@@ -1,0 +1,15 @@
+.DS_Store
+node_modules
+/build
+/.svelte-kit
+/package
+.env
+.env.*
+!.env.example
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Large FFmpeg binaries (Tauri sidecar) — do not commit
+# Users must place them manually per src-tauri/bin/README.md
+src-tauri/bin/ffmpeg*
+src-tauri/bin/ffprobe*
