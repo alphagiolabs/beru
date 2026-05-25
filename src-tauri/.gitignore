@@ -8,5 +8,8 @@
 
 # FFmpeg sidecar binaries (very large ~200MB each)
 # Download manually — see bin/README.md
+# Never commit the actual .exe files
 bin/ffmpeg*
 bin/ffprobe*
+bin/*.exe
+!bin/README.md

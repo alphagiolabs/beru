@@ -1,11 +1,257 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&display=swap');
 @import "tailwindcss";
 
 :root {
-  /* Aquí pondremos las variables de diseño para que sea fácil personalizar */
-  --bg: #0a0a0a;
-  --surface: #111111;
-  --text: #f5f5f5;
-  --text-muted: #a3a3a3;
-  --accent: #3b82f6;
-  --border: #262626;
+  /* Cosmic Dark Palette */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  
+  --bg-cosmic: #06070a;
+  --surface-cosmic: rgba(15, 17, 28, 0.7);
+  --surface-hover: rgba(26, 29, 46, 0.85);
+  
+  --accent-primary: #8b5cf6; /* Futuristic Violet */
+  --accent-secondary: #6366f1; /* Digital Indigo */
+  --accent-cyan: #06b6d4; /* Neon Cyan */
+  --accent-emerald: #10b981; /* Mint Emerald */
+  --accent-amber: #f59e0b; /* Solar Amber */
+  --accent-rose: #f43f5e; /* Hot Rose */
+  
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(139, 92, 246, 0.5);
+  
+  --glow-shadow: 0 0 25px -5px rgba(139, 92, 246, 0.35);
+  --glow-shadow-cyan: 0 0 25px -5px rgba(6, 182, 212, 0.35);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-cosmic);
+  color: var(--text-primary);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: var(--surface-cosmic);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-glass);
+}
+
+.glass-panel-hover:hover {
+  background: var(--surface-hover);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
+  transform: translateY(-2px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Interactive Inputs */
+.glass-input {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  border-radius: 0.75rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.25);
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Custom Premium Buttons */
+.btn-premium {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  color: #white;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  box-shadow: var(--glow-shadow);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.btn-premium:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 30px -3px rgba(139, 92, 246, 0.6);
+  filter: brightness(1.1);
+}
+
+.btn-premium:active {
+  transform: translateY(1px);
+}
+
+.btn-premium::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 200%;
+  height: 200%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.15) 30%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  transform: rotate(30deg);
+  transition: all 0.5s ease;
+}
+
+.btn-premium:hover::after {
+  left: 120%;
+  transition: all 0.8s ease-in-out;
+}
+
+.btn-premium-cyan {
+  background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-secondary) 100%);
+  box-shadow: var(--glow-shadow-cyan);
+}
+
+.btn-premium-cyan:hover {
+  box-shadow: 0 0 30px -3px rgba(6, 182, 212, 0.6);
+}
+
+.btn-secondary-premium {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  font-weight: 500;
+  border-radius: 0.75rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.btn-secondary-premium:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Pulsing neon point indicators */
+.status-indicator {
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+}
+
+.status-indicator::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  background-color: inherit;
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(3.5);
+    opacity: 0;
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2.5s infinite ease-in-out;
+}
+
+/* Dropzone styling with dashed gradient hover */
+.animated-dropzone {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 1.25rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.animated-dropzone:hover {
+  border-color: var(--accent-cyan);
+  background: rgba(6, 182, 212, 0.02);
+  box-shadow: 0 0 40px -15px rgba(6, 182, 212, 0.2);
+}
+
+/* Beautiful custom selection preview styling (camera viewfinder grid) */
+.viewfinder-corner-tl {
+  border-left: 2px solid var(--accent-cyan);
+  border-top: 2px solid var(--accent-cyan);
+}
+.viewfinder-corner-tr {
+  border-right: 2px solid var(--accent-cyan);
+  border-top: 2px solid var(--accent-cyan);
+}
+.viewfinder-corner-bl {
+  border-left: 2px solid var(--accent-cyan);
+  border-bottom: 2px solid var(--accent-cyan);
+}
+.viewfinder-corner-br {
+  border-right: 2px solid var(--accent-cyan);
+  border-bottom: 2px solid var(--accent-cyan);
+}
+
+/* Liquid animated gradient for progress bars */
+.liquid-progress {
+  position: relative;
+  overflow: hidden;
+}
+
+.liquid-progress::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: shimmer 1.5s infinite linear;
+  background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }

@@ -1,155 +1,233 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 
-static CURRENT_CHILD: Mutex<Option<CommandChild>> = Mutex::new(None);
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum OperationMode {
+    Blur,
+    Crop,
+    Text,
+    Image,
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Region {
-    pub x: u32,
-    pub y: u32,
-    pub w: u32,
-    pub h: u32,
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct VideoOperation {
-    pub mode: String,                 // "blur" | "crop" | "text"
-    pub region: Option<Region>,       // required for blur/crop
+    pub mode: OperationMode,
+    pub region: Option<Region>,
     pub blur_strength: Option<u32>,
-    // Time range (in seconds). If None → apply to entire video
     pub start_time: Option<f64>,
     pub end_time: Option<f64>,
-    // For text mode
     pub text: Option<String>,
     pub font_size: Option<u32>,
     pub font_color: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct RemoveLogoRequest {
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "lowercase")]
+enum SpeedPreset {
+    Ultrafast,
+    Superfast,
+    Veryfast,
+    Fast,
+    Medium,
+}
+
+impl SpeedPreset {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Ultrafast => "ultrafast",
+            Self::Superfast => "superfast",
+            Self::Veryfast => "veryfast",
+            Self::Fast => "fast",
+            Self::Medium => "medium",
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct VideoJob {
     pub input_path: String,
     pub output_path: String,
     pub operations: Vec<VideoOperation>,
     pub video_duration: Option<f64>,
-    // For image overlays (future full support)
-    pub extra_images: Option<Vec<String>>,
+    pub speed_preset: Option<SpeedPreset>,
 }
 
-#[tauri::command]
-async fn remove_logo(app: tauri::AppHandle, req: RemoveLogoRequest) -> Result<String, String> {
-    if req.operations.is_empty() {
-        return Err("No operations provided".into());
+struct JobRegistry {
+    jobs: HashMap<usize, CommandChild>,
+}
+
+impl JobRegistry {
+    fn new() -> Self {
+        Self { jobs: HashMap::new() }
+    }
+    fn register(&mut self, index: usize, child: CommandChild) {
+        self.jobs.insert(index, child);
+    }
+    fn remove(&mut self, index: usize) -> Option<CommandChild> {
+        self.jobs.remove(&index)
+    }
+    fn kill_all(&mut self) {
+        for (_, child) in self.jobs.drain() {
+            let _ = child.kill();
+        }
+    }
+}
+
+static ACTIVE_JOBS: Mutex<Option<JobRegistry>> = Mutex::new(None);
+
+fn ensure_even(v: f64) -> u32 {
+    (v as u32) & !1
+}
+
+fn crop_filter_arg(r: &Region) -> String {
+    format!("{}:{}:{}:{}", ensure_even(r.w), ensure_even(r.h), r.x as u32, r.y as u32)
+}
+
+fn parse_hhmmss(s: &str) -> Option<f64> {
+    let parts: Vec<&str> = s.trim().split(':').collect();
+    if parts.len() == 3 {
+        let h: f64 = parts[0].parse().ok()?;
+        let m: f64 = parts[1].parse().ok()?;
+        let s: f64 = parts[2].parse().ok()?;
+        return Some(h * 3600.0 + m * 60.0 + s);
+    }
+    None
+}
+
+fn build_filter_graph(operations: &[VideoOperation]) -> Result<String, String> {
+    let mut filter_parts: Vec<String> = vec![];
+    let mut current_input = "[0:v]".to_string();
+
+    for (i, op) in operations.iter().enumerate() {
+        let label = format!("op{}", i);
+        let enable = match (op.start_time, op.end_time) {
+            (Some(s), Some(e)) => format!(":enable='between(t,{},{})'", s, e),
+            (Some(s), None) => format!(":enable='gte(t,{})'", s),
+            (None, Some(e)) => format!(":enable='lte(t,{})'", e),
+            _ => String::new(),
+        };
+
+        match &op.mode {
+            OperationMode::Blur => {
+                let r = op.region.as_ref().ok_or("Blur requires region")?;
+                let blur = op.blur_strength.unwrap_or(20);
+                let crop = crop_filter_arg(r);
+                let x = r.x as u32;
+                let y = r.y as u32;
+                filter_parts.push(format!(
+                    "{inp}split[m{i}][lg{i}];[lg{i}]crop={crop}{en},boxblur={blur}:1[b{i}];[m{i}][b{i}]overlay={x}:{y}[{out}]",
+                    inp = current_input, i = i, crop = crop, en = enable, blur = blur, x = x, y = y, out = label
+                ));
+                current_input = format!("[{}]", label);
+            }
+            OperationMode::Crop => {
+                let r = op.region.as_ref().ok_or("Crop requires region")?;
+                let crop = crop_filter_arg(r);
+                filter_parts.push(format!("{}crop={}{en}[{lbl}]",
+                    current_input, crop, en = enable, lbl = label
+                ));
+                current_input = format!("[{}]", label);
+            }
+            OperationMode::Text => {
+                let r = op.region.as_ref().ok_or("Text requires region")?;
+                let txt = op.text.as_deref().unwrap_or("Text");
+                let size = op.font_size.unwrap_or(24);
+                let color = op.font_color.as_deref().unwrap_or("white");
+                let escaped = txt
+                    .replace('\\', "\\\\")
+                    .replace(':', "\\:")
+                    .replace('\'', "'\\''");
+                filter_parts.push(format!(
+                    "{}drawtext=text='{}':x={}:y={}:fontsize={}:fontcolor={}:box=1:boxcolor=black@0.65:boxborderw=8{}[{}]",
+                    current_input, escaped, r.x as u32, r.y as u32, size, color, enable, label
+                ));
+                current_input = format!("[{}]", label);
+            }
+            OperationMode::Image => {
+                let r = op.region.as_ref().ok_or("Image overlay requires region")?;
+                filter_parts.push(format!(
+                    "[{idx}]scale={w}:{h}[s{i}];[s{i}]overlay={x}:{y}[{lbl}]",
+                    idx = i + 1, w = ensure_even(r.w), h = ensure_even(r.h), i = i, x = r.x as u32, y = r.y as u32, lbl = label
+                ));
+                current_input = format!("[{}]", label);
+            }
+        }
     }
 
-    let shell = app.shell();
+    Ok(filter_parts.join(";"))
+}
 
+fn parse_ffmpeg_time(line: &str) -> Option<f64> {
+    let pos = line.find("time=")?;
+    let rest = &line[pos + 5..];
+    let time_str = rest.split_whitespace().next()?;
+    parse_hhmmss(time_str)
+}
+
+fn parse_ffmpeg_speed(line: &str) -> Option<f64> {
+    let pos = line.find("speed=")?;
+    let rest = &line[pos + 6..];
+    let speed_str = rest.split('x').next()?;
+    speed_str.trim().parse().ok()
+}
+
+async fn process_single_job(
+    app: tauri::AppHandle,
+    job: VideoJob,
+    job_index: usize,
+) -> Result<String, String> {
+    let shell = app.shell();
     let ffmpeg = shell
         .sidecar("ffmpeg")
         .map_err(|e| format!("ffmpeg sidecar not found: {}", e))?;
 
-    // === Build dynamic multi-operation filter graph ===
-    let mut filter_parts: Vec<String> = vec![];
-    let mut current_input = "[0:v]".to_string();
+    let preset = job.speed_preset.as_ref().map(|p| p.as_str()).unwrap_or("ultrafast");
+    let filter_complex = build_filter_graph(&job.operations)?;
 
-    for (i, op) in req.operations.iter().enumerate() {
-        let label = format!("op{}", i);
-        let enable = match (op.start_time, op.end_time) {
-            (Some(s), Some(e)) => format!(":enable='between(t,{},{})'", s, e),
-            (Some(s), None)    => format!(":enable='gte(t,{})'", s),
-            (None, Some(e))    => format!(":enable='lte(t,{})'", e),
-            _ => "".to_string(),
-        };
+    let mut cmd = ffmpeg.args(["-y", "-i", &job.input_path]);
 
-        match op.mode.as_str() {
-            "blur" => {
-                let r = op.region.as_ref().ok_or("Blur requires region")?;
-                let blur = op.blur_strength.unwrap_or(20);
-
-                let main_label = format!("main{}", i);
-                let logo_label = format!("logo{}", i);
-                let blurred_label = format!("blurred{}", i);
-
-                filter_parts.push(format!(
-                    "{}split[{}][{}];[{}]crop={}:{}:{}:{}{},boxblur={}:1[{}];[{}][{}]overlay={}:{}[{}]",
-                    current_input,
-                    main_label, logo_label,
-                    logo_label, r.w, r.h, r.x, r.y, enable, blur, blurred_label,
-                    main_label, blurred_label, r.x, r.y, label
-                ));
-                current_input = format!("[{}]", label);
-            }
-            "crop" => {
-                let r = op.region.as_ref().ok_or("Crop requires region")?;
-                filter_parts.push(format!(
-                    "{}crop={}:{}:{}:{}{}[{}]",
-                    current_input, r.w, r.h, r.x, r.y, enable, label
-                ));
-                current_input = format!("[{}]", label);
-            }
-            "text" => {
-                let r = op.region.as_ref().ok_or("Text requires region (position)")?;
-                let txt = op.text.as_deref().unwrap_or("Text");
-                let size = op.font_size.unwrap_or(24);
-                let color = op.font_color.as_deref().unwrap_or("white");
-
-                // Polished drawtext with background box + time range support
-                filter_parts.push(format!(
-                    "{}drawtext=text='{}':x={}:y={}:fontsize={}:fontcolor={}:box=1:boxcolor=black@0.65:boxborderw=8{}{}[{}]",
-                    current_input,
-                    txt.replace("'", "\\'"),
-                    r.x, r.y, size, color, enable,
-                    label
-                ));
-                current_input = format!("[{}]", label);
-            }
-            "image" => {
-                let r = op.region.as_ref().ok_or("Image overlay requires region")?;
-                // If extra_images provided, use the first available image as overlay source
-                let img_index = 1; // 0 = main video, 1+ = extra images
-                filter_parts.push(format!(
-                    "{}[{}]scale={}:{}[scaled{}];[scaled{}]overlay={}:{}[{}]",
-                    current_input,
-                    img_index, r.w, r.h, i,
-                    i, r.x, r.y, label
-                ));
-                current_input = format!("[{}]", label);
-            }
-            _ => return Err(format!("Unknown mode: {}", op.mode)),
-        }
-    }
-
-    let filter_complex = filter_parts.join(";");
-
-    // Build command
-    let mut cmd = ffmpeg.args(["-y", "-i", &req.input_path]);
-
-    // Optimization for single simple crop
-    if req.operations.len() == 1 && req.operations[0].mode == "crop" {
-        let op = &req.operations[0];
-        if let Some(r) = &op.region {
-            cmd = cmd.args(["-vf", &format!("crop={}:{}:{}:{}", r.w, r.h, r.x, r.y)]);
+    // Single-crop shortcut: use -vf instead of -filter_complex
+    if job.operations.len() == 1 && job.operations[0].mode == OperationMode::Crop {
+        if let Some(r) = &job.operations[0].region {
+            cmd = cmd.args(["-vf", &format!("crop={}", crop_filter_arg(r))]);
         }
     } else {
         cmd = cmd.args(["-filter_complex", &filter_complex]);
     }
 
     let (mut rx, child) = cmd
-        .args(["-c:a", "copy", "-c:v", "libx264", "-preset", "fast", &req.output_path])
+        .args([
+            "-c:a", "copy",
+            "-c:v", "libx264",
+            "-preset", preset,
+            "-crf", "23",
+            "-movflags", "+faststart",
+            "-threads", "0",
+            &job.output_path,
+        ])
         .spawn()
         .map_err(|e| e.to_string())?;
 
-    // Store child for cancellation (simple global for MVP)
     {
-        let mut guard = CURRENT_CHILD.lock().unwrap();
-        *guard = Some(child);
+        let mut guard = ACTIVE_JOBS.lock().unwrap();
+        guard.get_or_insert_with(JobRegistry::new).register(job_index, child);
     }
 
-    // Progress + ETA
     let mut last_speed: Option<f64> = None;
-    let total_duration = req.video_duration.unwrap_or(0.0);
+    let total_duration = job.video_duration.unwrap_or(0.0);
 
     while let Some(event) = rx.recv().await {
         if let tauri_plugin_shell::process::CommandEvent::Stderr(line) = event {
@@ -161,14 +239,16 @@ async fn remove_logo(app: tauri::AppHandle, req: RemoveLogoRequest) -> Result<St
                 }
 
                 let eta = if let (Some(speed), true) = (last_speed, total_duration > 0.0) {
-                    let remaining = (total_duration - time) / speed.max(0.1);
-                    Some(remaining)
+                    Some((total_duration - time) / speed.max(0.1))
                 } else {
                     None
                 };
 
-                let _ = app.emit("ffmpeg-progress", serde_json::json!({
+                let _ = app.emit("queue-progress", serde_json::json!({
+                    "index": job_index,
                     "current": time,
+                    "total": total_duration,
+                    "percent": if total_duration > 0.0 { (time / total_duration * 100.0).min(99.9) } else { 0.0 },
                     "speed": last_speed,
                     "eta": eta
                 }));
@@ -176,58 +256,111 @@ async fn remove_logo(app: tauri::AppHandle, req: RemoveLogoRequest) -> Result<St
         }
     }
 
-    Ok(req.output_path)
+    {
+        let mut guard = ACTIVE_JOBS.lock().unwrap();
+        if let Some(registry) = guard.as_mut() {
+            registry.remove(job_index);
+        }
+    }
+
+    Ok(job.output_path)
 }
 
-fn parse_ffmpeg_speed(line: &str) -> Option<f64> {
-    if let Some(pos) = line.find("speed=") {
-        let rest = &line[pos + 6..];
-        let speed_str = rest.split('x').next()?;
-        return speed_str.trim().parse().ok();
+const MAX_CONCURRENT_JOBS: usize = 5;
+
+#[tauri::command]
+async fn process_queue(app: tauri::AppHandle, jobs: Vec<VideoJob>) -> Result<Vec<String>, String> {
+    if jobs.is_empty() {
+        return Err("No jobs provided".into());
     }
-    None
+
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_JOBS));
+    let mut handles = Vec::with_capacity(jobs.len());
+
+    for (i, job) in jobs.into_iter().enumerate() {
+        let app_clone = app.clone();
+        let sem = semaphore.clone();
+        let handle = tokio::spawn(async move {
+            let _permit = sem.acquire().await.unwrap();
+
+            let _ = app_clone.emit("queue-status", serde_json::json!({
+                "index": i, "status": "processing"
+            }));
+
+            let result = process_single_job(app_clone.clone(), job, i).await;
+
+            let status = match &result {
+                Ok(_) => serde_json::json!({ "index": i, "status": "done" }),
+                Err(e) => serde_json::json!({ "index": i, "status": "error", "error": e }),
+            };
+            let _ = app_clone.emit("queue-status", status);
+
+            result
+        });
+        handles.push(handle);
+    }
+
+    let mut results = Vec::with_capacity(handles.len());
+    for handle in handles {
+        match handle.await {
+            Ok(Ok(path)) => results.push(path),
+            Ok(Err(e)) => results.push(format!("ERROR: {}", e)),
+            Err(e) => results.push(format!("ERROR: task panicked: {}", e)),
+        }
+    }
+
+    Ok(results)
 }
 
 #[tauri::command]
-fn cancel_processing() {
-    if let Some(child) = CURRENT_CHILD.lock().unwrap().take() {
-        let _ = child.kill();
+async fn cancel_job(job_index: usize) -> Result<(), String> {
+    let mut guard = ACTIVE_JOBS.lock().unwrap();
+    if let Some(registry) = guard.as_mut() {
+        if let Some(child) = registry.remove(job_index) {
+            let _ = child.kill();
+            return Ok(());
+        }
     }
+    Err("Job not found".into())
+}
+
+#[tauri::command]
+async fn cancel_all_jobs() -> Result<(), String> {
+    let mut guard = ACTIVE_JOBS.lock().unwrap();
+    if let Some(registry) = guard.take() {
+        registry.kill_all();
+    }
+    Ok(())
 }
 
 #[tauri::command]
 async fn get_video_info(app: tauri::AppHandle, path: String) -> Result<serde_json::Value, String> {
     let shell = app.shell();
-    // Try to use ffprobe from the same sidecar location
-    let ffprobe = shell.sidecar("ffprobe")
-        .map_err(|_| "ffprobe not bundled yet (use same build as ffmpeg)".to_string())?;
+    let ffmpeg = shell
+        .sidecar("ffmpeg")
+        .map_err(|e| format!("ffmpeg sidecar not found: {}", e))?;
 
-    let output = ffprobe
-        .args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", &path])
+    let output = ffmpeg
+        .args(["-i", &path, "-hide_banner"])
         .output()
         .await
         .map_err(|e| e.to_string())?;
 
-    let json: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .map_err(|e| e.to_string())?;
+    let info = String::from_utf8_lossy(&output.stderr).to_string();
 
-    Ok(json)
-}
+    let duration = info
+        .lines()
+        .find(|l| l.contains("Duration:"))
+        .and_then(|l| {
+            let pos = l.find("Duration:")? + 10;
+            let time_str = l[pos..].split(',').next()?.trim();
+            parse_hhmmss(time_str)
+        });
 
-fn parse_ffmpeg_time(line: &str) -> Option<f64> {
-    // Looks for: time=00:01:23.45
-    if let Some(pos) = line.find("time=") {
-        let rest = &line[pos + 5..];
-        let time_str = rest.split_whitespace().next()?;
-        let parts: Vec<&str> = time_str.split(':').collect();
-        if parts.len() == 3 {
-            let h: f64 = parts[0].parse().ok()?;
-            let m: f64 = parts[1].parse().ok()?;
-            let s: f64 = parts[2].parse().ok()?;
-            return Some(h * 3600.0 + m * 60.0 + s);
-        }
-    }
-    None
+    Ok(serde_json::json!({
+        "duration": duration,
+        "raw_info": info
+    }))
 }
 
 #[tauri::command]
@@ -242,7 +375,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![greet, remove_logo, cancel_processing, get_video_info])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            process_queue,
+            cancel_job,
+            cancel_all_jobs,
+            get_video_info,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
