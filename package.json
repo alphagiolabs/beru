@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "ffmpeg:download": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1",
     "ffmpeg:download:force": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1 -Force",
     "ffmpeg:download:slim": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1 -Force",
@@ -17,7 +19,11 @@
     "tauri:dev": "npm run ffmpeg:download --if-present && tauri dev",
     "tauri:build": "npm run ffmpeg:download:force && tauri build",
     "build:report": "node -e \"const fs=require('fs');const p='src-tauri/target/release';if(fs.existsSync(p)){const s=fs.statSync(p+'/beru.exe').size/1024/1024;console.log('Rust binary:',s.toFixed(1),'MB')} else {console.log('Run tauri build first')} \"",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "version:bump": "node scripts/version-bump.mjs",
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
   },
   "license": "MIT",
   "dependencies": {
@@ -30,11 +36,13 @@
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.6",
     "@sveltejs/kit": "^2.9.0",
-    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "@sveltejs/vite-plugin-svelte": "^5.1.1",
     "@tauri-apps/cli": "^2",
+    "@types/node": "^25.9.1",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "typescript": "~5.6.2",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^4.1.7"
   }
 }

@@ -3,6 +3,7 @@
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import * as XLSX from 'xlsx';
+  import { fmtTime } from '$lib/utils';
 
   type QueueStatus = 'idle' | 'queued' | 'processing' | 'done' | 'error';
   type Region = { x: number; y: number; w: number; h: number };
@@ -40,8 +41,9 @@
 
   function touchQueue() { queue = [...queue]; }
   function updateOps(fn: (ops: Operation[]) => Operation[]) {
-    if (selectedIdx < 0) return;
-    queue[selectedIdx].operations = fn(queue[selectedIdx].operations);
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    const item = queue[selectedIdx]!;
+    item.operations = fn(item.operations);
     touchQueue();
   }
 
@@ -120,9 +122,9 @@
       [x, y], [x + w / 2, y], [x + w, y],
       [x, y + h / 2], [x + w, y + h / 2],
       [x, y + h], [x + w / 2, y + h], [x + w, y + h],
-    ]) {
-      ctx.fillRect(hx - hs / 2, hy - hs / 2, hs, hs);
-      ctx.strokeRect(hx - hs / 2, hy - hs / 2, hs, hs);
+    ] as [number, number][]) {
+      ctx.fillRect(hx! - hs / 2, hy! - hs / 2, hs, hs);
+      ctx.strokeRect(hx! - hs / 2, hy! - hs / 2, hs, hs);
     }
   }
 
@@ -136,7 +138,7 @@
   });
 
   $effect(() => {
-    if (region !== undefined) drawRegion();
+    if (region !== null) drawRegion();
   });
 
   function contentRect() {
@@ -221,7 +223,7 @@
   function onCanvasMouseMove(e: MouseEvent) {
     if (isDrawing || resizing) { onCanvasMove(e); return; }
     const h = hitTestHandle(e.clientX, e.clientY);
-    if (h && canvas) canvas.style.cursor = CURSORS[h];
+    if (h && canvas) canvas.style.cursor = CURSORS[h] ?? 'crosshair';
     else if (canvas) canvas.style.cursor = 'crosshair';
   }
 
@@ -275,10 +277,9 @@
       try {
         const info: any = await invoke('get_video_info', { path });
         duration = info.duration ?? 0;
-        // Parse resolution from raw_info (ffmpeg stderr)
         const raw: string = info.raw_info ?? '';
         const resMatch = raw.match(/(\d{2,5})x(\d{2,5})/);
-        if (resMatch) { width = parseInt(resMatch[1]); height = parseInt(resMatch[2]); }
+        if (resMatch) { width = parseInt(resMatch[1]!); height = parseInt(resMatch[2]!); }
       } catch {}
       queue = [...queue, {
         path, src, filename, width, height, duration,
@@ -298,8 +299,8 @@
 
   function removeQueueItem(idx: number) {
     queue = queue.filter((_, i) => i !== idx);
+    if (selectedIdx > idx) selectedIdx = Math.max(0, selectedIdx - 1);
     if (selectedIdx >= queue.length) selectedIdx = queue.length - 1;
-    if (selectedIdx === idx) selectedIdx = Math.min(idx, queue.length - 1);
   }
 
   function addOperation(mode: string) {
@@ -320,10 +321,9 @@
   }
 
   async function importExcelBulk() {
-    if (selectedIdx < 0) return;
-    const templateItem = queue[selectedIdx];
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    const templateItem = queue[selectedIdx]!;
     
-    // Check if there is an active region to use as a template
     if (!region) {
       alert('Please draw a region first to set the template for the text (position and size).');
       return;
@@ -339,7 +339,9 @@
       const rawBytes = await invoke<number[]>('read_file_bytes', { path: filePath as string });
       const data = new Uint8Array(rawBytes);
       const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) { alert('Excel file has no sheets.'); return; }
+      const sheet = workbook.Sheets[sheetName]!;
       const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet);
 
       if (rows.length === 0) {
@@ -352,16 +354,13 @@
         const text = String(row.text ?? row.Text ?? row.TEXT ?? '');
         if (!text) continue;
 
-        // Try to get ID for filename
         const id = String(row.id ?? row.Id ?? row.ID ?? row.Name ?? row.name ?? `clone_${Date.now()}_${newClones.length}`);
 
-        // We use the visually drawn region and inputs as the template
         const w = region.w;
         const h = region.h;
         const x = region.x;
         const y = region.y;
         
-        // You can still override font settings from excel if they exist, otherwise use template
         const fontSize = Number(row.fontSize ?? row.font_size ?? row.FontSize ?? textFontSize);
         const fontColor = String(row.fontColor ?? row.font_color ?? row.FontColor ?? textFontColor);
 
@@ -378,7 +377,7 @@
 
         const clone: QueueItem = {
           ...templateItem,
-          operations: [newOp], // Set the text operation
+          operations: [newOp],
           status: 'idle',
           progress: 0,
           error: null,
@@ -394,11 +393,9 @@
         return;
       }
 
-      // Add the clones to the queue
       queue = [...queue, ...newClones];
       alert(`Imported ${newClones.length} videos from Excel using the template.`);
       
-      // Clear selection so you see the new items
       region = null;
       drawRegion();
     } catch (e) {
@@ -415,8 +412,10 @@
   }
 
   function editOpRegion(opIdx: number) {
-    if (selectedIdx < 0) return;
-    const op = queue[selectedIdx].operations[opIdx];
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    const item = queue[selectedIdx]!;
+    const op = item.operations[opIdx];
+    if (!op) return;
     if (op.region) {
       region = { ...op.region };
       blurStrength = op.blurStrength ?? 20;
@@ -440,9 +439,10 @@
     const unlistenProg = await listen<any>('queue-progress', (ev) => {
       const { index, percent, speed, eta } = ev.payload;
       if (index >= 0 && index < queue.length) {
-        queue[index].progress = percent ?? 0;
-        queue[index].speed = speed ?? null;
-        queue[index].eta = eta ?? null;
+        const item = queue[index]!;
+        item.progress = percent ?? 0;
+        item.speed = speed ?? null;
+        item.eta = eta ?? null;
         touchQueue();
       }
     });
@@ -450,17 +450,20 @@
     const unlistenStatus = await listen<any>('queue-status', (ev) => {
       const { index, status, error } = ev.payload;
       if (index >= 0 && index < queue.length) {
-        queue[index].status = status;
-        if (status === 'done') queue[index].progress = 100;
-        if (error) queue[index].error = error;
+        const item = queue[index]!;
+        if (item.status !== 'processing' && item.status !== 'queued') return;
+        item.status = status;
+        if (status === 'done') item.progress = 100;
+        if (error) item.error = error;
         touchQueue();
       }
     });
 
     try {
       const jobs = queue
-        .filter(q => q.operations.length > 0)
-        .map(q => {
+        .map((q, originalIndex) => ({ q, originalIndex }))
+        .filter(({ q }) => q.operations.length > 0)
+        .map(({ q, originalIndex }) => {
           let outPath = q.path.replace(/(\.[^.]+)$/, '_no_logo$1');
           if (q.customOutputName) {
             outPath = q.path.replace(/[^\\/]+(\.[^.]+)$/, `${q.customOutputName}$1`);
@@ -468,6 +471,7 @@
           return {
             input_path: q.path,
             output_path: outPath,
+            original_index: originalIndex,
             operations: q.operations.map(op => ({
               mode: op.mode,
               region: op.region ? {
@@ -497,14 +501,6 @@
     for (const q of queue) { if (q.status === 'processing' || q.status === 'queued') q.status = 'idle'; }
     touchQueue();
     isProcessingAll = false;
-  }
-
-  function fmtTime(s: number): string {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = Math.floor(s % 60);
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-    return `${m}:${sec.toString().padStart(2, '0')}`;
   }
 </script>
 
@@ -564,7 +560,8 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div class="flex items-start gap-2 px-2.5 py-2 border-b border-zinc-800/40 cursor-pointer transition-colors
                    {i === selectedIdx ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'}"
-              onclick={() => selectQueueItem(i)}>
+              onclick={() => selectQueueItem(i)}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectQueueItem(i); }}>
               <div class="w-14 h-9 rounded overflow-hidden bg-zinc-900 shrink-0 relative">
                 <!-- svelte-ignore a11y_media_has_caption -->
                 <video src={item.src} class="w-full h-full object-cover" muted preload="metadata"></video>
@@ -628,7 +625,6 @@
     <!-- Right sidebar -->
     {#if selected}
       <aside class="w-72 border-l border-zinc-800 flex flex-col bg-zinc-950 shrink-0 overflow-y-auto">
-        <!-- Sidebar Tabs -->
         <div class="p-3 pb-0">
           <div class="flex p-1 bg-zinc-900/50 rounded-lg border border-zinc-800/80">
             <button onclick={() => sidebarMode = 'logo'} class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 {sidebarMode === 'logo' ? 'text-cyan-50 bg-cyan-900/40 shadow-sm border border-cyan-500/20' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}">

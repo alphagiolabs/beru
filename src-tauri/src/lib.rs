@@ -63,6 +63,7 @@ pub struct VideoJob {
     pub operations: Vec<VideoOperation>,
     pub video_duration: Option<f64>,
     pub speed_preset: Option<SpeedPreset>,
+    pub original_index: Option<usize>,
 }
 
 struct JobRegistry {
@@ -93,7 +94,7 @@ fn ensure_even(v: f64) -> u32 {
 }
 
 fn crop_filter_arg(r: &Region) -> String {
-    format!("{}:{}:{}:{}", ensure_even(r.w), ensure_even(r.h), r.x as u32, r.y as u32)
+    format!("{}:{}:{}:{}", ensure_even(r.w), ensure_even(r.h), ensure_even(r.x), ensure_even(r.y))
 }
 
 fn parse_hhmmss(s: &str) -> Option<f64> {
@@ -280,18 +281,19 @@ async fn process_queue(app: tauri::AppHandle, jobs: Vec<VideoJob>) -> Result<Vec
     for (i, job) in jobs.into_iter().enumerate() {
         let app_clone = app.clone();
         let sem = semaphore.clone();
+        let display_index = job.original_index.unwrap_or(i);
         let handle = tokio::spawn(async move {
             let _permit = sem.acquire().await.unwrap();
 
             let _ = app_clone.emit("queue-status", serde_json::json!({
-                "index": i, "status": "processing"
+                "index": display_index, "status": "processing"
             }));
 
-            let result = process_single_job(app_clone.clone(), job, i).await;
+            let result = process_single_job(app_clone.clone(), job, display_index).await;
 
             let status = match &result {
-                Ok(_) => serde_json::json!({ "index": i, "status": "done" }),
-                Err(e) => serde_json::json!({ "index": i, "status": "error", "error": e }),
+                Ok(_) => serde_json::json!({ "index": display_index, "status": "done" }),
+                Err(e) => serde_json::json!({ "index": display_index, "status": "error", "error": e }),
             };
             let _ = app_clone.emit("queue-status", status);
 
@@ -364,6 +366,11 @@ async fn get_video_info(app: tauri::AppHandle, path: String) -> Result<serde_jso
 }
 
 #[tauri::command]
+fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
@@ -381,7 +388,194 @@ pub fn run() {
             cancel_job,
             cancel_all_jobs,
             get_video_info,
+            read_file_bytes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ensure_even() {
+        assert_eq!(ensure_even(0.0), 0);
+        assert_eq!(ensure_even(1.0), 0);
+        assert_eq!(ensure_even(2.0), 2);
+        assert_eq!(ensure_even(3.0), 2);
+        assert_eq!(ensure_even(4.0), 4);
+        assert_eq!(ensure_even(100.7), 100);
+        assert_eq!(ensure_even(101.9), 100);
+    }
+
+    #[test]
+    fn test_crop_filter_arg() {
+        let r = Region { x: 10.0, y: 20.0, w: 100.0, h: 50.0 };
+        assert_eq!(crop_filter_arg(&r), "100:50:10:20");
+
+        let r2 = Region { x: 0.0, y: 0.0, w: 1920.0, h: 1080.0 };
+        assert_eq!(crop_filter_arg(&r2), "1920:1080:0:0");
+
+        // Odd values get rounded down to even
+        let r3 = Region { x: 1.0, y: 1.0, w: 101.0, h: 51.0 };
+        assert_eq!(crop_filter_arg(&r3), "100:50:0:0");
+    }
+
+    #[test]
+    fn test_parse_hhmmss() {
+        assert_eq!(parse_hhmmss("00:01:30.50"), Some(90.5));
+        assert_eq!(parse_hhmmss("01:00:00.00"), Some(3600.0));
+        assert_eq!(parse_hhmmss("00:00:00.00"), Some(0.0));
+        assert_eq!(parse_hhmmss("10:30:45.12"), Some(10.0 * 3600.0 + 30.0 * 60.0 + 45.12));
+        assert_eq!(parse_hhmmss("invalid"), None);
+        assert_eq!(parse_hhmmss("00:00"), None);
+    }
+
+    #[test]
+    fn test_parse_ffmpeg_time() {
+        assert_eq!(
+            parse_ffmpeg_time("frame=  100 fps=30 time=00:00:03.33 bitrate=1000kbits/s"),
+            Some(3.33)
+        );
+        assert_eq!(
+            parse_ffmpeg_time("size=  1024kB time=00:01:30.00 speed=2.0x"),
+            Some(90.0)
+        );
+        assert_eq!(parse_ffmpeg_time("no time info here"), None);
+        assert_eq!(parse_ffmpeg_time(""), None);
+    }
+
+    #[test]
+    fn test_parse_ffmpeg_speed() {
+        assert_eq!(
+            parse_ffmpeg_speed("frame=  100 fps=30 time=00:00:03.33 speed=2.5x"),
+            Some(2.5)
+        );
+        assert_eq!(
+            parse_ffmpeg_speed("size=  1024kB time=00:01:30.00 speed=1.00x"),
+            Some(1.0)
+        );
+        assert_eq!(parse_ffmpeg_speed("no speed info"), None);
+    }
+
+    #[test]
+    fn test_build_filter_graph_empty() {
+        let result = build_filter_graph(&[]);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "");
+    }
+
+    #[test]
+    fn test_build_filter_graph_single_blur() {
+        let ops = vec![VideoOperation {
+            mode: OperationMode::Blur,
+            region: Some(Region { x: 10.0, y: 20.0, w: 100.0, h: 50.0 }),
+            blur_strength: Some(15),
+            start_time: None,
+            end_time: None,
+            text: None,
+            font_size: None,
+            font_color: None,
+        }];
+        let result = build_filter_graph(&ops).unwrap();
+        assert!(result.contains("split"));
+        assert!(result.contains("crop=100:50:10:20"));
+        assert!(result.contains("boxblur=15:1"));
+        assert!(result.contains("overlay=10:20"));
+    }
+
+    #[test]
+    fn test_build_filter_graph_single_crop() {
+        let ops = vec![VideoOperation {
+            mode: OperationMode::Crop,
+            region: Some(Region { x: 0.0, y: 0.0, w: 640.0, h: 480.0 }),
+            blur_strength: None,
+            start_time: None,
+            end_time: None,
+            text: None,
+            font_size: None,
+            font_color: None,
+        }];
+        let result = build_filter_graph(&ops).unwrap();
+        assert!(result.contains("crop=640:480:0:0"));
+    }
+
+    #[test]
+    fn test_build_filter_graph_text() {
+        let ops = vec![VideoOperation {
+            mode: OperationMode::Text,
+            region: Some(Region { x: 50.0, y: 50.0, w: 200.0, h: 100.0 }),
+            blur_strength: None,
+            start_time: None,
+            end_time: None,
+            text: Some("Hello World".to_string()),
+            font_size: Some(32),
+            font_color: Some("white".to_string()),
+        }];
+        let result = build_filter_graph(&ops).unwrap();
+        assert!(result.contains("drawtext=text='Hello World'"));
+        assert!(result.contains("fontsize=32"));
+        assert!(result.contains("fontcolor=white"));
+    }
+
+    #[test]
+    fn test_build_filter_graph_blur_without_region_fails() {
+        let ops = vec![VideoOperation {
+            mode: OperationMode::Blur,
+            region: None,
+            blur_strength: Some(20),
+            start_time: None,
+            end_time: None,
+            text: None,
+            font_size: None,
+            font_color: None,
+        }];
+        assert!(build_filter_graph(&ops).is_err());
+    }
+
+    #[test]
+    fn test_build_filter_graph_with_time_range() {
+        let ops = vec![VideoOperation {
+            mode: OperationMode::Blur,
+            region: Some(Region { x: 10.0, y: 10.0, w: 50.0, h: 50.0 }),
+            blur_strength: Some(20),
+            start_time: Some(5.0),
+            end_time: Some(15.0),
+            text: None,
+            font_size: None,
+            font_color: None,
+        }];
+        let result = build_filter_graph(&ops).unwrap();
+        assert!(result.contains("enable='between(t,5,15)'"));
+    }
+
+    #[test]
+    fn test_build_filter_graph_multiple_operations() {
+        let ops = vec![
+            VideoOperation {
+                mode: OperationMode::Blur,
+                region: Some(Region { x: 10.0, y: 10.0, w: 50.0, h: 50.0 }),
+                blur_strength: Some(20),
+                start_time: None,
+                end_time: None,
+                text: None,
+                font_size: None,
+                font_color: None,
+            },
+            VideoOperation {
+                mode: OperationMode::Crop,
+                region: Some(Region { x: 0.0, y: 0.0, w: 640.0, h: 480.0 }),
+                blur_strength: None,
+                start_time: None,
+                end_time: None,
+                text: None,
+                font_size: None,
+                font_color: None,
+            },
+        ];
+        let result = build_filter_graph(&ops).unwrap();
+        assert!(result.contains("[op0]"));
+        assert!(result.contains("[op1]"));
+    }
 }
