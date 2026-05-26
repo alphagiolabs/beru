@@ -1,6 +1,6 @@
 [package]
 name = "beru"
-version = "0.1.2"
+version = "0.1.3"
 description = "Editor de vídeo local sin límites. 100% offline, sin suscripciones ni límites de tamaño."
 authors = ["Beru Contributors"]
 license = "MIT"

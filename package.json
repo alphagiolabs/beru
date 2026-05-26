@@ -1,7 +1,7 @@
 {
   "name": "beru",
-  "version": "0.1.0",
-  "description": "",
+  "version": "0.1.3",
+  "description": "Editor de vídeo local sin límites. 100% offline.",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "ffmpeg:download": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1",
+    "ffmpeg:sync": "powershell -ExecutionPolicy Bypass -File scripts/sync-ffmpeg-sidecars.ps1",
     "ffmpeg:download:force": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1 -Force",
     "ffmpeg:download:slim": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1 -Force",
     "ffmpeg:build:minimal": "powershell -ExecutionPolicy Bypass -File scripts/build-ffmpeg-minimal.ps1",
