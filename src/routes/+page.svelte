@@ -3,41 +3,22 @@
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { listen } from '@tauri-apps/api/event';
   import * as XLSX from 'xlsx';
-  import { fmtTime } from '$lib/utils';
+  import { hasOnlyEmptyTextOps, regionsMatch } from '$lib/video-utils';
+  import type { Region, Operation, QueueItem, SidebarMode, TextRegion } from '$lib/types';
+  import { pushHistory, tryUndo, tryRedo } from '$lib/stores/history.svelte';
+  import { onMount } from 'svelte';
 
-  type QueueStatus = 'idle' | 'queued' | 'processing' | 'done' | 'error';
-  type Region = { x: number; y: number; w: number; h: number };
-  type Operation = {
-    id: number;
-    mode: string;
-    region: Region | null;
-    blurStrength?: number;
-    startTime?: number | null;
-    endTime?: number | null;
-    text?: string;
-    fontSize?: number;
-    fontColor?: string;
-  };
-  const MODE_META: Record<string, { label: string; color: string }> = {
-    blur: { label: 'Blur', color: 'text-blue-400' },
-    crop: { label: 'Crop', color: 'text-amber-400' },
-    text: { label: 'Text', color: 'text-purple-400' },
-  };
-  type QueueItem = {
-    path: string;
-    src: string;
-    filename: string;
-    width: number;
-    height: number;
-    duration: number;
-    operations: Operation[];
-    status: QueueStatus;
-    progress: number;
-    eta: number | null;
-    speed: number | null;
-    error: string | null;
-    customOutputName?: string;
-  };
+  import Header from '$lib/components/Header.svelte';
+  import QueueSidebar from '$lib/components/QueueSidebar.svelte';
+  import BatchProgressBar from '$lib/components/BatchProgressBar.svelte';
+  import DragOverlay from '$lib/components/DragOverlay.svelte';
+  import ToolBar from '$lib/components/ToolBar.svelte';
+  import StyleEditor from '$lib/components/StyleEditor.svelte';
+  import PresetManager, { type TextPreset } from '$lib/components/PresetManager.svelte';
+  import LayerList from '$lib/components/LayerList.svelte';
+  import BatchPanel from '$lib/components/BatchPanel.svelte';
+  import TableEditor from '$lib/components/TableEditor.svelte';
+  import ShortcutsModal from '$lib/components/ShortcutsModal.svelte';
 
   function touchQueue() { queue = [...queue]; }
   function updateOps(fn: (ops: Operation[]) => Operation[]) {
@@ -47,12 +28,157 @@
     touchQueue();
   }
 
+  // ── Core state ────────────────────────────────────────────────────────
   let queue = $state<QueueItem[]>([]);
   let selectedIdx = $state<number>(-1);
   let isProcessingAll = $state(false);
+  let batchSummary = $state<{total:number;succeeded:number;failed:number} | null>(null);
+  let showShortcuts = $state(false);
+  let showTableEditor = $state(false);
   let speedPreset = $state('ultrafast');
-  let sidebarMode = $state<'logo' | 'batch'>('logo');
+  let sidebarMode = $state<SidebarMode>('logo');
+  let exportFormat = $state('mp4');
+  let activeTool = $state<'blur' | 'crop' | 'text' | 'delogo'>('blur');
 
+  // ── Text drag state ───────────────────────────────────────────────────
+  let draggingOpIdx = $state<number>(-1);
+  let dragStartVideo = $state<{x:number;y:number}>({x:0,y:0});
+  let dragStartRegion = $state<Region>({x:0,y:0,w:0,h:0});
+  let resizingOpIdx = $state<number>(-1);
+  let opResizeHandle = $state<string | null>(null);
+  let opResizeStart = $state<{cx:number;cy:number;r:Region}>({cx:0,cy:0,r:{x:0,y:0,w:0,h:0}});
+  let hoveredOpIdx = $state<number>(-1);
+
+  // ── Template state ────────────────────────────────────────────────────
+  let templateIdx = $state<number>(-1);
+  let templateRegions = $state<TextRegion[]>([]);
+  let nextRegionLabel = $state(1);
+
+  // ── Rich text style state ─────────────────────────────────────────────
+  let textFontFamily = $state<string>('Arial');
+  let textBold = $state(false);
+  let textItalic = $state(false);
+  let textBgEnabled = $state(true);
+  let textBgColor = $state('black');
+  let textBgOpacity = $state(0.65);
+  let textBorderWidth = $state(0);
+  let textBorderColor = $state('black');
+
+  // ── Presets ───────────────────────────────────────────────────────────
+  let presets = $state<TextPreset[]>([]);
+  let presetManager = $state<PresetManager>();
+
+  // ── Undo/redo ─────────────────────────────────────────────────────────
+  let history = $state<Operation[][]>([]);
+  let historyIndex = $state(-1);
+
+  function saveToHistoryLocal() {
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    const ops = queue[selectedIdx]!.operations;
+    const result = pushHistory(history, historyIndex, ops);
+    history = result.history;
+    historyIndex = result.historyIndex;
+  }
+
+  function undo() {
+    const result = tryUndo(history, historyIndex);
+    if (result && selectedIdx >= 0 && selectedIdx < queue.length) {
+      historyIndex = result.historyIndex;
+      queue[selectedIdx]!.operations = result.ops;
+      touchQueue();
+    }
+  }
+
+  function redo() {
+    const result = tryRedo(history, historyIndex);
+    if (result && selectedIdx >= 0 && selectedIdx < queue.length) {
+      historyIndex = result.historyIndex;
+      queue[selectedIdx]!.operations = result.ops;
+      touchQueue();
+    }
+  }
+
+  $effect(() => {
+    void selectedIdx;
+    history = [];
+    historyIndex = -1;
+  });
+
+  // ── Drag & drop ───────────────────────────────────────────────────────
+  let isDragging = $state(false);
+  let dragDepth = 0;
+
+  // ── Batch find & replace ──────────────────────────────────────────────
+  let batchFindText = $state('');
+  let batchReplaceText = $state('');
+  let batchFindScope = $state<'selected' | 'all'>('selected');
+
+  function batchFindReplace() {
+    const find = batchFindText.trim();
+    if (!find) { alert('Enter a text to find.'); return; }
+    let count = 0;
+    const items = batchFindScope === 'all' ? queue : (selected ? [selected] : []);
+    saveToHistoryLocal();
+    for (const item of items) {
+      for (let j = 0; j < item.operations.length; j++) {
+        const op = item.operations[j]!;
+        if (op.mode === 'text' && op.text && op.text.includes(find)) {
+          item.operations[j] = { ...op, text: op.text.replaceAll(find, batchReplaceText) };
+          count++;
+        }
+      }
+      item.operations = [...item.operations];
+    }
+    touchQueue();
+    alert(`Replaced in ${count} layer(s).`);
+  }
+
+  function isFileDrag(e: DragEvent): boolean {
+    return Array.from(e.dataTransfer?.types ?? []).includes('Files');
+  }
+
+  function onDragEnter(e: DragEvent) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth++;
+    isDragging = true;
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onDragOver(e: DragEvent) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    isDragging = true;
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  }
+
+  function onDragLeave(e: DragEvent) {
+    if (!isFileDrag(e)) return;
+    dragDepth = Math.max(0, dragDepth - 1);
+    isDragging = dragDepth > 0;
+  }
+
+  const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv'];
+
+  async function onDrop(e: DragEvent) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    dragDepth = 0;
+    isDragging = false;
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+    const paths: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i]!;
+      const ext = '.' + f.name.split('.').pop()?.toLowerCase();
+      if (!VIDEO_EXTENSIONS.includes(ext)) continue;
+      const nativePath = (f as File & { path?: string }).path;
+      if (nativePath) paths.push(nativePath);
+    }
+    if (paths.length > 0) await addVideoFromPaths(paths);
+  }
+
+  // ── Canvas / video ────────────────────────────────────────────────────
   let videoEl = $state<HTMLVideoElement>();
   let canvas = $state<HTMLCanvasElement>();
 
@@ -73,6 +199,54 @@
 
   const selected = $derived(selectedIdx >= 0 && selectedIdx < queue.length ? queue[selectedIdx] : null);
 
+  // ── Auto-save ─────────────────────────────────────────────────────────
+  let autoSaveTimer: ReturnType<typeof setInterval> | null = null;
+
+  function enableAutoSave() {
+    if (autoSaveTimer) clearInterval(autoSaveTimer);
+    autoSaveTimer = setInterval(() => {
+      try {
+        localStorage.setItem('beru-autosave', JSON.stringify({
+          queue: queue.map(q => ({
+            ...q,
+            operations: q.operations.map(op => ({ ...op, region: op.region ? { ...op.region } : null })),
+          })),
+          selectedIdx,
+          templateIdx,
+          templateRegions,
+        }));
+      } catch (e) {
+        console.error('Auto-save failed:', e);
+        try { localStorage.removeItem('beru-autosave'); } catch {}
+      }
+    }, 30000);
+  }
+
+  function loadAutoSave() {
+    try {
+      const saved = localStorage.getItem('beru-autosave');
+      if (!saved) return;
+      const state = JSON.parse(saved);
+      if (state.queue && Array.isArray(state.queue) && state.queue.length > 0) {
+        queue = state.queue;
+        selectedIdx = state.selectedIdx ?? -1;
+        if (selectedIdx >= queue.length) selectedIdx = queue.length - 1;
+        templateIdx = state.templateIdx ?? -1;
+        templateRegions = state.templateRegions ?? [];
+      }
+    } catch (e) {
+      console.error('Failed to load autosave:', e);
+    }
+  }
+
+  onMount(() => {
+    loadAutoSave();
+    presetManager?.loadFromStorage();
+    enableAutoSave();
+    return () => { if (autoSaveTimer) clearInterval(autoSaveTimer); };
+  });
+
+  // ── Canvas drawing ────────────────────────────────────────────────────
   function fitCanvas() {
     if (!videoEl || !canvas) return;
     const rect = videoEl.getBoundingClientRect();
@@ -98,14 +272,43 @@
     const w = region.w * sx;
     const h = region.h * sy;
 
-    ctx.fillStyle = 'rgba(6, 182, 212, 0.15)';
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = 'rgba(6, 182, 212, 0.85)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x, y, w, h);
+    if (activeTool === 'crop') {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(0, 0, canvas.width, y);
+      ctx.fillRect(0, y + h, canvas.width, canvas.height - y - h);
+      ctx.fillRect(0, y, x, h);
+      ctx.fillRect(x + w, y, canvas.width - x - w, h);
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeRect(x, y, w, h);
+      ctx.setLineDash([]);
+    } else if (activeTool === 'delogo') {
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.18)';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, w, h);
+      // X marks the logo to remove
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x, y); ctx.lineTo(x + w, y + h);
+      ctx.moveTo(x + w, y); ctx.lineTo(x, y + h);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.fillStyle = 'rgba(0, 240, 234, 0.12)';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = 'rgba(0, 240, 234, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, w, h);
+    }
 
+    const cornerColor = activeTool === 'crop' ? '#fbbf24' : activeTool === 'delogo' ? '#ef4444' : '#ffffff';
     const ms = Math.min(12, w / 3, h / 3);
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = cornerColor;
     ctx.lineWidth = 2.5;
     for (const [cx, cy, dx1, dy1, dx2, dy2] of [
       [x, y, ms, 0, 0, ms], [x + w, y, -ms, 0, 0, ms],
@@ -115,7 +318,7 @@
     }
 
     const hs = 7;
-    ctx.fillStyle = '#06b6d4';
+    ctx.fillStyle = activeTool === 'crop' ? '#fbbf24' : activeTool === 'delogo' ? '#ef4444' : '#00f0ea';
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.5;
     for (const [hx, hy] of [
@@ -141,15 +344,35 @@
     if (region !== null) drawRegion();
   });
 
+  $effect(() => {
+    void activeTool;
+    drawRegion();
+  });
+
+  // ── Canvas coordinate helpers ─────────────────────────────────────────
   function contentRect() {
     if (!videoEl) return null;
     const br = videoEl.getBoundingClientRect();
+    if (br.width === 0 || br.height === 0) return null;
     const vr = videoEl.videoWidth / videoEl.videoHeight;
     const cr = br.width / br.height;
     let dw: number, dh: number, ox: number, oy: number;
     if (vr > cr) { dw = br.width; dh = br.width / vr; ox = 0; oy = (br.height - dh) / 2; }
     else { dh = br.height; dw = br.height * vr; ox = (br.width - dw) / 2; oy = 0; }
     return { dw, dh, ox, oy, br };
+  }
+
+  function regionToScreen(r: Region | null): { x: number; y: number; w: number; h: number; sx: number; sy: number } | null {
+    if (!r || !videoEl) return null;
+    const c = contentRect();
+    if (!c) return null;
+    const sx = c.dw / videoEl.videoWidth;
+    const sy = c.dh / videoEl.videoHeight;
+    return { x: r.x * sx + c.ox, y: r.y * sy + c.oy, w: r.w * sx, h: r.h * sy, sx, sy };
+  }
+
+  function cssFontFamily(family: string | undefined): string {
+    return `"${(family ?? 'Arial').replace(/"/g, '\\"')}", sans-serif`;
   }
 
   function toVideo(cx: number, cy: number): { x: number; y: number } | null {
@@ -162,6 +385,7 @@
     };
   }
 
+  // ── Canvas interaction ────────────────────────────────────────────────
   function onCanvasDown(e: MouseEvent) {
     if (!videoEl || resizing) return;
     if (!videoEl.paused) videoEl.pause();
@@ -188,6 +412,15 @@
   function onCanvasUp() {
     isDrawing = false;
     if (resizing) { resizing = false; resizeHandle = null; }
+    if (draggingOpIdx >= 0) {
+      draggingOpIdx = -1;
+      queue = [...queue];
+    }
+    if (resizingOpIdx >= 0) {
+      resizingOpIdx = -1;
+      opResizeHandle = null;
+      queue = [...queue];
+    }
   }
 
   const CURSORS: Record<string, string> = {
@@ -207,13 +440,48 @@
     const rw = region.w * sx;
     const rh = region.h * sy;
     const T = 16;
-
     const handles: Record<string, [number, number]> = {
       tl: [rx, ry], tc: [rx + rw / 2, ry], tr: [rx + rw, ry],
       ml: [rx, ry + rh / 2], mr: [rx + rw, ry + rh / 2],
       bl: [rx, ry + rh], bc: [rx + rw / 2, ry + rh], br: [rx + rw, ry + rh],
     };
+    for (const [name, [hx, hy]] of Object.entries(handles)) {
+      if (Math.abs(cx - hx) < T && Math.abs(cy - hy) < T) return name;
+    }
+    return null;
+  }
 
+  function hitTestOp(cx: number, cy: number): number {
+    if (!selected || !videoEl) return -1;
+    const v = toVideo(cx, cy);
+    if (!v) return -1;
+    for (let i = selected.operations.length - 1; i >= 0; i--) {
+      const op = selected.operations[i]!;
+      if (op.mode !== 'text' || !op.region) continue;
+      const r = op.region;
+      if (v.x >= r.x && v.x <= r.x + r.w && v.y >= r.y && v.y <= r.y + r.h) return i;
+    }
+    return -1;
+  }
+
+  function hitTestOpHandle(cx: number, cy: number, opIdx: number): string | null {
+    if (!selected || !videoEl || opIdx < 0) return null;
+    const op = selected.operations[opIdx];
+    if (!op || !op.region) return null;
+    const c = contentRect();
+    if (!c) return null;
+    const sx = c.dw / videoEl.videoWidth;
+    const sy = c.dh / videoEl.videoHeight;
+    const r = op.region;
+    const rx = r.x * sx + c.ox + c.br.left;
+    const ry = r.y * sy + c.oy + c.br.top;
+    const rw = r.w * sx;
+    const rh = r.h * sy;
+    const T = 12;
+    const handles: Record<string, [number, number]> = {
+      tl: [rx, ry], tr: [rx + rw, ry],
+      bl: [rx, ry + rh], br: [rx + rw, ry + rh],
+    };
     for (const [name, [hx, hy]] of Object.entries(handles)) {
       if (Math.abs(cx - hx) < T && Math.abs(cy - hy) < T) return name;
     }
@@ -222,12 +490,66 @@
 
   function onCanvasMouseMove(e: MouseEvent) {
     if (isDrawing || resizing) { onCanvasMove(e); return; }
+    if (draggingOpIdx >= 0) {
+      const v = toVideo(e.clientX, e.clientY);
+      if (!v || !selected) return;
+      const op = selected.operations[draggingOpIdx];
+      if (!op || !op.region) return;
+      const dx = v.x - dragStartVideo.x;
+      const dy = v.y - dragStartVideo.y;
+      op.region = {
+        x: Math.max(0, dragStartRegion.x + dx),
+        y: Math.max(0, dragStartRegion.y + dy),
+        w: dragStartRegion.w,
+        h: dragStartRegion.h,
+      };
+      queue = [...queue];
+      return;
+    }
+    if (resizingOpIdx >= 0 && opResizeHandle) {
+      doOpResize(e.clientX, e.clientY);
+      return;
+    }
+    const hitOp = hitTestOp(e.clientX, e.clientY);
+    hoveredOpIdx = hitOp;
+    if (hitOp >= 0) {
+      const handle = hitTestOpHandle(e.clientX, e.clientY, hitOp);
+      if (handle && canvas) canvas.style.cursor = CURSORS[handle] ?? 'grab';
+      else if (canvas) canvas.style.cursor = 'grab';
+      return;
+    }
     const h = hitTestHandle(e.clientX, e.clientY);
     if (h && canvas) canvas.style.cursor = CURSORS[h] ?? 'crosshair';
     else if (canvas) canvas.style.cursor = 'crosshair';
   }
 
   function onCanvasMouseDown(e: MouseEvent) {
+    if (hoveredOpIdx >= 0) {
+      const handle = hitTestOpHandle(e.clientX, e.clientY, hoveredOpIdx);
+      if (handle && selected) {
+        const op = selected.operations[hoveredOpIdx];
+        if (op?.region) {
+          saveToHistoryLocal();
+          resizingOpIdx = hoveredOpIdx;
+          opResizeHandle = handle;
+          const v = toVideo(e.clientX, e.clientY);
+          opResizeStart = { cx: v?.x ?? 0, cy: v?.y ?? 0, r: { ...op.region } };
+          return;
+        }
+      }
+    }
+    const hitOp = hitTestOp(e.clientX, e.clientY);
+    if (hitOp >= 0 && selected) {
+      const op = selected.operations[hitOp];
+      if (op?.region) {
+        saveToHistoryLocal();
+        draggingOpIdx = hitOp;
+        const v = toVideo(e.clientX, e.clientY);
+        dragStartVideo = { x: v?.x ?? 0, y: v?.y ?? 0 };
+        dragStartRegion = { ...op.region };
+        return;
+      }
+    }
     const h = hitTestHandle(e.clientX, e.clientY);
     if (h && region) {
       resizing = true;
@@ -239,6 +561,28 @@
     onCanvasDown(e);
   }
 
+  function doOpResize(cx: number, cy: number) {
+    if (!opResizeHandle || resizingOpIdx < 0 || !selected) return;
+    const op = selected.operations[resizingOpIdx];
+    if (!op?.region) return;
+    const v = toVideo(cx, cy);
+    if (!v) return;
+    const dx = v.x - opResizeStart.cx;
+    const dy = v.y - opResizeStart.cy;
+    const sr = opResizeStart.r;
+    const MIN = 10;
+    const h = opResizeHandle;
+    let nx = sr.x, ny = sr.y, nw = sr.w, nh = sr.h;
+    if (h.includes('l')) { nx = sr.x + dx; nw = sr.w - dx; }
+    if (h.includes('r')) { nw = sr.w + dx; }
+    if (h.includes('t')) { ny = sr.y + dy; nh = sr.h - dy; }
+    if (h.includes('b')) { nh = sr.h + dy; }
+    if (nw < MIN) { nw = MIN; if (h.includes('l')) nx = sr.x + sr.w - MIN; }
+    if (nh < MIN) { nh = MIN; if (h.includes('t')) ny = sr.y + sr.h - MIN; }
+    op.region = { x: Math.max(0, nx), y: Math.max(0, ny), w: nw, h: nh };
+    queue = [...queue];
+  }
+
   function doResize(cx: number, cy: number) {
     if (!resizeHandle) return;
     const v = toVideo(cx, cy);
@@ -248,18 +592,40 @@
     const sr = resizeStart.r;
     const MIN = 10;
     const h = resizeHandle;
-
     let nx = sr.x, ny = sr.y, nw = sr.w, nh = sr.h;
-
     if (h.includes('l')) { nx = sr.x + dx; nw = sr.w - dx; }
     if (h.includes('r')) { nw = sr.w + dx; }
     if (h.includes('t') || h === 'tc') { ny = sr.y + dy; nh = sr.h - dy; }
     if (h.includes('b') || h === 'bc') { nh = sr.h + dy; }
-
     if (nw < MIN) { nw = MIN; if (h.includes('l')) nx = sr.x + sr.w - MIN; }
     if (nh < MIN) { nh = MIN; if (h.includes('t') || h === 'tc') ny = sr.y + sr.h - MIN; }
-
     region = { x: Math.max(0, nx), y: Math.max(0, ny), w: nw, h: nh };
+  }
+
+  // ── Queue operations ──────────────────────────────────────────────────
+  async function addVideoFromPaths(paths: string[]) {
+    for (const path of paths) {
+      if (queue.some(q => q.path === path)) continue;
+      const filename = path.split(/[/\\]/).pop() ?? path;
+      const src = convertFileSrc(path);
+      let width = 0, height = 0, duration = 0;
+      try {
+        const info: any = await invoke('get_video_info', { path });
+        duration = info.duration ?? 0;
+        width = info.width ?? 0;
+        height = info.height ?? 0;
+        if (width === 0 || height === 0) {
+          const raw: string = info.raw_info ?? '';
+          const resMatch = raw.match(/(\d{2,5})x(\d{2,5})/);
+          if (resMatch) { width = parseInt(resMatch[1]!); height = parseInt(resMatch[2]!); }
+        }
+      } catch {}
+      queue = [...queue, {
+        path, src, filename, width, height, duration,
+        operations: [], status: 'idle', progress: 0, eta: null, speed: null, error: null,
+      }];
+    }
+    if (selectedIdx < 0 && queue.length > 0) selectedIdx = 0;
   }
 
   async function addVideo() {
@@ -269,24 +635,7 @@
     });
     if (!sel) return;
     const paths = Array.isArray(sel) ? sel : [sel];
-    for (const path of paths) {
-      if (queue.some(q => q.path === path)) continue;
-      const filename = path.split(/[/\\]/).pop() ?? path;
-      const src = convertFileSrc(path);
-      let width = 0, height = 0, duration = 0;
-      try {
-        const info: any = await invoke('get_video_info', { path });
-        duration = info.duration ?? 0;
-        const raw: string = info.raw_info ?? '';
-        const resMatch = raw.match(/(\d{2,5})x(\d{2,5})/);
-        if (resMatch) { width = parseInt(resMatch[1]!); height = parseInt(resMatch[2]!); }
-      } catch {}
-      queue = [...queue, {
-        path, src, filename, width, height, duration,
-        operations: [], status: 'idle', progress: 0, eta: null, speed: null, error: null,
-      }];
-    }
-    if (selectedIdx < 0 && queue.length > 0) selectedIdx = 0;
+    await addVideoFromPaths(paths);
   }
 
   function selectQueueItem(idx: number) {
@@ -303,15 +652,27 @@
     if (selectedIdx >= queue.length) selectedIdx = queue.length - 1;
   }
 
+  // ── Operation management ──────────────────────────────────────────────
   function addOperation(mode: string) {
     if (!region || selectedIdx < 0) return;
+    saveToHistoryLocal();
     const op: Operation = {
       id: Date.now(), mode, region: { ...region },
       blurStrength: mode === 'blur' ? blurStrength : undefined,
       startTime: tempStart, endTime: tempEnd,
-      text: mode === 'text' ? textInput : undefined,
-      fontSize: mode === 'text' ? textFontSize : undefined,
-      fontColor: mode === 'text' ? textFontColor : undefined,
+      ...(mode === 'text' ? {
+        text: textInput,
+        fontSize: textFontSize,
+        fontColor: textFontColor,
+        fontFamily: textFontFamily,
+        bold: textBold,
+        italic: textItalic,
+        bgEnabled: textBgEnabled,
+        bgColor: textBgColor,
+        bgOpacity: textBgOpacity,
+        borderWidth: textBorderWidth,
+        borderColor: textBorderColor,
+      } : {}),
     };
     updateOps(ops => [...ops, op]);
     region = null;
@@ -320,95 +681,48 @@
     drawRegion();
   }
 
-  async function importExcelBulk() {
-    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
-    const templateItem = queue[selectedIdx]!;
-    
-    if (!region) {
-      alert('Please draw a region first to set the template for the text (position and size).');
-      return;
-    }
+  function addTemplateRegion() {
+    if (!region) { alert('Draw a region on the video first.'); return; }
+    templateRegions = [...templateRegions, {
+      id: Date.now(),
+      region: { ...region },
+      label: `text${nextRegionLabel}`,
+    }];
+    nextRegionLabel++;
+    region = null;
+    drawRegion();
+  }
 
-    const filePath = await open({
-      multiple: false,
-      filters: [{ name: 'Excel', extensions: ['xlsx', 'xls', 'csv'] }],
+  function removeTemplateRegion(id: number) {
+    templateRegions = templateRegions.filter(r => r.id !== id);
+  }
+
+  function setTemplate(idx: number) {
+    templateIdx = idx;
+    templateRegions = [];
+    nextRegionLabel = 1;
+  }
+
+  function removeOp(opIdx: number) { updateOps(ops => ops.filter((_, i) => i !== opIdx)); }
+  function clearOps() { updateOps(() => []); }
+
+  function moveOp(opIdx: number, direction: -1 | 1) {
+    updateOps(ops => {
+      const newIdx = opIdx + direction;
+      if (newIdx < 0 || newIdx >= ops.length) return ops;
+      const next = [...ops];
+      [next[opIdx], next[newIdx]] = [next[newIdx]!, next[opIdx]!];
+      return next;
     });
-    if (!filePath) return;
-
-    try {
-      const rawBytes = await invoke<number[]>('read_file_bytes', { path: filePath as string });
-      const data = new Uint8Array(rawBytes);
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) { alert('Excel file has no sheets.'); return; }
-      const sheet = workbook.Sheets[sheetName]!;
-      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet);
-
-      if (rows.length === 0) {
-        alert('The Excel file is empty.');
-        return;
-      }
-
-      const newClones: QueueItem[] = [];
-      for (const row of rows) {
-        const text = String(row.text ?? row.Text ?? row.TEXT ?? '');
-        if (!text) continue;
-
-        const id = String(row.id ?? row.Id ?? row.ID ?? row.Name ?? row.name ?? `clone_${Date.now()}_${newClones.length}`);
-
-        const w = region.w;
-        const h = region.h;
-        const x = region.x;
-        const y = region.y;
-        
-        const fontSize = Number(row.fontSize ?? row.font_size ?? row.FontSize ?? textFontSize);
-        const fontColor = String(row.fontColor ?? row.font_color ?? row.FontColor ?? textFontColor);
-
-        const newOp: Operation = {
-          id: Date.now() + newClones.length,
-          mode: 'text',
-          region: { x, y, w, h },
-          text,
-          fontSize,
-          fontColor,
-          startTime: tempStart,
-          endTime: tempEnd,
-        };
-
-        const clone: QueueItem = {
-          ...templateItem,
-          operations: [newOp],
-          status: 'idle',
-          progress: 0,
-          error: null,
-          eta: null,
-          speed: null,
-          customOutputName: id,
-        };
-        newClones.push(clone);
-      }
-
-      if (newClones.length === 0) {
-        alert('No valid text rows found. Make sure the Excel has a "text" column.');
-        return;
-      }
-
-      queue = [...queue, ...newClones];
-      alert(`Imported ${newClones.length} videos from Excel using the template.`);
-      
-      region = null;
-      drawRegion();
-    } catch (e) {
-      alert('Error reading Excel: ' + e);
-    }
   }
 
-  function removeOp(opIdx: number) {
-    updateOps(ops => ops.filter((_, i) => i !== opIdx));
-  }
-
-  function clearOps() {
-    updateOps(() => []);
+  function duplicateOp(opIdx: number) {
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    const item = queue[selectedIdx]!;
+    const op = item.operations[opIdx];
+    if (!op) return;
+    const dup: Operation = { ...op, id: Date.now(), region: op.region ? { ...op.region } : null };
+    updateOps(ops => [...ops.slice(0, opIdx + 1), dup, ...ops.slice(opIdx + 1)]);
   }
 
   function editOpRegion(opIdx: number) {
@@ -426,15 +740,179 @@
     }
   }
 
+  function applyStyleToOp(opIdx: number) {
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    const item = queue[selectedIdx]!;
+    const op = item.operations[opIdx];
+    if (!op || op.mode !== 'text') return;
+    saveToHistoryLocal();
+    op.fontFamily = textFontFamily;
+    op.bold = textBold;
+    op.italic = textItalic;
+    op.fontSize = textFontSize;
+    op.fontColor = textFontColor;
+    op.bgEnabled = textBgEnabled;
+    op.bgColor = textBgColor;
+    op.bgOpacity = textBgOpacity;
+    op.borderWidth = textBorderWidth;
+    op.borderColor = textBorderColor;
+    touchQueue();
+  }
+
+  function autoPositionText(mode: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') {
+    if (!videoEl || selectedIdx < 0) return;
+    const vw = videoEl.videoWidth;
+    const vh = videoEl.videoHeight;
+    const padding = Math.min(vw, vh) * 0.05;
+    const textWidth = vw * 0.3;
+    const textHeight = vh * 0.1;
+    let x = padding, y = padding;
+    if (mode === 'center') { x = vw / 2 - textWidth / 2; y = vh / 2 - textHeight / 2; }
+    else if (mode === 'top-right') { x = vw - textWidth - padding; y = padding; }
+    else if (mode === 'bottom-left') { x = padding; y = vh - textHeight - padding; }
+    else if (mode === 'bottom-right') { x = vw - textWidth - padding; y = vh - textHeight - padding; }
+    region = { x: Math.max(0, x), y: Math.max(0, y), w: textWidth, h: textHeight };
+    drawRegion();
+  }
+
+  function detectContrast(): 'light' | 'dark' | 'neutral' {
+    if (!videoEl) return 'neutral';
+    const vw = videoEl.videoWidth;
+    const vh = videoEl.videoHeight;
+    const sampleSize = 0.1;
+    const sw = Math.max(1, Math.floor(vw * sampleSize));
+    const sh = Math.max(1, Math.floor(vh * sampleSize));
+    const offscreen = document.createElement('canvas');
+    offscreen.width = sw;
+    offscreen.height = sh;
+    const ctx = offscreen.getContext('2d');
+    if (!ctx) return 'neutral';
+    const sx = Math.floor(vw * (1 - sampleSize) / 2);
+    const sy = Math.floor(vh * (1 - sampleSize) / 2);
+    ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, sw, sh);
+    const imageData = ctx.getImageData(0, 0, sw, sh);
+    const data = imageData.data;
+    let totalBrightness = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      totalBrightness += (data[i]! * 0.299 + data[i + 1]! * 0.587 + data[i + 2]! * 0.114);
+    }
+    const avg = totalBrightness / (data.length / 4);
+    if (avg > 128) return 'light';
+    if (avg < 80) return 'dark';
+    return 'neutral';
+  }
+
+  function autoTextColor() {
+    const contrast = detectContrast();
+    if (contrast === 'light') textFontColor = 'black';
+    else if (contrast === 'dark') textFontColor = 'white';
+  }
+
+  // ── Excel import ──────────────────────────────────────────────────────
+  async function importExcelBulk() {
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    const templateItem = queue[selectedIdx]!;
+    const regions = templateRegions.length > 0
+      ? templateRegions
+      : region
+        ? [{ id: 0, region, label: 'text1' }]
+        : [];
+    if (regions.length === 0) {
+      alert('Please draw a region first to set the template for the text (position and size).');
+      return;
+    }
+    const filePath = await open({
+      multiple: false,
+      filters: [{ name: 'Excel', extensions: ['xlsx', 'xls', 'csv'] }],
+    });
+    if (!filePath) return;
+    try {
+      const rawBytes = await invoke<number[]>('read_file_bytes', { path: filePath as string });
+      const data = new Uint8Array(rawBytes);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) { alert('Excel file has no sheets.'); return; }
+      const sheet = workbook.Sheets[sheetName]!;
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet);
+      if (rows.length === 0) { alert('The Excel file is empty.'); return; }
+
+      const newClones: QueueItem[] = [];
+      for (const row of rows) {
+        const text = String(row.text ?? row.Text ?? row.TEXT ?? '');
+        if (!text) continue;
+        const id = String(row.id ?? row.Id ?? row.ID ?? row.Name ?? row.name ?? `clone_${Date.now()}_${newClones.length}`);
+        const ops: Operation[] = [];
+        for (const tr of regions) {
+          const colText = tr.label === 'text1'
+            ? text
+            : String(row[tr.label] ?? row[tr.label.toUpperCase()] ?? row[tr.label.toLowerCase()] ?? '');
+          if (!colText) continue;
+          const fontSize = Number(row.fontSize ?? row.font_size ?? row.FontSize ?? textFontSize);
+          const fontColor = String(row.fontColor ?? row.font_color ?? row.FontColor ?? textFontColor);
+          ops.push({
+            id: Date.now() + newClones.length + ops.length,
+            mode: 'text',
+            region: { ...tr.region },
+            text: colText,
+            fontSize,
+            fontColor,
+            fontFamily: String(row.fontFamily ?? row.font_family ?? textFontFamily),
+            bold: String(row.bold ?? textBold).toLowerCase() === 'true' || row.bold === 1,
+            italic: String(row.italic ?? textItalic).toLowerCase() === 'true' || row.italic === 1,
+            bgEnabled: String(row.bgEnabled ?? row.bg_enabled ?? textBgEnabled).toLowerCase() !== 'false',
+            bgColor: String(row.bgColor ?? row.bg_color ?? textBgColor),
+            bgOpacity: Number(row.bgOpacity ?? row.bg_opacity ?? textBgOpacity),
+            borderWidth: Number(row.borderWidth ?? row.border_width ?? textBorderWidth),
+            borderColor: String(row.borderColor ?? row.border_color ?? textBorderColor),
+            startTime: tempStart,
+            endTime: tempEnd,
+          });
+        }
+        if (ops.length === 0) continue;
+        newClones.push({
+          ...templateItem,
+          operations: ops, status: 'idle', progress: 0, error: null, eta: null, speed: null,
+          customOutputName: id,
+        });
+      }
+      if (newClones.length === 0) {
+        alert('No valid text rows found. Make sure the Excel has a "text" column.');
+        return;
+      }
+      queue = [...queue, ...newClones];
+      alert(`Imported ${newClones.length} videos from Excel using ${regions.length} text region(s).`);
+    } catch (e) {
+      alert('Error reading Excel: ' + e);
+    }
+  }
+
+  // ── Batch processing ──────────────────────────────────────────────────
   async function processAll() {
     const ready = queue.filter(q => q.operations.length > 0 && q.status !== 'done');
     if (ready.length === 0) return;
-    isProcessingAll = true;
 
+    const emptyTextRows = ready
+      .filter(q => hasOnlyEmptyTextOps(q.operations))
+      .map(q => q.customOutputName ?? q.filename);
+    if (emptyTextRows.length > 0) {
+      alert(
+        `Some videos have no text filled in yet (${emptyTextRows.join(', ')}). ` +
+        'Open the Table Editor and enter text for text1/text2 before processing.',
+      );
+      return;
+    }
+
+    isProcessingAll = true;
     for (const q of queue) {
       if (q.operations.length > 0) { q.status = 'queued'; q.progress = 0; q.error = null; }
     }
     queue = [...queue];
+
+    let rafId = 0;
+    const scheduleBatch = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => { rafId = 0; touchQueue(); });
+    };
 
     const unlistenProg = await listen<any>('queue-progress', (ev) => {
       const { index, percent, speed, eta } = ev.payload;
@@ -443,7 +921,7 @@
         item.progress = percent ?? 0;
         item.speed = speed ?? null;
         item.eta = eta ?? null;
-        touchQueue();
+        scheduleBatch();
       }
     });
 
@@ -455,16 +933,20 @@
         item.status = status;
         if (status === 'done') item.progress = 100;
         if (error) item.error = error;
-        touchQueue();
+        scheduleBatch();
       }
     });
 
+    const unlistenSummary = await listen<any>('queue-summary', (ev) => {
+      batchSummary = ev.payload;
+    });
+
     try {
-      const jobs = queue
+      const allJobs = queue
         .map((q, originalIndex) => ({ q, originalIndex }))
-        .filter(({ q }) => q.operations.length > 0)
+        .filter(({ q }) => q.operations.length > 0 && q.status !== 'done')
         .map(({ q, originalIndex }) => {
-          let outPath = q.path.replace(/(\.[^.]+)$/, '_no_logo$1');
+          let outPath = q.path.replace(/(\.[^.]+)$/, `_edited.${exportFormat}`);
           if (q.customOutputName) {
             outPath = q.path.replace(/[^\\/]+(\.[^.]+)$/, `${q.customOutputName}$1`);
           }
@@ -481,17 +963,30 @@
               blur_strength: op.blurStrength ?? 20,
               start_time: op.startTime, end_time: op.endTime,
               text: op.text, font_size: op.fontSize, font_color: op.fontColor ?? 'white',
+              font_family: op.fontFamily ?? null, bold: op.bold ?? null, italic: op.italic ?? null,
+              bg_enabled: op.bgEnabled ?? null, bg_color: op.bgColor ?? null, bg_opacity: op.bgOpacity ?? null,
+              border_width: op.borderWidth ?? null, border_color: op.borderColor ?? null,
             })),
             video_duration: q.duration,
             speed_preset: speedPreset,
           };
         });
-      await invoke('process_queue', { jobs });
+
+      if (allJobs.length === 0) return;
+
+      const BATCH_SIZE = 20;
+      for (let offset = 0; offset < allJobs.length; offset += BATCH_SIZE) {
+        if (!isProcessingAll) break;
+        const batch = allJobs.slice(offset, offset + BATCH_SIZE);
+        await invoke('process_queue', { jobs: batch });
+      }
     } catch (e) {
       alert('Queue error: ' + e);
     } finally {
+      if (rafId) cancelAnimationFrame(rafId);
       unlistenProg();
       unlistenStatus();
+      unlistenSummary();
       isProcessingAll = false;
     }
   }
@@ -502,275 +997,311 @@
     touchQueue();
     isProcessingAll = false;
   }
+
+  function applyToAll() {
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    const sourceOps = queue[selectedIdx]!.operations;
+    if (sourceOps.length === 0) { alert('No operations to apply.'); return; }
+    if (!confirm(`Apply ${sourceOps.length} operation(s) to all ${queue.length} video(s)?`)) return;
+    for (let i = 0; i < queue.length; i++) {
+      if (i === selectedIdx) continue;
+      queue[i]!.operations = sourceOps.map(op => ({
+        ...op,
+        id: Date.now() + Math.random(),
+        region: op.region ? { ...op.region } : null,
+      }));
+    }
+    touchQueue();
+  }
 </script>
 
-<main class="h-screen flex flex-col bg-zinc-950 text-zinc-100 select-none overflow-hidden">
-  <!-- Header -->
-  <header class="h-14 px-4 border-b border-zinc-800 flex items-center gap-3 bg-zinc-950 shrink-0 z-10">
-    <div class="flex items-center gap-2">
-      <div class="h-7 w-7 rounded-lg bg-gradient-to-br from-cyan-500 to-violet-600 flex items-center justify-center">
-        <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-        </svg>
-      </div>
-      <span class="font-bold text-sm tracking-tight">Beru</span>
-      <span class="text-[9px] text-zinc-500 bg-zinc-800/60 px-1.5 py-0.5 rounded font-mono">logo remover</span>
-    </div>
-    <div class="ml-3 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[9px] font-medium text-emerald-400">
-      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> LOCAL
-    </div>
-    <div class="flex-1"></div>
-    <label class="text-[10px] text-zinc-500 flex items-center gap-1">
-      Speed:
-      <select bind:value={speedPreset} class="bg-zinc-800 border border-zinc-700 rounded px-1.5 py-0.5 text-[11px] text-zinc-200">
-        <option value="ultrafast">ultrafast</option>
-        <option value="superfast">superfast</option>
-        <option value="veryfast">veryfast</option>
-        <option value="fast">fast</option>
-        <option value="medium">medium</option>
-      </select>
-    </label>
-    <button onclick={addVideo} class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-xs font-medium">
-      + Add videos
-    </button>
-    {#if isProcessingAll}
-      <button onclick={cancelAll} class="px-3 py-1.5 bg-red-700 hover:bg-red-600 rounded text-xs font-medium">Cancel all</button>
-    {:else}
-      <button onclick={processAll} disabled={!queue.some(q => q.operations.length > 0)}
-        class="px-4 py-1.5 bg-emerald-700 hover:bg-emerald-600 disabled:bg-zinc-800 disabled:text-zinc-500 rounded text-xs font-medium">
-        Process {queue.filter(q => q.operations.length > 0).length} video(s)
-      </button>
-    {/if}
-  </header>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<main class="h-screen flex flex-col select-none overflow-hidden"
+  style="background:var(--bg-app);color:var(--text-primary)"
+  ondragenter={onDragEnter} ondragover={onDragOver} ondragleave={onDragLeave} ondrop={onDrop}>
 
-  <div class="flex-1 flex overflow-hidden">
-    <!-- Queue sidebar -->
-    <aside class="w-60 border-r border-zinc-800 flex flex-col bg-zinc-950 shrink-0">
-      <div class="px-3 py-2 text-[10px] font-medium text-zinc-500 uppercase tracking-wider border-b border-zinc-800/60">
-        Queue ({queue.length})
-      </div>
-      <div class="flex-1 overflow-y-auto">
-        {#if queue.length === 0}
-          <div class="p-4 text-center text-zinc-600 text-xs">
-            <div class="text-3xl mb-2 opacity-30">+</div>
-            Click "Add videos"
+  <Header
+    {queue}
+    bind:isProcessingAll
+    {batchSummary}
+    bind:exportFormat
+    bind:speedPreset
+    canUndo={historyIndex > 0}
+    canRedo={historyIndex < history.length - 1}
+    hasSelected={!!selected}
+    onUndo={undo}
+    onRedo={redo}
+    onAddVideo={addVideo}
+    onProcessAll={processAll}
+    onCancelAll={cancelAll}
+    onShowShortcuts={() => showShortcuts = !showShortcuts}
+  />
+
+  <BatchProgressBar {queue} {isProcessingAll} />
+
+  <div class="flex-1 flex overflow-hidden min-h-0">
+    <QueueSidebar
+      bind:queue
+      bind:selectedIdx
+      {templateIdx}
+      onAddVideo={addVideo}
+      onSelectItem={selectQueueItem}
+      onRemoveItem={removeQueueItem}
+    />
+
+    <!-- Preview + toolbar -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <div class="cap-preview flex-1">
+        {#if selected}
+          <div class="relative inline-block cap-animate-in" style="max-width:100%;max-height:100%">
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video bind:this={videoEl} src={selected.src} controls
+              class="max-h-[calc(100vh-140px)] max-w-full"
+              style="display:block;object-fit:contain;border-radius:4px"
+              onloadedmetadata={() => { region = null; setTimeout(fitCanvas, 50); }}></video>
+
+            {#if selected}
+              {#each selected.operations as op, opIdx (op.id)}
+                {@const s = regionToScreen(op.region)}
+                {#if s}
+                  {#if op.mode === 'blur'}
+                    <div class="absolute pointer-events-none"
+                      style="left:{s.x}px;top:{s.y}px;width:{s.w}px;height:{s.h}px;backdrop-filter:blur({(op.blurStrength ?? 20) * s.sy}px);-webkit-backdrop-filter:blur({(op.blurStrength ?? 20) * s.sy}px)"></div>
+                  {:else if op.mode === 'text' && op.text}
+                    {@const bgOn = op.bgEnabled ?? true}
+                    {@const fontSize = Math.max(1, (op.fontSize ?? 24) * s.sy)}
+                    {@const isHovered = hoveredOpIdx === opIdx}
+                    {@const isActive = draggingOpIdx === opIdx || resizingOpIdx === opIdx}
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
+                    <div class="absolute {isActive ? 'pointer-events-auto cursor-grabbing' : isHovered ? 'pointer-events-auto cursor-grab' : 'pointer-events-none'}"
+                      style="left:{s.x}px;top:{s.y}px;width:{s.w}px;height:{s.h}px;{(isHovered && !isActive) ? 'outline:1.5px dashed rgba(0,240,234,0.7);outline-offset:2px;' : ''}{isActive ? 'outline:2px solid rgba(0,240,234,0.9);outline-offset:2px;' : ''}">
+                      <div style="color:{op.fontColor ?? 'white'};font-size:{fontSize}px;font-family:{cssFontFamily(op.fontFamily)};font-weight:{op.bold ? 700 : 400};font-style:{op.italic ? 'italic' : 'normal'};background:{bgOn ? (op.bgColor ?? 'black') : 'transparent'};opacity:{bgOn ? (op.bgOpacity ?? 0.65) : 1};padding:{bgOn ? Math.max(2,4*s.sy) : 0}px {bgOn ? Math.max(4,8*s.sy) : 0}px;border-radius:{bgOn ? Math.max(3,6*s.sy) : 0}px;white-space:pre-wrap">{op.text}</div>
+                      {#if isHovered || isActive}
+                        {@const hs = 6}
+                        <div class="absolute pointer-events-none" style="left:-{hs/2}px;top:-{hs/2}px;width:{hs}px;height:{hs}px;background:#00f0ea;border:1px solid white;border-radius:1px;"></div>
+                        <div class="absolute pointer-events-none" style="right:-{hs/2}px;top:-{hs/2}px;width:{hs}px;height:{hs}px;background:#00f0ea;border:1px solid white;border-radius:1px;"></div>
+                        <div class="absolute pointer-events-none" style="left:-{hs/2}px;bottom:-{hs/2}px;width:{hs}px;height:{hs}px;background:#00f0ea;border:1px solid white;border-radius:1px;"></div>
+                        <div class="absolute pointer-events-none" style="right:-{hs/2}px;bottom:-{hs/2}px;width:{hs}px;height:{hs}px;background:#00f0ea;border:1px solid white;border-radius:1px;"></div>
+                      {/if}
+                    </div>
+                  {/if}
+                {/if}
+              {/each}
+            {/if}
+
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <canvas bind:this={canvas} class="absolute top-0 left-0" style="cursor:crosshair"
+              onmousedown={onCanvasMouseDown} onmousemove={onCanvasMouseMove}
+              onmouseup={onCanvasUp} onmouseleave={onCanvasUp}></canvas>
           </div>
         {:else}
-          {#each queue as item, i}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div class="flex items-start gap-2 px-2.5 py-2 border-b border-zinc-800/40 cursor-pointer transition-colors
-                   {i === selectedIdx ? 'bg-zinc-800/70' : 'hover:bg-zinc-800/30'}"
-              onclick={() => selectQueueItem(i)}
-              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectQueueItem(i); }}>
-              <div class="w-14 h-9 rounded overflow-hidden bg-zinc-900 shrink-0 relative">
-                <!-- svelte-ignore a11y_media_has_caption -->
-                <video src={item.src} class="w-full h-full object-cover" muted preload="metadata"></video>
-                {#if item.status === 'done'}
-                  <div class="absolute inset-0 bg-emerald-900/60 flex items-center justify-center text-[9px] font-bold text-emerald-300">OK</div>
-                {:else if item.status === 'processing'}
-                  <div class="absolute bottom-0 left-0 right-0 h-1 bg-zinc-700"><div class="h-full bg-emerald-500 transition-all" style="width:{item.progress}%"></div></div>
-                {:else if item.status === 'error'}
-                  <div class="absolute inset-0 bg-red-900/60 flex items-center justify-center text-[9px] text-red-300">ERR</div>
-                {/if}
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-1.5 text-[10px] truncate {i === selectedIdx ? 'text-zinc-100' : 'text-zinc-300'}">
-                  {#if item.customOutputName}
-                    <span class="px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[9px] font-medium tracking-wide">BATCH</span>
-                    <span class="truncate">{item.customOutputName}</span>
-                  {:else}
-                    <span class="truncate">{item.filename}</span>
-                  {/if}
-                </div>
-                <div class="text-[9px] text-zinc-500">{item.width}x{item.height} &middot; {fmtTime(item.duration)}</div>
-                <div class="text-[9px] text-zinc-500">
-                  {item.operations.length} op{item.operations.length !== 1 ? 's' : ''}
-                  {#if item.status === 'processing' && item.eta != null}
-                    <span class="text-emerald-400 ml-1">{Math.round(item.eta)}s</span>
-                  {/if}
-                  {#if item.status === 'done'}<span class="text-emerald-400 ml-1">Done</span>{/if}
-                  {#if item.error}<span class="text-red-400 ml-1 truncate block">{item.error}</span>{/if}
-                </div>
-              </div>
-              <button onclick={(e) => { e.stopPropagation(); removeQueueItem(i); }} class="text-zinc-600 hover:text-red-400 text-xs shrink-0 mt-0.5" disabled={item.status === 'processing'}>&times;</button>
+          <div class="cap-preview-empty cap-animate-in">
+            <div class="cap-preview-empty-icon">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+              </svg>
             </div>
-          {/each}
+            <p class="text-sm font-semibold mb-1" style="color:var(--text-secondary)">Arrastra videos aqu&iacute;</p>
+            <p class="text-xs" style="color:var(--text-dim)">MP4, MOV, AVI, MKV, WebM</p>
+            <button onclick={addVideo} class="cap-btn-secondary mt-4">Importar medios</button>
+          </div>
         {/if}
       </div>
-    </aside>
 
-    <!-- Video preview -->
-    <div class="flex-1 flex items-center justify-center bg-black relative overflow-hidden">
-      {#if selected}
-        <div class="relative inline-block" style="max-width:100%;max-height:100%">
-          <!-- svelte-ignore a11y_media_has_caption -->
-          <video bind:this={videoEl} src={selected.src} controls
-            class="max-h-[calc(100vh-80px)] max-w-full rounded shadow-2xl"
-            style="display:block;object-fit:contain"
-            onloadedmetadata={() => { region = null; setTimeout(fitCanvas, 50); }}></video>
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <canvas bind:this={canvas} class="absolute top-0 left-0" style="cursor:crosshair"
-            onmousedown={onCanvasMouseDown} onmousemove={onCanvasMouseMove}
-            onmouseup={onCanvasUp} onmouseleave={onCanvasUp}></canvas>
-        </div>
-      {:else}
-        <div class="text-center text-zinc-600">
-          <div class="text-5xl mb-3 opacity-30">+</div>
-          <p class="text-sm">Add videos to the queue</p>
-          <p class="text-[10px] mt-1 text-zinc-700">Select a video from the queue to edit</p>
-        </div>
-      {/if}
+      <ToolBar bind:activeTool visible={!!selected && sidebarMode === 'logo'} />
     </div>
 
-    <!-- Right sidebar -->
+    <!-- Properties panel — right -->
     {#if selected}
-      <aside class="w-72 border-l border-zinc-800 flex flex-col bg-zinc-950 shrink-0 overflow-y-auto">
-        <div class="p-3 pb-0">
-          <div class="flex p-1 bg-zinc-900/50 rounded-lg border border-zinc-800/80">
-            <button onclick={() => sidebarMode = 'logo'} class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 {sidebarMode === 'logo' ? 'text-cyan-50 bg-cyan-900/40 shadow-sm border border-cyan-500/20' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}">
-              Logo Remove
+      <aside class="cap-sidebar cap-sidebar-right overflow-y-auto">
+        <div class="cap-section !pb-3">
+          <div class="cap-mode-tabs">
+            <button onclick={() => sidebarMode = 'logo'} class="cap-mode-tab {sidebarMode === 'logo' ? 'active-logo' : ''}">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.364 15.364 0 018.466-6.282 3 3 0 00-4.242-4.243 15.364 15.364 0 00-6.282 8.466 3 3 0 004.242 4.243"/></svg>
+              Quitar logo
             </button>
-            <button onclick={() => sidebarMode = 'batch'} class="flex-1 py-1.5 text-xs font-medium rounded-md transition-all duration-200 {sidebarMode === 'batch' ? 'text-indigo-50 bg-indigo-900/40 shadow-sm border border-indigo-500/20' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50'}">
-              Batch Text
+            <button onclick={() => sidebarMode = 'batch'} class="cap-mode-tab {sidebarMode === 'batch' ? 'active-batch' : ''}">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 01-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-13.5V5.625m0 0h-7.5m7.5 0v1.5c0 .621-.504 1.125-1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5"/></svg>
+              Texto en lote
             </button>
           </div>
         </div>
 
-        <div class="p-3 flex flex-col flex-1">
-          <div class="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-2">
-            Region &middot; <span class="text-zinc-300 normal-case">{selected.filename}</span>
+        <div class="cap-section">
+          <div class="cap-section-title">
+            Regi&oacute;n &middot; <span class="normal-case tracking-normal font-normal" style="color:var(--text-secondary)">{selected.filename}</span>
           </div>
 
           {#if region}
-            <div class="grid grid-cols-2 gap-1.5 mb-3">
+            <div class="grid grid-cols-2 gap-2 mb-3">
               {#each ([['X','x'],['Y','y'],['W','w'],['H','h']] as const) as [label, key]}
-                <label class="flex items-center gap-1 text-[10px] text-zinc-500">
-                  <span class="w-3 shrink-0">{label}</span>
+                <label>
+                  <span class="cap-input-label">{label}</span>
                   <input type="number" value={Math.round(region[key])}
                     onchange={(e) => { region = { ...region!, [key]: parseInt((e.target as HTMLInputElement).value) || 0 }; }}
-                    class="w-full bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-xs text-zinc-100 font-mono" />
+                    class="cap-input font-mono text-[11px]" />
                 </label>
               {/each}
             </div>
 
             {#if sidebarMode === 'logo'}
               <div class="mb-3">
-                <label class="flex items-center gap-2 text-[10px] text-zinc-500">
-                  Blur
-                  <input type="range" min="2" max="60" bind:value={blurStrength} class="flex-1 accent-cyan-500" />
-                  <span class="font-mono text-xs w-6 text-right">{blurStrength}</span>
+                <label class="flex items-center gap-2 text-[10px]" style="color:var(--text-muted)">
+                  Intensidad blur
+                  <input type="range" min="2" max="60" bind:value={blurStrength} class="flex-1" />
+                  <span class="font-mono text-xs w-6 text-right" style="color:var(--accent)">{blurStrength}</span>
                 </label>
               </div>
             {/if}
 
-            <div class="mb-3 space-y-1.5">
+            <div class="mb-3 space-y-2">
               {#if sidebarMode === 'logo'}
-                <label class="flex flex-col text-[10px] text-zinc-500 group">
-                  Text content
-                  <input type="text" bind:value={textInput} placeholder="Enter text..." class="mt-1 bg-zinc-900/80 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all" />
+                <label>
+                  <span class="cap-input-label">Contenido de texto</span>
+                  <input type="text" bind:value={textInput} placeholder="Escribe aqu&iacute;..." class="cap-input" />
                 </label>
               {:else}
-                <div class="flex items-start gap-2 bg-indigo-950/30 p-2.5 rounded-lg border border-indigo-500/20 mb-3 shadow-inner">
-                  <svg class="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                  <div class="text-[10px] text-indigo-200/80 leading-relaxed">
-                    The drawn region acts as the template for position and size. Text content will be loaded dynamically from your Excel file.
-                  </div>
+                <div class="cap-card cap-card-batch text-[10px] leading-relaxed" style="color:rgba(168,85,247,0.85)">
+                  La regi&oacute;n dibujada define posici&oacute;n y tama&ntilde;o. El texto se cargar&aacute; desde Excel.
                 </div>
               {/if}
-              <div class="grid grid-cols-2 gap-2">
-                <label class="flex flex-col text-[10px] text-zinc-500">
-                  Font size
-                  <div class="relative mt-1">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-zinc-600">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                    </span>
-                    <input type="number" bind:value={textFontSize} min="8" max="200" class="w-full bg-zinc-900/80 border border-zinc-700 rounded pl-6 pr-2 py-1.5 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all" />
-                  </div>
-                </label>
-                <label class="flex flex-col text-[10px] text-zinc-500">
-                  Color
-                  <div class="relative mt-1">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-zinc-600">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"></path></svg>
-                    </span>
-                    <input type="text" bind:value={textFontColor} placeholder="white" class="w-full bg-zinc-900/80 border border-zinc-700 rounded pl-6 pr-2 py-1.5 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all" />
-                  </div>
-                </label>
-              </div>
+
+              <StyleEditor
+                bind:fontFamily={textFontFamily}
+                bind:bold={textBold}
+                bind:italic={textItalic}
+                bind:fontSize={textFontSize}
+                bind:fontColor={textFontColor}
+                bind:bgEnabled={textBgEnabled}
+                bind:bgColor={textBgColor}
+                bind:bgOpacity={textBgOpacity}
+                bind:borderWidth={textBorderWidth}
+                bind:borderColor={textBorderColor}
+              />
             </div>
 
-            {#if sidebarMode === 'logo'}
-              <div class="grid grid-cols-2 gap-1.5 mb-3">
-                <label class="flex flex-col text-[10px] text-zinc-500">
-                  Start (s)
-                  <input type="number" bind:value={tempStart} placeholder="0" class="bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-xs text-zinc-100" />
-                </label>
-                <label class="flex flex-col text-[10px] text-zinc-500">
-                  End (s)
-                  <input type="number" bind:value={tempEnd} placeholder="end" class="bg-zinc-900 border border-zinc-700 rounded px-1.5 py-1 text-xs text-zinc-100" />
-                </label>
-              </div>
+            <PresetManager
+              bind:this={presetManager}
+              bind:presets
+              currentStyle={() => ({
+                name: '', fontFamily: textFontFamily, bold: textBold, italic: textItalic,
+                fontSize: textFontSize, fontColor: textFontColor, bgEnabled: textBgEnabled,
+                bgColor: textBgColor, bgOpacity: textBgOpacity, borderWidth: textBorderWidth,
+                borderColor: textBorderColor,
+              })}
+              onApply={(p) => {
+                textFontFamily = p.fontFamily; textBold = p.bold; textItalic = p.italic;
+                textFontSize = p.fontSize; textFontColor = p.fontColor; textBgEnabled = p.bgEnabled;
+                textBgColor = p.bgColor; textBgOpacity = p.bgOpacity; textBorderWidth = p.borderWidth;
+                textBorderColor = p.borderColor;
+              }}
+            />
 
-              <div class="grid grid-cols-3 gap-1.5 mb-2">
-                <button onclick={() => addOperation('blur')} class="bg-blue-700 hover:bg-blue-600 py-1.5 rounded text-xs font-medium">Blur</button>
-                <button onclick={() => addOperation('crop')} class="bg-amber-700 hover:bg-amber-600 py-1.5 rounded text-xs font-medium">Crop</button>
-                <button onclick={() => addOperation('text')} class="bg-purple-700 hover:bg-purple-600 py-1.5 rounded text-xs font-medium">Text</button>
+            {#if sidebarMode === 'logo'}
+              <div class="grid grid-cols-2 gap-2 mb-3">
+                <label>
+                  <span class="cap-input-label">Inicio (s)</span>
+                  <input type="number" bind:value={tempStart} placeholder="0" class="cap-input font-mono text-[11px]" />
+                </label>
+                <label>
+                  <span class="cap-input-label">Fin (s)</span>
+                  <input type="number" bind:value={tempEnd} placeholder="final" class="cap-input font-mono text-[11px]" />
+                </label>
               </div>
             {/if}
-            <button onclick={() => { region = null; drawRegion(); }} class="text-[10px] text-zinc-500 hover:text-zinc-300 mb-3">Cancel selection</button>
+            <div class="mb-2">
+              <button onclick={() => addOperation(activeTool)}
+                class="cap-btn-apply {activeTool === 'blur' ? 'cap-btn-apply-blur' : activeTool === 'crop' ? 'cap-btn-apply-crop' : activeTool === 'delogo' ? 'cap-btn-apply-delogo' : 'cap-btn-apply-text'}">
+                Aplicar {activeTool === 'blur' ? 'Desenfoque' : activeTool === 'crop' ? 'Recorte' : activeTool === 'delogo' ? 'Remover Logo' : 'Texto'}
+              </button>
+            </div>
+            <button onclick={() => { region = null; drawRegion(); }} class="text-[10px] mb-3 hover:underline" style="color:var(--text-muted)">Cancelar selecci&oacute;n</button>
+            <div class="mb-3">
+              <div class="cap-input-label mb-1.5">Posici&oacute;n autom&aacute;tica</div>
+              <div class="grid grid-cols-5 gap-1">
+                <button onclick={() => autoPositionText('top-left')} class="cap-btn-icon !w-full" title="Arriba izq">&#8598;</button>
+                <button onclick={() => autoPositionText('center')} class="cap-btn-icon !w-full" title="Centro">&#8853;</button>
+                <button onclick={() => autoPositionText('top-right')} class="cap-btn-icon !w-full" title="Arriba der">&#8599;</button>
+                <button onclick={() => autoPositionText('bottom-left')} class="cap-btn-icon !w-full" title="Abajo izq">&#8601;</button>
+                <button onclick={() => autoPositionText('bottom-right')} class="cap-btn-icon !w-full" title="Abajo der">&#8600;</button>
+              </div>
+              <button onclick={autoTextColor} class="cap-btn-secondary w-full mt-1.5 text-[10px] !py-1.5">
+                Color autom&aacute;tico (contraste)
+              </button>
+            </div>
           {:else}
-            <div class="text-[11px] text-zinc-600 mb-4 leading-relaxed">
-              Draw a rectangle on the video to select the area. Adjust with handles or numeric inputs.
+            <div class="text-[11px] mb-4 leading-relaxed cap-card cap-card-info" style="color:var(--text-secondary)">
+              Dibuja un rect&aacute;ngulo sobre el video para seleccionar el &aacute;rea. Ajusta con los handles o los valores num&eacute;ricos.
             </div>
           {/if}
 
           {#if sidebarMode === 'batch'}
-            <button onclick={importExcelBulk}
-              class="w-full mb-3 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-500/25 border border-indigo-400/30 rounded-lg text-xs font-semibold text-white flex items-center justify-center gap-2 transform hover:scale-[1.02] active:scale-95 transition-all duration-200">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-              </svg>
-              Import text from Excel
-            </button>
+            <BatchPanel
+              {selectedIdx}
+              bind:templateIdx
+              bind:templateRegions
+              bind:nextRegionLabel
+              {region}
+              bind:batchFindText
+              bind:batchReplaceText
+              bind:batchFindScope
+              onAddTemplateRegion={addTemplateRegion}
+              onRemoveTemplateRegion={removeTemplateRegion}
+              onSetTemplate={setTemplate}
+              onImportExcel={importExcelBulk}
+              onOpenTableEditor={() => showTableEditor = true}
+              onBatchFindReplace={batchFindReplace}
+            />
           {/if}
-
-          <div class="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-1.5 mt-auto">
-            Operations ({selected.operations.length})
-          </div>
-        {#if selected.operations.length === 0}
-          <div class="text-[11px] text-zinc-700">None yet</div>
-        {:else}
-          <div class="space-y-1">
-            {#each selected.operations as op, oi}
-              <div class="flex items-center gap-1.5 bg-zinc-900 px-2 py-1.5 rounded text-[11px] group">
-                <span class="uppercase font-medium w-10 shrink-0 {MODE_META[op.mode]?.color ?? 'text-zinc-400'}">
-                  {MODE_META[op.mode]?.label ?? op.mode}
-                </span>
-                {#if op.mode === 'text' && op.text}
-                  <span class="text-zinc-300 text-[10px] flex-1 truncate">"{op.text}"</span>
-                {:else if op.region}
-                  <span class="font-mono text-zinc-500 text-[10px] flex-1 truncate">
-                    {Math.round(op.region.x)},{Math.round(op.region.y)} {Math.round(op.region.w)}x{Math.round(op.region.h)}
-                  </span>
-                {/if}
-                {#if op.startTime || op.endTime}
-                  <span class="text-amber-500 text-[10px]">{op.startTime ?? 0}s-{op.endTime ?? 'end'}</span>
-                {/if}
-                <button onclick={() => editOpRegion(oi)}
-                  class="text-zinc-600 hover:text-blue-400 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity" title="Edit region">E</button>
-                <button onclick={() => removeOp(oi)} class="text-zinc-600 hover:text-red-400 text-xs" title="Remove">&times;</button>
-              </div>
-            {/each}
-            <button onclick={clearOps} class="text-[10px] text-red-500 hover:text-red-400 mt-1">Clear all</button>
-          </div>
-        {/if}
         </div>
+
+        <LayerList
+          bind:operations={selected.operations}
+          onRemove={removeOp}
+          onMove={moveOp}
+          onDuplicate={duplicateOp}
+          onEditRegion={editOpRegion}
+          onApplyStyle={applyStyleToOp}
+          onClearOps={clearOps}
+          onStyleTextOp={applyStyleToOp}
+        />
       </aside>
     {/if}
   </div>
+
+  <DragOverlay {isDragging} />
+
+  <ShortcutsModal bind:open={showShortcuts} />
+
+  <TableEditor
+    bind:open={showTableEditor}
+    bind:queue
+    {selectedIdx}
+    {templateRegions}
+    {region}
+    {textFontSize}
+    {textFontColor}
+    {textFontFamily}
+    {textBold}
+    {textItalic}
+    {textBgEnabled}
+    {textBgColor}
+    {textBgOpacity}
+    {textBorderWidth}
+    {textBorderColor}
+    onSelectItem={selectQueueItem}
+  />
 </main>
+
+<svelte:window onkeydown={(e) => {
+  if (showShortcuts && e.key === 'Escape') { showShortcuts = false; return; }
+  if (showTableEditor && e.key === 'Escape') { showTableEditor = false; return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'o') { e.preventDefault(); addVideo(); }
+  if (e.key === '?' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); showShortcuts = !showShortcuts; }
+}} />
 
 <style>
   :global(body) { margin: 0; overflow: hidden; }
-  input[type="range"] { accent-color: #06b6d4; }
 </style>
