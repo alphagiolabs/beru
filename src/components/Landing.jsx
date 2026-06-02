@@ -5,12 +5,30 @@ import { useT } from "../i18n/useT";
 const api = window.api;
 
 export default function Landing() {
-  const store = useEditorStore();
   const t = useT();
 
   const handleSelect = async () => {
-    const paths = await api?.openVideos();
-    if (paths && paths.length > 0) await store.addVideos(paths, api);
+    if (!api?.openVideos) {
+      useEditorStore.getState().showToast({ kind: "err", text: t("errors.noApi") });
+      return;
+    }
+    try {
+      const paths = await api.openVideos();
+      if (!paths?.length) return;
+      await useEditorStore.getState().addVideos(paths, api);
+      useEditorStore.getState().showToast({
+        kind: "ok",
+        text: t("drop.added", { count: paths.length }),
+      });
+    } catch (err) {
+      console.error("[beru] Video import failed:", err);
+      useEditorStore.getState().showToast({
+        kind: "err",
+        text: t("errors.importVideosFailed", {
+          message: err?.message || t("errors.unknown"),
+        }),
+      });
+    }
   };
 
   return (

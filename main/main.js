@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } from "electron";
 import { spawn, exec } from "child_process";
 import path from "path";
 import fs from "fs";
@@ -15,6 +15,7 @@ let mainWindow = null;
 let pythonProcess = null;
 let currentTmpFile = null;
 let isProcessing = false;
+let lastProcessingError = null;
 
 function getPythonPath() {
   if (isDev) return path.join(__dirname, "..", "python", "processor.py");
@@ -33,11 +34,35 @@ function getFfmpegPath() {
     : path.join(process.resourcesPath, "bin", "ffmpeg.exe");
 }
 
+const videoInfoCache = new Map();
+
+function getVideoMtimeMs(filePath) {
+  try { return fs.statSync(filePath).mtimeMs; } catch { return -1; }
+}
+
+/** Fast metadata read for batch import (ffprobe only, cached by path+mtime). */
+async function probeVideoFast(filePath) {
+  const mtime = getVideoMtimeMs(filePath);
+  if (mtime >= 0) {
+    const hit = videoInfoCache.get(filePath);
+    if (hit && hit.mtime === mtime) return hit.info;
+  }
+  const info = await probeVideoFile(filePath, {
+    ffprobePath: getFfprobePath(),
+    ffmpegPath: getFfmpegPath(),
+    timeoutMs: 2500,
+    allowFfmpegFallback: false,
+  });
+  if (mtime >= 0) videoInfoCache.set(filePath, { mtime, info });
+  return info;
+}
+
 function probeVideo(filePath) {
   return probeVideoFile(filePath, {
     ffprobePath: getFfprobePath(),
     ffmpegPath: getFfmpegPath(),
     timeoutMs: 5000,
+    allowFfmpegFallback: true,
   });
 }
 
@@ -54,6 +79,18 @@ async function runWithConcurrency(items, limit, worker) {
   const runners = Array.from({ length: Math.min(limit, items.length) }, launch);
   await Promise.all(runners);
   return results;
+}
+
+const DEV_URL = "http://localhost:5173";
+const BUILD_INDEX = path.join(__dirname, "..", "build", "index.html");
+
+function loadProductionBuild() {
+  if (!fs.existsSync(BUILD_INDEX)) {
+    console.error("[beru] Missing build/index.html — run: npm run build");
+    return false;
+  }
+  mainWindow.loadFile(BUILD_INDEX);
+  return true;
 }
 
 function createWindow() {
@@ -75,11 +112,22 @@ function createWindow() {
   });
   mainWindow.setMenu(null);
 
+  let devFallbackUsed = false;
   if (isDev) {
-    mainWindow.loadURL("http://localhost:5173");
+    mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      if (!isMainFrame || devFallbackUsed) return;
+      if (!validatedURL?.startsWith(DEV_URL)) return;
+      devFallbackUsed = true;
+      console.warn(
+        `[beru] Dev server unavailable (${errorCode} ${errorDescription}). ` +
+        "Loading build/ — start Vite with: npm run dev",
+      );
+      loadProductionBuild();
+    });
+    mainWindow.loadURL(DEV_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "build", "index.html"));
+    loadProductionBuild();
   }
 
   // Initialize the auto-updater (no-op in dev). Safe to call after window is ready.
@@ -132,8 +180,9 @@ ipcMain.handle("fs:getVideoInfo", async (_event, filePath) => {
 
 ipcMain.handle("fs:getVideoInfoBatch", async (_event, filePaths) => {
   if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
-  const limit = Math.max(1, Math.min(8, os.cpus()?.length || 4));
-  return await runWithConcurrency(filePaths, limit, probeVideo);
+  const cpus = os.cpus()?.length || 4;
+  const limit = Math.max(2, Math.min(16, filePaths.length, cpus * 2));
+  return await runWithConcurrency(filePaths, limit, probeVideoFast);
 });
 
 const VIDEO_EXT = /\.(mp4|mov|avi|mkv|webm|flv|wmv|m4v|mpg|mpeg)$/i;
@@ -192,10 +241,12 @@ const extractThumbnail = (filePath, width = 80) => new Promise((resolve) => {
   let killTimer = null;
   const proc = spawn(ffmpeg, [
     "-hide_banner", "-loglevel", "error",
-    "-ss", "0", "-i", filePath,
+    "-ss", "1",
+    "-i", filePath,
+    "-an", "-sn", "-dn",
     "-vframes", "1",
     "-vf", `scale=${width}:-2`,
-    "-q:v", "8",
+    "-q:v", "10",
     "-f", "image2pipe",
     "-vcodec", "mjpeg",
     "-",
@@ -217,7 +268,7 @@ const extractThumbnail = (filePath, width = 80) => new Promise((resolve) => {
     const dataUrl = `data:image/jpeg;base64,${buf.toString("base64")}`;
     finish({ dataUrl, size: buf.length });
   });
-  killTimer = setTimeout(() => finish(null), 8000);
+  killTimer = setTimeout(() => finish(null), 5000);
 });
 
 ipcMain.handle("video:thumbnail", async (_event, filePath) => {
@@ -226,7 +277,8 @@ ipcMain.handle("video:thumbnail", async (_event, filePath) => {
 
 ipcMain.handle("video:thumbnailBatch", async (_event, filePaths) => {
   if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
-  const limit = Math.max(1, Math.min(4, os.cpus()?.length || 4));
+  const cpus = os.cpus()?.length || 4;
+  const limit = Math.max(2, Math.min(8, filePaths.length, cpus));
   return await runWithConcurrency(filePaths, limit, (p) => extractThumbnail(p, 80));
 });
 
@@ -267,8 +319,16 @@ function dispatchProcessorLine(line) {
     if (msg.type === "progress") sendToRenderer("process:progress", msg);
     else if (msg.type === "job_progress") sendToRenderer("process:jobProgress", msg);
     else if (msg.type === "complete") sendToRenderer("process:complete", msg);
-    else if (msg.type === "error") sendToRenderer("process:jobError", msg);
-    else if (msg.type === "summary") sendToRenderer("process:summary", msg);
+    else if (msg.type === "error") {
+      const errText = msg.error || msg.message || "Unknown error";
+      const idx = msg.index;
+      if (Number.isInteger(idx) && idx >= 0) {
+        sendToRenderer("process:jobError", msg);
+      } else {
+        lastProcessingError = errText;
+        sendToRenderer("process:error", errText);
+      }
+    } else if (msg.type === "summary") sendToRenderer("process:summary", msg);
     else sendToRenderer("process:log", trimmed);
   } catch {
     sendToRenderer("process:log", trimmed);
@@ -283,7 +343,6 @@ ipcMain.handle("process:start", async (_event, jobs) => {
   try {
     const scriptPath = getPythonPath();
     if (!fs.existsSync(scriptPath)) {
-      sendToRenderer("process:error", "Python script not found: " + scriptPath);
       return { success: false, error: "processor.py not found" };
     }
 
@@ -292,6 +351,7 @@ ipcMain.handle("process:start", async (_event, jobs) => {
     }
 
     isProcessing = true;
+    lastProcessingError = null;
 
     const uid = `${Date.now()}-${randomBytes(4).toString("hex")}`;
     currentTmpFile = path.join(app.getPath("temp"), `beru-jobs-${uid}.json`);
@@ -344,19 +404,26 @@ ipcMain.handle("process:start", async (_event, jobs) => {
       pythonProcess.on("close", (code) => {
         if (stdoutBuf.trim()) dispatchProcessorLine(stdoutBuf);
         sendToRenderer("process:finished", { code });
-        resolve(finishProcessing({ success: code === 0, code }));
+        const failed = code !== 0;
+        resolve(finishProcessing({
+          success: !failed,
+          code,
+          error: failed
+            ? (lastProcessingError || `Process exited with code ${code}`)
+            : undefined,
+        }));
       });
 
       pythonProcess.on("error", (err) => {
+        lastProcessingError = err.message;
         sendToRenderer("process:error", err.message);
-        resolve(finishProcessing({ success: false, error: err.message }));
+        resolve(finishProcessing({ success: false, code: 1, error: err.message }));
       });
     });
   } catch (err) {
     isProcessing = false;
     pythonProcess = null;
     console.error("[beru] process:start failed:", err);
-    sendToRenderer("process:error", err.message);
     return { success: false, error: err.message };
   }
 });
@@ -683,7 +750,38 @@ process.on("unhandledRejection", (reason) => {
   console.error("[beru] unhandledRejection:", reason);
 });
 
-app.whenReady().then(createWindow);
+// ── Custom beru:// protocol ────────────────────────────────────────────────
+// Lets the renderer load local files (e.g. <video src=...>) from any origin
+// (Vite dev server on http://localhost:5173) without disabling webSecurity.
+// Must be declared before app.whenReady().
+protocol.registerSchemesAsPrivileged([
+  { scheme: "beru", privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: false } },
+]);
+
+function registerBeruProtocol() {
+  protocol.handle("beru", async (request) => {
+    try {
+      const url = new URL(request.url);
+      // beru://local/<percent-encoded-absolute-path>  e.g. beru://local/C%3A%5Cvideos%5Cclip.mp4
+      let absPath = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+      if (process.platform === "win32" && /^\/[A-Za-z]:/.test(url.pathname)) {
+        absPath = absPath.replace(/^([A-Za-z]:)/, "$1");
+      }
+      if (!absPath || !fs.existsSync(absPath)) {
+        return new Response("Not found", { status: 404 });
+      }
+      return net.fetch(pathToFileURL(absPath).toString());
+    } catch (err) {
+      console.error("[beru] beru:// handler error:", err);
+      return new Response("Internal error", { status: 500 });
+    }
+  });
+}
+
+app.whenReady().then(() => {
+  registerBeruProtocol();
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
@@ -706,5 +804,21 @@ ipcMain.handle("updater:download", async () => {
 ipcMain.handle("updater:install", () => {
   updater.install();
   return { ok: true };
+});
+
+ipcMain.handle("updater:checkGitHub", async () => {
+  return await updater.checkGitHubRelease();
+});
+
+ipcMain.handle("shell:openExternal", async (_event, url) => {
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
+    return { success: false, error: "URL inválida" };
+  }
+  try {
+    await shell.openExternal(url);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e?.message || String(e) };
+  }
 });
 

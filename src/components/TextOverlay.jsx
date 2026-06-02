@@ -1,3 +1,5 @@
+import { letterSpacingToPx } from "../utils/letter-spacing";
+
 /**
  * Renders a text overlay aligned to a video region (preview only).
  * screen: return value of regionToScreen()
@@ -22,7 +24,7 @@ export default function TextOverlay({
   const fontSize = Math.max(1, (style.fontSize || 24) * screen.sy);
   const bgOn = style.bgEnabled !== false;
   const baseWeight = style.fontWeight ?? (style.bold ? 700 : 400);
-  const letterSpacing = (style.letterSpacing || 0) * screen.sy;
+  const letterSpacing = letterSpacingToPx(style.letterSpacing) * screen.sy;
   const textOpacity = style.textOpacity ?? 1;
   const align = style.textAlign || "left";
   const boxPad = bgOn ? Math.max(2, (style.boxBorderWidth || 4) * screen.sy) : 0;

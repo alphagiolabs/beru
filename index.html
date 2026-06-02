@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Beru</title>
+    <style>
+      html, body, #root { height: 100%; margin: 0; }
+      body { background: #0a0a0a; color: #ffffff; font-family: "Segoe UI", system-ui, sans-serif; }
+      #root:empty::after {
+        content: "Cargando Beru…";
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #888;
+        font-size: 13px;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

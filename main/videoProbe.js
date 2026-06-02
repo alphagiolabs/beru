@@ -127,7 +127,12 @@ function runProcess(command, args, timeoutMs) {
   });
 }
 
-export async function probeVideoFile(filePath, { ffprobePath, ffmpegPath, timeoutMs = 5000 } = {}) {
+export async function probeVideoFile(filePath, {
+  ffprobePath,
+  ffmpegPath,
+  timeoutMs = 5000,
+  allowFfmpegFallback = true,
+} = {}) {
   if (!filePath || !fs.existsSync(filePath)) {
     return emptyVideoInfo({ exists: false });
   }
@@ -149,7 +154,7 @@ export async function probeVideoFile(filePath, { ffprobePath, ffmpegPath, timeou
     }
   }
 
-  if (ffmpegPath && fs.existsSync(ffmpegPath)) {
+  if (allowFfmpegFallback && ffmpegPath && fs.existsSync(ffmpegPath)) {
     const result = await runProcess(ffmpegPath, [
       "-hide_banner", "-i", filePath,
     ], timeoutMs);

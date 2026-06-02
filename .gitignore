@@ -15,6 +15,11 @@ $null
 # Python cache
 __pycache__/
 *.pyc
+python/benchmark_*.py
+
+# Local test media / benchmark output
+prueba.mp4
+tmp/
 
 # FFmpeg binaries (large)
 src-tauri/bin/ffmpeg*

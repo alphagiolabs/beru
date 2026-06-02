@@ -113,6 +113,32 @@ print(processor.build_drawtext({
     expect(r.stdout.trim()).toContain("fontfile='C\\:/Windows/Fonts/arial.ttf'");
   });
 
+  it("emits drawtext spacing for letter_spacing instead of inserting spaces", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+print(processor.build_drawtext({
+    "mode": "text",
+    "text": "ABC",
+    "font_family": "Arial",
+    "letter_spacing": 8,
+    "region": {"x": 10, "y": 20, "w": 200, "h": 50},
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const filter = r.stdout.trim();
+    expect(filter).toContain("spacing=8");
+    expect(filter).toContain("text='ABC'");
+    expect(filter).not.toContain("text='A B C'");
+  });
+
   it("uses two automatic workers for hardware encoders that tolerate parallel jobs", () => {
     const code = `
 import json

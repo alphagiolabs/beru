@@ -382,19 +382,8 @@ def ffprobe(path):
 def build_drawtext(op):
     """Build ffmpeg drawtext filter string from operation."""
     text = op.get("text", "")
-    
-    # 1. Apply letter spacing to the RAW text BEFORE escaping
-    letter_spacing = op.get("letter_spacing", 0)
-    if letter_spacing and letter_spacing > 0:
-        try:
-            spacing_val = int(letter_spacing)
-            if spacing_val > 0:
-                spacing_str = " " * max(1, spacing_val // 2)
-                text = spacing_str.join(text)
-        except (TypeError, ValueError):
-            pass
 
-    # 2. Escape the text for FFmpeg drawtext syntax
+    # Escape the text for FFmpeg drawtext syntax
     text = (text
             .replace("\\", "\\\\")
             .replace(":", "\\:")
@@ -463,6 +452,15 @@ def build_drawtext(op):
 
     if italic:
         parts.append("fontstyle=italic")
+
+    # Letter spacing (drawtext spacing= pixels between glyphs; matches CSS preview)
+    letter_spacing = op.get("letter_spacing", 0)
+    try:
+        spacing_px = int(round(float(letter_spacing)))
+    except (TypeError, ValueError):
+        spacing_px = 0
+    if spacing_px > 0:
+        parts.append(f"spacing={spacing_px}")
 
     # Background box
     if op.get("bg_enabled", True):

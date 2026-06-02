@@ -72,6 +72,37 @@ describe("useEditorStore logic regressions", () => {
     });
   });
 
+  it("addVideos populates the queue and selects the first item", async () => {
+    mockApi.getVideoInfoBatch.mockResolvedValueOnce([
+      {
+        width: 1920,
+        height: 1080,
+        duration: 42,
+        videoCodec: "h264",
+        pixFmt: "yuv420p",
+        frameRate: 30,
+        audioCodec: "aac",
+      },
+    ]);
+
+    await useEditorStore.getState().addVideos(["C:\\videos\\clip.mp4"], mockApi);
+
+    expect(useEditorStore.getState().queue).toHaveLength(1);
+    await vi.waitFor(() => {
+      expect(useEditorStore.getState().queue[0].width).toBe(1920);
+    });
+    const state = useEditorStore.getState();
+
+    expect(state.queue[0]).toEqual(expect.objectContaining({
+      path: "C:\\videos\\clip.mp4",
+      filename: "clip.mp4",
+      width: 1920,
+      height: 1080,
+      duration: 42,
+    }));
+    expect(state.selectedIdx).toBe(0);
+  });
+
   it("uses the queue index as the job id when processing a single video", async () => {
     useEditorStore.setState({
       queue: [
@@ -276,6 +307,41 @@ describe("useEditorStore logic regressions", () => {
     expect(project.templateRegions[0].style).toEqual(
       expect.objectContaining({ fontSize: 44, fontColor: "#abcdef" }),
     );
+  });
+
+  it("prunes imageDataCache when a video is removed from the queue", () => {
+    useEditorStore.setState({
+      queue: [
+        queueItem({
+          operations: [
+            { id: "img-1", mode: "image", imagePath: "C:\\img\\a.png", region: { x: 0, y: 0, w: 0.1, h: 0.1 } },
+          ],
+        }),
+        queueItem({ path: "C:\\videos\\b.mp4", filename: "b.mp4" }),
+      ],
+      imageDataCache: { "C:\\img\\a.png": "data:image/png;base64,abc" },
+    });
+
+    useEditorStore.getState().removeVideo(0);
+
+    expect(useEditorStore.getState().imageDataCache).toEqual({});
+  });
+
+  it("prunes imageDataCache when an image operation is removed", () => {
+    useEditorStore.setState({
+      queue: [
+        queueItem({
+          operations: [
+            { id: "img-1", mode: "image", imagePath: "C:\\img\\a.png", region: { x: 0, y: 0, w: 0.1, h: 0.1 } },
+          ],
+        }),
+      ],
+      imageDataCache: { "C:\\img\\a.png": "data:image/png;base64,abc" },
+    });
+
+    useEditorStore.getState().removeOperationAt(0, 0);
+
+    expect(useEditorStore.getState().imageDataCache).toEqual({});
   });
 
   it("does not duplicate recent projects after removing one through IPC", async () => {

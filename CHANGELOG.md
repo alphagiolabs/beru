@@ -5,6 +5,50 @@ All notable changes to Beru will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-06-02
+
+### Added
+- **`TopUpdateBar`**: persistent top banner that polls `https://api.github.com/repos/alphagiolabs/beru/releases` on app start and shows a dark download banner when a newer stable release is published on GitHub. Rendered in both Landing and editor branches of `App.jsx`. Dismiss is per-version (stored in `localStorage`).
+- **GitHub Releases sync (server-side)**: new `updater.checkGitHubRelease()` in `main/updater.js` uses `app.getVersion()` as the source of truth, fetches releases with `User-Agent: Beru/<version>`, filters drafts/prereleases, picks the highest stable semver, and resolves the Windows installer asset (`Beru-Setup-*.exe`, excluding `.blockmap`). Exposed to the renderer via `window.api.checkGitHubRelease()`.
+- **External link handler**: new `shell:openExternal` IPC + `window.api.openExternal(url)` so the banner opens the installer (or release page fallback) with `shell.openExternal` instead of a raw `<a target="_blank">`.
+
+### Changed
+- The download button in `TopUpdateBar` is now a `<button onClick>` that calls `api.openExternal` rather than an anchor, keeping navigation inside Electron's shell.
+- 30-minute throttle on the GitHub Releases check (timestamp stored in `localStorage`) to stay under the unauthenticated rate limit.
+- Error state surfaces a red banner with a **Reintentar** button (i18n: `topUpdateBar.error`, `topUpdateBar.retry`).
+
+### i18n
+- `es.json` / `en.json`: added `topUpdateBar.message`, `topUpdateBar.cta`, `topUpdateBar.ctaDirect`, `topUpdateBar.dismiss`, `topUpdateBar.error`, `topUpdateBar.retry`.
+
+## [1.5.1] - 2026-06-02
+
+### Added
+- **ESLint** (flat config) and **Prettier** with `npm run lint`, `lint:fix`, and `format` scripts.
+- Vitest coverage for store import, optimistic `addVideos`, letter-spacing helpers, batch progress, and processing error formatting.
+
+### Changed
+- `useEditorStore` is now a thin composer over six slices: `processing`, `batch`, `queue`, `ui`, `editorStyle`, and `project` (under `src/stores/slices/`).
+- `TableEditor` split into `TableEditorPreview`, `TableEditorGrid`, and `TableEditorFocusPanel`.
+
+## [1.5.0] - 2026-06-02
+
+### Added
+- **App toasts** (`AppToast`) and store actions `showToast` / `clearAppToast`; batch/header/properties flows no longer use `alert()`.
+- **Global processing errors**: FFmpeg/Python failures surface in the UI via `beru:error` and i18n `errors.processingFailed`.
+- Shared text-style helpers (`src/utils/text-style.js`, `letter-spacing.js`, `color-utils.js`, `format-message.js`, `batch-progress.js`) with unit tests.
+
+### Changed
+- **Letter spacing**: export uses FFmpeg `drawtext` `spacing=` (pixels); preview uses `letterSpacingToPx` instead of inserting spaces between characters.
+- **Region matching**: table editor, Excel re-apply, and batch preview use `regionsMatch` / `findTextOpForRegion` (full normalized box), not x/y-only equality.
+- **IPC / state**: `useProcessing` updates the store directly; removed the `beru:*` CustomEvent bus and duplicate listeners in `App.jsx`.
+- **Zustand**: heavy components use `useShallow` selectors to cut unnecessary re-renders.
+- **Video import**: queue items appear immediately; metadata and thumbnails load in the background (`addVideos` returns the probe promise for `await`).
+
+### Fixed
+- `imageDataCache` pruned when videos or image operations are removed.
+- `BatchPanel` Excel import reads fresh mapping state after the mapping modal closes.
+- Negative letter spacing clamped at export time.
+
 ## [1.4.9] - 2026-06-02
 
 ### Changed

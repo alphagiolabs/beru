@@ -6,7 +6,11 @@ const HANDLE_THRESHOLD_PX = 16;
 const MOVE_INSET_PX = 4;
 
 export default function useCanvas(videoEl) {
-  const store = useEditorStore();
+  const currentRegion = useEditorStore((s) => s.currentRegion);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const delogoMethod = useEditorStore((s) => s.delogoMethod);
+  const setCurrentRegion = useEditorStore((s) => s.setCurrentRegion);
+  const get = useEditorStore.getState;
   const canvasRef = useRef(null);
   const drawStart = useRef({ x: 0, y: 0 });
   const isDrawing = useRef(false);
@@ -22,8 +26,8 @@ export default function useCanvas(videoEl) {
     canvas.height = rect.height;
     canvas.style.width = rect.width + "px";
     canvas.style.height = rect.height + "px";
-    drawRegionOnCanvas(canvas, video, store.currentRegion, store.activeTool, store.delogoMethod);
-  }, [videoEl, store.currentRegion, store.activeTool, store.delogoMethod]);
+    drawRegionOnCanvas(canvas, video, currentRegion, activeTool, delogoMethod);
+  }, [videoEl, currentRegion, activeTool, delogoMethod]);
 
   useEffect(() => {
     const video = videoEl?.current;
@@ -35,7 +39,7 @@ export default function useCanvas(videoEl) {
   }, [videoEl, fitCanvas]);
 
   const getScreenRect = useCallback(() => {
-    const r = store.currentRegion;
+    const r = currentRegion;
     const video = videoEl?.current;
     if (!r || !video || !video.videoWidth || !video.videoHeight) return null;
     const c = contentRect(video);
@@ -47,7 +51,7 @@ export default function useCanvas(videoEl) {
     const rw = r.w * video.videoWidth * sx;
     const rh = r.h * video.videoHeight * sy;
     return { rx, ry, rw, rh };
-  }, [store.currentRegion, videoEl]);
+  }, [currentRegion, videoEl]);
 
   const hitTestHandle = useCallback((cx, cy) => {
     const sr = getScreenRect();
@@ -86,16 +90,16 @@ export default function useCanvas(videoEl) {
     if (!video.paused) video.pause();
 
     /* Priority: handle > region interior > empty space */
-    if (store.currentRegion) {
+    if (currentRegion) {
       const handle = hitTestHandle(e.clientX, e.clientY);
       if (handle) {
-        resizeInfo.current = { handle, startNx: 0, startNy: 0, startR: { ...store.currentRegion } };
+        resizeInfo.current = { handle, startNx: 0, startNy: 0, startR: { ...currentRegion } };
         return;
       }
       if (hitTestRegion(e.clientX, e.clientY)) {
         const startV = toVideoCoordsNormalized(video, e.clientX, e.clientY);
         if (!startV) return;
-        moveInfo.current = { startNx: startV.x, startNy: startV.y, startR: { ...store.currentRegion } };
+        moveInfo.current = { startNx: startV.x, startNy: startV.y, startR: { ...currentRegion } };
         return;
       }
     }
@@ -105,8 +109,8 @@ export default function useCanvas(videoEl) {
     if (!v) return;
     drawStart.current = { x: v.x, y: v.y };
     isDrawing.current = true;
-    store.setCurrentRegion({ x: v.x, y: v.y, w: 0, h: 0 });
-  }, [videoEl, store, hitTestHandle, hitTestRegion]);
+    setCurrentRegion({ x: v.x, y: v.y, w: 0, h: 0 });
+  }, [videoEl, currentRegion, setCurrentRegion, hitTestHandle, hitTestRegion]);
 
   const onMouseMove = useCallback((e) => {
     const video = videoEl?.current;
@@ -132,21 +136,21 @@ export default function useCanvas(videoEl) {
       if (h.includes("b") || h === "bc") { nh = sr.h + dy; }
       if (nw < MIN) { nw = MIN; if (h.includes("l")) nx = sr.x + sr.w - MIN; }
       if (nh < MIN) { nh = MIN; if (h.includes("t") || h === "tc") ny = sr.y + sr.h - MIN; }
-      store.setCurrentRegion({ x: nx, y: ny, w: nw, h: nh });
+      setCurrentRegion({ x: nx, y: ny, w: nw, h: nh });
     } else if (moveInfo.current) {
       const v = toVideoCoordsNormalized(video, e.clientX, e.clientY);
       if (!v) return;
       const sr = moveInfo.current.startR;
       const dx = v.x - moveInfo.current.startNx;
       const dy = v.y - moveInfo.current.startNy;
-      store.setCurrentRegion(clampRegionToVideo(
+      setCurrentRegion(clampRegionToVideo(
         { x: sr.x + dx, y: sr.y + dy, w: sr.w, h: sr.h },
         1, 1
       ));
     } else if (isDrawing.current) {
       const v = toVideoCoordsNormalized(video, e.clientX, e.clientY);
       if (!v) return;
-      store.setCurrentRegion({
+      setCurrentRegion({
         x: Math.min(drawStart.current.x, v.x),
         y: Math.min(drawStart.current.y, v.y),
         w: Math.abs(v.x - drawStart.current.x),
@@ -165,14 +169,14 @@ export default function useCanvas(videoEl) {
         const handle = hitTestHandle(e.clientX, e.clientY);
         if (handle) {
           canvas.style.cursor = cursorForHandle(handle);
-        } else if (store.currentRegion && hitTestRegion(e.clientX, e.clientY)) {
+        } else if (currentRegion && hitTestRegion(e.clientX, e.clientY)) {
           canvas.style.cursor = "grab";
         } else {
-          canvas.style.cursor = store.currentRegion ? "crosshair" : "crosshair";
+          canvas.style.cursor = currentRegion ? "crosshair" : "crosshair";
         }
       }
     }
-  }, [videoEl, store, hitTestHandle, hitTestRegion]);
+  }, [videoEl, currentRegion, setCurrentRegion, hitTestHandle, hitTestRegion]);
 
   const onMouseUp = useCallback(() => {
     isDrawing.current = false;

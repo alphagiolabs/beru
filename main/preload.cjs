@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("api", {
   checkForUpdates: () => ipcRenderer.invoke("updater:check"),
   downloadUpdate: () => ipcRenderer.invoke("updater:download"),
   installUpdate: () => ipcRenderer.invoke("updater:install"),
+  checkGitHubRelease: () => ipcRenderer.invoke("updater:checkGitHub"),
+  openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
   onUpdaterEvent: (cb) => {
     const handler = (_e, payload) => cb(payload);
     ipcRenderer.on("updater:event", handler);

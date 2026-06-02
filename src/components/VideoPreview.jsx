@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from "react";
+import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import useCanvas from "../hooks/useCanvas";
 import { regionToScreen, fmtTime } from "../utils/video-utils";
@@ -25,8 +26,28 @@ const isOpActive = (op, t) => {
 };
 
 export default function VideoPreview() {
-  const store = useEditorStore();
-  const sel = store.selected();
+  const {
+    selectedIdx, queue, sidebarMode, activeTool, currentRegion, textInput,
+    blurStrength, imageDataCache, templateRegions, selectedTemplateRegionId,
+  } = useEditorStore(
+    (s) => ({
+      selectedIdx: s.selectedIdx,
+      queue: s.queue,
+      sidebarMode: s.sidebarMode,
+      activeTool: s.activeTool,
+      currentRegion: s.currentRegion,
+      textInput: s.textInput,
+      blurStrength: s.blurStrength,
+      imageDataCache: s.imageDataCache,
+      templateRegions: s.templateRegions,
+      selectedTemplateRegionId: s.selectedTemplateRegionId,
+    }),
+    shallow,
+  );
+  const setCurrentRegion = useEditorStore((s) => s.setCurrentRegion);
+  const updateOperationRegion = useEditorStore((s) => s.updateOperationRegion);
+  const getBatchPreviewPayload = useEditorStore((s) => s.getBatchPreviewPayload);
+  const sel = selectedIdx >= 0 && selectedIdx < queue.length ? queue[selectedIdx] : null;
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -54,7 +75,7 @@ export default function VideoPreview() {
 
   useEffect(() => {
     if (!sel) {
-      store.setCurrentRegion(null);
+      setCurrentRegion(null);
     }
   }, [sel?.path]);
 
@@ -146,8 +167,8 @@ export default function VideoPreview() {
       y: newY,
     };
     
-    store.updateOperationRegion(draggingOp.opIdx, updatedRegion);
-  }, [draggingOp, dragStart, store]);
+    updateOperationRegion(draggingOp.opIdx, updatedRegion);
+  }, [draggingOp, dragStart, updateOperationRegion]);
 
   const handleImageDragEnd = useCallback(() => {
     setDraggingOp(null);
@@ -186,7 +207,7 @@ export default function VideoPreview() {
       <div className="relative inline-block" style={{ maxWidth: "100%", maxHeight: "100%", overflow: "hidden" }}>
         <video ref={videoRef} src={sel.src}
           className="max-h-[calc(100vh-200px)] max-w-full block object-contain rounded"
-          onLoadedMetadata={() => { store.setCurrentRegion(null); setDuration(videoRef.current?.duration || 0); }} />
+          onLoadedMetadata={() => { setCurrentRegion(null); setDuration(videoRef.current?.duration || 0); }} />
 
         {/* Operation overlays */}
         {sel.operations.filter((op) => isOpActive(op, currentTime)).map((op, opIdx) => {
@@ -227,7 +248,7 @@ export default function VideoPreview() {
             return <div key={op.id} className="absolute pointer-events-none z-10" style={overlayStyle} />;
           }
           if (op.mode === "image" && op.imagePath) {
-            const dataUrl = store.imageDataCache?.[op.imagePath];
+            const dataUrl = imageDataCache?.[op.imagePath];
             const isDragging = draggingOp?.opIdx === opIdx;
             return (
               <div key={op.id} 
@@ -253,7 +274,7 @@ export default function VideoPreview() {
               </div>
             );
           }
-          if (op.mode === "text" && op.text && store.sidebarMode !== "batch") {
+          if (op.mode === "text" && op.text && sidebarMode !== "batch") {
             return (
               <TextOverlay
                 key={op.id}
@@ -268,10 +289,10 @@ export default function VideoPreview() {
         })}
 
         {/* Live blur preview while configuring */}
-        {store.sidebarMode === "logo" && store.activeTool === "blur" && store.currentRegion && (() => {
-          const s = regionToScreen(store.currentRegion, videoRef.current);
+        {sidebarMode === "logo" && activeTool === "blur" && currentRegion && (() => {
+          const s = regionToScreen(currentRegion, videoRef.current);
           if (!s) return null;
-          const blurPx = Math.max(1, store.blurStrength || 20);
+          const blurPx = Math.max(1, blurStrength || 20);
           return (
             <div className="absolute pointer-events-none z-10"
               style={{ left: s.x, top: s.y, width: s.w, height: s.h }}>
@@ -294,26 +315,26 @@ export default function VideoPreview() {
         })()}
 
         {/* Live text preview while configuring (logo mode) */}
-        {store.sidebarMode === "logo" && store.activeTool === "text" && store.currentRegion && store.textInput && (() => {
-          const s = regionToScreen(store.currentRegion, videoRef.current);
+        {sidebarMode === "logo" && activeTool === "text" && currentRegion && textInput && (() => {
+          const s = regionToScreen(currentRegion, videoRef.current);
           if (!s) return null;
           return (
             <TextOverlay
               screen={s}
-              text={store.textInput}
-              style={getGlobalTextStyleFromState(store)}
+              text={textInput}
+              style={getGlobalTextStyleFromState(useEditorStore.getState())}
               showOutline={false}
             />
           );
         })()}
 
         {/* Batch: live text preview per template region */}
-        {store.sidebarMode === "batch" && store.selectedIdx >= 0 && store.templateRegions.map((tr) => {
-          const payload = store.getBatchPreviewPayload(store.selectedIdx, tr.id);
+        {sidebarMode === "batch" && selectedIdx >= 0 && templateRegions.map((tr) => {
+          const payload = getBatchPreviewPayload(selectedIdx, tr.id);
           if (!payload) return null;
           const s = regionToScreen(payload.region, videoRef.current);
           if (!s) return null;
-          const isSelected = store.selectedTemplateRegionId === tr.id;
+          const isSelected = selectedTemplateRegionId === tr.id;
           return (
             <TextOverlay
               key={tr.id}
@@ -328,14 +349,14 @@ export default function VideoPreview() {
         })()}
 
         {/* Batch: preview while drawing a new region */}
-        {store.sidebarMode === "batch" && store.currentRegion && (() => {
-          const s = regionToScreen(store.currentRegion, videoRef.current);
+        {sidebarMode === "batch" && currentRegion && (() => {
+          const s = regionToScreen(currentRegion, videoRef.current);
           if (!s) return null;
           return (
             <TextOverlay
               screen={s}
               text="Texto de ejemplo"
-              style={getGlobalTextStyleFromState(store)}
+              style={getGlobalTextStyleFromState(useEditorStore.getState())}
               isFocused
               showOutline
             />

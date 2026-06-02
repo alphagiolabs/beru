@@ -60,6 +60,12 @@
   "updater.install": "Reiniciar y actualizar",
   "updater.dismiss": "Más tarde",
   "updater.checkNow": "Buscar actualizaciones",
+  "topUpdateBar.message": "Nueva versión {version} disponible en GitHub",
+  "topUpdateBar.cta": "Descargar",
+  "topUpdateBar.ctaDirect": "Descargar instalable",
+  "topUpdateBar.dismiss": "Cerrar",
+  "topUpdateBar.error": "No se pudo verificar actualizaciones: {message}",
+  "topUpdateBar.retry": "Reintentar",
 
   "modal.savePreset.title": "Guardar como preset",
   "modal.savePreset.desc": "Se guardará en la carpeta de presets del usuario. Incluirá regiones, operaciones y estilo de texto, pero no el archivo Excel.",
@@ -236,6 +242,7 @@
   "style.bgOpacity": "Opacidad del fondo",
   "style.borderColor": "Color del borde",
   "style.borderWidth": "Grosor del borde",
+  "style.letterSpacingHint": "En la exportación, valores negativos se tratan como 0 (límite de FFmpeg).",
 
   "errors.noApi": "API no disponible",
   "errors.invalidName": "Nombre inválido",
@@ -244,6 +251,29 @@
   "errors.invalidData": "Datos inválidos",
   "errors.unknown": "Error desconocido",
   "errors.ffmpeg": "Error de FFmpeg",
+  "errors.processingFailed": "Error al procesar: {message}",
+  "errors.processStartFailed": "Error al iniciar procesamiento: {message}",
+  "errors.imageReadFailed": "No se pudo leer la imagen",
+  "errors.importVideosFailed": "No se pudieron importar los videos: {message}",
+
+  "drop.noPaths": "No se detectaron rutas de archivos",
+  "drop.noVideos": "Sin videos en la selección",
+  "drop.added": "{count} video(s) agregado(s)",
+  "drop.addedWithIgnored": "{count} video(s) agregado(s) · {ignored} ignorado(s)",
+
+  "batch.excelParseError": "Error al leer Excel: {message}",
+  "batch.excelLinked": "Vinculados {count} registros de Excel.",
+  "batch.confirmExcelOverwrite": "Algunos videos tienen operaciones manuales (blur, crop, etc.) que se perderán al importar Excel. ¿Continuar?",
+
+  "header.missingDimensions": "{count} video(s) sin resolución ({names}{more}). Procesar puede fallar. ¿Continuar?",
+
+  "queue.processingBusy": "Hay un proceso en ejecución",
+  "queue.renderComplete": "Render completo",
+  "queue.processFailed": "Error al procesar",
+  "queue.copyFailed": "No se pudo copiar",
+
+  "batchProgress.processing": "Procesando",
+  "batchProgress.done": "Completado",
 
   "match.coincide": "Coincide",
   "match.sinMatch": "Sin match",

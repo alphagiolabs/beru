@@ -67,3 +67,12 @@ export function regionsMatch(r1, r2) {
     Math.abs(r1.h - r2.h) < 0.001
   );
 }
+
+/** Find the text operation whose region matches a template/table region. */
+export function findTextOpForRegion(operations, region) {
+  if (!region || !Array.isArray(operations)) return { op: null, opIdx: -1 };
+  const idx = operations.findIndex(
+    (o) => o.mode === "text" && o.region && regionsMatch(o.region, region),
+  );
+  return { op: idx >= 0 ? operations[idx] : null, opIdx: idx };
+}

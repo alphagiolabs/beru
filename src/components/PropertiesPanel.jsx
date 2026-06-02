@@ -1,4 +1,6 @@
+import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
+import { useT } from "../i18n/useT";
 import StyleEditor from "./StyleEditor";
 import PresetManager from "./PresetManager";
 import BatchPanel from "./BatchPanel";
@@ -16,21 +18,49 @@ const DELOGO_ICONS = {
 };
 
 export default function PropertiesPanel() {
-  const store = useEditorStore();
-  const sel = store.selected();
-  const { currentRegion, activeTool, sidebarMode } = store;
+  const {
+    selectedIdx, queue, currentRegion, activeTool, sidebarMode,
+    tempImagePath, tempImageDataUrl, tempImageOpacity, tempImageScale,
+    blurStrength, delogoMethod, delogoFillColor, delogoFillOpacity,
+    temporalRadius, mosaicSize, mirrorSide, edgeFeather,
+  } = useEditorStore(
+    (s) => ({
+      selectedIdx: s.selectedIdx,
+      queue: s.queue,
+      currentRegion: s.currentRegion,
+      activeTool: s.activeTool,
+      sidebarMode: s.sidebarMode,
+      tempImagePath: s.tempImagePath,
+      tempImageDataUrl: s.tempImageDataUrl,
+      tempImageOpacity: s.tempImageOpacity,
+      tempImageScale: s.tempImageScale,
+      blurStrength: s.blurStrength,
+      delogoMethod: s.delogoMethod,
+      delogoFillColor: s.delogoFillColor,
+      delogoFillOpacity: s.delogoFillOpacity,
+      temporalRadius: s.temporalRadius,
+      mosaicSize: s.mosaicSize,
+      mirrorSide: s.mirrorSide,
+      edgeFeather: s.edgeFeather,
+    }),
+    shallow,
+  );
+  const showToast = useEditorStore((s) => s.showToast);
+  const get = useEditorStore.getState;
+  const t = useT();
+  const sel = selectedIdx >= 0 && selectedIdx < queue.length ? queue[selectedIdx] : null;
 
   return (
     <div className="cap-section">
       {/* Mode tabs */}
       <div className="flex rounded mb-3 overflow-hidden border" style={{ borderColor: "var(--border)" }}>
-        <button onClick={() => store.setSidebarMode("logo")}
+        <button onClick={() => get().setSidebarMode("logo")}
           className="flex-1 py-1.5 text-[10px] font-medium text-center transition-colors"
           style={{ background: sidebarMode === "logo" ? "var(--accent)" : "transparent",
             color: sidebarMode === "logo" ? "var(--bg-app)" : "var(--text-dim)" }}>
           Quitar logo
         </button>
-        <button onClick={() => store.setSidebarMode("batch")}
+        <button onClick={() => get().setSidebarMode("batch")}
           className="flex-1 py-1.5 text-[10px] font-medium text-center transition-colors"
           style={{ background: sidebarMode === "batch" ? "#a855f7" : "transparent",
             color: sidebarMode === "batch" ? "white" : "var(--text-dim)" }}>
@@ -59,7 +89,7 @@ export default function PropertiesPanel() {
                     onChange={(e) => {
                       const px = Number(e.target.value);
                       if (!Number.isFinite(px) || !dimFor(key)) return;
-                      store.updateRegionValue(key, px / dimFor(key));
+                      get().updateRegionValue(key, px / dimFor(key));
                     }}
                     className="cap-input font-mono text-[11px]"
                   />
@@ -73,43 +103,46 @@ export default function PropertiesPanel() {
             <div className="mb-3 space-y-2">
               <div className="cap-input-label">Marca de agua</div>
               <div className="flex gap-1.5">
-                <input type="text" value={store.tempImagePath ? store.tempImagePath.split(/[\\/]/).pop() : ""} placeholder="Seleccionar logo..." readOnly
+                <input type="text" value={tempImagePath ? tempImagePath.split(/[\\/]/).pop() : ""} placeholder="Seleccionar logo..." readOnly
                   className="cap-input flex-1 font-mono text-[10px] truncate" />
                 <button onClick={async () => {
                   const res = await window.api?.pickImage();
                   if (res?.success) {
-                    store.setTempImagePath(res.path);
+                    get().setTempImagePath(res.path);
                     const r = await window.api?.readImage(res.path);
-                    if (r?.success) store.setTempImageDataUrl(r.dataUrl);
-                    else alert(r?.error || "No se pudo leer la imagen");
+                    if (r?.success) get().setTempImageDataUrl(r.dataUrl);
+                    else showToast({
+                      kind: "err",
+                      text: r?.error || t("errors.imageReadFailed"),
+                    });
                   }
                 }} className="cap-btn-secondary !text-[10px] !px-2">Elegir</button>
-                {store.tempImagePath && (
-                  <button onClick={() => { store.setTempImagePath(""); store.setTempImageDataUrl(""); }}
+                {tempImagePath && (
+                  <button onClick={() => { get().setTempImagePath(""); get().setTempImageDataUrl(""); }}
                     className="cap-btn-secondary !text-[10px] !px-2" style={{ color: "var(--rose)" }}>×</button>
                 )}
               </div>
-              {store.tempImageDataUrl && (
+              {tempImageDataUrl && (
                 <div className="rounded overflow-hidden border" style={{ borderColor: "var(--border)" }}>
-                  <img src={store.tempImageDataUrl} alt="preview" className="block w-full max-h-32 object-contain" style={{ background: "var(--bg-app)" }} />
+                  <img src={tempImageDataUrl} alt="preview" className="block w-full max-h-32 object-contain" style={{ background: "var(--bg-app)" }} />
                 </div>
               )}
               <div className="flex items-center gap-2 text-[10px]" style={{ color: "var(--text-dim)" }}>
                 Opacidad
-                <input type="range" min="0" max="1" step="0.05" value={store.tempImageOpacity}
-                  onChange={(e) => store.setTempImageOpacity(Number(e.target.value))} className="flex-1" />
-                <span className="font-mono text-xs w-8 text-right" style={{ color: "var(--accent)" }}>{Math.round(store.tempImageOpacity * 100)}%</span>
+                <input type="range" min="0" max="1" step="0.05" value={tempImageOpacity}
+                  onChange={(e) => get().setTempImageOpacity(Number(e.target.value))} className="flex-1" />
+                <span className="font-mono text-xs w-8 text-right" style={{ color: "var(--accent)" }}>{Math.round(tempImageOpacity * 100)}%</span>
               </div>
               <div className="flex items-center gap-2 text-[10px]" style={{ color: "var(--text-dim)" }}>
                 Escala
-                <input type="range" min="0.1" max="3" step="0.1" value={store.tempImageScale || 1}
+                <input type="range" min="0.1" max="3" step="0.1" value={tempImageScale || 1}
                   onChange={(e) => {
                     const scale = Number(e.target.value);
-                    store.setTempImageScale(scale);
+                    get().setTempImageScale(scale);
                     if (currentRegion) {
                       const baseW = currentRegion.baseW || currentRegion.w;
                       const baseH = currentRegion.baseH || currentRegion.h;
-                      store.setCurrentRegion({
+                      get().setCurrentRegion({
                         ...currentRegion,
                         baseW,
                         baseH,
@@ -118,7 +151,7 @@ export default function PropertiesPanel() {
                       });
                     }
                   }} className="flex-1" />
-                <span className="font-mono text-xs w-8 text-right" style={{ color: "var(--accent)" }}>{(store.tempImageScale || 1).toFixed(1)}x</span>
+                <span className="font-mono text-xs w-8 text-right" style={{ color: "var(--accent)" }}>{(tempImageScale || 1).toFixed(1)}x</span>
               </div>
               <div className="cap-input-label !mt-3">Posición rápida</div>
               <div className="grid grid-cols-3 gap-1">
@@ -142,7 +175,7 @@ export default function PropertiesPanel() {
                     else if (pos.x === 0.5) x = pos.x - w / 2;
                     if (pos.y === 0.98) y = pos.y - h;
                     else if (pos.y === 0.5) y = pos.y - h / 2;
-                    store.setCurrentRegion({ x, y, w, h, baseW: w, baseH: h });
+                    get().setCurrentRegion({ x, y, w, h, baseW: w, baseH: h });
                   }}
                     className="cap-btn-secondary !text-xs !p-1.5" title={pos.label}>
                     {pos.label}
@@ -159,9 +192,9 @@ export default function PropertiesPanel() {
           {sidebarMode === "logo" && activeTool === "blur" && (
             <div className="mb-3 flex items-center gap-2 text-[10px]" style={{ color: "var(--text-dim)" }}>
               Intensidad blur
-              <input type="range" min="2" max="60" value={store.blurStrength}
-                onChange={(e) => store.setBlurStrength(Number(e.target.value))} className="flex-1" />
-              <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{store.blurStrength}</span>
+              <input type="range" min="2" max="60" value={blurStrength}
+                onChange={(e) => get().setBlurStrength(Number(e.target.value))} className="flex-1" />
+              <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{blurStrength}</span>
             </div>
           )}
 
@@ -177,9 +210,9 @@ export default function PropertiesPanel() {
               <div className="grid grid-cols-3 gap-1 mb-2">
                 {DELOGO_METHODS.map((m) => {
                   const Icon = DELOGO_ICONS[m.id];
-                  const active = store.delogoMethod === m.id;
+                  const active = delogoMethod === m.id;
                   return (
-                    <button key={m.id} onClick={() => store.setDelogoMethod(m.id)}
+                    <button key={m.id} onClick={() => get().setDelogoMethod(m.id)}
                       className="cap-btn-secondary !text-[10px] !py-1.5"
                       style={{
                         background: active ? "var(--rose)" : "var(--bg-elevated)",
@@ -194,39 +227,39 @@ export default function PropertiesPanel() {
                 })}
               </div>
               <div className="text-[9px] mb-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                {DELOGO_METHODS.find((m) => m.id === store.delogoMethod)?.description}
+                {DELOGO_METHODS.find((m) => m.id === delogoMethod)?.description}
               </div>
 
               {/* Method-specific parameters */}
-              {store.delogoMethod === "temporal" && (
+              {delogoMethod === "temporal" && (
                 <div className="flex items-center gap-2 text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>
                   Radio (frames)
-                  <input type="range" min="1" max="15" value={store.temporalRadius}
-                    onChange={(e) => store.setTemporalRadius(e.target.value)} className="flex-1" />
-                  <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{store.temporalRadius}</span>
+                  <input type="range" min="1" max="15" value={temporalRadius}
+                    onChange={(e) => get().setTemporalRadius(e.target.value)} className="flex-1" />
+                  <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{temporalRadius}</span>
                 </div>
               )}
 
-              {store.delogoMethod === "mosaic" && (
+              {delogoMethod === "mosaic" && (
                 <div className="flex items-center gap-2 text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>
                   Tamaño bloque
-                  <input type="range" min="4" max="40" value={store.mosaicSize}
-                    onChange={(e) => store.setMosaicSize(e.target.value)} className="flex-1" />
-                  <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{store.mosaicSize}px</span>
+                  <input type="range" min="4" max="40" value={mosaicSize}
+                    onChange={(e) => get().setMosaicSize(e.target.value)} className="flex-1" />
+                  <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{mosaicSize}px</span>
                 </div>
               )}
 
-              {store.delogoMethod === "mirror" && (
+              {delogoMethod === "mirror" && (
                 <div className="mb-1">
                   <div className="cap-input-label mb-1">Lado a reflejar</div>
                   <div className="grid grid-cols-2 gap-1">
                     {MIRROR_SIDES.map((s) => (
-                      <button key={s.id} onClick={() => store.setMirrorSide(s.id)}
+                      <button key={s.id} onClick={() => get().setMirrorSide(s.id)}
                         className="cap-btn-secondary !text-[9px] !py-1"
                         style={{
-                          background: store.mirrorSide === s.id ? "var(--rose)" : "var(--bg-elevated)",
-                          color: store.mirrorSide === s.id ? "white" : "var(--text-dim)",
-                          borderColor: store.mirrorSide === s.id ? "var(--rose)" : "var(--border)",
+                          background: mirrorSide === s.id ? "var(--rose)" : "var(--bg-elevated)",
+                          color: mirrorSide === s.id ? "white" : "var(--text-dim)",
+                          borderColor: mirrorSide === s.id ? "var(--rose)" : "var(--border)",
                         }}>
                         {s.label}
                       </button>
@@ -235,29 +268,29 @@ export default function PropertiesPanel() {
                 </div>
               )}
 
-              {store.delogoMethod === "blur" && (
+              {delogoMethod === "blur" && (
                 <div className="flex items-center gap-2 text-[10px] mb-1" style={{ color: "var(--text-dim)" }}>
                   Intensidad blur
-                  <input type="range" min="2" max="60" value={store.blurStrength}
-                    onChange={(e) => store.setBlurStrength(e.target.value)} className="flex-1" />
-                  <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{store.blurStrength}</span>
+                  <input type="range" min="2" max="60" value={blurStrength}
+                    onChange={(e) => get().setBlurStrength(e.target.value)} className="flex-1" />
+                  <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{blurStrength}</span>
                 </div>
               )}
 
-              {store.delogoMethod === "fill" && (
+              {delogoMethod === "fill" && (
                 <div className="space-y-2">
                   <label className="flex items-center gap-2">
                     <span className="cap-input-label">Color</span>
-                    <input type="color" value={store.delogoFillColor}
-                      onChange={(e) => store.setDelogoFillColor(e.target.value)}
+                    <input type="color" value={delogoFillColor}
+                      onChange={(e) => get().setDelogoFillColor(e.target.value)}
                       className="w-6 h-6 rounded cursor-pointer border-0" />
-                    <span className="font-mono text-[10px]" style={{ color: "var(--text-dim)" }}>{store.delogoFillColor}</span>
+                    <span className="font-mono text-[10px]" style={{ color: "var(--text-dim)" }}>{delogoFillColor}</span>
                   </label>
                   <div className="flex items-center gap-2 text-[10px]" style={{ color: "var(--text-dim)" }}>
                     Opacidad
-                    <input type="range" min="0" max="1" step="0.05" value={store.delogoFillOpacity}
-                      onChange={(e) => store.setDelogoFillOpacity(e.target.value)} className="flex-1" />
-                    <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{store.delogoFillOpacity.toFixed(2)}</span>
+                    <input type="range" min="0" max="1" step="0.05" value={delogoFillOpacity}
+                      onChange={(e) => get().setDelogoFillOpacity(e.target.value)} className="flex-1" />
+                    <span className="font-mono text-xs w-6 text-right" style={{ color: "var(--accent)" }}>{delogoFillOpacity.toFixed(2)}</span>
                   </div>
                 </div>
               )}
@@ -267,9 +300,9 @@ export default function PropertiesPanel() {
                 <span title="Suaviza el borde entre la zona restaurada y el video original">
                   Feather borde
                 </span>
-                <input type="range" min="0" max="20" value={store.edgeFeather}
-                  onChange={(e) => store.setEdgeFeather(e.target.value)} className="flex-1" />
-                <span className="font-mono text-xs w-8 text-right" style={{ color: "var(--accent)" }}>{store.edgeFeather}px</span>
+                <input type="range" min="0" max="20" value={edgeFeather}
+                  onChange={(e) => get().setEdgeFeather(e.target.value)} className="flex-1" />
+                <span className="font-mono text-xs w-8 text-right" style={{ color: "var(--accent)" }}>{edgeFeather}px</span>
               </div>
             </div>
           )}
@@ -280,7 +313,7 @@ export default function PropertiesPanel() {
               {sidebarMode === "logo" ? (
                 <label>
                   <span className="cap-input-label">Contenido</span>
-                  <input type="text" value={store.textInput} onChange={(e) => store.setTextInput(e.target.value)}
+                  <input type="text" value={get().textInput} onChange={(e) => get().setTextInput(e.target.value)}
                     placeholder="Texto..." className="cap-input" />
                 </label>
               ) : (
@@ -298,23 +331,23 @@ export default function PropertiesPanel() {
             <div className="grid grid-cols-2 gap-2 mb-3">
               <label>
                 <span className="cap-input-label">Inicio (s)</span>
-                <input type="number" value={store.tempStart ?? ""} onChange={(e) => store.setTempStart(e.target.value ? Number(e.target.value) : null)}
+                <input type="number" value={get().tempStart ?? ""} onChange={(e) => get().setTempStart(e.target.value ? Number(e.target.value) : null)}
                   placeholder="0" className="cap-input font-mono text-[11px]" />
               </label>
               <label>
                 <span className="cap-input-label">Fin (s)</span>
-                <input type="number" value={store.tempEnd ?? ""} onChange={(e) => store.setTempEnd(e.target.value ? Number(e.target.value) : null)}
+                <input type="number" value={get().tempEnd ?? ""} onChange={(e) => get().setTempEnd(e.target.value ? Number(e.target.value) : null)}
                   placeholder="final" className="cap-input font-mono text-[11px]" />
               </label>
             </div>
           )}
 
           {/* Apply button */}
-          <button onClick={() => store.addOperation(activeTool)}
+          <button onClick={() => get().addOperation(activeTool)}
             className="cap-btn-primary w-full mb-2">
             Aplicar {activeTool === "blur" ? "Desenfoque" : activeTool === "crop" ? "Recorte" : activeTool === "delogo" ? "Remover" : activeTool === "image" ? "Imagen" : "Texto"}
           </button>
-          <button onClick={() => store.setCurrentRegion(null)}
+          <button onClick={() => get().setCurrentRegion(null)}
             className="text-[10px] hover:underline block mx-auto mb-3" style={{ color: "var(--text-muted)" }}>
             Cancelar selección
           </button>
@@ -331,7 +364,7 @@ export default function PropertiesPanel() {
                   ["bottom-left", "↙", { x: 0.05, y: 0.87, w: 0.4, h: 0.08 }],
                   ["bottom-right", "↘", { x: 0.55, y: 0.87, w: 0.4, h: 0.08 }],
                 ].map(([pos, label, region]) => (
-                  <button key={pos} onClick={() => store.setCurrentRegion(region)}
+                  <button key={pos} onClick={() => get().setCurrentRegion(region)}
                     className="cap-btn-secondary !text-xs !p-1.5" title={pos}>{label}</button>
                 ))}
               </div>

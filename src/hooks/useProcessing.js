@@ -1,34 +1,54 @@
 import { useEffect } from "react";
+import useEditorStore from "../stores/useEditorStore";
+import { tStatic } from "../utils/format-message";
+
+function processingErrorText(detail) {
+  const lang = useEditorStore.getState().language || "es";
+  const message = typeof detail === "string"
+    ? detail
+    : (detail?.message || detail?.error || "");
+  return tStatic("errors.processingFailed", {
+    message: message || tStatic("errors.unknown", {}, lang),
+  }, lang);
+}
+
+function bind(apiFn, handler) {
+  if (typeof apiFn !== "function") return null;
+  return apiFn(handler);
+}
 
 export default function useProcessing(api) {
   useEffect(() => {
     if (!api) return;
     const unsubs = [
-      api.onProgress((msg) => {
-        window.dispatchEvent(new CustomEvent("beru:progress", { detail: msg }));
+      bind(api.onProgress, (msg) => {
+        useEditorStore.getState().updateProcessingProgress(msg);
       }),
-      api.onJobProgress?.((msg) => {
-        window.dispatchEvent(new CustomEvent("beru:jobProgress", { detail: msg }));
+      bind(api.onJobProgress, (msg) => {
+        useEditorStore.getState().updateJobProgress(msg);
       }),
-      api.onComplete((msg) => {
-        window.dispatchEvent(new CustomEvent("beru:complete", { detail: msg }));
+      bind(api.onComplete, (msg) => {
+        useEditorStore.getState().markJobDone(msg);
       }),
-      api.onSummary((msg) => {
-        window.dispatchEvent(new CustomEvent("beru:summary", { detail: msg }));
+      bind(api.onSummary, (msg) => {
+        useEditorStore.getState().setBatchSummary(msg);
       }),
-      api.onJobError((msg) => {
-        window.dispatchEvent(new CustomEvent("beru:jobError", { detail: msg }));
+      bind(api.onJobError, (msg) => {
+        useEditorStore.getState().markJobError(msg);
       }),
-      api.onFinished((msg) => {
-        window.dispatchEvent(new CustomEvent("beru:finished", { detail: msg }));
+      bind(api.onFinished, () => {
+        useEditorStore.getState().setProcessing(false);
       }),
-      api.onError((msg) => {
-        window.dispatchEvent(new CustomEvent("beru:error", { detail: msg }));
+      bind(api.onError, (msg) => {
+        const state = useEditorStore.getState();
+        state.setProcessing(false);
+        console.error("[beru] Processing error:", msg);
+        state.showToast({ kind: "err", text: processingErrorText(msg) });
       }),
-      api.onLog((msg) => {
-        window.dispatchEvent(new CustomEvent("beru:log", { detail: msg }));
+      bind(api.onLog, (msg) => {
+        useEditorStore.getState().appendLog(msg);
       }),
-    ];
+    ].filter(Boolean);
     return () => unsubs.forEach((u) => u?.());
   }, [api]);
 }

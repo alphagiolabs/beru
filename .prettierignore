@@ -1,0 +1,6 @@
+build
+dist-installer
+dist-electron
+node_modules
+src-tauri/bin
+package-lock.json

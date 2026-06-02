@@ -1,16 +1,38 @@
 import { useState, useEffect, useRef } from "react";
 import { Upload, Play, Square, FolderOutput, Undo2, Redo2, Keyboard, FlaskConical, X, FolderOpen, ExternalLink, Save, FolderInput, Library, ChevronDown, BookmarkPlus, Sun, Moon, Languages, History } from "lucide-react";
+import { shallow } from "zustand/shallow";
 import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
 import useEditorStore from "../stores/useEditorStore";
 
 const api = window.api;
 
 export default function Header() {
-  const store = useEditorStore();
-  const { isProcessing, batchSummary, exportFormat, encodeProfile, batchWorkers, outputDir, queue, selectedIdx, presets, theme, language, recent } = store;
+  const {
+    isProcessing, batchSummary, exportFormat, encodeProfile, batchWorkers,
+    outputDir, queue, selectedIdx, presets, theme, language, recent,
+  } = useEditorStore(
+    (s) => ({
+      isProcessing: s.isProcessing,
+      batchSummary: s.batchSummary,
+      exportFormat: s.exportFormat,
+      encodeProfile: s.encodeProfile,
+      batchWorkers: s.batchWorkers,
+      outputDir: s.outputDir,
+      queue: s.queue,
+      selectedIdx: s.selectedIdx,
+      presets: s.presets,
+      theme: s.theme,
+      language: s.language,
+      recent: s.recent,
+    }),
+    shallow,
+  );
+  const showToast = useEditorStore((s) => s.showToast);
+  const undoStack = useEditorStore((s) => s.undoStack);
+  const redoStack = useEditorStore((s) => s.redoStack);
   const t = useT();
+  const get = useEditorStore.getState;
   const [testResult, setTestResult] = useState(null);
-  const [projectToast, setProjectToast] = useState(null);
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [savePresetOpen, setSavePresetOpen] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
@@ -63,14 +85,11 @@ export default function Header() {
     };
   }, [recentOpen]);
 
-  const flashToast = (kind, text) => {
-    setProjectToast({ kind, text });
-    setTimeout(() => setProjectToast(null), 2500);
-  };
+  const flashToast = (kind, text) => showToast({ kind, text });
 
   const handleTogglePresets = async () => {
     if (!presetsOpen && presets.length === 0) {
-      await store.loadPresets();
+      await get().loadPresets();
     }
     setPresetsOpen((v) => !v);
   };
@@ -78,13 +97,13 @@ export default function Header() {
   const handleApplyPreset = (preset) => {
     setPresetsOpen(false);
     if (queue.length > 0 && !confirm(t("header.confirmApplyPreset", { name: preset.name }))) return;
-    const res = store.applyPreset(preset.data);
+    const res = get().applyPreset(preset.data);
     if (res.ok) flashToast("ok", t("header.presetApplied", { name: preset.name }));
     else flashToast("err", res.error || t("header.couldNotApply"));
   };
 
   const handleSaveProject = async () => {
-    const res = await store.saveProject();
+    const res = await get().saveProject();
     if (res.canceled) return;
     if (res.ok) flashToast("ok", t("header.savedAs", { name: res.filePath.split(/[\\/]/).pop() }));
     else flashToast("err", res.error || t("header.couldNotSave"));
@@ -99,7 +118,7 @@ export default function Header() {
   const handleSavePresetSubmit = async () => {
     const name = savePresetName.trim();
     if (!name) return;
-    const res = await store.savePreset(name);
+    const res = await get().savePreset(name);
     if (res.ok) {
       setSavePresetOpen(false);
       flashToast("ok", t("header.savedPresetAs", { name: res.fileName }));
@@ -110,7 +129,7 @@ export default function Header() {
 
   const handleLoadProject = async () => {
     if (queue.length > 0 && !confirm(t("header.confirmLoadQueue"))) return;
-    const res = await store.loadProject();
+    const res = await get().loadProject();
     if (res.canceled) return;
     if (res.ok) flashToast("ok", t("header.loadedFrom", { name: res.filePath.split(/[\\/]/).pop() }));
     else flashToast("err", res.error || t("header.couldNotLoad"));
@@ -120,7 +139,7 @@ export default function Header() {
     setRecentOpen(false);
     if (!entry?.path) return;
     if (queue.length > 0 && !confirm(t("header.confirmLoadRecent"))) return;
-    const res = await store.loadProjectFromPath(entry.path);
+    const res = await get().loadProjectFromPath(entry.path);
     if (res.ok) flashToast("ok", t("header.loadedFrom", { name: entry.name || entry.path.split(/[\\/]/).pop() }));
     else if (res.error && /no encontrad|not found|missing/i.test(res.error)) flashToast("err", t("header.recentMissing"));
     else flashToast("err", res.error || t("header.couldNotLoad"));
@@ -128,7 +147,7 @@ export default function Header() {
 
   const handleRemoveRecent = async (e, entry) => {
     e.stopPropagation();
-    await store.removeRecent(entry.path);
+    await get().removeRecent(entry.path);
   };
 
   const handleSelectOutput = async () => {
@@ -139,7 +158,7 @@ export default function Header() {
     try {
       const dir = await api.selectOutputDir();
       if (dir) {
-        store.setOutputDir(dir);
+        get().setOutputDir(dir);
       } else {
         console.log("[beru] Output directory selection canceled or returned null");
       }
@@ -149,50 +168,78 @@ export default function Header() {
   };
 
   const handleAddVideos = async () => {
-    const paths = await api?.openVideos();
-    if (paths && paths.length > 0) await store.addVideos(paths, api);
+    if (!api?.openVideos) {
+      showToast({ kind: "err", text: t("errors.noApi") });
+      return;
+    }
+    try {
+      const paths = await api.openVideos();
+      if (!paths?.length) return;
+      await get().addVideos(paths, api);
+      showToast({ kind: "ok", text: t("drop.added", { count: paths.length }) });
+    } catch (err) {
+      console.error("[beru] Video import failed:", err);
+      showToast({
+        kind: "err",
+        text: t("errors.importVideosFailed", {
+          message: err?.message || t("errors.unknown"),
+        }),
+      });
+    }
   };
 
   const handleProcessAll = async () => {
     if (!api) return;
-    store.setBatchSummary(null);
+    get().setBatchSummary(null);
     const queueForProcessing = queue.some((q) => !q.width || !q.height)
-      ? await store.refreshMissingVideoInfo(api)
+      ? await get().refreshMissingVideoInfo(api)
       : queue;
     const missingDims = queueForProcessing.filter((q) => !q.width || !q.height);
     if (missingDims.length > 0) {
       const names = missingDims.slice(0, 3).map((q) => q.filename).join(", ");
       const more = missingDims.length > 3 ? ` (+${missingDims.length - 3})` : "";
-      if (!confirm(
-        `${missingDims.length} video(s) sin resolución detectada (${names}${more}).\n` +
-        "Procesar puede fallar. ¿Reimportar los videos o continuar igual?"
-      )) return;
+      if (!confirm(t("header.missingDimensions", {
+        count: missingDims.length,
+        names,
+        more,
+      }))) return;
     }
-    const jobs = queueForProcessing.map((q, i) => store._buildJobFor(q, i)).filter(Boolean);
-    store.setProcessing(true);
+    const jobs = queueForProcessing.map((q, i) => get()._buildJobFor(q, i)).filter(Boolean);
+    get().setProcessing(true);
     useEditorStore.setState({ progressTotal: jobs.length, progressDone: 0 });
 
     api.startProcessing(jobs).then((result) => {
       if (!result.success) {
-        alert("Error: " + (result.error || "Process failed"));
-        store.setProcessing(false);
+        // Runtime failures are toasted via useProcessing → onError; only pre-spawn errors here.
+        if (result.error && result.code == null) {
+          showToast({
+            kind: "err",
+            text: t("errors.processStartFailed", {
+              message: result.error,
+            }),
+          });
+        }
+        get().setProcessing(false);
       }
     }).catch((e) => {
-      alert("Error: " + e.message);
-      store.setProcessing(false);
+      showToast({
+        kind: "err",
+        text: t("errors.processStartFailed", { message: e.message }),
+      });
+      get().setProcessing(false);
     });
   };
 
   const handleTestCurrent = async () => {
     if (!api || selectedIdx < 0) return;
     setTestResult({ status: "running" });
-    const res = await store.processSingle(selectedIdx);
+    const res = await get().processSingle(selectedIdx);
     setTestResult({ status: res.ok ? "ok" : "error", outputPath: res.outputPath, error: res.error });
   };
 
   const handleCancel = async () => {
     await api?.cancelProcessing();
-    store.setProcessing(false);
+    get().setProcessing(false);
   };
 
   const canTest = !isProcessing && selectedIdx >= 0 && selectedIdx < queue.length;
@@ -215,7 +262,7 @@ export default function Header() {
           <FolderOutput size={14} /> {outputDir ? "Salida ✓" : t("header.selectOutput")}
         </button>
 
-        <select value={exportFormat} onChange={(e) => store.setExportFormat(e.target.value)}
+        <select value={exportFormat} onChange={(e) => get().setExportFormat(e.target.value)}
           className="cap-input w-[72px] !py-1 text-[11px]" disabled={isProcessing}>
           <option value="mp4">MP4</option>
           <option value="mov">MOV</option>
@@ -224,7 +271,7 @@ export default function Header() {
 
         <select
           value={encodeProfile}
-          onChange={(e) => store.setEncodeProfile(e.target.value)}
+          onChange={(e) => get().setEncodeProfile(e.target.value)}
           className="cap-input w-[108px] !py-1 text-[11px]"
           disabled={isProcessing}
           title={t("header.encodeProfileHint")}
@@ -236,7 +283,7 @@ export default function Header() {
 
         <select
           value={String(batchWorkers)}
-          onChange={(e) => store.setBatchWorkers(e.target.value)}
+          onChange={(e) => get().setBatchWorkers(e.target.value)}
           className="cap-input w-[88px] !py-1 text-[11px]"
           disabled={isProcessing}
           title={t("header.batchWorkersHint")}
@@ -270,10 +317,10 @@ export default function Header() {
 
         <div className="w-px h-5 mx-1" style={{ background: "var(--border)" }} />
 
-        <button onClick={store.undo} disabled={store.undoStack.length === 0} className="cap-btn-secondary !p-1.5" title={`${t("header.undo")} (Ctrl+Z)`}>
+        <button onClick={get().undo} disabled={undoStack.length === 0} className="cap-btn-secondary !p-1.5" title={`${t("header.undo")} (Ctrl+Z)`}>
           <Undo2 size={14} />
         </button>
-        <button onClick={store.redo} disabled={store.redoStack.length === 0} className="cap-btn-secondary !p-1.5" title={`${t("header.redo")} (Ctrl+Y)`}>
+        <button onClick={get().redo} disabled={redoStack.length === 0} className="cap-btn-secondary !p-1.5" title={`${t("header.redo")} (Ctrl+Y)`}>
           <Redo2 size={14} />
         </button>
         <div className="relative" ref={presetsRef}>
@@ -367,7 +414,7 @@ export default function Header() {
         <button onClick={openSavePreset} className="cap-btn-secondary !p-1.5" title={t("header.savePreset")}>
           <BookmarkPlus size={14} />
         </button>
-        <button onClick={() => store.toggleTheme()} className="cap-btn-secondary !p-1.5" title={t("header.theme")}>
+        <button onClick={() => get().toggleTheme()} className="cap-btn-secondary !p-1.5" title={t("header.theme")}>
           {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
         </button>
         <div className="relative" ref={langRef}>
@@ -379,7 +426,7 @@ export default function Header() {
               style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}>
               {SUPPORTED_LANGUAGES.map((lng) => (
                 <button key={lng.code}
-                  onClick={() => { store.setLanguage(lng.code); setLangOpen(false); }}
+                  onClick={() => { get().setLanguage(lng.code); setLangOpen(false); }}
                   className="block w-full text-left px-3 py-1.5 text-[11px] hover:opacity-80"
                   style={{ color: lng.code === language ? "var(--accent)" : "var(--text-secondary)", fontWeight: lng.code === language ? 600 : 400 }}>
                   {lng.label}
@@ -388,7 +435,7 @@ export default function Header() {
             </div>
           )}
         </div>
-        <button onClick={() => store.setShowShortcuts(true)} className="cap-btn-secondary !p-1.5" title={t("header.shortcuts")}>
+        <button onClick={() => get().setShowShortcuts(true)} className="cap-btn-secondary !p-1.5" title={t("header.shortcuts")}>
           <Keyboard size={14} />
         </button>
 
@@ -487,16 +534,6 @@ export default function Header() {
         </div>
       )}
 
-      {projectToast && (
-        <div className="fixed bottom-4 right-4 z-50 rounded-md px-3 py-2 text-[11px] shadow-lg"
-          style={{
-            background: "var(--bg-elevated)",
-            border: `1px solid ${projectToast.kind === "ok" ? "#22c55e" : "#f43f5e"}`,
-            color: projectToast.kind === "ok" ? "#22c55e" : "#f43f5e",
-          }}>
-          {projectToast.text}
-        </div>
-      )}
     </header>
   );
 }

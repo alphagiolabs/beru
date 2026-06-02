@@ -92,4 +92,124 @@ const install = () => {
   try { au.quitAndInstall(false, true); } catch {}
 };
 
-export { init, checkForUpdates, startDownload, install, isDev };
+/* ── GitHub Releases check (renderer-driven banner) ──────────────────────
+ *
+ * - Uses `app.getVersion()` as source of truth (not the renderer).
+ * - Server-side fetch, so the renderer never hits GitHub's CORS / rate limit.
+ * - Skips drafts and prereleases; picks the highest stable semver.
+ * - Finds the Windows installer asset when present.
+ */
+
+const parseSemver = (v) => {
+  const s = (v || "").replace(/^v/i, "").trim();
+  const core = s.split("-")[0].split(".").map((n) => {
+    const x = parseInt(n, 10);
+    return Number.isFinite(x) ? x : 0;
+  });
+  const i = s.indexOf("-");
+  const pre = i === -1 ? [] : s.slice(i + 1).split(".").map((p) =>
+    /^\d+$/.test(p) ? Number(p) : p
+  );
+  return { core, pre };
+};
+
+const compareSemver = (a, b) => {
+  const A = parseSemver(a);
+  const B = parseSemver(b);
+  const len = Math.max(A.core.length, B.core.length);
+  for (let i = 0; i < len; i++) {
+    const na = A.core[i] || 0;
+    const nb = B.core[i] || 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  if (A.pre.length === 0 && B.pre.length > 0) return 1;
+  if (A.pre.length > 0 && B.pre.length === 0) return -1;
+  const plen = Math.max(A.pre.length, B.pre.length);
+  for (let i = 0; i < plen; i++) {
+    const na = A.pre[i];
+    const nb = B.pre[i];
+    if (na == null && nb != null) return -1;
+    if (na != null && nb == null) return 1;
+    if (typeof na === "number" && typeof nb === "number") {
+      if (na > nb) return 1;
+      if (na < nb) return -1;
+    } else {
+      const sa = String(na);
+      const sb = String(nb);
+      if (sa > sb) return 1;
+      if (sa < sb) return -1;
+    }
+  }
+  return 0;
+};
+
+const pickInstaller = (assets) => {
+  if (!Array.isArray(assets)) return null;
+  const exe = assets.find((a) => /\.exe$/i.test(a?.name || "") && !/\.blockmap$/i.test(a?.name || ""));
+  return exe?.browser_download_url || null;
+};
+
+const findLatestStable = (releases) => {
+  if (!Array.isArray(releases)) return null;
+  const stable = releases.filter((r) => r && !r.draft && !r.prerelease && r.tag_name);
+  if (stable.length === 0) return null;
+  let best = stable[0];
+  for (const r of stable.slice(1)) {
+    if (compareSemver(r.tag_name, best.tag_name) > 0) best = r;
+  }
+  return best;
+};
+
+const checkGitHubRelease = async () => {
+  const currentVersion = app.getVersion();
+  const owner = "alphagiolabs";
+  const repo = "beru";
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=20`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(apiUrl, {
+      signal: controller.signal,
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": `Beru/${currentVersion}`,
+      },
+    });
+    if (!res.ok) {
+      return { ok: false, error: `GitHub API ${res.status}`, currentVersion };
+    }
+    const data = await res.json();
+    const latest = findLatestStable(data);
+    if (!latest || !latest.tag_name) {
+      return { ok: true, updateAvailable: false, currentVersion };
+    }
+    const tag = (latest.tag_name || "").replace(/^v/i, "").trim();
+    const updateAvailable = compareSemver(tag, currentVersion) > 0;
+    return {
+      ok: true,
+      updateAvailable,
+      currentVersion,
+      latest: updateAvailable
+        ? {
+            version: tag,
+            tagName: latest.tag_name,
+            name: latest.name || tag,
+            htmlUrl: latest.html_url,
+            installerUrl: pickInstaller(latest.assets),
+            assets: Array.isArray(latest.assets)
+              ? latest.assets.map((a) => ({ name: a.name, url: a.browser_download_url, size: a.size }))
+              : [],
+            publishedAt: latest.published_at,
+            body: latest.body || "",
+          }
+        : null,
+    };
+  } catch (e) {
+    return { ok: false, error: e?.message || String(e), currentVersion };
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+export { init, checkForUpdates, startDownload, install, isDev, checkGitHubRelease };

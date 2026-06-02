@@ -1,32 +1,58 @@
-import { useState } from "react";
-import { Plus, FileSpreadsheet, Table2, Copy, Trash2, Settings2, Check, AlertCircle, Copy as CopyIcon } from "lucide-react";
+import { Plus, FileSpreadsheet, Table2, Copy, Trash2, Settings2 } from "lucide-react";
+import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
+import { useT } from "../i18n/useT";
 
 const api = window.api;
 
 export default function BatchPanel() {
-  const store = useEditorStore();
-  const { templateRegions, selectedIdx, excelPath, excelMapping, excelRows, selectedTemplateRegionId } = store;
-  const report = store.getMatchReport();
+  const {
+    templateRegions, selectedIdx, excelPath, excelMapping, excelRows,
+    selectedTemplateRegionId, currentRegion, queue,
+  } = useEditorStore(
+    (s) => ({
+      templateRegions: s.templateRegions,
+      selectedIdx: s.selectedIdx,
+      excelPath: s.excelPath,
+      excelMapping: s.excelMapping,
+      excelRows: s.excelRows,
+      selectedTemplateRegionId: s.selectedTemplateRegionId,
+      currentRegion: s.currentRegion,
+      queue: s.queue,
+    }),
+    shallow,
+  );
+  const showToast = useEditorStore((s) => s.showToast);
+  const get = useEditorStore.getState;
+  const t = useT();
+  const report = get().getMatchReport();
 
   const handleImportExcel = async () => {
     // Warn if any videos have manual (non-text) operations that will be overwritten
-    const hasManualOps = store.queue.some((v) => v.operations.some((op) => op.mode !== "text"));
+    const hasManualOps = queue.some((v) => v.operations.some((op) => op.mode !== "text"));
     if (hasManualOps) {
-      if (!confirm("Algunos videos tienen operaciones manuales (blur, crop, etc.) que se perderán al importar Excel. ¿Continuar?")) return;
+      if (!confirm(t("batch.confirmExcelOverwrite"))) return;
     }
 
     const path = await api?.openExcel();
     if (!path) return;
-    const result = await store.importExcel(path);
+    const result = await get().importExcel(path);
     if (!result.success) {
-      alert("Error: " + (result.error || "Failed to parse Excel"));
+      showToast({
+        kind: "err",
+        text: t("batch.excelParseError", {
+          message: result.error || t("errors.unknown"),
+        }),
+      });
     } else {
-      // Open mapping modal automatically on first import
-      if (!excelMapping.idColumn || Object.keys(excelMapping.columns).length === 0) {
-        store.setShowMappingModal(true);
+      const mapping = get().excelMapping;
+      if (!mapping.idColumn || Object.keys(mapping.columns).length === 0) {
+        get().setShowMappingModal(true);
       } else {
-        alert(result.message || `Vinculados ${result.rowCount} registros de Excel.`);
+        showToast({
+          kind: "ok",
+          text: result.message || t("batch.excelLinked", { count: result.rowCount ?? 0 }),
+        });
       }
     }
   };
@@ -47,8 +73,8 @@ export default function BatchPanel() {
           key={tr.id}
           role="button"
           tabIndex={0}
-          onClick={() => store.setSelectedTemplateRegion(tr.id)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); store.setSelectedTemplateRegion(tr.id); } }}
+          onClick={() => get().setSelectedTemplateRegion(tr.id)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); get().setSelectedTemplateRegion(tr.id); } }}
           className="flex items-center gap-2 p-2 rounded cursor-pointer"
           style={{
             background: isSelected ? "rgba(168,85,247,0.15)" : "var(--bg-elevated)",
@@ -61,7 +87,7 @@ export default function BatchPanel() {
             {(tr.region.x * 100).toFixed(1)}%,{(tr.region.y * 100).toFixed(1)}% {(tr.region.w * 100).toFixed(1)}%×{(tr.region.h * 100).toFixed(1)}%
           </span>
           <button
-            onClick={(e) => { e.stopPropagation(); store.removeTemplateRegion(tr.id); }}
+            onClick={(e) => { e.stopPropagation(); get().removeTemplateRegion(tr.id); }}
             className="p-0.5 rounded hover:bg-red-500/20"
             style={{ color: "var(--text-dim)" }}
           >
@@ -71,7 +97,7 @@ export default function BatchPanel() {
         );
       })}
 
-      <button onClick={store.addTemplateRegion} disabled={!store.currentRegion}
+      <button onClick={get().addTemplateRegion} disabled={!currentRegion}
         className="cap-btn-secondary w-full text-[10px]">
         <Plus size={12} /> Agregar región actual
       </button>
@@ -84,7 +110,7 @@ export default function BatchPanel() {
             <FileSpreadsheet size={12} /> {excelPath ? "Reimportar Excel" : "Importar Excel"}
           </button>
           {excelPath && (
-            <button onClick={() => store.setShowMappingModal(true)}
+            <button onClick={() => get().setShowMappingModal(true)}
               className="cap-btn-secondary !p-1.5" title="Configurar mapeo">
               <Settings2 size={12} />
             </button>
@@ -117,15 +143,15 @@ export default function BatchPanel() {
 
       {/* Actions */}
       <div className="border-t pt-3 space-y-1" style={{ borderColor: "var(--border)" }}>
-        <button onClick={store.applyToAll}
+        <button onClick={get().applyToAll}
           className="cap-btn-secondary w-full text-[10px]">
           <Copy size={12} /> Aplicar capas a todos
         </button>
-        <button onClick={() => store.setShowTableEditor(true)}
+        <button onClick={() => get().setShowTableEditor(true)}
           className="cap-btn-secondary w-full text-[10px]">
           <Table2 size={12} /> Editor de tabla
         </button>
-        <button onClick={() => store.setTemplate(selectedIdx)}
+        <button onClick={() => get().setTemplate(selectedIdx)}
           className="cap-btn-secondary w-full text-[10px] !text-purple-400">
           Marcar como plantilla
         </button>

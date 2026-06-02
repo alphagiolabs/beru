@@ -60,6 +60,12 @@
   "updater.install": "Restart and update",
   "updater.dismiss": "Later",
   "updater.checkNow": "Check for updates",
+  "topUpdateBar.message": "New version {version} available on GitHub",
+  "topUpdateBar.cta": "Download",
+  "topUpdateBar.ctaDirect": "Download installer",
+  "topUpdateBar.dismiss": "Close",
+  "topUpdateBar.error": "Could not check for updates: {message}",
+  "topUpdateBar.retry": "Retry",
 
   "modal.savePreset.title": "Save as preset",
   "modal.savePreset.desc": "It will be saved in the user presets folder. It will include regions, operations, and text style, but not the Excel file.",
@@ -233,6 +239,7 @@
   "style.bgOpacity": "Background opacity",
   "style.borderColor": "Border color",
   "style.borderWidth": "Border width",
+  "style.letterSpacingHint": "On export, negative values are treated as 0 (FFmpeg limit).",
 
   "errors.noApi": "API not available",
   "errors.invalidName": "Invalid name",
@@ -241,6 +248,29 @@
   "errors.invalidData": "Invalid data",
   "errors.unknown": "Unknown error",
   "errors.ffmpeg": "FFmpeg error",
+  "errors.processingFailed": "Processing failed: {message}",
+  "errors.processStartFailed": "Failed to start processing: {message}",
+  "errors.imageReadFailed": "Could not read image",
+  "errors.importVideosFailed": "Could not import videos: {message}",
+
+  "drop.noPaths": "No file paths detected",
+  "drop.noVideos": "No videos in selection",
+  "drop.added": "{count} video(s) added",
+  "drop.addedWithIgnored": "{count} video(s) added · {ignored} ignored",
+
+  "batch.excelParseError": "Failed to read Excel: {message}",
+  "batch.excelLinked": "Linked {count} Excel records.",
+  "batch.confirmExcelOverwrite": "Some videos have manual operations (blur, crop, etc.) that will be lost when importing Excel. Continue?",
+
+  "header.missingDimensions": "{count} video(s) without detected resolution ({names}{more}). Processing may fail. Continue?",
+
+  "queue.processingBusy": "A process is already running",
+  "queue.renderComplete": "Render complete",
+  "queue.processFailed": "Processing failed",
+  "queue.copyFailed": "Could not copy",
+
+  "batchProgress.processing": "Processing",
+  "batchProgress.done": "Done",
 
   "match.coincide": "Match",
   "match.sinMatch": "No match",

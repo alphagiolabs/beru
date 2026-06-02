@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, FileVideo, Edit3, MoreVertical, Play, RotateCw, FolderOpen, Eye, Copy, X } from "lucide-react";
+import { Plus, Trash2, FileVideo, Edit3, MoreVertical, Play, RotateCw, FolderOpen, Eye, Copy } from "lucide-react";
+import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { fmtTime, stripExt } from "../utils/video-utils";
 import MatchBadge from "./MatchBadge";
@@ -24,11 +25,21 @@ function Thumbnail({ value, status }) {
 }
 
 export default function QueueSidebar() {
-  const store = useEditorStore();
-  const { queue, selectedIdx, templateIdx, excelMatchStatus, excelPath, isProcessing } = store;
+  const { queue, selectedIdx, templateIdx, excelMatchStatus, excelPath, isProcessing } = useEditorStore(
+    (s) => ({
+      queue: s.queue,
+      selectedIdx: s.selectedIdx,
+      templateIdx: s.templateIdx,
+      excelMatchStatus: s.excelMatchStatus,
+      excelPath: s.excelPath,
+      isProcessing: s.isProcessing,
+    }),
+    shallow,
+  );
+  const showToast = useEditorStore((s) => s.showToast);
+  const get = useEditorStore.getState;
   const t = useT();
   const [openMenuIdx, setOpenMenuIdx] = useState(-1);
-  const [toast, setToast] = useState(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -45,15 +56,25 @@ export default function QueueSidebar() {
     };
   }, [openMenuIdx]);
 
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 2200);
-    return () => clearTimeout(t);
-  }, [toast]);
-
   const handleAdd = async () => {
-    const paths = await api?.openVideos();
-    if (paths && paths.length > 0) await store.addVideos(paths, api);
+    if (!api?.openVideos) {
+      showToast({ kind: "err", text: t("errors.noApi") });
+      return;
+    }
+    try {
+      const paths = await api.openVideos();
+      if (!paths?.length) return;
+      await get().addVideos(paths, api);
+      showToast({ kind: "ok", text: t("drop.added", { count: paths.length }) });
+    } catch (err) {
+      console.error("[beru] Video import failed:", err);
+      showToast({
+        kind: "err",
+        text: t("errors.importVideosFailed", {
+          message: err?.message || t("errors.unknown"),
+        }),
+      });
+    }
   };
 
   const statusColors = {
@@ -67,26 +88,29 @@ export default function QueueSidebar() {
   const handleProcessThis = async (idx) => {
     setOpenMenuIdx(-1);
     if (isProcessing) {
-      setToast({ kind: "warn", text: "Hay un proceso en ejecución" });
+      showToast({ kind: "warn", text: t("queue.processingBusy") });
       return;
     }
-    const res = await store.processSingle(idx);
+    const res = await get().processSingle(idx);
     if (res.ok) {
-      setToast({ kind: "ok", text: "Render completo" });
+      showToast({ kind: "ok", text: t("queue.renderComplete") });
     } else {
-      setToast({ kind: "err", text: res.error || "Error al procesar" });
+      showToast({
+        kind: "err",
+        text: res.error || t("queue.processFailed"),
+      });
     }
   };
 
   const handleReveal = (idx) => {
     setOpenMenuIdx(-1);
-    const out = store.outputPathFor(queue[idx]);
+    const out = get().outputPathFor(queue[idx]);
     if (out) api?.showItemInFolder(out);
   };
 
   const handleOpenOutputDir = () => {
     setOpenMenuIdx(-1);
-    const dir = store.outputDir;
+    const dir = get().outputDir;
     if (dir) api?.openPath(dir);
   };
 
@@ -95,9 +119,9 @@ export default function QueueSidebar() {
     const name = queue[idx]?.filename || "";
     try {
       await navigator.clipboard.writeText(name);
-      setToast({ kind: "ok", text: t("queue.copiedName") });
+      showToast({ kind: "ok", text: t("queue.copiedName") });
     } catch {
-      setToast({ kind: "err", text: "No se pudo copiar" });
+      showToast({ kind: "err", text: t("queue.copyFailed") });
     }
   };
 
@@ -118,7 +142,7 @@ export default function QueueSidebar() {
           const isOpen = openMenuIdx === idx;
           return (
             <div key={idx}
-              onClick={() => store.selectVideo(idx)}
+              onClick={() => get().selectVideo(idx)}
               className="flex items-center gap-2 px-3 py-2 border-b cursor-pointer transition-colors group relative"
               style={{
                 borderColor: "var(--border)",
@@ -179,12 +203,12 @@ export default function QueueSidebar() {
                     </button>
                   )}
                   <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
-                  <button onClick={handleOpenOutputDir} disabled={!store.outputDir}
+                  <button onClick={handleOpenOutputDir} disabled={!get().outputDir}
                     className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
                     style={{ color: "var(--text-primary)" }}>
                     <FolderOpen size={11} /> {t("queue.menu.openFolder")}
                   </button>
-                  <button onClick={() => handleReveal(idx)} disabled={!store.outputDir}
+                  <button onClick={() => handleReveal(idx)} disabled={!get().outputDir}
                     className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
                     style={{ color: "var(--text-primary)" }}>
                     <Eye size={11} /> {t("queue.menu.showInExplorer")}
@@ -195,7 +219,7 @@ export default function QueueSidebar() {
                     <Copy size={11} /> {t("queue.menu.copyName")}
                   </button>
                   <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
-                  <button onClick={() => { setOpenMenuIdx(-1); store.removeVideo(idx); }}
+                  <button onClick={() => { setOpenMenuIdx(-1); get().removeVideo(idx); }}
                     disabled={isProcessing}
                     className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
                     style={{ color: "#f43f5e" }}>
@@ -208,17 +232,6 @@ export default function QueueSidebar() {
         })}
       </div>
 
-      {toast && (
-        <div className="absolute bottom-3 left-3 right-3 z-40 rounded-md px-3 py-2 text-[11px] flex items-center gap-2 shadow-lg"
-          style={{
-            background: toast.kind === "ok" ? "var(--bg-elevated)" : "var(--bg-elevated)",
-            border: `1px solid ${toast.kind === "ok" ? "#22c55e" : toast.kind === "warn" ? "#fbbf24" : "#f43f5e"}`,
-            color: toast.kind === "ok" ? "#22c55e" : toast.kind === "warn" ? "#fbbf24" : "#f43f5e",
-          }}>
-          <span className="flex-1">{toast.text}</span>
-          <button onClick={() => setToast(null)} style={{ color: "inherit" }}><X size={11} /></button>
-        </div>
-      )}
     </aside>
   );
 }

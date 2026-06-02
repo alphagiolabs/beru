@@ -1,0 +1,48 @@
+---
+pid: 12464
+cwd: "C:\Users\HIDROAA\Desktop\beru"
+command: "cd \"C:\\Users\\HIDROAA\\Desktop\\beru\" && npm run dev 2>&1"
+started_at: 2026-06-02T20:06:23.989Z
+running_for_ms: 759999   
+---
+
+> beru@1.5.1 dev
+> concurrently "vite" "wait-on http://localhost:5173 && electron ."
+
+(node:11476) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[0] 
+[0]   VITE v5.4.21  ready in 310 ms
+[0] 
+[0]   ➜  Local:   http://localhost:5173/
+[0]   ➜  Network: use --host to expose
+[1] 
+[0] 3:06:27 p. m. [vite] ✨ new dependencies optimized: zustand/shallow
+[0] 3:06:27 p. m. [vite] ✨ optimized dependencies changed. reloading
+[1] wait-on http://localhost:5173 && electron . exited with code 0
+[0] 3:07:00 p. m. [vite] hmr update /src/components/Landing.jsx, /src/index.css
+[0] 3:07:00 p. m. [vite] hmr update /src/components/Header.jsx, /src/index.css
+[0] 3:07:00 p. m. [vite] hmr update /src/components/QueueSidebar.jsx, /src/index.css
+[0] 3:07:04 p. m. [vite] hmr update /src/App.jsx, /src/index.css, /src/components/Landing.jsx, /src/components/UpdateBanner.jsx, /src/components/DragOverlay.jsx, /src/components/LayerList.jsx, /src/components/TopUpdateBar.jsx, /src/components/ShortcutsModal.jsx, /src/components/ToolBar.jsx, /src/components/ExcelMappingModal.jsx, /src/components/QueueSidebar.jsx, /src/components/BatchProgressBar.jsx, /src/components/Header.jsx, /src/components/PropertiesPanel.jsx, /src/components/MatchBadge.jsx, /src/components/BatchPanel.jsx
+[0] 3:07:04 p. m. [vite] hmr update /src/App.jsx, /src/index.css, /src/components/Landing.jsx, /src/components/UpdateBanner.jsx, /src/components/DragOverlay.jsx, /src/components/LayerList.jsx, /src/components/TopUpdateBar.jsx, /src/components/ShortcutsModal.jsx, /src/components/ToolBar.jsx, /src/components/ExcelMappingModal.jsx, /src/components/QueueSidebar.jsx, /src/components/BatchProgressBar.jsx, /src/components/Header.jsx, /src/components/PropertiesPanel.jsx, /src/components/MatchBadge.jsx, /src/components/BatchPanel.jsx
+[0] 3:07:14 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:14 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:14 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:14 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:16 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:19 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:19 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:19 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:19 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:07:19 p. m. [vite] page reload dist-installer/win-unpacked/LICENSES.chromium.html
+[0] 3:08:03 p. m. [vite] hmr update /src/App.jsx, /src/index.css, /src/components/Landing.jsx, /src/components/UpdateBanner.jsx, /src/components/DragOverlay.jsx, /src/components/LayerList.jsx, /src/components/TopUpdateBar.jsx, /src/components/ShortcutsModal.jsx, /src/components/ToolBar.jsx, /src/components/ExcelMappingModal.jsx, /src/components/QueueSidebar.jsx, /src/components/BatchProgressBar.jsx, /src/components/Header.jsx, /src/components/PropertiesPanel.jsx, /src/components/MatchBadge.jsx, /src/components/BatchPanel.jsx, /src/components/AppToast.jsx, /src/components/TableEditor.jsx, /src/components/VideoPreview.jsx, /src/components/PresetManager.jsx, /src/components/table-editor/TableEditorGrid.jsx, /src/components/DelogoLivePreview.jsx, /src/components/StyleEditor.jsx
+[0] 3:08:10 p. m. [vite] hmr update /src/App.jsx, /src/index.css, /src/components/Landing.jsx, /src/components/UpdateBanner.jsx, /src/components/DragOverlay.jsx, /src/components/LayerList.jsx, /src/components/TopUpdateBar.jsx, /src/components/ShortcutsModal.jsx, /src/components/ToolBar.jsx, /src/components/ExcelMappingModal.jsx, /src/components/QueueSidebar.jsx, /src/components/BatchProgressBar.jsx, /src/components/Header.jsx, /src/components/PropertiesPanel.jsx, /src/components/MatchBadge.jsx, /src/components/BatchPanel.jsx, /src/components/AppToast.jsx, /src/components/TableEditor.jsx, /src/components/VideoPreview.jsx, /src/components/PresetManager.jsx, /src/components/table-editor/TableEditorGrid.jsx, /src/components/DelogoLivePreview.jsx, /src/components/StyleEditor.jsx
+[0] 3:08:39 p. m. [vite] hmr update /src/App.jsx, /src/index.css, /src/components/Landing.jsx, /src/components/UpdateBanner.jsx, /src/components/DragOverlay.jsx, /src/components/LayerList.jsx, /src/components/TopUpdateBar.jsx, /src/components/ShortcutsModal.jsx, /src/components/ToolBar.jsx, /src/components/ExcelMappingModal.jsx, /src/components/QueueSidebar.jsx, /src/components/BatchProgressBar.jsx, /src/components/Header.jsx, /src/components/PropertiesPanel.jsx, /src/components/MatchBadge.jsx, /src/components/BatchPanel.jsx, /src/components/AppToast.jsx, /src/components/TableEditor.jsx, /src/components/VideoPreview.jsx, /src/components/PresetManager.jsx, /src/components/table-editor/TableEditorGrid.jsx, /src/components/DelogoLivePreview.jsx, /src/components/StyleEditor.jsx
+[0] 3:08:39 p. m. [vite] hmr update /src/App.jsx, /src/index.css, /src/components/Landing.jsx, /src/components/UpdateBanner.jsx, /src/components/DragOverlay.jsx, /src/components/LayerList.jsx, /src/components/TopUpdateBar.jsx, /src/components/ShortcutsModal.jsx, /src/components/ToolBar.jsx, /src/components/ExcelMappingModal.jsx, /src/components/QueueSidebar.jsx, /src/components/BatchProgressBar.jsx, /src/components/Header.jsx, /src/components/PropertiesPanel.jsx, /src/components/MatchBadge.jsx, /src/components/BatchPanel.jsx, /src/components/AppToast.jsx, /src/components/TableEditor.jsx, /src/components/VideoPreview.jsx, /src/components/PresetManager.jsx, /src/components/table-editor/TableEditorGrid.jsx, /src/components/DelogoLivePreview.jsx, /src/components/StyleEditor.jsx
+[0] 3:09:21 p. m. [vite] hmr update /src/components/TopUpdateBar.jsx, /src/index.css
+[0] 3:10:06 p. m. [vite] hmr update /src/components/TopUpdateBar.jsx, /src/index.css
+[0] 3:10:11 p. m. [vite] hmr update /src/App.jsx, /src/index.css, /src/components/Landing.jsx, /src/components/UpdateBanner.jsx, /src/components/DragOverlay.jsx, /src/components/LayerList.jsx, /src/components/TopUpdateBar.jsx, /src/components/ShortcutsModal.jsx, /src/components/ToolBar.jsx, /src/components/ExcelMappingModal.jsx, /src/components/QueueSidebar.jsx, /src/components/BatchProgressBar.jsx, /src/components/Header.jsx, /src/components/PropertiesPanel.jsx, /src/components/MatchBadge.jsx, /src/components/BatchPanel.jsx, /src/components/AppToast.jsx, /src/components/TableEditor.jsx, /src/components/VideoPreview.jsx, /src/components/PresetManager.jsx, /src/components/table-editor/TableEditorGrid.jsx, /src/components/DelogoLivePreview.jsx, /src/components/StyleEditor.jsx
+[0] 3:11:18 p. m. [vite] page reload src/main.jsx
+[0] 3:11:18 p. m. [vite] hmr update /src/App.jsx, /src/index.css
+[0] 3:11:18 p. m. [vite] hmr update /src/components/TopUpdateBar.jsx, /src/index.css
+[0] 3:11:18 p. m. [vite] page reload index.html
