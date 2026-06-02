@@ -113,6 +113,48 @@ print(processor.build_drawtext({
     expect(r.stdout.trim()).toContain("fontfile='C\\:/Windows/Fonts/arial.ttf'");
   });
 
+  it("skips empty drawtext filters (ffmpeg EINVAL on text='')", () => {
+    const code = `
+import processor
+print(processor.build_drawtext({
+    "mode": "text",
+    "text": "",
+    "region": {"x": 10, "y": 20, "w": 200, "h": 50},
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("None");
+  });
+
+  it("does not append scale when resolution already matches (no crop)", () => {
+    const code = `
+import processor
+graph, last, imgs = processor.build_filter_complex([
+    {"mode": "text", "text": "Hola", "region": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.1}},
+], 1920, 1080)
+graph, last = processor._ensure_output_dimensions(graph, last, 1920, 1080)
+print("scale=" not in graph)
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("True");
+  });
+
+  it("build_filter_complex ignores blank text operations", () => {
+    const code = `
+import processor
+graph, last, imgs = processor.build_filter_complex([
+    {"mode": "text", "text": "", "region": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.1}},
+    {"mode": "text", "text": "Hola", "region": {"x": 0.2, "y": 0.2, "w": 0.2, "h": 0.1}},
+], 1920, 1080)
+print(graph is not None and "drawtext" in graph and "Hola" in graph)
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("True");
+  });
+
   it("emits drawtext spacing for letter_spacing instead of inserting spaces", () => {
     const code = `
 import processor
@@ -139,12 +181,13 @@ print(processor.build_drawtext({
     expect(filter).not.toContain("text='A B C'");
   });
 
-  it("uses two automatic workers for hardware encoders that tolerate parallel jobs", () => {
+  it("conservative auto caps GPU at 2 and MF at 1", () => {
     const code = `
 import json
 import os
 import processor
 os.environ.pop("BERU_WORKERS", None)
+os.environ["BERU_WORKERS_MODE"] = "conservative"
 print(json.dumps([
     processor.resolve_max_workers("h264_nvenc", 4),
     processor.resolve_max_workers("h264_mf", 4),
@@ -160,6 +203,22 @@ print(json.dumps([
     }
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout.trim())).toEqual([2, 1, 1]);
+  });
+
+  it("balanced auto reaches 5 workers for NVENC when job count allows", () => {
+    const code = `
+import json
+import os
+import processor
+os.environ.pop("BERU_WORKERS", None)
+os.environ["BERU_WORKERS_MODE"] = "balanced"
+print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8)))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+    });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout.trim())).toBe(5);
   });
 
   it("uses BERU_FFPROBE when resolving the runtime ffprobe path", () => {
@@ -201,6 +260,55 @@ print(json.dumps([
     }
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("ffmpeg ffprobe");
+  });
+
+  it("retries failed GPU jobs with fewer workers when BERU_RETRY_FAILED=1", () => {
+    const code = `
+import json
+import os
+import processor
+
+calls = {"n": 0}
+
+def fake_process(idx, job, ffmpeg_path):
+    calls["n"] += 1
+    job_id = job.get("id", idx)
+    if calls["n"] <= 1:
+        return {"index": job_id, "status": "failed", "error": "nvenc init failed"}
+    return {"index": job_id, "status": "succeeded"}
+
+processor.detect_hw_encoder = lambda _ffmpeg: "h264_nvenc"
+processor.get_system_fonts = lambda: {}
+processor._process_one = fake_process
+os.environ["BERU_RETRY_FAILED"] = "1"
+jobs = [{"id": 3, "input_path": "C:/tmp/a.mp4", "output_path": "C:/tmp/out.mp4"}]
+result = processor.process_jobs(jobs, "ffmpeg", max_workers=4)
+print(json.dumps({"calls": calls["n"], "result": result}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.calls).toBe(2);
+    expect(parsed.result.succeeded).toBe(1);
+    expect(parsed.result.failed).toBe(0);
+  });
+
+  it("bounds stderr buffer while streaming progress", () => {
+    const code = `
+import processor
+buf = []
+for i in range(500):
+    processor._stderr_buffer_append(buf, "x" * 200 + "\\n")
+print(len(buf), sum(len(x) for x in buf))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    const [lines, chars] = r.stdout.trim().split(" ").map(Number);
+    expect(lines).toBeLessThanOrEqual(256);
+    expect(chars).toBeLessThanOrEqual(48000);
   });
 
   it("does not deadlock while printing batch progress", () => {

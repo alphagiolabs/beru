@@ -13,6 +13,7 @@ export function emptyVideoInfo(overrides = {}) {
     pixFmt: DEFAULT_PIX_FMT,
     frameRate: 0,
     audioCodec: "",
+    audioChannels: 0,
     ...overrides,
   };
 }
@@ -48,6 +49,7 @@ export function parseFfprobeJson(stdout) {
     pixFmt: videoStream?.pix_fmt || DEFAULT_PIX_FMT,
     frameRate: parseFrameRate(videoStream?.r_frame_rate || videoStream?.avg_frame_rate || ""),
     audioCodec: audioStream?.codec_name || "",
+    audioChannels: audioStream ? Number(audioStream.channels || 0) : 0,
   });
 }
 
@@ -82,6 +84,32 @@ export function parseFfmpegOutput(output) {
   const resolution = resolutionMatches.find((m) => Number(m[1]) > 0 && Number(m[2]) > 0);
   const fpsMatch = videoLine.match(/,\s*([0-9]+(?:\.[0-9]+)?)\s*fps\b/i)
     || videoLine.match(/,\s*([0-9]+(?:\.[0-9]+)?)\s*tbr\b/i);
+  /* Audio line format: "Audio: aac, 44100 Hz, stereo, fltp, 192 kb/s"
+   * The channel layout (mono/stereo/5.1/7.1) appears before the sample format. */
+  const channelLayoutMap = {
+    mono: 1, "1.0": 1,
+    stereo: 2, "2.0": 2,
+    "2.1": 3, "3.0": 3,
+    "4.0": 4, "3.1": 4, quad: 4,
+    "5.0": 5, "4.1": 5,
+    "5.1": 6, hexagonal: 6,
+    "6.1": 7, "7.0": 7,
+    "7.1": 8, octagonal: 8,
+    "16.0": 16,
+  };
+  let audioChannels = 0;
+  if (audioLine) {
+    const layoutMatch = audioLine.match(/,\s*([a-z0-9.]+)\s*,\s*[a-z0-9]+/i);
+    if (layoutMatch) {
+      const key = layoutMatch[1].toLowerCase();
+      if (key in channelLayoutMap) {
+        audioChannels = channelLayoutMap[key];
+      } else {
+        const numMatch = key.match(/^(\d+)\.(\d+)$/);
+        if (numMatch) audioChannels = Number(numMatch[1]) + Number(numMatch[2]);
+      }
+    }
+  }
 
   return emptyVideoInfo({
     width: resolution ? Number(resolution[1]) : 0,
@@ -91,6 +119,7 @@ export function parseFfmpegOutput(output) {
     pixFmt: resolution ? parsePixFmt(videoLine, resolution.index) : DEFAULT_PIX_FMT,
     frameRate: fpsMatch ? Number(fpsMatch[1]) : 0,
     audioCodec: parseStreamCodec(audioLine, "Audio"),
+    audioChannels,
   });
 }
 

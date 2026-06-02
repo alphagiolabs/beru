@@ -1,5 +1,6 @@
 import { createOperation, createQueueItem, uid, denormalizeRegion, ensureNormalized } from "../../utils/types";
 import { clampRegionToVideo, isRegionUsable } from "../../utils/video-utils";
+import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { sanitizeOperation } from "../../utils/delogo-ops";
 
 const MAX_UNDO_STACK = 50;
@@ -37,7 +38,7 @@ export function createQueueSlice(set, get) {
 
   videoBounds: () => {
     const s = get().selected();
-    return { width: s?.width || 0, height: s?.height || 0 };
+    return getLockedDimensions(s);
   },
 
   /* Convert a normalized region to pixel coords for the current selected video. */
@@ -75,16 +76,7 @@ export function createQueueSlice(set, get) {
         const idx = startIdx + i;
         const info = infos[i] || {};
         if (!next[idx] || next[idx].path !== pathList[i]) continue;
-        next[idx] = {
-          ...next[idx],
-          width: info.width || 0,
-          height: info.height || 0,
-          duration: info.duration || 0,
-          videoCodec: info.videoCodec || "",
-          pixFmt: info.pixFmt || "yuv420p",
-          frameRate: info.frameRate || 0,
-          audioCodec: info.audioCodec || "",
-        };
+        next[idx] = mergeProbeIntoQueueItem(next[idx], info);
       }
       return { queue: next };
     });

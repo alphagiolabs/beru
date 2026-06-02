@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("api", {
   savePreset: (name, jsonStr) => ipcRenderer.invoke("presets:save", name, jsonStr),
   loadSettings: () => ipcRenderer.invoke("settings:load"),
   saveSettings: (partial) => ipcRenderer.invoke("settings:save", partial),
+  getBatchCapacity: (opts) => ipcRenderer.invoke("system:getBatchCapacity", opts),
   listRecent: () => ipcRenderer.invoke("recent:list"),
   addRecent: (entry) => ipcRenderer.invoke("recent:add", entry),
   removeRecent: (path) => ipcRenderer.invoke("recent:remove", path),

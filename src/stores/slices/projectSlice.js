@@ -1,5 +1,10 @@
-import { createOperation, ensureNormalized } from "../../utils/types";
+import { createOperation } from "../../utils/types";
 import { pickTextStyle } from "../../utils/text-style";
+import {
+  sanitizeTemplateRegions,
+  sanitizeTextStyle,
+  sanitizeDefaults,
+} from "../../utils/sanitize-preset";
 
 /** Project/preset serialization, persistence, and apply/load helpers. */
 export function createProjectSlice(set, get) {
@@ -33,7 +38,7 @@ export function createProjectSlice(set, get) {
         type: "beru-project",
         version: "1.2.0",
         savedAt: new Date().toISOString(),
-        templateRegions: s.templateRegions.map((r) => ({ ...r, region: ensureNormalized(r.region) })),
+        templateRegions: sanitizeTemplateRegions(s.templateRegions),
         textStyle: {
           textInput: s.textInput,
           textFontSize: s.textFontSize,
@@ -120,45 +125,38 @@ export function createProjectSlice(set, get) {
     },
 
     _applyTemplateState: (data) => {
-      const textStyle = data.textStyle || {};
-      const defaults = data.defaults || {};
-      const templateRegions = Array.isArray(data.templateRegions)
-        ? data.templateRegions.map((r) => ({
-            id: r.id,
-            label: r.label,
-            region: ensureNormalized(r.region),
-            style: r.style ? pickTextStyle(r.style) : undefined,
-          }))
-        : [];
+      const textStyle = sanitizeTextStyle(data.textStyle || {});
+      const defaults = sanitizeDefaults(data.defaults || {});
+      const templateRegions = sanitizeTemplateRegions(data.templateRegions);
       set({
         templateRegions,
         selectedTemplateRegionId: templateRegions[0]?.id ?? null,
         currentRegion: null,
         templateIdx: -1,
-        textInput: textStyle.textInput ?? get().textInput,
-        textFontSize: textStyle.textFontSize ?? get().textFontSize,
-        textFontColor: textStyle.textFontColor ?? get().textFontColor,
-        fontFamily: textStyle.fontFamily ?? get().fontFamily,
-        fontWeight: textStyle.fontWeight ?? get().fontWeight,
-        letterSpacing: textStyle.letterSpacing ?? get().letterSpacing,
-        textAlign: textStyle.textAlign ?? get().textAlign,
-        textOpacity: textStyle.textOpacity ?? get().textOpacity,
-        bold: textStyle.bold ?? get().bold,
-        italic: textStyle.italic ?? get().italic,
-        bgEnabled: textStyle.bgEnabled ?? get().bgEnabled,
-        bgColor: textStyle.bgColor ?? get().bgColor,
-        bgOpacity: textStyle.bgOpacity ?? get().bgOpacity,
-        boxBorderWidth: textStyle.boxBorderWidth ?? get().boxBorderWidth,
-        borderWidth: textStyle.borderWidth ?? get().borderWidth,
-        borderColor: textStyle.borderColor ?? get().borderColor,
-        blurStrength: defaults.blurStrength ?? get().blurStrength,
-        delogoMethod: defaults.delogoMethod ?? get().delogoMethod,
-        delogoFillColor: defaults.delogoFillColor ?? get().delogoFillColor,
-        delogoFillOpacity: defaults.delogoFillOpacity ?? get().delogoFillOpacity,
-        temporalRadius: defaults.temporalRadius ?? get().temporalRadius,
-        mosaicSize: defaults.mosaicSize ?? get().mosaicSize,
-        mirrorSide: defaults.mirrorSide ?? get().mirrorSide,
-        edgeFeather: defaults.edgeFeather ?? get().edgeFeather,
+        textInput: textStyle.textInput,
+        textFontSize: textStyle.textFontSize,
+        textFontColor: textStyle.textFontColor,
+        fontFamily: textStyle.fontFamily,
+        fontWeight: textStyle.fontWeight,
+        letterSpacing: textStyle.letterSpacing,
+        textAlign: textStyle.textAlign,
+        textOpacity: textStyle.textOpacity,
+        bold: textStyle.bold,
+        italic: textStyle.italic,
+        bgEnabled: textStyle.bgEnabled,
+        bgColor: textStyle.bgColor,
+        bgOpacity: textStyle.bgOpacity,
+        boxBorderWidth: textStyle.boxBorderWidth,
+        borderWidth: textStyle.borderWidth,
+        borderColor: textStyle.borderColor,
+        blurStrength: defaults.blurStrength,
+        delogoMethod: defaults.delogoMethod,
+        delogoFillColor: defaults.delogoFillColor,
+        delogoFillOpacity: defaults.delogoFillOpacity,
+        temporalRadius: defaults.temporalRadius,
+        mosaicSize: defaults.mosaicSize,
+        mirrorSide: defaults.mirrorSide,
+        edgeFeather: defaults.edgeFeather,
       });
     },
 

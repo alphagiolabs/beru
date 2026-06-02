@@ -151,7 +151,14 @@ describe("useEditorStore logic regressions", () => {
       audioCodec: "aac",
     }));
     expect(refreshed[1].width).toBe(1920);
-    expect(job).toEqual(expect.objectContaining({ width: 1280, height: 720 }));
+    expect(job).toEqual(expect.objectContaining({
+      width: 1280,
+      height: 720,
+      source_width: 1280,
+      source_height: 720,
+    }));
+    expect(refreshed[0].sourceWidth).toBe(1280);
+    expect(refreshed[0].sourceHeight).toBe(720);
   });
 
   it("reapplies Excel rows using advanced text style defaults", () => {

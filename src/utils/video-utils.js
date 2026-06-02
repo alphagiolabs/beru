@@ -81,7 +81,17 @@ export function regionToScreen(region, videoEl) {
 export function drawRegionOnCanvas(canvas, videoEl, region, tool = "blur", delogoMethod = "inpaint") {
   if (!canvas || !videoEl) return;
   const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const dpr = Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
+  if (typeof ctx.setTransform === "function") {
+    if (canvas.width !== Math.round(canvas.clientWidth * dpr) || canvas.height !== Math.round(canvas.clientHeight * dpr)) {
+      canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
+      canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr));
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
   if (!region) return;
   const c = contentRect(videoEl);
   if (!c || !videoEl.videoWidth || !videoEl.videoHeight) return;
@@ -98,10 +108,10 @@ export function drawRegionOnCanvas(canvas, videoEl, region, tool = "blur", delog
 
   if (tool === "crop") {
     ctx.fillStyle = "rgba(0,0,0,0.6)";
-    ctx.fillRect(0, 0, canvas.width, y);
-    ctx.fillRect(0, y + h, canvas.width, canvas.height - y - h);
+    ctx.fillRect(0, 0, canvas.clientWidth, y);
+    ctx.fillRect(0, y + h, canvas.clientWidth, canvas.clientHeight - y - h);
     ctx.fillRect(0, y, x, h);
-    ctx.fillRect(x + w, y, canvas.width - x - w, h);
+    ctx.fillRect(x + w, y, canvas.clientWidth - x - w, h);
     ctx.strokeStyle = "#fbbf24";
     ctx.lineWidth = 2.5;
     ctx.setLineDash([6, 4]);

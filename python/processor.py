@@ -176,20 +176,55 @@ def build_hwaccel_args(hw_encoder, has_video_filters=False):
     return ["-hwaccel", "auto"]
 
 
-def build_filter_thread_args():
-    """Parallelize filter graph execution across CPU cores."""
+MAX_WORKERS_CAP = 16
+AUTO_TARGET_WORKERS = 5
+
+_ENCODER_CAPS = {
+    "conservative": {
+        "h264_mf": 1,
+        "h264_nvenc": 2,
+        "h264_qsv": 2,
+        "h264_amf": 2,
+        "h264_vaapi": 2,
+        "h264_videotoolbox": 2,
+    },
+    "balanced": {
+        "h264_mf": 1,
+        "h264_nvenc": 5,
+        "h264_qsv": 5,
+        "h264_amf": 4,
+        "h264_vaapi": 4,
+        "h264_videotoolbox": 4,
+    },
+}
+
+# Set in process_jobs so each FFmpeg child uses proportional filter threads.
+_BATCH_ACTIVE_WORKERS = 1
+
+
+def build_filter_thread_args(active_workers=None):
+    """Parallelize filter graph; fewer threads per job when many jobs run at once."""
+    workers = active_workers if active_workers is not None else _BATCH_ACTIVE_WORKERS
     cpus = os.cpu_count() or 4
-    n = max(1, min(cpus, 8))
+    n = max(1, min(4, cpus // max(1, int(workers))))
     return ["-filter_threads", str(n), "-filter_complex_threads", str(n)]
 
 
-def build_audio_args(output_path, src_audio_codec):
-    """Copy audio when the container supports the source codec; else AAC."""
+def build_audio_args(output_path, src_audio_codec, src_audio_channels=0):
+    """Copy audio when the container supports the source codec; else AAC.
+
+    When re-encoding to AAC, preserve the source channel layout (mono → mono,
+    5.1 → 5.1) so surround sources don't silently downmix to stereo.
+    """
     ext = os.path.splitext(output_path)[1].lower()
     codec = (src_audio_codec or "").lower()
     if codec and codec in _AUDIO_COPY_CODECS.get(ext, frozenset()):
         return ["-map", "0:a?", "-c:a", "copy"]
-    return ["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"]
+    args = ["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"]
+    channels = int(src_audio_channels or 0)
+    if 1 <= channels <= 16:
+        args += ["-ac", str(channels)]
+    return args
 
 
 def build_encode_args(ffmpeg_path, profile_name, job, force_software=False):
@@ -234,25 +269,52 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False):
     ]
 
 
-def resolve_max_workers(hw_encoder, job_count):
-    """Pick parallel job count: env override, then GPU- or CPU-aware default."""
-    env_workers = int(os.environ.get("BERU_WORKERS", "0"))
+def resolve_max_workers(hw_encoder, job_count, max_source_pixels=0):
+    """Pick parallel job count: env override, then GPU/CPU-aware caps (balanced | conservative)."""
+    env_raw = os.environ.get("BERU_WORKERS", "0") or "0"
+    try:
+        env_workers = int(env_raw)
+    except ValueError:
+        env_workers = 0
     if env_workers > 0:
-        return max(1, min(env_workers, job_count))
+        return max(1, min(env_workers, job_count, MAX_WORKERS_CAP))
 
+    mode = (os.environ.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
+    if mode not in _ENCODER_CAPS:
+        mode = "balanced"
+
+    caps = _ENCODER_CAPS[mode]
     cpus = os.cpu_count() or 4
+
     if hw_encoder:
-        if hw_encoder == "h264_mf":
-            # MediaFoundation is the least predictable under parallel load.
-            return max(1, min(1, job_count))
-        return max(1, min(2, job_count))
-    return max(1, min(max(2, cpus - 1), 6, job_count))
+        cap = caps.get(hw_encoder, caps.get("h264_nvenc", 2))
+        workers = max(1, min(cap, job_count))
+        if (
+            mode == "balanced"
+            and hw_encoder != "h264_mf"
+            and job_count >= AUTO_TARGET_WORKERS
+        ):
+            workers = max(workers, min(AUTO_TARGET_WORKERS, job_count, cap))
+    else:
+        if mode == "conservative":
+            workers = max(1, min(max(2, cpus - 1), 6, job_count))
+        else:
+            cpu_cap = min(max(2, cpus - 2), 8)
+            workers = max(1, min(cpu_cap, job_count))
+            if job_count >= AUTO_TARGET_WORKERS:
+                workers = max(workers, min(AUTO_TARGET_WORKERS, job_count, cpu_cap))
+
+    # Reduce parallel 4K+ encodes to limit VRAM/RAM spikes.
+    if max_source_pixels >= 3840 * 2160:
+        workers = min(workers, 2)
+
+    return workers
 
 
 def job_video_info(job, input_path):
     """Use metadata from the job when Electron already probed the file."""
-    jw = int(job.get("width") or 0)
-    jh = int(job.get("height") or 0)
+    jw = int(job.get("source_width") or job.get("width") or 0)
+    jh = int(job.get("source_height") or job.get("height") or 0)
     if jw > 0 and jh > 0:
         return {
             "width": jw,
@@ -261,6 +323,7 @@ def job_video_info(job, input_path):
             "pix_fmt": job.get("pix_fmt") or "yuv420p",
             "frame_rate": float(job.get("frame_rate") or 0),
             "audio_codec": job.get("audio_codec") or "",
+            "audio_channels": int(job.get("audio_channels") or 0),
             "video_codec": job.get("video_codec") or "",
         }
     return ffprobe(input_path)
@@ -324,16 +387,108 @@ def _parse_frame_rate(rate_str):
         return 0.0
 
 
+def _empty_probe_result():
+    return {"width": 0, "height": 0, "duration": 0,
+            "video_codec": "", "pix_fmt": "yuv420p",
+            "frame_rate": 0.0, "audio_codec": "", "audio_channels": 0}
+
+
+_CHANNEL_LAYOUT_TO_COUNT = {
+    "mono": 1, "1.0": 1,
+    "stereo": 2, "2.0": 2,
+    "2.1": 3, "3.0": 3,
+    "4.0": 4, "3.1": 4, "quad": 4,
+    "5.0": 5, "4.1": 5,
+    "5.1": 6, "hexagonal": 6,
+    "6.1": 7, "7.0": 7,
+    "7.1": 8, "octagonal": 8,
+    "16.0": 16,
+}
+
+
+def _parse_channel_layout(audio_line):
+    """Extract channel count from an ffmpeg 'Audio: ...' line.
+
+    Line shape: 'Audio: aac, 44100 Hz, stereo, fltp, 192 kb/s'.
+    The layout token is the third comma-separated field after 'Audio:'.
+    """
+    if not audio_line:
+        return 0
+    m = re.search(r"Audio:\s*[^,]+,\s*[^,]+,\s*([a-z0-9.]+)\s*,", audio_line, re.I)
+    if not m:
+        return 0
+    key = m.group(1).lower()
+    if key in _CHANNEL_LAYOUT_TO_COUNT:
+        return _CHANNEL_LAYOUT_TO_COUNT[key]
+    parts = key.split(".")
+    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        return int(parts[0]) + int(parts[1])
+    return 0
+
+
+def _ffprobe_via_ffmpeg(path):
+    """Fallback when ffprobe returns no JSON (common on some Windows builds)."""
+    empty = _empty_probe_result()
+    ffmpeg_bin = FFMPEG if FFMPEG and os.path.isfile(FFMPEG) else find_ffmpeg()
+    if not ffmpeg_bin or not os.path.isfile(ffmpeg_bin):
+        return empty
+    try:
+        result = subprocess.run(
+            [ffmpeg_bin, "-hide_banner", "-i", path],
+            capture_output=True, text=True, timeout=30,
+        )
+        text = (result.stdout or "") + (result.stderr or "")
+        dur_match = re.search(
+            r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)", text,
+        )
+        duration = 0.0
+        if dur_match:
+            duration = (
+                int(dur_match.group(1)) * 3600
+                + int(dur_match.group(2)) * 60
+                + float(dur_match.group(3))
+            )
+        video_line = ""
+        for line in text.splitlines():
+            if re.search(r"\bVideo:\s*", line, re.I):
+                video_line = line
+                break
+        res_matches = list(re.finditer(r"(\d{2,6})x(\d{2,6})", video_line or text))
+        width = height = 0
+        for match in res_matches:
+            w, h = int(match.group(1)), int(match.group(2))
+            if w > 0 and h > 0:
+                width, height = w, h
+                break
+        if width <= 0 or height <= 0:
+            return empty
+        codec_match = re.search(r"Video:\s*([^,\s(]+)", video_line or text, re.I)
+        audio_line = next((ln for ln in text.splitlines() if re.search(r"\bAudio:\s*", ln, re.I)), "")
+        audio_match = re.search(r"Audio:\s*([^,\s(]+)", audio_line, re.I)
+        fps_match = re.search(r",\s*([0-9]+(?:\.[0-9]+)?)\s*fps\b", video_line or text, re.I)
+        return {
+            "width": width,
+            "height": height,
+            "duration": duration,
+            "video_codec": codec_match.group(1) if codec_match else "",
+            "pix_fmt": "yuv420p",
+            "frame_rate": float(fps_match.group(1)) if fps_match else 0.0,
+            "audio_codec": audio_match.group(1) if audio_match else "",
+            "audio_channels": _parse_channel_layout(audio_line),
+        }
+    except Exception as e:
+        logger.warning("ffmpeg probe fallback failed for %s: %s", os.path.basename(path), e)
+        return empty
+
+
 def ffprobe(path):
     """Get comprehensive video metadata for quality-preserving export."""
-    empty = {"width": 0, "height": 0, "duration": 0,
-             "video_codec": "", "pix_fmt": "yuv420p",
-             "frame_rate": 0.0, "audio_codec": ""}
+    empty = _empty_probe_result()
     if not path or not os.path.exists(path):
         return empty
     if not FFPROBE or not os.path.isfile(FFPROBE):
         logger.warning("ffprobe binary not found: %s", FFPROBE)
-        return empty
+        return _ffprobe_via_ffmpeg(path)
     try:
         result = subprocess.run(
             [FFPROBE, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
@@ -346,7 +501,7 @@ def ffprobe(path):
                 "ffprobe empty output for %s (exit %s): %s",
                 os.path.basename(path), result.returncode, err_snip,
             )
-            return empty
+            return _ffprobe_via_ffmpeg(path)
         info = json.loads(raw)
         fmt = info.get("format", {})
         video_stream = None
@@ -358,9 +513,7 @@ def ffprobe(path):
                 audio_stream = stream
 
         if not video_stream:
-            return {"width": 0, "height": 0, "duration": 0,
-                    "video_codec": "", "pix_fmt": "yuv420p",
-                    "frame_rate": 0.0, "audio_codec": ""}
+            return _ffprobe_via_ffmpeg(path)
 
         return {
             "width": video_stream.get("width", 0),
@@ -371,17 +524,18 @@ def ffprobe(path):
             "bit_rate": int(fmt.get("bit_rate", 0)) or int(video_stream.get("bit_rate", 0)),
             "frame_rate": _parse_frame_rate(video_stream.get("r_frame_rate") or video_stream.get("avg_frame_rate", "")),
             "audio_codec": audio_stream.get("codec_name", "") if audio_stream else "",
+            "audio_channels": int(audio_stream.get("channels", 0)) if audio_stream else 0,
         }
     except Exception as e:
         logger.warning("ffprobe failed for %s: %s", os.path.basename(path), e)
-    return {"width": 0, "height": 0, "duration": 0,
-            "video_codec": "", "pix_fmt": "yuv420p",
-            "frame_rate": 0.0, "audio_codec": ""}
+    return _ffprobe_via_ffmpeg(path)
 
 
 def build_drawtext(op):
     """Build ffmpeg drawtext filter string from operation."""
-    text = op.get("text", "")
+    text = (op.get("text") or "").strip()
+    if not text:
+        return None
 
     # Escape the text for FFmpeg drawtext syntax
     text = (text
@@ -392,6 +546,8 @@ def build_drawtext(op):
             .replace(";", "\\;")
             .replace(",", "\\,")
             .replace("%", "\\%")
+            .replace("{", "\\{")
+            .replace("}", "\\}")
             .replace("\n", "\\n")
             .replace("\r", ""))
 
@@ -861,7 +1017,11 @@ def build_filter_complex(operations, video_w, video_h):
         h = region["h"]
 
         if mode == "text":
+            if not (op.get("text") or "").strip():
+                continue
             dt = build_drawtext(op)
+            if not dt:
+                continue
             if n == 0:
                 filters.append(f"[0:v]{dt}[tmp{n}]")
             else:
@@ -941,9 +1101,41 @@ def build_filter_complex(operations, video_w, video_h):
     return ";".join(filters), f"[tmp{n - 1}]", image_paths
 
 
+def _crop_changes_output_size(operations):
+    """True when a full-duration crop op changes the export canvas size."""
+    for raw_op in operations:
+        op = _normalize_operation(raw_op)
+        if op.get("mode") != "crop":
+            continue
+        if _build_enable_clause(op):
+            continue
+        return True
+    return False
+
+
+def _ensure_output_dimensions(filter_complex, output_label, target_w, target_h):
+    """Force final frame size to match resolution locked at import.
+
+    Called only when no full-duration crop is present. In that case the
+    filter chain's default output is the source resolution (vw x vh), which
+    equals the target. Appending `scale` would be a no-op that still
+    allocates buffers and runs a lanczos resample, so skip it.
+
+    If a future op changes the main video frame size before the output
+    label, this function should be revisited.
+    """
+    if not filter_complex or target_w <= 0 or target_h <= 0:
+        return filter_complex, output_label
+    return filter_complex, output_label
+
+
 MAX_RETRIES = 2
 RETRY_DELAYS = [2, 5]
+MAX_STDERR_LINES = 256
+MAX_STDERR_CHARS = 48_000
 _tr_print_lock = threading.Lock()
+_last_job_progress_emit = {}
+_job_progress_lock = threading.Lock()
 _cancel_event = threading.Event()
 _jobs_file = None
 
@@ -977,8 +1169,50 @@ def _is_transient_error(stderr_text):
     return any(m in lower for m in markers)
 
 
+def _stderr_buffer_append(buffer, line):
+    """Keep stderr bounded while streaming FFmpeg output."""
+    buffer.append(line)
+    while len(buffer) > MAX_STDERR_LINES:
+        buffer.pop(0)
+    joined = "".join(buffer)
+    while len(joined) > MAX_STDERR_CHARS and buffer:
+        buffer.pop(0)
+        joined = "".join(buffer)
+
+
+def _retry_failed_enabled():
+    flag = (os.environ.get("BERU_RETRY_FAILED") or "1").strip().lower()
+    return flag not in ("0", "false", "no", "off")
+
+
+def _is_hw_encoder_error(err_text):
+    """Errors that often clear when fewer parallel GPU encodes run."""
+    if not err_text:
+        return False
+    lower = err_text.lower()
+    markers = (
+        "nvenc", "amf", "qsv", "videotoolbox", "vaapi", "h264_mf",
+        "error code: -22", "hwaccel", "no capable devices",
+        "cannot create cuda", "out of memory", "encoder init",
+    )
+    return any(m in lower for m in markers)
+
+
+def _should_retry_failed_job(result, max_workers):
+    if result.get("status") != "failed":
+        return False
+    err = result.get("error") or ""
+    if _is_hw_encoder_error(err):
+        return True
+    if max_workers >= 3 and "timeout" in err.lower():
+        return True
+    return False
+
+
 def _extract_error_line(stderr_text):
     """Extract the most relevant error line from FFmpeg stderr."""
+    if len(stderr_text) > MAX_STDERR_CHARS:
+        stderr_text = stderr_text[-MAX_STDERR_CHARS:]
     lines = stderr_text.split("\n")
     for line in reversed(lines):
         stripped = line.strip()
@@ -990,13 +1224,20 @@ def _extract_error_line(stderr_text):
 
 
 def _emit_job_progress(job_id, percent, speed):
-    """Per-video encode progress (0-100) for the renderer."""
+    """Per-video encode progress (0-100) for the renderer (throttled ~1 Hz per job)."""
     if job_id is None:
         return
+    pct = round(max(0.0, min(100.0, percent)), 1)
+    now = time.monotonic()
+    with _job_progress_lock:
+        last_t = _last_job_progress_emit.get(job_id, 0.0)
+        if pct < 99.0 and (now - last_t) < 1.0:
+            return
+        _last_job_progress_emit[job_id] = now
     _safe_print(json.dumps({
         "type": "job_progress",
         "index": job_id,
-        "percent": round(max(0.0, min(100.0, percent)), 1),
+        "percent": pct,
         "speed": speed,
     }))
 
@@ -1015,9 +1256,10 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
             else:
                 proc = subprocess.run(cmd, capture_output=True, timeout=timeout_sec)
                 ok = proc.returncode == 0
-                err = None if ok else _extract_error_line(
-                    proc.stderr.decode("utf-8", errors="replace")
-                )
+                stderr_raw = proc.stderr.decode("utf-8", errors="replace")
+                if len(stderr_raw) > MAX_STDERR_CHARS:
+                    stderr_raw = stderr_raw[-MAX_STDERR_CHARS:]
+                err = None if ok else _extract_error_line(stderr_raw)
             elapsed = time.perf_counter() - t0
             if ok:
                 logger.info("FFmpeg finished in %.1fs (job=%s)", elapsed, job_id)
@@ -1060,7 +1302,7 @@ def _run_ffmpeg_with_progress(cmd, timeout_sec, job_id, duration_sec):
     last_pct = -1.0
     try:
         for line in proc.stderr:
-            stderr_lines.append(line)
+            _stderr_buffer_append(stderr_lines, line)
             if _check_cancelled():
                 proc.kill()
                 proc.wait(timeout=5)
@@ -1137,8 +1379,8 @@ def _process_one(idx, job, ffmpeg_path):
             return {"index": job_id, "status": "failed"}
 
     info = job_video_info(job, input_path)
-    vw = int(info.get("width") or 0)
-    vh = int(info.get("height") or 0)
+    vw = int(job.get("source_width") or job.get("width") or info.get("width") or 0)
+    vh = int(job.get("source_height") or job.get("height") or info.get("height") or 0)
     duration = float(info.get("duration") or 0)
     if vw <= 0 or vh <= 0:
         err = (
@@ -1155,6 +1397,11 @@ def _process_one(idx, job, ffmpeg_path):
     ]
 
     filter_complex, output_label, image_paths = build_filter_complex(operations, vw, vh)
+
+    if filter_complex and not _crop_changes_output_size(operations):
+        filter_complex, output_label = _ensure_output_dimensions(
+            filter_complex, output_label, vw, vh,
+        )
 
     if not filter_complex and operations:
         err = (
@@ -1192,7 +1439,11 @@ def _process_one(idx, job, ffmpeg_path):
             cmd += ["-pix_fmt", src_pix_fmt]
         else:
             cmd += ["-pix_fmt", "yuv420p"]
-        cmd += build_audio_args(output_path, src_audio_codec)
+        cmd += build_audio_args(output_path, src_audio_codec, job.get("audio_channels"))
+        out_ext = os.path.splitext(output_path)[1].lower()
+        if out_ext in (".mp4", ".mov", ".m4v"):
+            cmd += ["-movflags", "+faststart"]
+        cmd += ["-max_muxing_queue_size", "1024"]
         cmd.append(output_path)
         return cmd
 
@@ -1230,67 +1481,168 @@ def _process_one(idx, job, ffmpeg_path):
     else:
         logger.error("Job %d: ffmpeg failed: %s", idx, err[:200] if err else "")
         _safe_print(json.dumps({"type": "error", "index": job_id, "error": err or "Unknown error"}))
-        return {"index": job_id, "status": "failed"}
+        return {"index": job_id, "status": "failed", "error": err or "Unknown error"}
+
+
+def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True):
+    """Run one concurrent pass; returns per-job results and failure list."""
+    total = len(jobs)
+    results = {}
+    state = {"succeeded": 0, "failed": 0, "cancelled": 0, "completed": 0}
+    state_lock = threading.Lock()
+
+    def _on_done(fut):
+        try:
+            result = fut.result()
+        except Exception as e:
+            job_pos = getattr(fut, "_beru_job_pos", -1)
+            job_id = jobs[job_pos].get("id", job_pos) if 0 <= job_pos < total else -1
+            result = {"index": job_id, "status": "failed", "error": str(e)}
+
+        with state_lock:
+            idx = result.get("index", -1)
+            results[idx] = result
+            state["completed"] += 1
+            status = result.get("status", "failed")
+            if status == "succeeded":
+                state["succeeded"] += 1
+            elif status == "cancelled":
+                state["cancelled"] += 1
+            else:
+                state["failed"] += 1
+
+            if emit_batch_progress:
+                job_pos = getattr(fut, "_beru_job_pos", -1)
+                if 0 <= job_pos < total:
+                    fname = os.path.basename(jobs[job_pos].get("input_path", "")) or "?"
+                else:
+                    fname = "?"
+                progress_msg = {
+                    "type": "progress",
+                    "current": state["completed"],
+                    "total": total,
+                    "file": fname,
+                    "succeeded": state["succeeded"],
+                    "failed": state["failed"],
+                }
+                _safe_print(json.dumps(progress_msg))
+
+    global _BATCH_ACTIVE_WORKERS
+    _BATCH_ACTIVE_WORKERS = max(1, max_workers)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = []
+        for i, job in enumerate(jobs):
+            if _check_cancelled():
+                job_id = job.get("id", i) if isinstance(job, dict) else i
+                with state_lock:
+                    if job_id not in results:
+                        results[job_id] = {"index": job_id, "status": "cancelled"}
+                        state["cancelled"] += 1
+                        state["completed"] += 1
+                        if emit_batch_progress:
+                            fname = os.path.basename(job.get("input_path", "")) if isinstance(job, dict) else "?"
+                            _safe_print(json.dumps({
+                                "type": "progress",
+                                "current": state["completed"],
+                                "total": total,
+                                "file": fname,
+                                "succeeded": state["succeeded"],
+                                "failed": state["failed"],
+                            }))
+                _safe_print(json.dumps({
+                    "type": "error", "index": job_id, "error": "Cancelled",
+                }))
+                continue
+            fut = executor.submit(_process_one, i, job, ffmpeg_path)
+            fut._beru_job_pos = i
+            fut.add_done_callback(_on_done)
+            futures.append(fut)
+        concurrent.futures.wait(futures)
+
+    failed_jobs = []
+    for i, job in enumerate(jobs):
+        if not isinstance(job, dict):
+            continue
+        job_id = job.get("id", i)
+        result = results.get(job_id)
+        if result and result.get("status") == "failed":
+            failed_jobs.append((job, result))
+
+    return {
+        **state,
+        "results": results,
+        "failed_jobs": failed_jobs,
+    }
 
 
 def process_jobs(jobs, ffmpeg_path, max_workers=None):
     """Process jobs concurrently. Report progress to stdout."""
-    global _cancel_event, _jobs_file
+    global _cancel_event, _jobs_file, _BATCH_ACTIVE_WORKERS
     _cancel_event.clear()
+    _last_job_progress_emit.clear()
 
     # Warm font cache before parallel workers hit drawtext
     get_system_fonts()
 
     hw = detect_hw_encoder(ffmpeg_path)
+    max_pixels = 0
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        w = int(job.get("source_width") or job.get("width") or 0)
+        h = int(job.get("source_height") or job.get("height") or 0)
+        if w > 0 and h > 0:
+            max_pixels = max(max_pixels, w * h)
+
     if max_workers is None:
-        max_workers = resolve_max_workers(hw, len(jobs))
+        max_workers = resolve_max_workers(hw, len(jobs), max_pixels)
 
     total = len(jobs)
-    succeeded = 0
-    failed = 0
-    cancelled = 0
-    completed = 0
+    mode = (os.environ.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
+    logger.info(
+        "Starting batch: %d jobs, %d workers (mode=%s, encoder=%s, max_px=%d), ffmpeg=%s",
+        total, max_workers, mode, hw or "libx264", max_pixels, ffmpeg_path,
+    )
 
-    logger.info("Starting batch: %d jobs, %d workers, ffmpeg=%s",
-                total, max_workers, ffmpeg_path)
+    pass1 = _execute_batch(jobs, ffmpeg_path, max_workers, emit_batch_progress=True)
+    succeeded = pass1["succeeded"]
+    failed = pass1["failed"]
+    cancelled = pass1["cancelled"]
 
-    def _on_done(fut):
-        nonlocal completed, succeeded, failed, cancelled
-        try:
-            result = fut.result()
-        except Exception as e:
-            result = {"index": -1, "status": "failed"}
-            logger.error("Job future exception: %s", e)
-
-        with _tr_print_lock:
-            completed += 1
-            status = result.get("status", "failed")
-            if status == "succeeded":
+    retry_candidates = [
+        job for job, result in pass1["failed_jobs"]
+        if _should_retry_failed_job(result, max_workers)
+    ]
+    if (
+        _retry_failed_enabled()
+        and max_workers > 1
+        and retry_candidates
+        and not _check_cancelled()
+    ):
+        reduced_workers = max(1, max_workers // 2)
+        logger.info(
+            "Retry pass: %d failed jobs at %d workers (was %d)",
+            len(retry_candidates), reduced_workers, max_workers,
+        )
+        pass2 = _execute_batch(
+            retry_candidates, ffmpeg_path, reduced_workers, emit_batch_progress=False,
+        )
+        for job in retry_candidates:
+            job_id = job.get("id")
+            if job_id is None:
+                continue
+            prev = pass1["results"].get(job_id)
+            new = pass2["results"].get(job_id)
+            if not prev or prev.get("status") != "failed":
+                continue
+            failed -= 1
+            if new and new.get("status") == "succeeded":
                 succeeded += 1
-            elif status == "cancelled":
+            elif new and new.get("status") == "cancelled":
                 cancelled += 1
-            elif status == "failed":
-                failed += 1
-
-            job_pos = getattr(fut, "_beru_job_pos", -1)
-            if 0 <= job_pos < len(jobs):
-                fname = os.path.basename(jobs[job_pos].get("input_path", "")) or "?"
             else:
-                fname = "?"
-            progress_msg = {
-                "type": "progress", "current": completed, "total": total,
-                "file": fname, "succeeded": succeeded, "failed": failed
-            }
-        _safe_print(json.dumps(progress_msg))
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-        for i, job in enumerate(jobs):
-            f = executor.submit(_process_one, i, job, ffmpeg_path)
-            f._beru_job_pos = i
-            f.add_done_callback(_on_done)
-            futures.append(f)
-        concurrent.futures.wait(futures)
+                failed += 1
 
     logger.info("Batch finished: %d/%d succeeded, %d failed, %d cancelled",
                 succeeded, total, failed, cancelled)

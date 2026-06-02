@@ -1,14 +1,19 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Upload, Play, Square, FolderOutput, Undo2, Redo2, Keyboard, FlaskConical, X, FolderOpen, ExternalLink, Save, FolderInput, Library, ChevronDown, BookmarkPlus, Sun, Moon, Languages, History } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
 import useEditorStore from "../stores/useEditorStore";
+import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
+import {
+  hasVideoDimensions,
+  listVideosMissingBatchText,
+} from "../utils/batch-process";
 
 const api = window.api;
 
 export default function Header() {
   const {
-    isProcessing, batchSummary, exportFormat, encodeProfile, batchWorkers,
+    isProcessing, batchSummary, exportFormat, encodeProfile, batchWorkers, batchRetryFailed,
     outputDir, queue, selectedIdx, presets, theme, language, recent,
   } = useEditorStore(
     (s) => ({
@@ -17,6 +22,7 @@ export default function Header() {
       exportFormat: s.exportFormat,
       encodeProfile: s.encodeProfile,
       batchWorkers: s.batchWorkers,
+      batchRetryFailed: s.batchRetryFailed,
       outputDir: s.outputDir,
       queue: s.queue,
       selectedIdx: s.selectedIdx,
@@ -33,6 +39,7 @@ export default function Header() {
   const t = useT();
   const get = useEditorStore.getState;
   const [testResult, setTestResult] = useState(null);
+  const [autoWorkerHint, setAutoWorkerHint] = useState(5);
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [savePresetOpen, setSavePresetOpen] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
@@ -43,47 +50,33 @@ export default function Header() {
   const langRef = useRef(null);
   const recentRef = useRef(null);
 
-  useEffect(() => {
-    if (!presetsOpen) return;
-    const onDown = (e) => {
-      if (presetsRef.current && !presetsRef.current.contains(e.target)) setPresetsOpen(false);
-    };
-    const onKey = (e) => { if (e.key === "Escape") setPresetsOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [presetsOpen]);
+  const setPresetsOpenStable = useCallback((v) => setPresetsOpen(v), []);
+  const setLangOpenStable = useCallback((v) => setLangOpen(v), []);
+  const setRecentOpenStable = useCallback((v) => setRecentOpen(v), []);
+
+  useCloseOnOutsideClick(presetsRef, presetsOpen, setPresetsOpenStable);
+  useCloseOnOutsideClick(langRef, langOpen, setLangOpenStable);
+  useCloseOnOutsideClick(recentRef, recentOpen, setRecentOpenStable);
 
   useEffect(() => {
-    if (!langOpen) return;
-    const onDown = (e) => {
-      if (langRef.current && !langRef.current.contains(e.target)) setLangOpen(false);
-    };
-    const onKey = (e) => { if (e.key === "Escape") setLangOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [langOpen]);
-
-  useEffect(() => {
-    if (!recentOpen) return;
-    const onDown = (e) => {
-      if (recentRef.current && !recentRef.current.contains(e.target)) setRecentOpen(false);
-    };
-    const onKey = (e) => { if (e.key === "Escape") setRecentOpen(false); };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [recentOpen]);
+    if (!api?.getBatchCapacity) return undefined;
+    let cancelled = false;
+    const jobCount = Math.max(1, queue.length);
+    let maxSourcePixels = 0;
+    for (const item of queue) {
+      const w = Number(item.sourceWidth || item.width || 0);
+      const h = Number(item.sourceHeight || item.height || 0);
+      if (w > 0 && h > 0) maxSourcePixels = Math.max(maxSourcePixels, w * h);
+    }
+    api.getBatchCapacity({ jobCount, maxSourcePixels })
+      .then((cap) => {
+        if (!cancelled && Number(cap?.recommended) > 0) {
+          setAutoWorkerHint(cap.recommended);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [queue]);
 
   const flashToast = (kind, text) => showToast({ kind, text });
 
@@ -191,20 +184,52 @@ export default function Header() {
   const handleProcessAll = async () => {
     if (!api) return;
     get().setBatchSummary(null);
-    const queueForProcessing = queue.some((q) => !q.width || !q.height)
-      ? await get().refreshMissingVideoInfo(api)
-      : queue;
-    const missingDims = queueForProcessing.filter((q) => !q.width || !q.height);
+
+    const { templateRegions, sidebarMode } = get();
+    if (sidebarMode === "batch" || templateRegions.length > 0) {
+      get().materializeBatchTextOps();
+    }
+
+    let queueForProcessing = get().queue;
+    if (queueForProcessing.some((q) => !hasVideoDimensions(q))) {
+      queueForProcessing = await get().refreshMissingVideoInfo(api);
+    }
+
+    const missingDims = queueForProcessing.filter((q) => !hasVideoDimensions(q));
     if (missingDims.length > 0) {
       const names = missingDims.slice(0, 3).map((q) => q.filename).join(", ");
       const more = missingDims.length > 3 ? ` (+${missingDims.length - 3})` : "";
-      if (!confirm(t("header.missingDimensions", {
-        count: missingDims.length,
-        names,
-        more,
-      }))) return;
+      showToast({
+        kind: "err",
+        text: t("errors.missingVideoDimensions", { count: missingDims.length, names, more }),
+      });
+      return;
     }
-    const jobs = queueForProcessing.map((q, i) => get()._buildJobFor(q, i)).filter(Boolean);
+
+    if (templateRegions.length > 0) {
+      const missingText = listVideosMissingBatchText(
+        queueForProcessing,
+        templateRegions,
+        (videoIdx, regionId) => get().getCellTextForRegion(videoIdx, regionId),
+      );
+      if (missingText.length > 0) {
+        const names = missingText.slice(0, 3).join(", ");
+        const more = missingText.length > 3 ? ` (+${missingText.length - 3})` : "";
+        showToast({
+          kind: "err",
+          text: t("errors.batchTextMissing", { count: missingText.length, names, more }),
+        });
+        return;
+      }
+    }
+
+    const jobs = queueForProcessing
+      .map((q, i) => get()._buildJobFor(q, i))
+      .filter(Boolean);
+    if (jobs.length === 0) {
+      showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
+      return;
+    }
     get().setProcessing(true);
     useEditorStore.setState({ progressTotal: jobs.length, progressDone: 0 });
 
@@ -288,13 +313,30 @@ export default function Header() {
           disabled={isProcessing}
           title={t("header.batchWorkersHint")}
         >
-          <option value="0">{t("header.workersAuto")}</option>
+          <option value="0">{t("header.workersAuto", { count: autoWorkerHint })}</option>
           <option value="1">1</option>
           <option value="2">2</option>
           <option value="3">3</option>
           <option value="4">4</option>
+          <option value="5">5</option>
           <option value="6">6</option>
+          <option value="8">8</option>
         </select>
+
+        <label
+          className="flex items-center gap-1 text-[10px] cursor-pointer select-none whitespace-nowrap"
+          style={{ color: "var(--text-dim)" }}
+          title={t("header.batchRetryHint")}
+        >
+          <input
+            type="checkbox"
+            checked={batchRetryFailed}
+            onChange={(e) => get().setBatchRetryFailed(e.target.checked)}
+            disabled={isProcessing}
+            className="w-3 h-3 accent-[var(--accent)]"
+          />
+          {t("header.batchRetry")}
+        </label>
 
         <button
           onClick={handleTestCurrent}

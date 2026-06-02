@@ -181,6 +181,9 @@ export function createQueueItem(overrides = {}) {
     filename: "",
     width: 0,
     height: 0,
+    /** Resolution at first successful import probe — used for export. */
+    sourceWidth: 0,
+    sourceHeight: 0,
     duration: 0,
     videoCodec: "",
     pixFmt: "yuv420p",

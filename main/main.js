@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } from "electron";
-import { spawn, exec } from "child_process";
+import { spawn, spawnSync, exec } from "child_process";
 import path from "path";
 import fs from "fs";
 import os from "os";
@@ -7,9 +7,15 @@ import { fileURLToPath, pathToFileURL } from "url";
 import { randomBytes } from "crypto";
 import * as updater from "./updater.js";
 import { probeVideoFile } from "./videoProbe.js";
+import { createPathSecurity } from "./pathSecurity.js";
+import {
+  pickHwEncoderFromEncodersText,
+  recommendBatchWorkers,
+} from "./workerPolicy.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+const pathSecurity = createPathSecurity(app);
 
 let mainWindow = null;
 let pythonProcess = null;
@@ -35,6 +41,16 @@ function getFfmpegPath() {
 }
 
 const videoInfoCache = new Map();
+const VIDEO_INFO_CACHE_MAX = 500;
+
+function trimVideoInfoCache() {
+  if (videoInfoCache.size <= VIDEO_INFO_CACHE_MAX) return;
+  const keys = videoInfoCache.keys();
+  const excess = videoInfoCache.size - VIDEO_INFO_CACHE_MAX;
+  for (let i = 0; i < excess; i++) {
+    videoInfoCache.delete(keys.next().value);
+  }
+}
 
 function getVideoMtimeMs(filePath) {
   try { return fs.statSync(filePath).mtimeMs; } catch { return -1; }
@@ -53,7 +69,7 @@ async function probeVideoFast(filePath) {
     timeoutMs: 2500,
     allowFfmpegFallback: false,
   });
-  if (mtime >= 0) videoInfoCache.set(filePath, { mtime, info });
+  if (mtime >= 0) { videoInfoCache.set(filePath, { mtime, info }); trimVideoInfoCache(); }
   return info;
 }
 
@@ -143,6 +159,7 @@ ipcMain.handle("dialog:openVideos", async () => {
     properties: ["openFile", "multiSelections"],
   });
   if (canceled || filePaths.length === 0) return [];
+  pathSecurity.registerAllowedPaths(filePaths);
   return filePaths;
 });
 
@@ -153,6 +170,7 @@ ipcMain.handle("dialog:openExcel", async () => {
     properties: ["openFile"],
   });
   if (canceled || filePaths.length === 0) return null;
+  pathSecurity.registerAllowedPath(filePaths[0]);
   return filePaths[0];
 });
 
@@ -171,8 +189,10 @@ ipcMain.handle("dialog:selectOutputDir", async () => {
 });
 
 ipcMain.handle("fs:getVideoInfo", async (_event, filePath) => {
+  const check = pathSecurity.validateReadableFile(filePath, "video");
+  if (!check.ok) return { exists: false, width: 0, height: 0, duration: 0, error: check.error };
   try {
-    return await probeVideo(filePath);
+    return await probeVideo(check.resolvedPath);
   } catch {
     return { exists: true, width: 0, height: 0, duration: 0 };
   }
@@ -182,7 +202,19 @@ ipcMain.handle("fs:getVideoInfoBatch", async (_event, filePaths) => {
   if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
   const cpus = os.cpus()?.length || 4;
   const limit = Math.max(2, Math.min(16, filePaths.length, cpus * 2));
-  return await runWithConcurrency(filePaths, limit, probeVideoFast);
+  const fastResults = await runWithConcurrency(filePaths, limit, probeVideoFast);
+  return await Promise.all(fastResults.map(async (info, i) => {
+    if (info.width > 0 && info.height > 0) return info;
+    const check = pathSecurity.validateReadableFile(filePaths[i], "video");
+    if (!check.ok) return info;
+    try {
+      const full = await probeVideo(check.resolvedPath);
+      if (full.width > 0 && full.height > 0) return full;
+    } catch (e) {
+      console.error("[beru] Full video probe failed:", filePaths[i], e.message);
+    }
+    return info;
+  }));
 });
 
 const VIDEO_EXT = /\.(mp4|mov|avi|mkv|webm|flv|wmv|m4v|mpg|mpeg)$/i;
@@ -228,6 +260,7 @@ ipcMain.handle("fs:resolveDroppedPaths", async (_event, inputPaths) => {
       ignoredCount++;
     }
   }
+  pathSecurity.registerAllowedPaths(videoPaths);
   return { videoPaths, ignoredCount };
 });
 
@@ -272,7 +305,9 @@ const extractThumbnail = (filePath, width = 80) => new Promise((resolve) => {
 });
 
 ipcMain.handle("video:thumbnail", async (_event, filePath) => {
-  return await extractThumbnail(filePath, 80);
+  const check = pathSecurity.validateReadableFile(filePath, "video");
+  if (!check.ok) return null;
+  return await extractThumbnail(check.resolvedPath, 80);
 });
 
 ipcMain.handle("video:thumbnailBatch", async (_event, filePaths) => {
@@ -283,9 +318,11 @@ ipcMain.handle("video:thumbnailBatch", async (_event, filePaths) => {
 });
 
 ipcMain.handle("fs:readExcel", async (_event, filePath) => {
+  const check = pathSecurity.validateReadableFile(filePath, "excel");
+  if (!check.ok) return { error: check.error };
   try {
-    const buffer = await fs.promises.readFile(filePath);
-    return { data: buffer.toString("base64"), name: path.basename(filePath) };
+    const buffer = await fs.promises.readFile(check.resolvedPath);
+    return { data: buffer.toString("base64"), name: path.basename(check.resolvedPath) };
   } catch (e) {
     return { error: e.message };
   }
@@ -350,6 +387,10 @@ ipcMain.handle("process:start", async (_event, jobs) => {
       return { success: false, error: "No hay videos para procesar" };
     }
 
+    for (const job of jobs) {
+      if (job?.input_path) pathSecurity.registerAllowedPath(job.input_path);
+    }
+
     isProcessing = true;
     lastProcessingError = null;
 
@@ -357,13 +398,52 @@ ipcMain.handle("process:start", async (_event, jobs) => {
     currentTmpFile = path.join(app.getPath("temp"), `beru-jobs-${uid}.json`);
     const cancelFile = currentTmpFile.replace(".json", ".cancel");
     try { fs.unlinkSync(cancelFile); } catch {}
-    await fs.promises.writeFile(currentTmpFile, JSON.stringify(jobs));
+    const enrichedJobs = await Promise.all(jobs.map(async (job) => {
+      const sw = Number(job.source_width || job.width || 0);
+      const sh = Number(job.source_height || job.height || 0);
+      if (sw > 0 && sh > 0) {
+        return {
+          ...job,
+          width: sw,
+          height: sh,
+          source_width: sw,
+          source_height: sh,
+        };
+      }
+      if (!job?.input_path) return job;
+      try {
+        const info = await probeVideo(job.input_path);
+        if (info.width > 0 && info.height > 0) {
+        return {
+          ...job,
+          width: info.width,
+          height: info.height,
+          source_width: info.width,
+          source_height: info.height,
+          video_duration: info.duration || job.video_duration || 0,
+          video_codec: info.videoCodec || job.video_codec || "",
+          pix_fmt: info.pixFmt || job.pix_fmt || "yuv420p",
+          frame_rate: info.frameRate || job.frame_rate || 0,
+          audio_codec: info.audioCodec || job.audio_codec || "",
+          audio_channels: info.audioChannels || job.audio_channels || 0,
+        };
+        }
+      } catch (e) {
+        console.error("[beru] Job probe failed:", job.input_path, e.message);
+      }
+      return job;
+    }));
 
-    const firstProfile = jobs[0]?.encode_profile || "balanced";
-    let workerCount = "0";
+    await fs.promises.writeFile(currentTmpFile, JSON.stringify(enrichedJobs));
+
+    const firstProfile = enrichedJobs[0]?.encode_profile || "balanced";
     const settings = readSettings();
+    const batchWorkersMode = settings.batchWorkersMode === "conservative"
+      ? "conservative"
+      : "balanced";
+    let workerCount = "0";
     if (Number(settings.batchWorkers) > 0) {
-      workerCount = String(Math.min(8, Math.floor(Number(settings.batchWorkers))));
+      workerCount = String(Math.min(16, Math.floor(Number(settings.batchWorkers))));
     }
 
     const py = resolvePythonSpawn();
@@ -372,6 +452,8 @@ ipcMain.handle("process:start", async (_event, jobs) => {
       env: {
         ...process.env,
         BERU_WORKERS: workerCount,
+        BERU_WORKERS_MODE: batchWorkersMode,
+        BERU_RETRY_FAILED: settings.batchRetryFailed === false ? "0" : "1",
         BERU_ENCODE_PROFILE: firstProfile,
         BERU_FFMPEG: getFfmpegPath(),
         BERU_FFPROBE: getFfprobePath(),
@@ -429,21 +511,15 @@ ipcMain.handle("process:start", async (_event, jobs) => {
 });
 
 ipcMain.handle("shell:openPath", async (_event, filePath) => {
+  const check = pathSecurity.validateShellPath(filePath);
+  if (!check.ok) return { success: false, error: check.error };
+  filePath = check.resolvedPath;
   if (!filePath) return { success: false, error: "No path provided" };
   if (!fs.existsSync(filePath)) {
     return { success: false, error: "Archivo no existe" };
   }
   const result = await shell.openPath(filePath);
   if (result) return { success: false, error: result };
-  return { success: true };
-});
-
-ipcMain.handle("shell:showItemInFolder", async (_event, filePath) => {
-  if (!filePath) return { success: false, error: "No path provided" };
-  if (!fs.existsSync(filePath)) {
-    return { success: false, error: "Archivo no existe" };
-  }
-  shell.showItemInFolder(filePath);
   return { success: true };
 });
 
@@ -495,19 +571,15 @@ const IMAGE_MIMES = {
 };
 
 ipcMain.handle("image:read", async (_event, imagePath) => {
-  if (!imagePath || typeof imagePath !== "string") {
-    return { success: false, error: "Ruta inválida" };
-  }
-  if (!fs.existsSync(imagePath)) {
-    return { success: false, error: "Archivo no encontrado" };
-  }
-  const ext = path.extname(imagePath).toLowerCase();
+  const check = pathSecurity.validateReadableFile(imagePath, "image");
+  if (!check.ok) return { success: false, error: check.error };
+  const ext = path.extname(check.resolvedPath).toLowerCase();
   const mime = IMAGE_MIMES[ext];
   if (!mime) {
     return { success: false, error: `Formato no soportado: ${ext}` };
   }
   try {
-    const buf = fs.readFileSync(imagePath);
+    const buf = fs.readFileSync(check.resolvedPath);
     const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
     return { success: true, dataUrl, size: buf.length, mime };
   } catch (e) {
@@ -524,6 +596,7 @@ ipcMain.handle("image:pick", async () => {
     ],
   });
   if (canceled || !filePaths || filePaths.length === 0) return { success: false, canceled: true };
+  pathSecurity.registerAllowedPath(filePaths[0]);
   return { success: true, path: filePaths[0] };
 });
 
@@ -609,7 +682,56 @@ ipcMain.handle("presets:save", async (_event, name, jsonStr) => {
 
 // ── Settings (theme, future preferences) ──────────────────────────────────
 
-const SETTINGS_DEFAULTS = { theme: "dark", language: "es", encodeProfile: "balanced", batchWorkers: 0 };
+const SETTINGS_DEFAULTS = {
+  theme: "dark",
+  language: "es",
+  encodeProfile: "balanced",
+  batchWorkers: 0,
+  batchWorkersMode: "balanced",
+  batchRetryFailed: true,
+};
+
+let cachedHwEncoder = null;
+
+async function detectHwEncoderCached() {
+  if (cachedHwEncoder !== null) return cachedHwEncoder || null;
+  const ffmpeg = getFfmpegPath();
+  try {
+    const r = spawnSync(ffmpeg, ["-hide_banner", "-encoders"], {
+      encoding: "utf8",
+      timeout: 15000,
+      windowsHide: true,
+    });
+    const text = `${r.stdout || ""}${r.stderr || ""}`;
+    cachedHwEncoder = pickHwEncoderFromEncodersText(text) || "";
+  } catch {
+    cachedHwEncoder = "";
+  }
+  return cachedHwEncoder || null;
+}
+
+ipcMain.handle("system:getBatchCapacity", async (_event, opts = {}) => {
+  const settings = readSettings();
+  const mode = settings.batchWorkersMode === "conservative" ? "conservative" : "balanced";
+  const jobCount = Math.max(1, Number(opts.jobCount) || 1);
+  const maxSourcePixels = Math.max(0, Number(opts.maxSourcePixels) || 0);
+  const explicitWorkers = Number(settings.batchWorkers) > 0
+    ? Math.floor(Number(settings.batchWorkers))
+    : 0;
+  const hwEncoder = await detectHwEncoderCached();
+  const rec = recommendBatchWorkers({
+    hwEncoder,
+    jobCount,
+    maxSourcePixels,
+    mode,
+    explicitWorkers,
+  });
+  return {
+    ...rec,
+    explicitWorkers,
+    maxWorkersCap: 16,
+  };
+});
 
 const readSettings = () => {
   try {
@@ -714,30 +836,40 @@ ipcMain.handle("project:load", async () => {
     properties: ["openFile"],
     filters: [{ name: "Proyecto Beru", extensions: ["beru.json", "json"] }],
   });
-  if (canceled || !filePaths || filePaths.length === 0) return { success: false, canceled: true };
+    if (canceled || !filePaths || filePaths.length === 0) return { success: false, canceled: true };
+  pathSecurity.registerAllowedPath(filePaths[0]);
+  const check = pathSecurity.validateReadableFile(filePaths[0], "project");
+  if (!check.ok) return { success: false, error: check.error };
   try {
-    const raw = fs.readFileSync(filePaths[0], "utf8");
+    const raw = fs.readFileSync(check.resolvedPath, "utf8");
     const data = JSON.parse(raw);
-    return { success: true, filePath: filePaths[0], data };
+    return { success: true, filePath: check.resolvedPath, data };
   } catch (e) {
     return { success: false, error: e.message };
   }
 });
 
 ipcMain.handle("project:loadFromPath", async (_event, filePath) => {
-  if (typeof filePath !== "string" || !filePath.trim()) {
-    return { success: false, error: "Path inválido" };
-  }
+  const check = pathSecurity.validateReadableFile(filePath, "project");
+  if (!check.ok) return { success: false, error: check.error };
   try {
-    if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(check.resolvedPath)) {
       return { success: false, error: "Archivo no encontrado", missing: true };
     }
-    const raw = fs.readFileSync(filePath, "utf8");
+    const raw = fs.readFileSync(check.resolvedPath, "utf8");
     const data = JSON.parse(raw);
-    return { success: true, filePath, data };
+    pathSecurity.registerAllowedPath(check.resolvedPath);
+    return { success: true, filePath: check.resolvedPath, data };
   } catch (e) {
     return { success: false, error: e.message };
   }
+});
+
+ipcMain.handle("shell:showItemInFolder", async (_event, filePath) => {
+  const check = pathSecurity.validateShellPath(filePath);
+  if (!check.ok) return { success: false, error: check.error };
+  shell.showItemInFolder(check.resolvedPath);
+  return { success: true };
 });
 
 // ── App lifecycle ─────────────────────────────────────────────────────────

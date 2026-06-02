@@ -1,5 +1,7 @@
 import { denormalizeRegion } from "../../utils/types";
 import { sanitizeOperation } from "../../utils/delogo-ops";
+import { filterOperationsForExport, hasVideoDimensions } from "../../utils/batch-process";
+import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 
 function isQueueJobIndex(idx, queueLength) {
   return Number.isInteger(idx) && idx >= 0 && idx < queueLength;
@@ -11,6 +13,8 @@ export function createProcessingSlice(set, get) {
     isProcessing: false,
     encodeProfile: "balanced",
     batchWorkers: 0,
+    batchWorkersMode: "balanced",
+    batchRetryFailed: true,
     exportFormat: "mp4",
     batchSummary: null,
     progressDone: 0,
@@ -47,10 +51,9 @@ export function createProcessingSlice(set, get) {
       if (!isQueueJobIndex(idx, s.queue.length)) return {};
       const updated = [...s.queue];
       updated[idx] = { ...updated[idx], status: "done", progress: 100, error: null };
-      const terminal = updated.filter((q) => q.status === "done" || q.status === "error").length;
       return {
         queue: updated,
-        progressDone: Math.max(s.progressDone, terminal),
+        progressDone: s.progressDone + 1,
       };
     }),
 
@@ -59,10 +62,9 @@ export function createProcessingSlice(set, get) {
       if (!isQueueJobIndex(idx, s.queue.length)) return {};
       const updated = [...s.queue];
       updated[idx] = { ...updated[idx], status: "error", error: msg.error };
-      const terminal = updated.filter((q) => q.status === "done" || q.status === "error").length;
       return {
         queue: updated,
-        progressDone: Math.max(s.progressDone, terminal),
+        progressDone: s.progressDone + 1,
       };
     }),
 
@@ -82,32 +84,34 @@ export function createProcessingSlice(set, get) {
 
       let infos = [];
       try {
-        infos = api.getVideoInfoBatch
-          ? await api.getVideoInfoBatch(missing.map((item) => item.path))
-          : await Promise.all(missing.map((item) => api.getVideoInfo(item.path)));
+        if (api.getVideoInfoBatch) {
+          infos = await api.getVideoInfoBatch(missing.map((item) => item.path));
+        } else if (api.getVideoInfo) {
+          infos = await Promise.all(missing.map((item) => api.getVideoInfo(item.path)));
+        }
       } catch {
         return get().queue;
       }
       if (!Array.isArray(infos)) infos = [];
 
+      if (api.getVideoInfo) {
+        await Promise.all(missing.map(async (item, i) => {
+          if (hasVideoDimensions({ width: infos[i]?.width, height: infos[i]?.height })) return;
+          try {
+            const retry = await api.getVideoInfo(item.path);
+            if (hasVideoDimensions(retry)) infos[i] = retry;
+          } catch { /* keep prior info */ }
+        }));
+      }
+
       const infoByPath = new Map(missing.map((item, i) => [item.path, infos[i] || {}]));
       const current = get().queue;
       const next = current.map((item) => {
-        if (item.width && item.height) return item;
+        if (hasVideoDimensions(getLockedDimensions(item))) return item;
         const info = infoByPath.get(item.path);
-        const width = Number(info?.width || 0);
-        const height = Number(info?.height || 0);
+        const { width, height } = getLockedDimensions({ ...item, ...info });
         if (width <= 0 || height <= 0) return item;
-        return {
-          ...item,
-          width,
-          height,
-          duration: Number(info.duration || item.duration || 0),
-          videoCodec: info.videoCodec || item.videoCodec || "",
-          pixFmt: info.pixFmt || item.pixFmt || "yuv420p",
-          frameRate: Number(info.frameRate || item.frameRate || 0),
-          audioCodec: info.audioCodec || item.audioCodec || "",
-        };
+        return mergeProbeIntoQueueItem(item, info);
       });
 
       if (next.some((item, i) => item !== current[i])) {
@@ -121,19 +125,22 @@ export function createProcessingSlice(set, get) {
       if (!item) return null;
       const { encodeProfile } = get();
       const outPath = get().outputPathFor(item);
+      const { width, height } = getLockedDimensions(item);
       return {
         id: index,
         input_path: item.path,
         output_path: outPath,
-        width: item.width || 0,
-        height: item.height || 0,
-        operations: item.operations.map((op) => {
+        width,
+        height,
+        source_width: width,
+        source_height: height,
+        operations: filterOperationsForExport(item.operations).map((op) => {
           const safe = sanitizeOperation(op);
           return {
             mode: safe.mode,
             region: safe.region
-              ? (item.width > 0 && item.height > 0
-                ? denormalizeRegion(safe.region, item.width, item.height)
+              ? (width > 0 && height > 0
+                ? denormalizeRegion(safe.region, width, height)
                 : safe.region)
               : safe.region,
             blur_strength: safe.blurStrength,
@@ -171,6 +178,7 @@ export function createProcessingSlice(set, get) {
         pix_fmt: item.pixFmt || "yuv420p",
         frame_rate: item.frameRate || 0,
         audio_codec: item.audioCodec || "",
+        audio_channels: item.audioChannels || 0,
         encode_profile: encodeProfile,
       };
     },
@@ -224,12 +232,23 @@ export function createProcessingSlice(set, get) {
 
     setBatchWorkers: async (val) => {
       const n = Number(val);
-      const workers = Number.isFinite(n) && n >= 0 ? Math.min(8, Math.floor(n)) : 0;
+      const workers = Number.isFinite(n) && n >= 0 ? Math.min(16, Math.floor(n)) : 0;
       set({ batchWorkers: workers });
       const api = window.api;
       if (api?.saveSettings) {
         try { await api.saveSettings({ batchWorkers: workers }); } catch (e) {
           console.error("[beru] Failed to save batch workers:", e.message);
+        }
+      }
+    },
+
+    setBatchRetryFailed: async (enabled) => {
+      const batchRetryFailed = !!enabled;
+      set({ batchRetryFailed });
+      const api = window.api;
+      if (api?.saveSettings) {
+        try { await api.saveSettings({ batchRetryFailed }); } catch (e) {
+          console.error("[beru] Failed to save batch retry setting:", e.message);
         }
       }
     },

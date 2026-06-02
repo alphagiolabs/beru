@@ -37,11 +37,20 @@ jobs:
       - name: Build renderer
         run: npx vite build
 
-      - name: Package & publish (electron-builder)
+      - name: Package & publish (signed, when secrets configured)
+        if: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
         run: npx electron-builder --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Disable code signing unless secrets are configured
+          CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'true'
+
+      - name: Package & publish (unsigned fallback)
+        if: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 == '' }}
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
       - name: Upload installers

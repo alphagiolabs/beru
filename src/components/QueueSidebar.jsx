@@ -141,7 +141,7 @@ export default function QueueSidebar() {
           const ms = excelPath ? (excelMatchStatus[idx] || "unmatched") : "none";
           const isOpen = openMenuIdx === idx;
           return (
-            <div key={idx}
+            <div key={item.path}
               onClick={() => get().selectVideo(idx)}
               className="flex items-center gap-2 px-3 py-2 border-b cursor-pointer transition-colors group relative"
               style={{

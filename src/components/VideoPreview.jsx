@@ -58,6 +58,7 @@ export default function VideoPreview() {
   const [draggingOp, setDraggingOp] = useState(null);
   const [dragStart, setDragStart] = useState(null);
   const [, setLayoutTick] = useState(0);
+  const [videoError, setVideoError] = useState(null);
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
 
   useEffect(() => {
@@ -126,6 +127,7 @@ export default function VideoPreview() {
     setPlaying(false);
     setCurrentTime(0);
     setDuration(sel?.duration || 0);
+    setVideoError(null);
   }, [sel?.path]);
 
   // Drag handlers for image operations
@@ -207,7 +209,26 @@ export default function VideoPreview() {
       <div className="relative inline-block" style={{ maxWidth: "100%", maxHeight: "100%", overflow: "hidden" }}>
         <video ref={videoRef} src={sel.src}
           className="max-h-[calc(100vh-200px)] max-w-full block object-contain rounded"
-          onLoadedMetadata={() => { setCurrentRegion(null); setDuration(videoRef.current?.duration || 0); }} />
+          style={{ imageRendering: "auto" }}
+          preload="auto"
+          playsInline
+          disablePictureInPicture
+          controlsList="nodownload noplaybackrate"
+          onLoadedMetadata={() => { setCurrentRegion(null); setDuration(videoRef.current?.duration || 0); setVideoError(null); }}
+          onError={() => {
+            const code = videoRef.current?.error?.code;
+            const message = videoRef.current?.error?.message;
+            setVideoError(message ? `${code ? `code ${code}: ` : ""}${message}` : `code ${code || "?"}`);
+          }} />
+
+        {videoError && (
+          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+            <div className="pointer-events-auto max-w-[80%] rounded px-3 py-2 text-[11px] font-medium"
+              style={{ background: "rgba(244, 63, 94, 0.95)", color: "white" }}>
+              No se pudo cargar el video ({videoError}). Si el archivo cambió de ubicación, vuelve a importarlo.
+            </div>
+          </div>
+        )}
 
         {/* Operation overlays */}
         {sel.operations.filter((op) => isOpActive(op, currentTime)).map((op, opIdx) => {

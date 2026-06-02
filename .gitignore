@@ -17,8 +17,12 @@ __pycache__/
 *.pyc
 python/benchmark_*.py
 
-# Local test media / benchmark output
+# Local test media / benchmark output (never commit)
 prueba.mp4
+prueba.*
+/*.mp4
+/*.mov
+/*.mkv
 tmp/
 
 # FFmpeg binaries (large)

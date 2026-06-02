@@ -34,10 +34,21 @@ export function createUiSlice(set, get) {
             ? settings.encodeProfile
             : "balanced";
         const batchWorkers = Number.isFinite(Number(settings?.batchWorkers))
-          ? Math.max(0, Math.min(8, Math.floor(Number(settings.batchWorkers))))
+          ? Math.max(0, Math.min(16, Math.floor(Number(settings.batchWorkers))))
           : 0;
+        const batchWorkersMode = settings?.batchWorkersMode === "conservative"
+          ? "conservative"
+          : "balanced";
+        const batchRetryFailed = settings?.batchRetryFailed !== false;
         applyThemeToDom(theme);
-        set({ theme, language, encodeProfile, batchWorkers });
+        set({
+          theme,
+          language,
+          encodeProfile,
+          batchWorkers,
+          batchWorkersMode,
+          batchRetryFailed,
+        });
         return { ok: true, settings };
       } catch (e) {
         return { ok: false, error: e.message };

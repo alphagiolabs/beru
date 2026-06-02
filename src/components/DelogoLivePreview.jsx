@@ -17,6 +17,8 @@ function getSourceCanvas(w, h) {
     c.width = w;
     c.height = h;
   }
+  sourceCache.ctx.imageSmoothingEnabled = true;
+  sourceCache.ctx.imageSmoothingQuality = "high";
   return c;
 }
 
@@ -252,10 +254,14 @@ export default function DelogoLivePreview({ videoRef }) {
   const visible = !!(sidebarMode === "logo" && activeTool === "delogo" && currentRegion);
   const isCanvas = visible && CANVAS_METHODS.has(delogoMethod);
 
-  /* Reset temporal buffer when region or method changes */
+  /* Reset temporal buffer when region, method, or video source changes.
+   * Without the src check, rapid video switching could feed leftover frames
+   * from the previous video into the first ~3 frames of the new one. */
+  const videoSrc = videoRef?.current?.currentSrc || videoRef?.current?.src || "";
   useEffect(() => {
     temporalFrameBuffer.frames = [];
-  }, [currentRegion, delogoMethod]);
+    return () => { temporalFrameBuffer.frames = []; };
+  }, [currentRegion, delogoMethod, videoSrc]);
 
   /* Canvas path — re-draws every frame while visible */
   useEffect(() => {
@@ -268,13 +274,13 @@ export default function DelogoLivePreview({ videoRef }) {
       const video = videoRef.current;
       const region = useEditorStore.getState().currentRegion;
       const method = useEditorStore.getState().delogoMethod;
-      const pausedOrHidden =
-        document.hidden ||
-        !video ||
-        video.paused ||
-        !region ||
-        video.readyState < 2;
-      if (pausedOrHidden) {
+      const paused = !video || video.paused || !region || video.readyState < 2;
+      if (document.hidden) {
+        // Tab is hidden — poll at low frequency instead of 60fps RAF loop
+        rafId = setTimeout(draw, 1000);
+        return;
+      }
+      if (paused) {
         rafId = requestAnimationFrame(draw);
         return;
       }
@@ -286,14 +292,18 @@ export default function DelogoLivePreview({ videoRef }) {
 
       const w = Math.max(1, Math.round(screen.w));
       const h = Math.max(1, Math.round(screen.h));
-      if (canvas.width !== w) canvas.width = w;
-      if (canvas.height !== h) canvas.height = h;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const bw = Math.max(1, Math.round(w * dpr));
+      const bh = Math.max(1, Math.round(h * dpr));
+      if (canvas.width !== bw) canvas.width = bw;
+      if (canvas.height !== bh) canvas.height = bh;
       canvas.style.left = screen.x + "px";
       canvas.style.top = screen.y + "px";
       canvas.style.width = w + "px";
       canvas.style.height = h + "px";
 
       const ctx = canvas.getContext("2d");
+      if (typeof ctx.setTransform === "function") ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const s = useEditorStore.getState();
       if (method === "mosaic") renderMosaic(ctx, video, region, screen, s.mosaicSize);
       else if (method === "mirror") renderMirror(ctx, video, region, screen, s.mirrorSide);
@@ -309,7 +319,7 @@ export default function DelogoLivePreview({ videoRef }) {
       rafId = requestAnimationFrame(draw);
     };
     rafId = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(rafId);
+    return () => { cancelAnimationFrame(rafId); clearTimeout(rafId); };
   }, [isCanvas, videoRef]);
 
   /* CSS path (blur / fill) — no RAF needed, browser composites the effect */

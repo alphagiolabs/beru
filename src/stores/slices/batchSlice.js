@@ -296,7 +296,7 @@ export function createBatchSlice(set, get) {
     },
 
     _reapplyExcel: () => {
-      const { queue, excelRows, excelMapping, templateRegions, textFontSize, textFontColor, fontFamily, fontWeight, letterSpacing, textAlign, textOpacity, bold, italic, bgEnabled, bgColor, bgOpacity, boxBorderWidth, borderWidth, borderColor } = get();
+      const { queue, excelRows, excelMapping, templateRegions } = get();
       const { idColumn, columns } = excelMapping;
 
       if (!idColumn || excelRows.length === 0) {
@@ -348,21 +348,7 @@ export function createBatchSlice(set, get) {
             mode: "text",
             region: { ...tr.region },
             text: textVal !== undefined && textVal !== null ? String(textVal) : "",
-            fontSize: baseStyle.fontSize ?? textFontSize,
-            fontColor: baseStyle.fontColor ?? textFontColor,
-            fontFamily: baseStyle.fontFamily ?? fontFamily,
-            fontWeight: baseStyle.fontWeight,
-            letterSpacing: baseStyle.letterSpacing,
-            textAlign: baseStyle.textAlign,
-            textOpacity: baseStyle.textOpacity,
-            bold: baseStyle.bold ?? bold,
-            italic: baseStyle.italic ?? italic,
-            bgEnabled: baseStyle.bgEnabled ?? bgEnabled,
-            bgColor: baseStyle.bgColor ?? bgColor,
-            bgOpacity: baseStyle.bgOpacity ?? bgOpacity,
-            boxBorderWidth: baseStyle.boxBorderWidth,
-            borderWidth: baseStyle.borderWidth ?? borderWidth,
-            borderColor: baseStyle.borderColor ?? borderColor,
+            ...pickTextStyle(baseStyle),
           });
         });
         const ops = [...preservedOps, ...newTextOps];
@@ -418,9 +404,52 @@ export function createBatchSlice(set, get) {
 
     setShowTableEditor: (val) => {
       if (!val && get().showTableEditor) {
+        get().materializeBatchTextOps();
         get().syncAllOperationsToExcel();
       }
       set({ showTableEditor: val });
+    },
+
+    /**
+     * Ensure each template column has a queue text op with the same value shown
+     * in the table editor (including Excel-only cells). Removes empty text ops.
+     */
+    materializeBatchTextOps: () => {
+      const { queue, templateRegions } = get();
+      if (!templateRegions.length || !queue.length) return;
+
+      const globalStyle = getGlobalTextStyleFromState(get());
+      const updated = queue.map((item, videoIdx) => {
+        let ops = item.operations.map((op) => ({
+          ...op,
+          region: op.region ? { ...op.region } : null,
+        }));
+
+        for (const tr of templateRegions) {
+          const text = String(get().getCellTextForRegion(videoIdx, tr.id) ?? "").trim();
+          const { op, opIdx } = findTextOpForRegion(ops, tr.region);
+
+          if (text) {
+            const baseStyle = mergeTextStyles(globalStyle, tr.style, op || {});
+            if (opIdx >= 0) {
+              ops[opIdx] = { ...ops[opIdx], text, ...pickTextStyle(baseStyle) };
+            } else {
+              ops.push(createOperation({
+                mode: "text",
+                region: { ...tr.region },
+                text,
+                ...pickTextStyle(baseStyle),
+              }));
+            }
+          } else if (opIdx >= 0) {
+            ops = ops.filter((_, i) => i !== opIdx);
+          }
+        }
+
+        return { ...item, operations: ops };
+      });
+
+      set({ queue: updated });
     },
   };
 }

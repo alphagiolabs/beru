@@ -1,6 +1,8 @@
 /** Delogo operation sanitization (no UI). Used before FFmpeg job export. */
 
-const VALID_DELOGO_METHODS = new Set([
+import { clampNum } from "./clamp";
+
+export const VALID_DELOGO_METHODS = new Set([
   "temporal", "mirror", "mosaic", "inpaint", "blur", "fill",
 ]);
 
@@ -30,10 +32,4 @@ export function sanitizeOperation(op) {
   out.delogoFillOpacity = Number.isFinite(fo) ? Math.max(0, Math.min(1, fo)) : 1;
 
   return out;
-}
-
-function clampNum(val, min, max, fallback) {
-  const n = Number(val);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(min, Math.min(max, n));
 }
