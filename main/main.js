@@ -29,15 +29,21 @@ function getPythonPath() {
 }
 
 function getFfprobePath() {
-  return isDev
-    ? path.join(__dirname, "..", "src-tauri", "bin", "ffprobe.exe")
-    : path.join(process.resourcesPath, "bin", "ffprobe.exe");
+  if (fs.existsSync(path.join(__dirname, "..", "src-tauri", "bin", "ffprobe.exe"))) {
+    return path.join(__dirname, "..", "src-tauri", "bin", "ffprobe.exe");
+  }
+  const bundled = path.join(process.resourcesPath, "bin", "ffprobe.exe");
+  if (!isDev && fs.existsSync(bundled)) return bundled;
+  return null;
 }
 
 function getFfmpegPath() {
-  return isDev
-    ? path.join(__dirname, "..", "src-tauri", "bin", "ffmpeg.exe")
-    : path.join(process.resourcesPath, "bin", "ffmpeg.exe");
+  if (fs.existsSync(path.join(__dirname, "..", "src-tauri", "bin", "ffmpeg.exe"))) {
+    return path.join(__dirname, "..", "src-tauri", "bin", "ffmpeg.exe");
+  }
+  const bundled = path.join(process.resourcesPath, "bin", "ffmpeg.exe");
+  if (!isDev && fs.existsSync(bundled)) return bundled;
+  return null;
 }
 
 const videoInfoCache = new Map();
@@ -447,17 +453,20 @@ ipcMain.handle("process:start", async (_event, jobs) => {
     }
 
     const py = resolvePythonSpawn();
+    const ffmpegPath = getFfmpegPath();
+    const ffprobePath = getFfprobePath();
+    const childEnv = {
+      ...process.env,
+      BERU_WORKERS: workerCount,
+      BERU_WORKERS_MODE: batchWorkersMode,
+      BERU_RETRY_FAILED: settings.batchRetryFailed === false ? "0" : "1",
+      BERU_ENCODE_PROFILE: firstProfile,
+    };
+    if (ffmpegPath) childEnv.BERU_FFMPEG = ffmpegPath;
+    if (ffprobePath) childEnv.BERU_FFPROBE = ffprobePath;
     pythonProcess = spawn(py.command, [...py.args, scriptPath, currentTmpFile], {
       windowsHide: true,
-      env: {
-        ...process.env,
-        BERU_WORKERS: workerCount,
-        BERU_WORKERS_MODE: batchWorkersMode,
-        BERU_RETRY_FAILED: settings.batchRetryFailed === false ? "0" : "1",
-        BERU_ENCODE_PROFILE: firstProfile,
-        BERU_FFMPEG: getFfmpegPath(),
-        BERU_FFPROBE: getFfprobePath(),
-      },
+      env: childEnv,
     });
 
     let stdoutBuf = "";

@@ -330,9 +330,9 @@ def job_video_info(job, input_path):
 
 
 def find_ffmpeg():
-    """Locate ffmpeg binary - bundled or system PATH."""
+    """Locate ffmpeg binary - bundled, env var, or system PATH."""
     env_ffmpeg = os.environ.get("BERU_FFMPEG")
-    if env_ffmpeg:
+    if env_ffmpeg and os.path.isfile(env_ffmpeg):
         return env_ffmpeg
 
     script_dir = Path(__file__).resolve().parent  # python/
@@ -343,19 +343,21 @@ def find_ffmpeg():
         project_root / "src-tauri" / "bin" / "ffmpeg.exe",   # dev: beru/src-tauri/bin
         project_root / "bin" / "ffmpeg.exe",                  # dev fallback
         resources_root / "bin" / "ffmpeg.exe",                # packaged: resources/bin/ (python is resources/python/)
-        Path(shutil.which("ffmpeg") or ""),
-        Path(shutil.which("ffmpeg.exe") or ""),
     ]
     for c in candidates:
-        if c and c.exists():
+        if c.exists():
             return str(c)
+
+    found = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
+    if found:
+        return found
     return "ffmpeg"
 
 
 def find_ffprobe(ffmpeg_bin):
     """Locate ffprobe alongside ffmpeg, bundled resources, or system PATH."""
     env_ffprobe = os.environ.get("BERU_FFPROBE")
-    if env_ffprobe:
+    if env_ffprobe and os.path.isfile(env_ffprobe):
         return env_ffprobe
 
     script_dir = Path(__file__).resolve().parent
@@ -365,12 +367,14 @@ def find_ffprobe(ffmpeg_bin):
         Path(ffmpeg_bin).parent / "ffprobe.exe",
         project_root / "src-tauri" / "bin" / "ffprobe.exe",
         project_root / "bin" / "ffprobe.exe",
-        Path(shutil.which("ffprobe.exe") or ""),
-        Path(shutil.which("ffprobe") or ""),
     ]
     for candidate in candidates:
-        if candidate and candidate.exists():
+        if candidate.exists():
             return str(candidate)
+
+    found = shutil.which("ffprobe") or shutil.which("ffprobe.exe")
+    if found:
+        return found
     return ffmpeg_bin.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
 
 
@@ -1661,7 +1665,7 @@ def main():
 
     ffmpeg_bin = find_ffmpeg()
     ffprobe_bin = find_ffprobe(ffmpeg_bin)
-    if not os.path.exists(ffmpeg_bin):
+    if not (os.path.isfile(ffmpeg_bin) or shutil.which(ffmpeg_bin)):
         logger.error("ffmpeg not found at %s", ffmpeg_bin)
         print(json.dumps({"type": "error", "error": f"ffmpeg not found at {ffmpeg_bin}"}))
         sys.exit(1)
