@@ -87,7 +87,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "beru-app",
+        "owner": "alphagiolabs",
         "repo": "beru",
         "releaseType": "release"
       }
