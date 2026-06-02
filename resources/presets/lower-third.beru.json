@@ -1,0 +1,32 @@
+{
+  "type": "beru-preset",
+  "version": "1.2.0",
+  "name": "Lower third YouTube",
+  "description": "Banda inferior centrada con texto blanco sobre fondo oscuro. Ideal para nombre de entrevistado o título de sección.",
+  "templateRegions": [
+    {
+      "id": "preset-lt-1",
+      "label": "Lower third",
+      "region": { "x": 0.10, "y": 0.78, "w": 0.80, "h": 0.12 }
+    }
+  ],
+  "textStyle": {
+    "textInput": "Nombre Apellido",
+    "textFontSize": 36,
+    "textFontColor": "#ffffff",
+    "fontFamily": "Arial",
+    "bold": true,
+    "italic": false,
+    "bgEnabled": true,
+    "bgColor": "#000000",
+    "bgOpacity": 0.70,
+    "borderWidth": 0,
+    "borderColor": "#000000"
+  },
+  "defaults": {
+    "blurStrength": 20,
+    "delogoMethod": "temporal",
+    "delogoFillColor": "#000000",
+    "delogoFillOpacity": 1
+  }
+}

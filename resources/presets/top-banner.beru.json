@@ -1,0 +1,32 @@
+{
+  "type": "beru-preset",
+  "version": "1.2.0",
+  "name": "Banner superior",
+  "description": "Título en banner superior centrado, color de acento sobre fondo translúcido. Útil para títulos de sección o capitulado.",
+  "templateRegions": [
+    {
+      "id": "preset-tb-1",
+      "label": "Banner",
+      "region": { "x": 0.15, "y": 0.06, "w": 0.70, "h": 0.10 }
+    }
+  ],
+  "textStyle": {
+    "textInput": "TÍTULO",
+    "textFontSize": 40,
+    "textFontColor": "#ffffff",
+    "fontFamily": "Arial",
+    "bold": true,
+    "italic": false,
+    "bgEnabled": true,
+    "bgColor": "#0ea5e9",
+    "bgOpacity": 0.85,
+    "borderWidth": 0,
+    "borderColor": "#000000"
+  },
+  "defaults": {
+    "blurStrength": 20,
+    "delogoMethod": "temporal",
+    "delogoFillColor": "#000000",
+    "delogoFillOpacity": 1
+  }
+}

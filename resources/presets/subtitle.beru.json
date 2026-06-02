@@ -1,0 +1,32 @@
+{
+  "type": "beru-preset",
+  "version": "1.2.0",
+  "name": "Subtítulo centrado",
+  "description": "Subtítulo cinematográfico centrado en la parte inferior, sin fondo, con borde fino para legibilidad sobre cualquier escena.",
+  "templateRegions": [
+    {
+      "id": "preset-sub-1",
+      "label": "Subtítulo",
+      "region": { "x": 0.10, "y": 0.85, "w": 0.80, "h": 0.10 }
+    }
+  ],
+  "textStyle": {
+    "textInput": "Subtítulo de la escena",
+    "textFontSize": 28,
+    "textFontColor": "#ffffff",
+    "fontFamily": "Arial",
+    "bold": false,
+    "italic": false,
+    "bgEnabled": false,
+    "bgColor": "#000000",
+    "bgOpacity": 0.5,
+    "borderWidth": 2,
+    "borderColor": "#000000"
+  },
+  "defaults": {
+    "blurStrength": 20,
+    "delogoMethod": "temporal",
+    "delogoFillColor": "#000000",
+    "delogoFillOpacity": 1
+  }
+}

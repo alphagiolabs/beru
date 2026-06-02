@@ -1,0 +1,32 @@
+{
+  "type": "beru-preset",
+  "version": "1.2.0",
+  "name": "Marca de agua esquina",
+  "description": "Texto pequeño en la esquina inferior derecha. Ideal para marca de agua, copyright o署名.",
+  "templateRegions": [
+    {
+      "id": "preset-wm-1",
+      "label": "Watermark",
+      "region": { "x": 0.72, "y": 0.92, "w": 0.25, "h": 0.06 }
+    }
+  ],
+  "textStyle": {
+    "textInput": "© 2026",
+    "textFontSize": 18,
+    "textFontColor": "#ffffff",
+    "fontFamily": "Arial",
+    "bold": false,
+    "italic": true,
+    "bgEnabled": false,
+    "bgColor": "#000000",
+    "bgOpacity": 0.5,
+    "borderWidth": 0,
+    "borderColor": "#000000"
+  },
+  "defaults": {
+    "blurStrength": 20,
+    "delogoMethod": "temporal",
+    "delogoFillColor": "#000000",
+    "delogoFillOpacity": 1
+  }
+}

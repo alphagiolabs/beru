@@ -1,0 +1,10 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Beru App Icon: B mark with play triangle on black rounded square -->
+  <rect width="512" height="512" rx="112" fill="#000"/>
+  <path fill="#fff" fill-rule="evenodd" d="
+    M 120 80 L 270 80 C 385 80 385 248 270 248 L 290 248 C 410 248 410 432 290 432 L 120 432 Z
+    M 185 130 L 250 130 C 320 130 320 210 250 210 L 185 210 Z
+    M 185 280 L 265 280 C 345 280 345 395 265 395 L 185 395 Z
+    M 232 218 L 315 248 L 232 278 Z
+  "/>
+</svg>

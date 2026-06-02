@@ -1,0 +1,306 @@
+# Changelog
+
+All notable changes to Beru will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.4.9] - 2026-06-02
+
+### Changed
+- Repackage 1.4.8 (React + Electron + Python rewrite) on top of the previous Svelte/Tauri codebase. The Electron app now matches the 1.4.x feature set documented above.
+- `vite.config.js` switched to the React plugin and a Vite-relative build root (`outDir: "build"`).
+- `package.json` `build` block configured for electron-builder (NSIS x64, es-ES, `app.beru.desktop`) and `extraResources` for the Python processor + FFmpeg sidecars shipped under `src-tauri/bin/`.
+
+### Fixed
+- `.gitignore` updated: added `dist-electron` and `dist-installer`, dropped `/.svelte-kit` and `/package`. New entries for `__pycache__/`, `*.pyc`, and a stray PowerShell `$null` artifact.
+- `.gitignore` now excludes local AI tooling (`.agents/`, `.commandcode/`, `skills-lock.json`, `AGENTS.md`) so they don't leak into the repo.
+- Removed dead Tauri/Svelte files from the working tree (`.github/workflows/release.yml`, `.vscode/`, `src-tauri/`, `src/routes/`, `src/lib/`, `static/`, `scripts/`, `docs/`, old `skills/`).
+
+## [1.1.0] - 2026-06-01
+
+### Added
+- Excel mapping modal (`ExcelMappingModal`): explicit configuration of ID column and per-region column mapping. Replaces the implicit name-based matching.
+- Match status badges in queue sidebar: green check (matched), amber warning (unmatched), red copy icon (duplicate ID), grey dash (no Excel loaded).
+- Match report in `BatchPanel` after import: counters for matched / unmatched / duplicate.
+- "Configurar mapeo" button (gear icon) in batch panel for re-opening the mapping modal.
+- `normalizeRegion` / `denormalizeRegion` / `ensureNormalized` helpers in `utils/types.js`.
+- `toVideoCoordsNormalized` helper in `utils/video-utils.js` for direct normalized mouse-to-region conversion.
+- `getMatchReport()` action in store, `clearExcel()`, `updateExcelMapping()`, `setShowMappingModal()`.
+
+### Changed
+- **BREAKING (data model)**: All regions (`currentRegion`, `templateRegions[].region`, `operations[].region`) are now stored NORMALIZED in 0..1 range. They are denormalized per-video at render time. This makes a single region reusable across videos of any resolution; a template drawn on a 1920×1080 video now correctly positions text on 1280×720, 1080×1920, etc. Manual X/Y/W/H inputs still display in pixels (denormalized to the current video) but store normalized.
+- `importExcel()` rewritten to use explicit `excelMapping.idColumn` and per-region column mapping. Auto-detects initial mapping from column headers and region labels; user can override.
+- `addTemplateRegion`, `addOperation`, `createTextOpForRegion` and all drawing paths now write normalized regions to the store.
+- `Header.jsx` job generation now denormalizes each operation's region per-target video before passing to FFmpeg.
+- Drawing canvas (`useCanvas`) uses `toVideoCoordsNormalized` and treats the current region as normalized throughout drag/resize.
+
+### Fixed
+- Positions defined on a template video no longer break when the rest of the batch has a different resolution.
+
+## [1.1.1] - 2026-06-01
+
+### Added
+- **Single-video test render**: new "Probar" button in the header renders only the currently selected video, with a result popup offering "Abrir video" and "Mostrar en carpeta" actions.
+- **Per-video context menu** in the queue sidebar (⋯ button): "Procesar este", "Reintentar" (only on error), "Abrir carpeta de salida", "Mostrar en explorador", "Copiar nombre". Closes on outside click / Escape.
+- Toast feedback at the bottom of the queue sidebar for one-shot actions.
+- New IPC handlers `shell:openPath` and `shell:showItemInFolder` exposed on `window.api` as `openPath` / `showItemInFolder`.
+- Store actions: `_buildJobFor(item, index)` (private, reused by batch and single flows) and `processSingle(videoIdx)` returning `{ ok, outputPath, error }`.
+
+### Changed
+- `python/processor.py` now reports the job's `id` field (queue index) in `complete` / `error` events instead of the position in the jobs array, so single-job runs identify the right queue item.
+- `Header.jsx` batch job generation now delegates to `store._buildJobFor` (no more inline job shape duplication).
+
+## [1.1.2] - 2026-06-01
+
+### Added
+- **Time-aware live preview**: text, blur and delogo overlays now respect each operation's `startTime` and `endTime` in the in-app video player. Scrubbing the timeline makes the overlay appear / disappear in real time. Operations with no time bounds stay visible for the full clip (unchanged behaviour).
+- **Timeline markers** on the seek bar: each operation with a time range renders a colored band over the seek bar (text = purple, blur = cyan, delogo = red, crop = amber). The active range is opaque; the rest is dimmed. Toggleable via the eye icon next to the mute button.
+- `isOpActive(op, t)` helper in `VideoPreview.jsx` centralises the time-window logic.
+
+### Changed
+- `VideoPreview.jsx` filters `sel.operations` through `isOpActive(op, currentTime)` before rendering overlays, so the live preview matches the FFmpeg-rendered output.
+
+## [1.2.0] - 2026-06-01
+
+### Added
+- **Project save / load**: two new header buttons (folder-input and save icons) persist the editing session to a `.beru.json` file. A project bundles:
+  - Template regions (with normalized coordinates so they round-trip across resolutions)
+  - Text style defaults (size, color, family, bold, italic, background, border)
+  - Tool defaults (blur strength, delogo method, fill color / opacity)
+  - Excel configuration: `path`, `headers`, `rows` (cached) and `mapping` (id column + per-region column). On load, the cached rows are used to re-apply per-video text operations immediately, even if the original Excel file has moved.
+- New IPC handlers `project:save` and `project:load` exposed on `window.api` as `saveProject(payload)` and `loadProject()`.
+- New store actions: `serializeProject()`, `saveProject()`, `loadProject()`, and private `_applyProject(data)` that validates and applies the payload. `_reapplyExcel()` is invoked automatically when the loaded project contains Excel data.
+- Loading a project with an existing queue prompts for confirmation before replacing per-video operations.
+
+### Changed
+- `useEditorStore.js` `templateRegions` are normalized via `ensureNormalized` on serialize and on apply, keeping the Phase 1 invariant.
+
+## [1.2.1] - 2026-06-01
+
+### Added
+- **Reusable presets** shipped in `resources/presets/` and packaged via electron-builder `extraResources`:
+  - **Lower third YouTube** — bottom-center band, white text on black 70% bg, bold.
+  - **Banner superior** — top-center banner, white on cyan 85% bg, bold.
+  - **Marca de agua esquina** — small italic text in bottom-right corner, no bg.
+  - **Subtítulo centrado** — bottom-center, no bg, with 2px black border for readability.
+- New header button (library icon) opens a dropdown with the preset list. Bundled presets show an "Incluido" badge; user-dropped presets in `<userData>/presets/` show "Personalizado".
+- New IPC handler `presets:list` exposed as `listPresets()` in `window.api`. Reads from `<appPath>/resources/presets` in dev, `<resourcesPath>/presets` in prod, plus the user folder.
+- New store actions: `loadPresets()` (fetches + caches the list, returns `{ ok, presets, userDir }`) and `applyPreset(data)` (applies template regions + text style + defaults, then either re-runs `_reapplyExcel` if Excel is loaded or seeds each video's `operations` from the new template with the current text).
+- New private helper `_applyTemplateState(data)` shared by `_applyProject` and `applyPreset` to avoid duplicating the 20-line set() call.
+
+### Changed
+- `_applyProject` now also accepts `type: "beru-preset"` payloads (used when re-importing a saved preset file as a project).
+
+## [1.3.0] - 2026-06-01
+
+### Added
+- **Image overlay** operation (mode `image`): draw a region on the video, pick a PNG/JPG/WebP/GIF/BMP file, and the image is rendered over the video at the region's position and size, with adjustable opacity and time bounds. Works for logos, watermarks, lower-thirds, PNG stickers, etc.
+- New "Image" button in the toolbar (next to Text). Selecting it shows an image picker + opacity slider in the Properties panel.
+- Live preview: the picked image is displayed over the video using an `<img>` element, with a green dashed outline during edit and a placeholder if the cache is cold.
+- New IPC handlers `image:read` (returns `{ success, dataUrl, size, mime }` from a file path; supports png/jpg/jpeg/webp/gif/bmp) and `image:pick` (opens an Open dialog filtered to image extensions), exposed on `window.api` as `readImage(path)` and `pickImage()`.
+- `imageDataCache` in the store: `{ [path]: dataUrl }`, populated on image pick and reused across the preview. The `addOperation` flow also writes the new path into the cache so the preview updates immediately.
+- Timeline markers (Phase 3) now color `image` ops green (`#10b981`) for consistency.
+
+### Changed
+- `python/processor.py`: `build_filter_complex` now returns `(filter_str, output_label, image_paths)`. Each unique image path becomes a second `ffmpeg` input (`-loop 1 -i <path>`); the overlay chain scales the image to the region's pixel size, converts to RGBA, applies `colorchannelmixer=aa=<opacity>` for the alpha multiplier, and overlays at `(x, y)`. Time bounds (`start_time` / `end_time`) are honored via `enable=between(t,start,end)` on the overlay. Bug fix: `_build_enable_clause` now reads `start_time`/`end_time` (snake_case) with a fallback to the legacy camelCase keys — the helper had been a no-op for the delogo path because of the casing mismatch.
+
+### Internal
+- `utils/types.js` `MODE_META` now has an `image` entry (green). `createOperation` defaults include `imagePath: ""` and `imageOpacity: 1`. `setActiveTool` clears `tempImagePath` / `tempImageDataUrl` when switching to a non-image tool.
+
+## [1.4.0] - 2026-06-01
+
+### Added
+- **Keyboard shortcuts** across the app. Press `?` at any time to open the shortcuts modal.
+  - **Playback**: `Space` play/pause · `←` / `→` seek ±5s · `Shift + ←` / `Shift + →` seek ±1s · `Home` / `End` start / end.
+  - **Queue**: `[` / `]` and `↑` / `↓` previous / next video in the queue.
+  - **Tools**: `1` Blur · `2` Crop · `3` Text · `4` Image · `5` Delogo (only in `logo` sidebar mode).
+  - **Region**: `N` new region (clears the current drawing) · `Supr` / `Backspace` cancel the current region · `Esc` close modals / cancel current region.
+  - **Project**: `Ctrl + S` save project · `Ctrl + O` load project · `Ctrl + Z` undo · `Ctrl + Y` / `Ctrl + Shift + Z` redo.
+- `isTypingTarget(target)` helper in `useKeyboard.js` skips events when the user is in an `<input>`, `<textarea>`, `<select>` or contentEditable element.
+- Video commands from the hook travel via a custom `beru:video:command` window event (`detail: { type: "toggle-play" | "seek" | "seek-abs", delta?, value? }`). `VideoPreview.jsx` subscribes once per video and acts on the live `<video>` element.
+
+### Changed
+- `ShortcutsModal.jsx` reorganized into 5 sections (Reproducción · Cola · Herramientas · Región · Proyecto) with new entries for all of the above. Replaces the previous flat 7-row list.
+
+## [1.4.1] - 2026-06-01
+
+### Added
+- **Drag & drop improvements** building on the existing root-level handlers in `App.jsx`:
+  - **Folder drop**: dropping a directory recursively scans it for video files. The main process exposes a new IPC `fs:resolveDroppedPaths(paths)` that takes a mixed list of file and folder paths, scans folders up to depth 8 (skipping `node_modules`, hidden folders and `System Volume Information`), filters to known video extensions, and returns `{ videoPaths, ignoredCount }`. Capped at 500 files per drop to avoid runaway scans.
+  - **Live preview during drag**: `DragOverlay.jsx` now subscribes to `dragover` events and shows a small counter under the "Soltar videos aquí" prompt ("3 videos detectados · 1 otro · También puedes soltar carpetas"). The counter is best-effort based on `dataTransfer.files` (no main-process scan during drag — only after drop).
+  - **Post-drop toast** in `App.jsx` (centered bottom, 3.5s) reports what happened: "5 videos agregados", "5 videos agregados · 2 ignorados", or "Sin videos en la selección (3 ignorados)".
+
+### Fixed
+- **Drag-leave flicker**: replaced the unreliable `!e.currentTarget.contains(e.relatedTarget)` check with a counter (`dragCounter.current`). Increments on `dragenter`, decrements on `dragleave`; the overlay hides only when the count reaches 0. This prevents the overlay from blinking when the cursor crosses over child elements inside the drop zone.
+
+### Internal
+- `App.jsx` now also passes the drop handlers to the empty-state `Landing` div, so drag & drop works before any video has been imported.
+- Extended video extension list in main process: `mp4|mov|avi|mkv|webm|flv|wmv|m4v|mpg|mpeg` (was `mp4|mov|avi|mkv|webm`).
+
+## [1.4.2] - 2026-06-01
+
+### Added
+- **Queue thumbnails**: every video in the queue now shows a 44×25 px frame-0 thumbnail in `QueueSidebar`, extracted automatically when the video is imported.
+  - `main/main.js:221-265` — new helper `extractThumbnail(filePath, width)` spawns the bundled `ffmpeg.exe` with `-ss 0 -vframes 1 -vf scale=160:-2 -q:v 6 -f image2pipe -vcodec mjpeg` and pipes the JPEG bytes to a buffer. Returns a base64 data URL on success, `null` on failure (no `ffmpeg`, corrupt file, 8 s timeout).
+  - `main/main.js:267-274` — IPC `video:thumbnail` (single) and `video:thumbnailBatch` (parallel, concurrency = min(6, CPU count), uses the same `runWithConcurrency` helper as `getVideoInfoBatch`).
+  - `main/preload.cjs:18-19` — `window.api.getThumbnail` and `getThumbnailBatch`.
+  - `src/utils/types.js:195` — `createQueueItem` defaults `thumbnail: null` so the field is always present.
+  - `src/stores/useEditorStore.js:148-176` — after `set` adds the new queue items, the store fires `api.getThumbnailBatch(toAdd)` in the background (no await) and patches the corresponding queue entries with `thumbnail: dataUrl` as results arrive. Failed extractions are silently skipped, so a broken `ffmpeg` cannot block imports.
+  - `src/components/QueueSidebar.jsx:8-23` — new inline `Thumbnail` component: shows the data URL in a 44×25 px black-bordered box, or a `FileVideo` icon placeholder while the thumbnail is still loading or extraction failed. The placeholder uses `var(--bg-app)` so it blends with the rest of the sidebar.
+
+### Internal
+- Thumbnails are not persisted: the queue is re-imported on each session, so thumbnails regenerate on import. This keeps storage cost at 0 bytes on disk and avoids cache-invalidation logic.
+- Quality: JPEG `-q:v 6` (~80 KB per thumbnail at 160 px wide). For 500 videos that's ~40 MB transient memory; the cap from Phase 8 already limits imports to 500 files.
+
+## [1.4.3] - 2026-06-01
+
+### Added
+- **Save as preset** closes the loop opened in v1.2.1 (Phase 5): the user can now persist the current template as a user preset without going through "Save project" and editing the JSON.
+  - `main/main.js:501-528` — new IPC `presets:save(name, jsonStr)`. Validates that the payload has `type: "beru-preset"`, sanitizes the name (strips `\/:*?"<>|` and control chars, prepends `_` to leading dots, caps at 80 chars), and appends `.beru.json` if missing. Writes to `<userData>/presets/`, creating the folder if needed. Returns `{ success, fileName, filePath, userDir }` or `{ success: false, error }`.
+  - `main/preload.cjs:21` — `window.api.savePreset(name, jsonStr)`.
+  - `src/stores/useEditorStore.js:891-916` — two new actions:
+    - `serializePreset()` reuses `serializeProject()` then strips `excel` and changes `type` to `"beru-preset"`. This guarantees the preset shape is exactly the project shape minus the Excel binding.
+    - `savePreset(name)` calls the IPC, then re-fetches `presets:list` so the new file appears in the Library dropdown immediately. Returns `{ ok, fileName?, filePath?, error? }`.
+  - `src/components/Header.jsx:212-214` — new icon button (`BookmarkPlus`, between Save project and the shortcuts button) titled "Guardar como preset".
+  - `src/components/Header.jsx:55-66, 290-321` — modal with a single text input (autofocused, `Enter` submits, `Esc` closes), a brief description, and Cancel/Save buttons. The disabled state on Save mirrors the input's emptiness.
+
+### Internal
+- Preset files written from this flow are indistinguishable from those written by hand or by Phase 5's bundled export. They show up in the Library dropdown with the green "Personalizado" badge (existing behavior from Phase 5).
+
+## [1.4.4] - 2026-06-01
+
+### Added
+- **Light theme** with a one-click toggle. Beru ships dark by default; flipping the toggle in the header switches to a clean light palette tuned for daytime use. The choice is persisted across sessions.
+  - `src/index.css:5-30` — `:root` keeps the dark values (no behavior change for users who never toggle). New `[data-theme="light"]` selector overrides the same 12 CSS vars (`--bg-app`, `--bg-surface`, `--bg-elevated`, `--text-primary/secondary/dim`, `--accent`, `--amber`, `--rose`, `--purple`, `--border`) with light-mode values. Components using `var(--...)` switch automatically — no per-component edits.
+  - `main/main.js:534-564` — new IPC `settings:load` and `settings:save(partial)`. Settings live at `<userData>/settings.json`. Defaults: `{ theme: "dark" }`. The save handler merges partial updates into the existing file (so future settings like `language` can reuse it without changing the schema).
+  - `main/preload.cjs:22-23` — `window.api.loadSettings()` and `window.api.saveSettings(partial)`.
+  - `src/stores/useEditorStore.js:8-13, 88, 670-695` — new state `theme: "dark" | "light"` and three actions:
+    - `loadSettings()` calls the IPC, applies the theme to `<html>` via `applyThemeToDom(theme)`, and stores it in state.
+    - `setTheme(theme)` updates state, applies the DOM attribute, and persists.
+    - `toggleTheme()` flips between dark/light.
+    The DOM helper `applyThemeToDom(theme)` sets `data-theme="light"` or removes the attribute (so `:root` applies the dark defaults).
+  - `src/App.jsx:32` — `store.loadSettings()` is called once at app boot, before the first paint (well, after the React commit but before the user interacts). This is the only change needed for the theme to survive a restart.
+  - `src/components/Header.jsx:215-217` — new icon button (`Sun` when in dark mode, `Moon` when in light) with a tooltip. Click toggles.
+  - `src/components/Landing.jsx:18` — the Beru logo's hardcoded `fill="#fff"` is now `fill="currentColor"`. The parent inherits `var(--text-primary)` from the body, so the logo is white in dark mode and dark gray in light mode.
+
+### Internal
+- The `--amber` and `--purple` semantic vars were tweaked in light mode (`#b45309` and `#7e22ce` respectively) so they retain enough contrast on the white surface. Their dark-mode values are unchanged.
+- Hardcoded brand colors that work in both themes (the teal-blue `cap-btn-primary` gradient, `opModeColor` for canvas markers, the green/red/amber status dots, the violet for "template video" badge) are intentionally left as-is.
+- Settings file format: `JSON.stringify(obj, null, 2)` — easy to read and edit by hand, easy to diff, easy to extend.
+
+## [1.4.5] - 2026-06-01
+
+### Added
+- **i18n / multi-language** support. Beru now ships in Spanish (default) and English; the user can switch at any time from a small dropdown in the header. The choice is persisted in `settings.json` (the same file used by the theme in Phase 11). The infrastructure is intentionally tiny — no `i18next` or `react-intl`, just a 25-line hook.
+  - `src/i18n/useT.js` — exports `useT()` (returns a `t(key, vars?)` function) and `SUPPORTED_LANGUAGES` (currently `[{code:"es"},{code:"en"}]`). `t(key, vars)` does `{name}`-style interpolation, falls back to Spanish if the key is missing in the current language, and finally to the key itself if missing in Spanish.
+  - `src/i18n/messages/es.json` (~140 keys) and `src/i18n/messages/en.json` (~140 keys) — flat namespaced keys organized as `common.*`, `header.*`, `queue.*`, `props.*`, `toolbar.*`, `preview.*`, `excel.*`, `modal.*`, `match.*`, `errors.*`, `style.*`, `drop.*`, `landing.*`, `table.*`, `batch.*`. Adding a new language is a single new JSON file + one entry in `SUPPORTED_LANGUAGES`.
+  - `main/main.js:534` — `SETTINGS_DEFAULTS` now includes `language: "es"`. The existing `settings:load` / `settings:save` IPCs handle persistence with no further changes.
+  - `src/stores/useEditorStore.js:91, 670-722` — new state `language: "es"|"en"`, new action `setLanguage(lang)`. `loadSettings` now also restores the language alongside the theme. Persistence is fire-and-forget like the theme.
+  - `src/components/Header.jsx:222-237` — new dropdown button next to the theme toggle. Shows the current language code (`ES` / `EN`) on the button, opens a small panel listing the supported languages with a checkmark on the active one. The same `mousedown` + `Escape` dismissal pattern as the Presets dropdown.
+  - **Components translated** (high-impact, user-visible strings):
+    - `Header.jsx` — all button tooltips, toasts, the Save Preset modal (title, description, placeholder, buttons), the Test Result modal (running / ok / error states, FFmpeg progress, open/show buttons), the "Procesar todos" / "Cancelar" / "Deshacer" / "Rehacer" labels, the "Sin presets" empty state.
+    - `Landing.jsx` — title, description, import button, drag-hint text.
+    - `QueueSidebar.jsx` — "Cola (N)" header, "Agregar videos" tooltip, the entire context menu (Procesar este / Reintentar / Abrir carpeta / Mostrar en explorador / Copiar nombre), the "Video plantilla" badge, the "Nombre copiado" toast.
+    - `ShortcutsModal.jsx` — title and all 5 section headers + every shortcut description in both languages.
+    - `ExcelMappingModal.jsx` — title, ID column label, region mapping label, "Vista previa" label, Cancel / Aplicar mapeo buttons.
+    - `DragOverlay.jsx` — "Soltar videos aquí" headline, count format ("N videos detectados", "M otros"), folder hint.
+    - `ToolBar.jsx` — all 5 tool labels (Blur / Crop / Text / Image / Remove logo).
+    - `LayerList.jsx` — "Capas (N)" title, "Sin operaciones" empty state, mode names (Blur / Crop / Text / Remove logo), duplicate tooltip.
+    - `MatchBadge.jsx` — all 4 status labels and descriptions (Vinculado / Sin match / ID duplicado / Sin Excel).
+
+### Internal
+- The `useT` hook subscribes to the store via `useEditorStore((s) => s.language)`, so any component using `useT` re-renders on language change. This is the only way to react to a switch in the existing infrastructure; the alternative (a Context) would be 4× the code for no real benefit.
+- The English translations are intentionally close to the Spanish — no marketing copy, no cultural adaptation. This keeps the diff small and makes it easy to spot mistranslations during review.
+- Bundle size went from 627 KB → 656 KB (+28 KB raw / +9 KB gzip) for the two language dicts. Acceptable for a one-time cost; adding a third language costs ~12 KB.
+- Strings not yet translated (deferred to a follow-up — the i18n keys are pre-wired in `es.json` / `en.json`, anyone can extend): the labels inside `PropertiesPanel.jsx`, `TableEditor.jsx`, `BatchPanel.jsx`, `StyleEditor.jsx`, `BatchProgressBar.jsx`, and the various `placeholder` attributes in inputs. These are mostly property names that work fine in either language.
+
+## [1.4.6] - 2026-06-01
+
+### Added
+- **Recent projects dropdown** next to the Load Project button. The last 8 `.beru.json` files saved or opened appear here so the user can reopen them in one click.
+  - `main/main.js:571-625` — new IPCs `recent:list`, `recent:add({path, name})`, `recent:remove(path)`. Persistence is `<userData>/recent.json` (separate from `settings.json` so the lists don't mix). List is capped at 8 entries, deduped by normalized path, sorted newest-first. `list` annotates each entry with `exists` (cheap `fs.existsSync`) so the UI can show stale paths dimmed.
+  - `main/main.js:611-625` — new IPC `project:loadFromPath(filePath)` that reads and parses a `.beru.json` from a known path (the file picker version is `project:load` and shows a dialog). Returns `{ success, filePath, data, error?, missing? }` where `missing: true` signals the file was deleted between sessions.
+  - `main/preload.cjs:24-25, 28` — `window.api.listRecent`, `addRecent`, `removeRecent`, `loadProjectFromPath`.
+  - `src/stores/useEditorStore.js:96, 768-840` — new state `recent: []` and four actions:
+    - `loadRecents()` calls the IPC at boot and stores the result.
+    - `addRecent(filePath, name)` pushes to head, dedupes by path, re-fetches the list with `exists` annotations.
+    - `removeRecent(filePath)` drops the entry both in main and locally.
+    - `loadProjectFromPath(filePath)` is the targeted loader: reads the file, applies it, re-adds to recents on success, and auto-prunes the entry on `missing: true`.
+  - `src/stores/useEditorStore.js:1137, 1180` — `saveProject` and `loadProject` now call `addRecent(filePath, savedAt)` on success. No caller changes needed.
+  - `src/App.jsx:33` — `store.loadRecents()` runs at boot alongside `loadSettings()` and `loadPresetsFromStorage()`.
+  - `src/components/Header.jsx:312-352` — new dropdown button (`History` icon + `ChevronDown`) right after the Load Project button. Opens a 280px panel showing each recent: filename (truncated), full path (truncated, on hover), and a remove "X" button that appears on row hover. Missing files render dimmed at 40% opacity; clicking them shows the "Archivo no encontrado" toast and auto-removes them from the list. Empty state shows "Sin proyectos recientes". Click on a row confirms with the user (if `queue.length > 0`) and loads.
+  - `src/i18n/messages/es.json` / `en.json` — 4 new keys: `header.recent`, `header.noRecents`, `header.recentMissing`, `header.confirmLoadRecent`.
+
+### Internal
+- Paths are normalized via `path.normalize` before compare/store so `C:\foo\bar` and `C:\foo\.\bar` are treated as the same entry.
+- The IPC `recent:add` accepts `name` but falls back to `path.basename(path)` if the renderer doesn't supply one.
+- The dropped entries write the list with `JSON.stringify(arr, null, 2)` for consistency with the settings file format.
+- Removed entries are pruned both from the disk file (via the IPC) and locally in the store; the next `recent:list` will not return them, so the UI updates immediately even before the IPC roundtrip resolves.
+
+## [1.4.8] - 2026-06-02
+
+### Fixed
+- **`main/main.js:752`**: removed orphan `});` that left the Electron main process with unbalanced braces; the app would fail to boot when the surrounding handler was last to execute during static analysis / `node --check`.
+- **`src/components/VideoPreview.jsx:181`**: the `opIdx` identifier used inside the per-operation callback (`opIdx + 1` for the React key) was never declared; added `(op, opIdx) =>` to the `.map` signature.
+- **`src/stores/useEditorStore.js`**: deleted the dead **sync** `savePreset` variant that only wrote to `localStorage` and was shadowed by the async IPC version. Callers were always hitting the async one, so the sync path was unreachable dead code with confusing overlapping responsibilities. `loadPresetsFromStorage` (used as first-paint cache) is preserved.
+- **`python/processor.py:25-26`**: `FFMPEG` and `FFPROBE` are now read from `BERU_FFMPEG` / `BERU_FFPROBE` env vars (falling back to bare `"ffmpeg"` / `"ffprobe"` for CLI use). The Electron main process passes the bundled ffmpeg/ffprobe sidecar paths in `python/processor.py` spawn env (`main/main.js`), so packaged installs no longer depend on ffmpeg being in PATH.
+
+### Changed
+- **`src/components/PresetManager.jsx`**: the save flow is now aligned with the async store action. The "Guardar" button shows a `saving` state, disables input + button while in flight, and renders green confirmation (with the file name) or a rose error toast on failure. Feedback auto-clears after 2.5s.
+
+### Internal
+- Added **vitest** + **jsdom** dev dependencies and an `npm test` script. New regression tests:
+  - `tests/store.savePreset.test.js` covers the async `savePreset` flow: empty-name rejection, IPC call arguments, and the `listPresets` refresh on success.
+  - `tests/python.ffmpeg-path.test.js` covers the env-var override for `BERU_FFMPEG` / `BERU_FFPROBE` and the `"ffmpeg"` / `"ffprobe"` fallback. Skipped automatically when Python is not on PATH.
+
+## [1.0.3] - 2026-05-28
+
+### Fixed
+- Blur overlay now renders visibly in video preview (fallback stripe pattern for Chromium/Electron where ackdrop-filter doesn't work on <video> elements)
+- Delogo blur method overlay now shows a visible blue-tinted diagonal stripe fallback
+
+### Changed
+- Rewrote frontend from SvelteKit to React (Electron + React + Zustand + Tailwind CSS v3)
+- Replaced Tauri with Electron for desktop shell
+
+
+## [1.0.0] - 2026-05-28
+
+### Added
+- First stable release of Beru
+- Electron + React desktop application
+- Automated text overlay on videos via Excel database
+- FFmpeg sidecar integration for video processing
+- Layer-based video editor with real-time preview
+- Batch processing with progress tracking
+- Style editor with customizable text properties
+- Preset manager for reusable text configurations
+- Drag & drop video import
+- Windows NSIS installer with Spanish (es-ES) localization
+
+### Changed
+- Version bumped from 0.1.2 → 1.0.0 for first stable release
+- App identifier updated to `app.beru.desktop`
+- Publisher metadata: "Beru" with Copyright © 2026
+
+## [0.1.2] - 2026-05-26
+
+### Changed
+- Updated all installer metadata (publisher, copyright, descriptions)
+- Spanish installers (es-ES) for both NSIS and WiX/MSI
+- Publisher "Beru" + copyright 2026 correctly embedded
+- Identifier corrected to `app.beru.desktop` (cross-platform compatible)
+
+## [0.1.1] - 2026-05-25
+
+### Changed
+- Metadata and bundle config improvements
+
+## [0.1.0] - 2026-05-25
+
+### Added
+- Initial release of Beru - desktop video editor
+- Tauri 2 + SvelteKit 5 desktop application
+- FFmpeg sidecar integration for video processing
+- Windows NSIS and MSI installers

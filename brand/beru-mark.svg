@@ -1,0 +1,9 @@
+<svg viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Beru Standalone Mark: white B for dark backgrounds -->
+  <path fill="#fff" fill-rule="evenodd" d="
+    M 0 0 L 140 0 C 260 0 260 195 140 195 L 165 195 C 295 195 295 400 165 400 L 0 400 Z
+    M 60 50 L 120 50 C 195 50 195 145 120 145 L 60 145 Z
+    M 60 240 L 140 240 C 225 240 225 350 140 350 L 60 350 Z
+    M 100 168 L 195 195 L 100 222 Z
+  "/>
+</svg>

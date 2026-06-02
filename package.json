@@ -1,49 +1,96 @@
 {
   "name": "beru",
-  "version": "0.1.3",
-  "description": "Editor de vídeo local sin límites. 100% offline.",
+  "version": "1.4.9",
+  "description": "Beru — Editor de video masivo con overlays de texto vía base de datos Excel",
+  "main": "main/main.js",
   "type": "module",
-  "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "ffmpeg:download": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1",
-    "ffmpeg:sync": "powershell -ExecutionPolicy Bypass -File scripts/sync-ffmpeg-sidecars.ps1",
-    "ffmpeg:download:force": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1 -Force",
-    "ffmpeg:download:slim": "powershell -ExecutionPolicy Bypass -File scripts/download-ffmpeg.ps1 -Force",
-    "ffmpeg:build:minimal": "powershell -ExecutionPolicy Bypass -File scripts/build-ffmpeg-minimal.ps1",
-    "ffmpeg:build:minimal:clean": "powershell -ExecutionPolicy Bypass -File scripts/build-ffmpeg-minimal.ps1 -Clean",
-    "tauri:dev": "npm run ffmpeg:download --if-present && tauri dev",
-    "tauri:build": "npm run ffmpeg:download:force && tauri build",
-    "build:report": "node -e \"const fs=require('fs');const p='src-tauri/target/release';if(fs.existsSync(p)){const s=fs.statSync(p+'/beru.exe').size/1024/1024;console.log('Rust binary:',s.toFixed(1),'MB')} else {console.log('Run tauri build first')} \"",
-    "tauri": "tauri",
-    "version:bump": "node scripts/version-bump.mjs",
-    "release:patch": "node scripts/release.mjs patch",
-    "release:minor": "node scripts/release.mjs minor",
-    "release:major": "node scripts/release.mjs major"
-  },
+  "author": "Beru",
+  "homepage": "https://beru.app",
   "license": "MIT",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build && electron-builder",
+    "preview": "vite preview",
+    "start": "electron .",
+    "test": "vitest run"
+  },
   "dependencies": {
-    "@tailwindcss/vite": "^4.3.0",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2",
-    "tailwindcss": "^4.3.0",
-    "xlsx": "^0.18.5"
+    "lucide-react": "^0.300.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "xlsx": "^0.18.5",
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.6",
-    "@sveltejs/kit": "^2.9.0",
-    "@sveltejs/vite-plugin-svelte": "^5.1.1",
-    "@tauri-apps/cli": "^2",
-    "@types/node": "^25.9.1",
-    "svelte": "^5.0.0",
-    "svelte-check": "^4.0.0",
-    "typescript": "~5.6.2",
-    "vite": "^6.0.3",
-    "vitest": "^4.1.7"
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.0",
+    "electron-updater": "^6.8.3",
+    "jsdom": "^24.0.0",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "vite": "^5.0.0",
+    "vitest": "^1.6.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "app.beru.desktop",
+    "productName": "Beru",
+    "copyright": "Copyright © 2026 Beru",
+    "directories": {
+      "output": "dist-installer"
+    },
+    "files": [
+      "main/**/*",
+      "build/**/*",
+      "python/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "python",
+        "to": "python"
+      },
+      {
+        "from": "src-tauri/bin",
+        "to": "bin"
+      },
+      {
+        "from": "resources/presets",
+        "to": "presets"
+      }
+    ],
+    "win": {
+      "icon": "brand/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "publisherName": "Beru"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerLanguages": [
+        "es_ES"
+      ],
+      "uninstallDisplayName": "Beru ${version}",
+      "shortcutName": "Beru"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "beru-app",
+        "repo": "beru",
+        "releaseType": "release"
+      }
+    ]
   }
 }

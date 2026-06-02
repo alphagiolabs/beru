@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-app: #0a0a0a;
+  --bg-surface: #111111;
+  --bg-elevated: #1a1a1a;
+  --text-primary: #ffffff;
+  --text-secondary: #999999;
+  --text-dim: #555555;
+  --accent: #ffffff;
+  --amber: #cccccc;
+  --rose: #f43f5e;
+  --purple: #888888;
+  --border: #222222;
+}
+
+[data-theme="light"] {
+  --bg-app: #f5f5f5;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ececec;
+  --text-primary: #0a0a0a;
+  --text-secondary: #555555;
+  --text-dim: #999999;
+  --accent: #0a0a0a;
+  --amber: #b45309;
+  --rose: #e11d48;
+  --purple: #7e22ce;
+  --border: #d4d4d4;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+body {
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* Base component classes */
+.cap-btn {
+  @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium
+         transition-all duration-150 active:scale-[0.97];
+}
+.cap-btn-primary {
+  @apply cap-btn text-white;
+  background: linear-gradient(135deg, #00b4b0, #0088cc);
+}
+.cap-btn-primary:hover { filter: brightness(1.15); }
+
+.cap-btn-secondary {
+  @apply cap-btn;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.cap-btn-secondary:hover { color: var(--text-primary); border-color: var(--text-dim); }
+
+.cap-btn-danger {
+  @apply cap-btn text-white;
+  background: var(--rose);
+}
+.cap-btn-danger:hover { filter: brightness(1.15); }
+
+.cap-input {
+  @apply w-full px-2.5 py-1.5 rounded text-xs outline-none;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+.cap-input:focus { border-color: var(--accent); }
+
+.cap-input-label {
+  @apply block text-[10px] font-medium mb-1 tracking-wide uppercase;
+  color: var(--text-dim);
+}
+
+.cap-card {
+  @apply rounded p-3 border;
+  background: var(--bg-surface);
+  border-color: var(--border);
+}
+
+.cap-section { @apply p-4 border-b; border-color: var(--border); }
+.cap-section-title {
+  @apply text-[10px] font-semibold tracking-widest uppercase mb-3;
+  color: var(--text-dim);
+}
