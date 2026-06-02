@@ -15,6 +15,7 @@ import TableEditor from "./components/TableEditor";
 import ExcelMappingModal from "./components/ExcelMappingModal";
 import Landing from "./components/Landing";
 import UpdateBanner from "./components/UpdateBanner";
+import UpdateReadyModal from "./components/UpdateReadyModal";
 import TopUpdateBar from "./components/TopUpdateBar";
 import AppToast from "./components/AppToast";
 import { useT } from "./i18n/useT";
@@ -165,6 +166,7 @@ export default function App() {
       <TableEditor />
       <ExcelMappingModal />
       <UpdateBanner />
+      <UpdateReadyModal />
       <AppToast />
     </div>
   );

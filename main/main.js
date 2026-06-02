@@ -29,20 +29,22 @@ function getPythonPath() {
 }
 
 function getFfprobePath() {
-  if (fs.existsSync(path.join(__dirname, "..", "src-tauri", "bin", "ffprobe.exe"))) {
-    return path.join(__dirname, "..", "src-tauri", "bin", "ffprobe.exe");
-  }
-  const bundled = path.join(process.resourcesPath, "bin", "ffprobe.exe");
-  if (!isDev && fs.existsSync(bundled)) return bundled;
+  const devBin = path.join(__dirname, "..", "bin", "ffprobe.exe");
+  const legacy = path.join(__dirname, "..", "src-tauri", "bin", "ffprobe.exe");
+  const packaged = path.join(process.resourcesPath, "bin", "ffprobe.exe");
+  if (fs.existsSync(devBin)) return devBin;
+  if (fs.existsSync(legacy)) return legacy;
+  if (!isDev && fs.existsSync(packaged)) return packaged;
   return null;
 }
 
 function getFfmpegPath() {
-  if (fs.existsSync(path.join(__dirname, "..", "src-tauri", "bin", "ffmpeg.exe"))) {
-    return path.join(__dirname, "..", "src-tauri", "bin", "ffmpeg.exe");
-  }
-  const bundled = path.join(process.resourcesPath, "bin", "ffmpeg.exe");
-  if (!isDev && fs.existsSync(bundled)) return bundled;
+  const devBin = path.join(__dirname, "..", "bin", "ffmpeg.exe");
+  const legacy = path.join(__dirname, "..", "src-tauri", "bin", "ffmpeg.exe");
+  const packaged = path.join(process.resourcesPath, "bin", "ffmpeg.exe");
+  if (fs.existsSync(devBin)) return devBin;
+  if (fs.existsSync(legacy)) return legacy;
+  if (!isDev && fs.existsSync(packaged)) return packaged;
   return null;
 }
 
