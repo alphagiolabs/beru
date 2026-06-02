@@ -20,12 +20,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -38,12 +38,19 @@ jobs:
         run: npx vite build
 
       - name: Package & publish
-        run: npx electron-builder --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
-          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        shell: pwsh
+        # Only set CSC_LINK / CSC_KEY_PASSWORD when the signing secrets are present.
+        # electron-builder treats an empty CSC_LINK as a relative path, which
+        # would resolve to the runner's cwd and crash the build with
+        # "WIN_CSC_LINK is not correct, cannot resolve: D:\a\beru\beru".
+        run: |
+          $cscLink = "${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}"
+          $cscKey  = "${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}"
+          $env:GH_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
+          $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+          if ($cscLink) { $env:CSC_LINK = $cscLink }
+          if ($cscKey)  { $env:CSC_KEY_PASSWORD = $cscKey }
+          npx electron-builder --publish always
 
       - name: Upload installers
         uses: actions/upload-artifact@v4
