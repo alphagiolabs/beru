@@ -3,7 +3,7 @@ import { spawn, exec } from "child_process";
 import path from "path";
 import fs from "fs";
 import os from "os";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { randomBytes } from "crypto";
 import * as updater from "./updater.js";
 import { probeVideoFile } from "./videoProbe.js";
