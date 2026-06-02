@@ -2,6 +2,7 @@ import { create } from "zustand";
 import * as XLSX from "xlsx";
 import { createRegion, createOperation, createQueueItem, createPreset, uid, normalizeRegion, denormalizeRegion, ensureNormalized } from "../utils/types";
 import { stripExt, rowGet, clampRegionToVideo, isRegionUsable } from "../utils/video-utils";
+import { sanitizeOperation } from "../utils/delogo-ops";
 
 const MAX_UNDO_STACK = 50;
 
@@ -310,7 +311,7 @@ const useEditorStore = create((set, get) => ({
     if (selectedIdx < 0 || !currentRegion || !isRegionUsable(currentRegion)) return;
     get()._saveUndo();
 
-    const op = createOperation({
+    const op = sanitizeOperation(createOperation({
       mode,
       region: { ...currentRegion },
       blurStrength: get().blurStrength,
@@ -336,7 +337,7 @@ const useEditorStore = create((set, get) => ({
       imageOpacity: get().tempImageOpacity,
       startTime: get().tempStart,
       endTime: get().tempEnd,
-    });
+    }));
 
     const updated = [...queue];
     updated[selectedIdx] = { ...updated[selectedIdx], operations: [...updated[selectedIdx].operations, op] };
@@ -399,7 +400,11 @@ const useEditorStore = create((set, get) => ({
     get()._saveUndo();
     const updated = [...queue];
     const ops = [...updated[selectedIdx].operations];
-    const clone = { ...ops[opIdx], id: uid(), region: ops[opIdx].region ? { ...ops[opIdx].region } : null };
+    const clone = sanitizeOperation({
+      ...ops[opIdx],
+      id: uid(),
+      region: ops[opIdx].region ? { ...ops[opIdx].region } : null,
+    });
     ops.splice(opIdx + 1, 0, clone);
     updated[selectedIdx] = { ...updated[selectedIdx], operations: ops };
     set({ queue: updated });
@@ -716,7 +721,7 @@ const useEditorStore = create((set, get) => ({
 
   /* Re-apply current excelMapping to the queue. Returns match report. */
   _reapplyExcel: () => {
-    const { queue, excelRows, excelMapping, templateRegions, textFontSize, textFontColor, fontFamily, bold, italic, bgEnabled, bgColor, bgOpacity, borderWidth, borderColor } = get();
+    const { queue, excelRows, excelMapping, templateRegions, textFontSize, textFontColor, fontFamily, fontWeight, letterSpacing, textAlign, textOpacity, bold, italic, bgEnabled, bgColor, bgOpacity, boxBorderWidth, borderWidth, borderColor } = get();
     const { idColumn, columns } = excelMapping;
 
     if (!idColumn || excelRows.length === 0) {
@@ -928,7 +933,7 @@ const useEditorStore = create((set, get) => ({
     try {
       const res = await api.removeRecent(filePath);
       if (res?.success && Array.isArray(res.recent)) {
-        set((s) => ({ recent: s.recent.filter((r) => res.recent.some((x) => x.path === r.path)).concat(res.recent.map((r) => ({ ...r, exists: true }))).slice(0, 8) }));
+        set({ recent: res.recent.map((r) => ({ ...r, exists: true })) });
       } else {
         // Fallback: just remove locally
         set((s) => ({ recent: s.recent.filter((r) => r.path !== filePath) }));
@@ -1047,42 +1052,45 @@ const useEditorStore = create((set, get) => ({
       output_path: outPath,
       width: item.width || 0,
       height: item.height || 0,
-      operations: item.operations.map((op) => ({
-        mode: op.mode,
-        region: op.region
+      operations: item.operations.map((op) => {
+        const safe = sanitizeOperation(op);
+        return {
+        mode: safe.mode,
+        region: safe.region
           ? (item.width > 0 && item.height > 0
-            ? denormalizeRegion(op.region, item.width, item.height)
-            : op.region)
-          : op.region,
-        blur_strength: op.blurStrength,
-        delogo_method: op.delogoMethod,
-        delogo_fill_color: op.delogoFillColor,
-        delogo_fill_opacity: op.delogoFillOpacity,
-        temporal_radius: op.temporalRadius,
-        mosaic_size: op.mosaicSize,
-        mirror_side: op.mirrorSide,
-        edge_feather: op.edgeFeather,
-        text: op.text,
-        font_size: op.fontSize,
-        font_color: op.fontColor,
-        font_family: op.fontFamily,
-        font_weight: op.fontWeight,
-        letter_spacing: op.letterSpacing,
-        text_align: op.textAlign,
-        text_opacity: op.textOpacity,
-        bold: op.bold,
-        italic: op.italic,
-        bg_enabled: op.bgEnabled,
-        bg_color: op.bgColor,
-        bg_opacity: op.bgOpacity,
-        box_border_width: op.boxBorderWidth,
-        border_width: op.borderWidth,
-        border_color: op.borderColor,
-        image_path: op.imagePath,
-        image_opacity: op.imageOpacity,
-        start_time: op.startTime,
-        end_time: op.endTime,
-      })),
+            ? denormalizeRegion(safe.region, item.width, item.height)
+            : safe.region)
+          : safe.region,
+        blur_strength: safe.blurStrength,
+        delogo_method: safe.delogoMethod,
+        delogo_fill_color: safe.delogoFillColor,
+        delogo_fill_opacity: safe.delogoFillOpacity,
+        temporal_radius: safe.temporalRadius,
+        mosaic_size: safe.mosaicSize,
+        mirror_side: safe.mirrorSide,
+        edge_feather: safe.edgeFeather,
+        text: safe.text,
+        font_size: safe.fontSize,
+        font_color: safe.fontColor,
+        font_family: safe.fontFamily,
+        font_weight: safe.fontWeight,
+        letter_spacing: safe.letterSpacing,
+        text_align: safe.textAlign,
+        text_opacity: safe.textOpacity,
+        bold: safe.bold,
+        italic: safe.italic,
+        bg_enabled: safe.bgEnabled,
+        bg_color: safe.bgColor,
+        bg_opacity: safe.bgOpacity,
+        box_border_width: safe.boxBorderWidth,
+        border_width: safe.borderWidth,
+        border_color: safe.borderColor,
+        image_path: safe.imagePath,
+        image_opacity: safe.imageOpacity,
+        start_time: safe.startTime,
+        end_time: safe.endTime,
+      };
+      }),
       video_duration: item.duration,
       video_codec: item.videoCodec || "",
       pix_fmt: item.pixFmt || "yuv420p",
@@ -1099,7 +1107,7 @@ const useEditorStore = create((set, get) => ({
     if (isProcessing) return { ok: false, error: "Ya hay un proceso en ejecución" };
     if (videoIdx < 0 || videoIdx >= queue.length) return { ok: false, error: "Video inválido" };
     const item = queue[videoIdx];
-    const job = get()._buildJobFor(item, 0);
+    const job = get()._buildJobFor(item, videoIdx);
     if (!job) return { ok: false, error: "No se pudo construir el job" };
 
     set({ isProcessing: true, progressTotal: 1, progressDone: 0 });
@@ -1247,11 +1255,16 @@ const useEditorStore = create((set, get) => ({
         textFontSize: s.textFontSize,
         textFontColor: s.textFontColor,
         fontFamily: s.fontFamily,
+        fontWeight: s.fontWeight,
+        letterSpacing: s.letterSpacing,
+        textAlign: s.textAlign,
+        textOpacity: s.textOpacity,
         bold: s.bold,
         italic: s.italic,
         bgEnabled: s.bgEnabled,
         bgColor: s.bgColor,
         bgOpacity: s.bgOpacity,
+        boxBorderWidth: s.boxBorderWidth,
         borderWidth: s.borderWidth,
         borderColor: s.borderColor,
       },
@@ -1346,11 +1359,16 @@ const useEditorStore = create((set, get) => ({
       textFontSize: textStyle.textFontSize ?? get().textFontSize,
       textFontColor: textStyle.textFontColor ?? get().textFontColor,
       fontFamily: textStyle.fontFamily ?? get().fontFamily,
+      fontWeight: textStyle.fontWeight ?? get().fontWeight,
+      letterSpacing: textStyle.letterSpacing ?? get().letterSpacing,
+      textAlign: textStyle.textAlign ?? get().textAlign,
+      textOpacity: textStyle.textOpacity ?? get().textOpacity,
       bold: textStyle.bold ?? get().bold,
       italic: textStyle.italic ?? get().italic,
       bgEnabled: textStyle.bgEnabled ?? get().bgEnabled,
       bgColor: textStyle.bgColor ?? get().bgColor,
       bgOpacity: textStyle.bgOpacity ?? get().bgOpacity,
+      boxBorderWidth: textStyle.boxBorderWidth ?? get().boxBorderWidth,
       borderWidth: textStyle.borderWidth ?? get().borderWidth,
       borderColor: textStyle.borderColor ?? get().borderColor,
       blurStrength: defaults.blurStrength ?? get().blurStrength,

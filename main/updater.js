@@ -47,7 +47,7 @@ const init = (win) => {
     send({ type: "disabled", reason: "missing-module" });
     return;
   }
-  au.autoDownload = false;
+  au.autoDownload = true;
   au.autoInstallOnAppQuit = false;
   au.logger = null;
 

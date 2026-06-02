@@ -209,8 +209,10 @@ def resolve_max_workers(hw_encoder, job_count):
 
     cpus = os.cpu_count() or 4
     if hw_encoder:
-        # One GPU encode at a time avoids driver resets that can crash Electron
-        return max(1, min(1, job_count))
+        if hw_encoder == "h264_mf":
+            # MediaFoundation is the least predictable under parallel load.
+            return max(1, min(1, job_count))
+        return max(1, min(2, job_count))
     return max(1, min(max(2, cpus - 1), 6, job_count))
 
 
@@ -233,6 +235,10 @@ def job_video_info(job, input_path):
 
 def find_ffmpeg():
     """Locate ffmpeg binary - bundled or system PATH."""
+    env_ffmpeg = os.environ.get("BERU_FFMPEG")
+    if env_ffmpeg:
+        return env_ffmpeg
+
     script_dir = Path(__file__).resolve().parent  # python/
     project_root = script_dir.parent               # beru/
     resources_root = script_dir.parent             # resources/ (when packaged: resources/python/processor.py)
@@ -248,6 +254,28 @@ def find_ffmpeg():
         if c and c.exists():
             return str(c)
     return "ffmpeg"
+
+
+def find_ffprobe(ffmpeg_bin):
+    """Locate ffprobe alongside ffmpeg, bundled resources, or system PATH."""
+    env_ffprobe = os.environ.get("BERU_FFPROBE")
+    if env_ffprobe:
+        return env_ffprobe
+
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    candidates = [
+        Path(ffmpeg_bin).with_name("ffprobe.exe"),
+        Path(ffmpeg_bin).parent / "ffprobe.exe",
+        project_root / "src-tauri" / "bin" / "ffprobe.exe",
+        project_root / "bin" / "ffprobe.exe",
+        Path(shutil.which("ffprobe.exe") or ""),
+        Path(shutil.which("ffprobe") or ""),
+    ]
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return str(candidate)
+    return ffmpeg_bin.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
 
 
 def _parse_frame_rate(rate_str):
@@ -365,7 +393,9 @@ def build_drawtext(op):
     else:
         x_expr = str(x)
 
-    font_key, font_val, _is_file = _resolve_font(font_family)
+    font_key, font_val, is_fontfile = _resolve_font(font_family)
+    if is_fontfile:
+        font_val = f"'{font_val}'"
 
     # Text opacity via fontcolor@alpha (ffmpeg drawtext supports this)
     text_opacity = op.get("text_opacity", 1)
@@ -446,6 +476,74 @@ def _build_enable_clause(op):
     return f"enable=between(t\\,{s:.6f}\\,{e:.6f})"
 
 
+VALID_DELOGO_METHODS = frozenset({
+    "temporal", "mirror", "mosaic", "inpaint", "blur", "fill",
+})
+
+
+def _coerce_int(val, default, lo, hi):
+    if val is None:
+        v = default
+    else:
+        try:
+            v = int(val)
+        except (TypeError, ValueError):
+            v = default
+    return max(lo, min(hi, v))
+
+
+def _normalize_operation(op):
+    """Accept snake_case or camelCase keys from jobs / hand-edited JSON."""
+    if not isinstance(op, dict):
+        return op
+    out = dict(op)
+    mode = (out.get("mode") or "").lower()
+    if mode != "delogo":
+        return out
+
+    method = out.get("delogo_method") or out.get("delogoMethod") or "temporal"
+    method = str(method).lower()
+    out["delogo_method"] = method if method in VALID_DELOGO_METHODS else "temporal"
+
+    pairs = (
+        ("temporal_radius", "temporalRadius"),
+        ("mosaic_size", "mosaicSize"),
+        ("mirror_side", "mirrorSide"),
+        ("edge_feather", "edgeFeather"),
+        ("blur_strength", "blurStrength"),
+        ("delogo_fill_color", "delogoFillColor"),
+        ("delogo_fill_opacity", "delogoFillOpacity"),
+        ("start_time", "startTime"),
+        ("end_time", "endTime"),
+    )
+    for snake, camel in pairs:
+        if out.get(snake) is None and camel in out:
+            out[snake] = out[camel]
+
+    return out
+
+
+def _fit_delogo_rect(x, y, w, h, video_w, video_h):
+    """Clamp logo box to frame; FFmpeg delogo prefers even width/height."""
+    x = max(0, min(int(x), max(0, video_w - 2)))
+    y = max(0, min(int(y), max(0, video_h - 2)))
+    w = max(2, min(int(w), video_w - x))
+    h = max(2, min(int(h), video_h - y))
+    if w % 2:
+        w -= 1
+    if h % 2:
+        h -= 1
+    if w < 2:
+        w = 2
+    if h < 2:
+        h = 2
+    if x + w > video_w:
+        x = max(0, video_w - w)
+    if y + h > video_h:
+        y = max(0, video_h - h)
+    return x, y, w, h
+
+
 def _build_padded_region(x, y, w, h, video_w, video_h, pad):
     """Return (x0, y0, rw, rh) for a feather/context pad around the logo box."""
     x0 = max(0, x - pad)
@@ -465,19 +563,19 @@ def _build_cleanup_filter(method, op, rw, rh):
     Mirror and inpaint are handled separately on the full frame.
     """
     if method == "temporal":
-        radius = max(1, min(15, int(op.get("temporal_radius", 3) or 3)))
+        radius = _coerce_int(op.get("temporal_radius"), 3, 1, 15)
         # Median across neighboring frames removes static logos on motion.
         return f"tmedian=radius={radius}:planes=0x7"
 
     if method == "mosaic":
-        block = max(2, min(80, int(op.get("mosaic_size", 12) or 12)))
+        block = _coerce_int(op.get("mosaic_size"), 12, 2, 80)
         return (
             f"scale=iw/{block}:ih/{block}:flags=neighbor,"
             f"scale={rw}:{rh}:flags=neighbor"
         )
 
     if method == "blur":
-        strength = int(op.get("blur_strength", 20) or 20)
+        strength = _coerce_int(op.get("blur_strength"), 20, 1, 100)
         luma = max(1, min(100, strength // 3))
         chroma = max(1, luma // 2)
         return f"boxblur=luma_radius={luma}:luma_power=1:chroma_radius={chroma}:chroma_power=1"
@@ -564,7 +662,11 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h):
     if w <= 0 or h <= 0:
         return None
 
+    x, y, w, h = _fit_delogo_rect(x, y, w, h, video_w, video_h)
+
     method = (op.get("delogo_method") or "temporal").lower()
+    if method not in VALID_DELOGO_METHODS:
+        method = "temporal"
     raw_feather = op.get("edge_feather")
     feather = max(0, min(40, int(raw_feather if raw_feather is not None else 6)))
     pad = max(2, feather)
@@ -641,18 +743,16 @@ def _region_to_pixels(region, video_w, video_h):
     if w <= 0 or h <= 0:
         return None
     if video_w > 0 and video_h > 0 and x <= 1 and y <= 1 and w <= 1 and h <= 1:
-        return {
-            "x": max(0, int(round(x * video_w))),
-            "y": max(0, int(round(y * video_h))),
-            "w": max(1, min(video_w, int(round(w * video_w)))),
-            "h": max(1, min(video_h, int(round(h * video_h)))),
-        }
-    return {
-        "x": max(0, int(x)),
-        "y": max(0, int(y)),
-        "w": max(1, int(w)),
-        "h": max(1, int(h)),
-    }
+        px = max(0, int(round(x * video_w)))
+        py = max(0, int(round(y * video_h)))
+        pw = max(1, min(video_w - px, int(round(w * video_w))))
+        ph = max(1, min(video_h - py, int(round(h * video_h))))
+        return {"x": px, "y": py, "w": pw, "h": ph}
+    px = max(0, int(x))
+    py = max(0, int(y))
+    pw = max(1, min(video_w - px, int(w))) if video_w > 0 else max(1, int(w))
+    ph = max(1, min(video_h - py, int(h))) if video_h > 0 else max(1, int(h))
+    return {"x": px, "y": py, "w": pw, "h": ph}
 
 
 def build_filter_complex(operations, video_w, video_h):
@@ -672,7 +772,8 @@ def build_filter_complex(operations, video_w, video_h):
             image_paths.append(path)
         return image_index[path]
 
-    for op in operations:
+    for raw_op in operations:
+        op = _normalize_operation(raw_op)
         mode = op.get("mode")
         region = _region_to_pixels(op.get("region", {}), video_w, video_h)
         if not region:
@@ -880,7 +981,7 @@ def _process_one(idx, job, ffmpeg_path):
     if not operations:
         logger.debug("Job %d: no operations, copying stream", idx)
         ok, err = _run_ffmpeg(
-            [ffmpeg_path, "-y", "-i", input_path, "-c", "copy", output_path],
+            [ffmpeg_path, "-y", "-loglevel", "error", "-i", input_path, "-c", "copy", output_path],
             timeout_sec=300
         )
         if ok:
@@ -895,6 +996,7 @@ def _process_one(idx, job, ffmpeg_path):
     info = job_video_info(job, input_path)
     vw = int(info.get("width") or 0)
     vh = int(info.get("height") or 0)
+    duration = float(info.get("duration") or 0)
     if vw <= 0 or vh <= 0:
         err = (
             "No se pudo leer la resolución del video. "
@@ -905,6 +1007,15 @@ def _process_one(idx, job, ffmpeg_path):
         return {"index": job_id, "status": "failed"}
 
     filter_complex, output_label, image_paths = build_filter_complex(operations, vw, vh)
+
+    if not filter_complex and operations:
+        err = (
+            "Las operaciones no generaron un filtro válido. "
+            "Comprueba que cada región tenga tamaño suficiente y esté dentro del video."
+        )
+        logger.error("Job %d: empty filter graph with %d ops", idx, len(operations))
+        _safe_print(json.dumps({"type": "error", "index": job_id, "error": err}))
+        return {"index": job_id, "status": "failed"}
 
     src_pix_fmt = job.get("pix_fmt") or info.get("pix_fmt", "yuv420p")
     src_frame_rate = job.get("frame_rate") or info.get("frame_rate", 0)
@@ -995,20 +1106,22 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None):
             elif status == "failed":
                 failed += 1
 
-            idx = result.get("index", -1)
-            if 0 <= idx < len(jobs):
-                fname = os.path.basename(jobs[idx].get("input_path", "")) or "?"
+            job_pos = getattr(fut, "_beru_job_pos", -1)
+            if 0 <= job_pos < len(jobs):
+                fname = os.path.basename(jobs[job_pos].get("input_path", "")) or "?"
             else:
                 fname = "?"
-            _safe_print(json.dumps({
+            progress_msg = {
                 "type": "progress", "current": completed, "total": total,
                 "file": fname, "succeeded": succeeded, "failed": failed
-            }))
+            }
+        _safe_print(json.dumps(progress_msg))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         for i, job in enumerate(jobs):
             f = executor.submit(_process_one, i, job, ffmpeg_path)
+            f._beru_job_pos = i
             f.add_done_callback(_on_done)
             futures.append(f)
         concurrent.futures.wait(futures)
@@ -1029,30 +1142,14 @@ def main():
     _jobs_file = sys.argv[1]
 
     ffmpeg_bin = find_ffmpeg()
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
-    ffprobe_candidates = [
-        Path(ffmpeg_bin).with_name("ffprobe.exe"),
-        Path(ffmpeg_bin).parent / "ffprobe.exe",
-        project_root / "src-tauri" / "bin" / "ffprobe.exe",
-        project_root / "bin" / "ffprobe.exe",
-        Path(shutil.which("ffprobe.exe") or ""),
-        Path(shutil.which("ffprobe") or ""),
-    ]
-    ffprobe_bin = ""
-    for candidate in ffprobe_candidates:
-        if candidate and candidate.exists():
-            ffprobe_bin = str(candidate)
-            break
-    if not ffprobe_bin:
-        ffprobe_bin = ffmpeg_bin.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
+    ffprobe_bin = find_ffprobe(ffmpeg_bin)
     if not os.path.exists(ffmpeg_bin):
         logger.error("ffmpeg not found at %s", ffmpeg_bin)
         print(json.dumps({"type": "error", "error": f"ffmpeg not found at {ffmpeg_bin}"}))
         sys.exit(1)
 
     FFMPEG = ffmpeg_bin
-    FFPROBE = ffprobe_bin if os.path.exists(ffprobe_bin) else ffprobe_bin.replace("ffprobe.exe", "ffprobe")
+    FFPROBE = ffprobe_bin
     logger.info("Using ffmpeg: %s", FFMPEG)
     logger.info("Using ffprobe: %s", FFPROBE)
 

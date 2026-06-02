@@ -6,6 +6,7 @@ import os from "os";
 import { fileURLToPath } from "url";
 import { randomBytes } from "crypto";
 import * as updater from "./updater.js";
+import { probeVideoFile } from "./videoProbe.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -33,61 +34,10 @@ function getFfmpegPath() {
 }
 
 function probeVideo(filePath) {
-  return new Promise((resolve) => {
-    const ffprobePath = getFfprobePath();
-    const empty = { exists: true, width: 0, height: 0, duration: 0, videoCodec: "", pixFmt: "yuv420p", frameRate: 0, audioCodec: "" };
-    if (!fs.existsSync(ffprobePath)) return resolve(empty);
-
-    const proc = spawn(ffprobePath, [
-      "-v", "quiet", "-print_format", "json",
-      "-show_format", "-show_streams", filePath,
-    ]);
-    let stdout = "";
-    let settled = false;
-    let killTimer = null;
-
-    const finish = (data) => {
-      if (settled) return;
-      settled = true;
-      if (killTimer) clearTimeout(killTimer);
-      try { proc.kill(); } catch {}
-      resolve(data);
-    };
-
-    proc.stdout.on("data", (d) => (stdout += d));
-    proc.on("close", (code) => {
-      if (code !== 0) return finish({ ...empty });
-      try {
-        const info = JSON.parse(stdout);
-        const videoStream = info.streams.find((s) => s.codec_type === "video");
-        const audioStream = info.streams.find((s) => s.codec_type === "audio");
-        const parseFrameRate = (rateStr) => {
-          if (!rateStr) return 0;
-          try {
-            if (rateStr.includes("/")) {
-              const [num, den] = rateStr.split("/");
-              return den !== "0" ? parseFloat(num) / parseFloat(den) : 0;
-            }
-            return parseFloat(rateStr) || 0;
-          } catch { return 0; }
-        };
-        finish({
-          exists: true,
-          width: videoStream ? videoStream.width : 0,
-          height: videoStream ? videoStream.height : 0,
-          duration: parseFloat(info.format?.duration) || 0,
-          videoCodec: videoStream?.codec_name || "",
-          pixFmt: videoStream?.pix_fmt || "yuv420p",
-          frameRate: parseFrameRate(videoStream?.r_frame_rate || videoStream?.avg_frame_rate || ""),
-          audioCodec: audioStream?.codec_name || "",
-        });
-      } catch (e) {
-        console.error("[beru] ffprobe JSON parse failed:", e.message);
-        finish({ ...empty });
-      }
-    });
-    proc.on("error", () => finish({ ...empty }));
-    killTimer = setTimeout(() => finish({ ...empty }), 5000);
+  return probeVideoFile(filePath, {
+    ffprobePath: getFfprobePath(),
+    ffmpegPath: getFfmpegPath(),
+    timeoutMs: 5000,
   });
 }
 
@@ -159,12 +109,17 @@ ipcMain.handle("dialog:openExcel", async () => {
 });
 
 ipcMain.handle("dialog:selectOutputDir", async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
-    title: "Seleccionar carpeta de salida",
-    properties: ["openDirectory", "createDirectory"],
-  });
-  if (canceled) return null;
-  return filePaths[0];
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: "Seleccionar carpeta de salida",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (canceled || !filePaths || filePaths.length === 0) return null;
+    return filePaths[0];
+  } catch (err) {
+    console.error("[beru] Error opening output directory dialog:", err);
+    return null;
+  }
 });
 
 ipcMain.handle("fs:getVideoInfo", async (_event, filePath) => {

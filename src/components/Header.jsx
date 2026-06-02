@@ -132,8 +132,20 @@ export default function Header() {
   };
 
   const handleSelectOutput = async () => {
-    const dir = await api?.selectOutputDir();
-    if (dir) store.setOutputDir(dir);
+    if (!api) {
+      console.error("[beru] API not available");
+      return;
+    }
+    try {
+      const dir = await api.selectOutputDir();
+      if (dir) {
+        store.setOutputDir(dir);
+      } else {
+        console.log("[beru] Output directory selection canceled or returned null");
+      }
+    } catch (err) {
+      console.error("[beru] Error selecting output directory:", err);
+    }
   };
 
   const handleAddVideos = async () => {

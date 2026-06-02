@@ -69,6 +69,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!api?.checkForUpdates) return;
+    const timer = setTimeout(() => { store.checkForUpdates(); }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     return () => {
       blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
       blobUrlsRef.current = [];

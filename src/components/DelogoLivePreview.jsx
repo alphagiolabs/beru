@@ -95,27 +95,53 @@ function renderMosaic(ctx, video, region, screen, blockSize) {
   ctx.restore();
 }
 
+function mirrorSampleRect(sx, sy, sw, sh, vw, vh, side) {
+  const s = (side || "right").toLowerCase();
+  if (s === "right") {
+    if (sx + sw + sw <= vw) return { srcX: sx + sw, srcY: sy, cw: sw, ch: sh, flipX: true };
+    if (sx >= sw) return { srcX: sx - sw, srcY: sy, cw: sw, ch: sh, flipX: true };
+    const cw = Math.max(1, Math.min(sw, vw - (sx + sw)));
+    return { srcX: Math.max(0, sx + sw), srcY: sy, cw, ch: sh, flipX: true, scale: true };
+  }
+  if (s === "left") {
+    if (sx >= sw) return { srcX: sx - sw, srcY: sy, cw: sw, ch: sh, flipX: true };
+    if (sx + sw + sw <= vw) return { srcX: sx + sw, srcY: sy, cw: sw, ch: sh, flipX: true };
+    const cw = Math.max(1, Math.min(sw, sx));
+    return { srcX: Math.max(0, sx - cw), srcY: sy, cw, ch: sh, flipX: true, scale: true };
+  }
+  if (s === "bottom") {
+    if (sy + sh + sh <= vh) return { srcX: sx, srcY: sy + sh, cw: sw, ch: sh, flipX: false };
+    if (sy >= sh) return { srcX: sx, srcY: sy - sh, cw: sw, ch: sh, flipX: false };
+    const ch = Math.max(1, Math.min(sh, vh - (sy + sh)));
+    return { srcX: sx, srcY: Math.max(0, sy + sh), cw: sw, ch, flipX: false, scale: true };
+  }
+  if (sy >= sh) return { srcX: sx, srcY: sy - sh, cw: sw, ch: sh, flipX: false };
+  if (sy + sh + sh <= vh) return { srcX: sx, srcY: sy + sh, cw: sw, ch: sh, flipX: false };
+  const ch = Math.max(1, Math.min(sh, sy));
+  return { srcX: sx, srcY: Math.max(0, sy - ch), cw: sw, ch, flipX: false, scale: true };
+}
+
 function renderMirror(ctx, video, region, screen, side) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
-  let srcX = sx;
-  let srcY = sy;
-  const flipX = side === "right" || side === "left";
-  if (side === "right") srcX = sx + sw;
-  else if (side === "left") srcX = sx - sw;
-  else if (side === "bottom") srcY = sy + sh;
-  else if (side === "top") srcY = sy - sh;
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const sample = mirrorSampleRect(sx, sy, sw, sh, vw, vh, side);
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.clearRect(0, 0, screen.w, screen.h);
-  if (flipX) {
+  if (sample.flipX) {
     ctx.translate(screen.w, 0);
     ctx.scale(-1, 1);
   } else {
     ctx.translate(0, screen.h);
     ctx.scale(1, -1);
   }
-  ctx.drawImage(video, srcX, srcY, sw, sh, 0, 0, screen.w, screen.h);
+  ctx.drawImage(
+    video,
+    sample.srcX, sample.srcY, sample.cw, sample.ch,
+    0, 0, screen.w, screen.h,
+  );
   ctx.restore();
 }
 

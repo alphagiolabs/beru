@@ -147,7 +147,7 @@ export function createOperation(overrides = {}) {
     mode: "blur",
     region: null,
     blurStrength: 20,
-    delogoMethod: "inpaint",
+    delogoMethod: "temporal",
     delogoFillColor: "black",
     delogoFillOpacity: 1,
     startTime: null,
