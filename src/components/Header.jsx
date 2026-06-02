@@ -440,9 +440,9 @@ export default function Header() {
         </button>
 
         {batchSummary && (
-          <span className="text-[11px] ml-2" style={{ color: "var(--text-secondary)" }}>
-            {batchSummary.succeeded}/{batchSummary.total} ok
-            {batchSummary.failed > 0 && <span style={{ color: "var(--rose)" }}> · {batchSummary.failed} err</span>}
+          <span className="text-[11px] ml-2 inline-flex items-center gap-1 whitespace-nowrap flex-shrink-0" style={{ color: "var(--text-secondary)" }}>
+            <span>{batchSummary.succeeded}/{batchSummary.total} ok</span>
+            {batchSummary.failed > 0 && <span style={{ color: "var(--rose)" }}>· {batchSummary.failed} err</span>}
           </span>
         )}
       </div>

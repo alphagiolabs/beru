@@ -346,7 +346,7 @@ export default function VideoPreview() {
               label={tr.label}
             />
           );
-        })()}
+        })}
 
         {/* Batch: preview while drawing a new region */}
         {sidebarMode === "batch" && currentRegion && (() => {
