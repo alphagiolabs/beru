@@ -10,6 +10,7 @@ Outputs progress as JSON lines to stdout.
 """
 
 import json
+import re
 import platform
 import logging
 import logging.handlers
@@ -114,11 +115,20 @@ def setup_logging():
 
 logger = setup_logging()
 
-# Encode profiles: fast (batch throughput), balanced (default), quality (max fidelity, CPU)
+# Encode profiles: fast (batch throughput), balanced (default), quality (max fidelity)
 ENCODE_PROFILES = {
     "fast": {"crf": 26, "preset": "ultrafast", "hw_cq": 28, "nvenc_preset": "p1"},
     "balanced": {"crf": 23, "preset": "fast", "hw_cq": 23, "nvenc_preset": "p4"},
-    "quality": {"crf": 18, "preset": "medium", "hw_cq": None, "nvenc_preset": None},
+    "quality": {"crf": 18, "preset": "medium", "hw_cq": 18, "nvenc_preset": "p6"},
+}
+
+# Audio codecs that can be stream-copied into each container (no re-encode).
+_AUDIO_COPY_CODECS = {
+    ".mp4": frozenset({"aac", "mp3", "mp4a"}),
+    ".mov": frozenset({"aac", "mp3", "alac"}),
+    ".m4v": frozenset({"aac"}),
+    ".mkv": frozenset({"aac", "mp3", "opus", "flac", "vorbis", "eac3", "ac3"}),
+    ".avi": frozenset({"mp3", "ac3", "pcm_s16le", "pcm_s24le"}),
 }
 
 _HW_ENCODER_CACHE = None
@@ -159,10 +169,33 @@ def detect_hw_encoder(ffmpeg_path):
     return None
 
 
+def build_hwaccel_args(hw_encoder, has_video_filters=False):
+    """Hardware decode when there is no CPU filter graph (filters need system memory)."""
+    if not hw_encoder or has_video_filters or os.environ.get("BERU_HWACCEL", "1") == "0":
+        return []
+    return ["-hwaccel", "auto"]
+
+
+def build_filter_thread_args():
+    """Parallelize filter graph execution across CPU cores."""
+    cpus = os.cpu_count() or 4
+    n = max(1, min(cpus, 8))
+    return ["-filter_threads", str(n), "-filter_complex_threads", str(n)]
+
+
+def build_audio_args(output_path, src_audio_codec):
+    """Copy audio when the container supports the source codec; else AAC."""
+    ext = os.path.splitext(output_path)[1].lower()
+    codec = (src_audio_codec or "").lower()
+    if codec and codec in _AUDIO_COPY_CODECS.get(ext, frozenset()):
+        return ["-map", "0:a?", "-c:a", "copy"]
+    return ["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"]
+
+
 def build_encode_args(ffmpeg_path, profile_name, job, force_software=False):
     """Return ffmpeg video encode argument list for the given profile."""
     profile = ENCODE_PROFILES.get(profile_name, ENCODE_PROFILES["balanced"])
-    use_hw = profile_name != "quality" and not force_software
+    use_hw = not force_software and profile.get("hw_cq") is not None
     hw = detect_hw_encoder(ffmpeg_path) if use_hw else None
 
     if hw == "h264_nvenc":
@@ -523,6 +556,51 @@ def _normalize_operation(op):
     return out
 
 
+def _optimize_delogo_for_speed(op, video_w, video_h):
+    """Use inpaint instead of tmedian for full-duration static logos (much faster)."""
+    if (op.get("mode") or "").lower() != "delogo":
+        return op
+    method = (op.get("delogo_method") or "temporal").lower()
+    if method != "temporal":
+        return op
+
+    start = op.get("start_time", op.get("startTime"))
+    end = op.get("end_time", op.get("endTime"))
+    if start is not None or end is not None:
+        return op
+
+    radius = op.get("temporal_radius")
+    if radius is not None:
+        try:
+            if int(radius) != 3:
+                return op
+        except (TypeError, ValueError):
+            pass
+
+    region = op.get("region") or {}
+    rw = float(region.get("w", 0))
+    rh = float(region.get("h", 0))
+    if rw <= 0 or rh <= 0:
+        return op
+
+    if video_w > 0 and video_h > 0 and rw <= 1 and rh <= 1:
+        area_ratio = rw * rh
+    elif video_w > 0 and video_h > 0:
+        area_ratio = (rw * rh) / (video_w * video_h)
+    else:
+        area_ratio = 0.1
+
+    if area_ratio > 0.25:
+        return op
+
+    optimized = dict(op)
+    optimized["delogo_method"] = "inpaint"
+    logger.debug(
+        "delogo: temporal -> inpaint (%.1f%% frame, faster static path)", area_ratio * 100
+    )
+    return optimized
+
+
 def _fit_delogo_rect(x, y, w, h, video_w, video_h):
     """Clamp logo box to frame; FFmpeg delogo prefers even width/height."""
     x = max(0, min(int(x), max(0, video_w - 2)))
@@ -862,8 +940,7 @@ def build_filter_complex(operations, video_w, video_h):
     if n == 0:
         return None, None, []
 
-    filters.append(f"[tmp{n-1}]copy[out]")
-    return ";".join(filters), "[out]", image_paths
+    return ";".join(filters), f"[tmp{n - 1}]", image_paths
 
 
 MAX_RETRIES = 2
@@ -914,22 +991,46 @@ def _extract_error_line(stderr_text):
     return stderr_text.strip()[-400:]
 
 
-def _run_ffmpeg(cmd, timeout_sec=600):
+def _emit_job_progress(job_id, percent, speed):
+    """Per-video encode progress (0-100) for the renderer."""
+    if job_id is None:
+        return
+    _safe_print(json.dumps({
+        "type": "job_progress",
+        "index": job_id,
+        "percent": round(max(0.0, min(100.0, percent)), 1),
+        "speed": speed,
+    }))
+
+
+def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
     """Run ffmpeg with retry for transient failures."""
     last_error = None
     for attempt in range(MAX_RETRIES + 1):
         try:
             logger.debug("FFmpeg cmd: %s", " ".join(str(x) for x in cmd)[:500])
-            proc = subprocess.run(cmd, capture_output=True, timeout=timeout_sec)
-            if proc.returncode == 0:
+            t0 = time.perf_counter()
+            if job_id is not None and duration_sec > 0:
+                ok, err = _run_ffmpeg_with_progress(
+                    cmd, timeout_sec, job_id, duration_sec
+                )
+            else:
+                proc = subprocess.run(cmd, capture_output=True, timeout=timeout_sec)
+                ok = proc.returncode == 0
+                err = None if ok else _extract_error_line(
+                    proc.stderr.decode("utf-8", errors="replace")
+                )
+            elapsed = time.perf_counter() - t0
+            if ok:
+                logger.info("FFmpeg finished in %.1fs (job=%s)", elapsed, job_id)
                 return True, None
-            stderr = proc.stderr.decode("utf-8", errors="replace")
+            stderr = err or ""
             if _is_transient_error(stderr) and attempt < MAX_RETRIES:
                 logger.warning("Transient error, retry %d/%d: %s",
-                               attempt + 1, MAX_RETRIES, stderr[:150])
+                               attempt + 1, MAX_RETRIES, (stderr or "")[:150])
                 time.sleep(RETRY_DELAYS[attempt])
                 continue
-            return False, _extract_error_line(stderr)
+            return False, stderr if stderr else "Unknown error"
         except subprocess.TimeoutExpired:
             if attempt < MAX_RETRIES:
                 logger.warning("Timeout, retry %d/%d", attempt + 1, MAX_RETRIES)
@@ -943,6 +1044,50 @@ def _run_ffmpeg(cmd, timeout_sec=600):
                 continue
             return False, str(e)
     return False, str(last_error) if last_error else "Unknown error"
+
+
+def _run_ffmpeg_with_progress(cmd, timeout_sec, job_id, duration_sec):
+    """Run ffmpeg and parse stderr time= for per-job progress."""
+    time_re = re.compile(r"time=(\d+):(\d+):(\d+\.?\d*)")
+    speed_re = re.compile(r"speed=\s*([0-9.]+)x")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    stderr_lines = []
+    last_pct = -1.0
+    try:
+        for line in proc.stderr:
+            stderr_lines.append(line)
+            if _check_cancelled():
+                proc.kill()
+                proc.wait(timeout=5)
+                return False, "Cancelled"
+            m = time_re.search(line)
+            if not m:
+                continue
+            h, mi, sec = int(m.group(1)), int(m.group(2)), float(m.group(3))
+            cur = h * 3600 + mi * 60 + sec
+            pct = (cur / duration_sec) * 100.0 if duration_sec > 0 else 0.0
+            sm = speed_re.search(line)
+            speed = float(sm.group(1)) if sm else None
+            if pct - last_pct >= 1.0 or pct >= 99.0:
+                _emit_job_progress(job_id, pct, speed)
+                last_pct = pct
+        proc.wait(timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=5)
+        return False, f"Timeout after {timeout_sec}s"
+    stderr = "".join(stderr_lines)
+    if proc.returncode == 0:
+        _emit_job_progress(job_id, 100.0, None)
+        return True, None
+    return False, _extract_error_line(stderr)
 
 
 def _process_one(idx, job, ffmpeg_path):
@@ -976,9 +1121,9 @@ def _process_one(idx, job, ffmpeg_path):
         return {"index": job_id, "status": "failed"}
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    operations = job.get("operations", [])
+    raw_operations = job.get("operations", [])
 
-    if not operations:
+    if not raw_operations:
         logger.debug("Job %d: no operations, copying stream", idx)
         ok, err = _run_ffmpeg(
             [ffmpeg_path, "-y", "-loglevel", "error", "-i", input_path, "-c", "copy", output_path],
@@ -1006,6 +1151,11 @@ def _process_one(idx, job, ffmpeg_path):
         _safe_print(json.dumps({"type": "error", "index": job_id, "error": err}))
         return {"index": job_id, "status": "failed"}
 
+    operations = [
+        _optimize_delogo_for_speed(_normalize_operation(op), vw, vh)
+        for op in raw_operations
+    ]
+
     filter_complex, output_label, image_paths = build_filter_complex(operations, vw, vh)
 
     if not filter_complex and operations:
@@ -1021,41 +1171,59 @@ def _process_one(idx, job, ffmpeg_path):
     src_frame_rate = job.get("frame_rate") or info.get("frame_rate", 0)
     src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
+    hw_encoder = detect_hw_encoder(ffmpeg_path)
 
     def _build_cmd(force_software=False):
-        cmd = [ffmpeg_path, "-y", "-i", input_path]
+        loglevel = "info" if duration > 0 else "error"
+        cmd = [ffmpeg_path, "-y", "-loglevel", loglevel]
+        if not force_software:
+            cmd += build_hwaccel_args(hw_encoder, has_video_filters=bool(filter_complex))
+        cmd += ["-i", input_path]
         for img_path in image_paths:
-            cmd += ["-loop", "1", "-i", img_path]
+            if duration > 0:
+                cmd += ["-loop", "1", "-t", f"{duration:.3f}", "-i", img_path]
+            else:
+                cmd += ["-loop", "1", "-i", img_path]
         if filter_complex:
+            cmd += build_filter_thread_args()
             cmd += ["-filter_complex", filter_complex, "-map", output_label]
+        if image_paths:
+            cmd += ["-shortest"]
         cmd += build_encode_args(ffmpeg_path, encode_profile, job, force_software=force_software)
         if src_pix_fmt:
             cmd += ["-pix_fmt", src_pix_fmt]
         else:
             cmd += ["-pix_fmt", "yuv420p"]
-        if src_frame_rate and src_frame_rate > 0:
-            cmd += ["-r", str(src_frame_rate)]
-        out_ext = os.path.splitext(output_path)[1].lower()
-        aac_container_formats = {".mp4", ".mov", ".m4v"}
-        if src_audio_codec and src_audio_codec == "aac" and out_ext in aac_container_formats:
-            cmd += ["-map", "0:a?", "-c:a", "copy"]
-        else:
-            cmd += ["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"]
+        cmd += build_audio_args(output_path, src_audio_codec)
         cmd.append(output_path)
         return cmd
 
-    logger.info("Job %d: processing '%s' [%dx%d, %d ops, profile=%s]",
-                idx, fname, vw, vh, len(operations), encode_profile)
-    ok, err = _run_ffmpeg(_build_cmd(), timeout_sec=600)
+    logger.info(
+        "Job %d: processing '%s' [%dx%d, %d ops, profile=%s, encoder=%s]",
+        idx, fname, vw, vh, len(operations), encode_profile,
+        hw_encoder or "libx264",
+    )
+
+    # Dynamic timeout: base 5 mins + 2x video duration, min 10 mins, max 2 hours
+    estimated_timeout = max(600, min(7200, int(duration * 2 + 300)))
+
+    ok, err = _run_ffmpeg(
+        _build_cmd(), timeout_sec=estimated_timeout, job_id=job_id, duration_sec=duration,
+    )
 
     # GPU encode can fail (-22) or destabilize the display stack — retry on CPU
-    if not ok and encode_profile != "quality":
+    if not ok:
         hw = detect_hw_encoder(ffmpeg_path)
         if hw and err and ("nvenc" in err.lower() or "error code: -22" in err.lower()
                            or "amf" in err.lower() or "qsv" in err.lower()
-                           or "videotoolbox" in err.lower()):
-            logger.warning("Job %d: hardware encode failed, retrying with libx264", idx)
-            ok, err = _run_ffmpeg(_build_cmd(force_software=True), timeout_sec=600)
+                           or "videotoolbox" in err.lower() or "hwaccel" in err.lower()):
+            logger.warning("Job %d: hardware path failed, retrying with libx264", idx)
+            ok, err = _run_ffmpeg(
+                _build_cmd(force_software=True),
+                timeout_sec=estimated_timeout,
+                job_id=job_id,
+                duration_sec=duration,
+            )
 
     if ok:
         logger.info("Job %d: completed -> %s", idx, os.path.basename(output_path))

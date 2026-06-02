@@ -40,6 +40,11 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("process:progress", handler);
     return () => ipcRenderer.removeListener("process:progress", handler);
   },
+  onJobProgress: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("process:jobProgress", handler);
+    return () => ipcRenderer.removeListener("process:jobProgress", handler);
+  },
   onComplete: (cb) => {
     const handler = (_e, data) => cb(data);
     ipcRenderer.on("process:complete", handler);

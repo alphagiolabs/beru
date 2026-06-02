@@ -265,6 +265,7 @@ function dispatchProcessorLine(line) {
   try {
     const msg = JSON.parse(trimmed);
     if (msg.type === "progress") sendToRenderer("process:progress", msg);
+    else if (msg.type === "job_progress") sendToRenderer("process:jobProgress", msg);
     else if (msg.type === "complete") sendToRenderer("process:complete", msg);
     else if (msg.type === "error") sendToRenderer("process:jobError", msg);
     else if (msg.type === "summary") sendToRenderer("process:summary", msg);

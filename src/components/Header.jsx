@@ -153,11 +153,13 @@ export default function Header() {
     if (paths && paths.length > 0) await store.addVideos(paths, api);
   };
 
-  const handleProcessAll = () => {
+  const handleProcessAll = async () => {
     if (!api) return;
     store.setBatchSummary(null);
-    const jobs = queue.map((q, i) => store._buildJobFor(q, i)).filter(Boolean);
-    const missingDims = queue.filter((q) => !q.width || !q.height);
+    const queueForProcessing = queue.some((q) => !q.width || !q.height)
+      ? await store.refreshMissingVideoInfo(api)
+      : queue;
+    const missingDims = queueForProcessing.filter((q) => !q.width || !q.height);
     if (missingDims.length > 0) {
       const names = missingDims.slice(0, 3).map((q) => q.filename).join(", ");
       const more = missingDims.length > 3 ? ` (+${missingDims.length - 3})` : "";
@@ -166,6 +168,7 @@ export default function Header() {
         "Procesar puede fallar. ¿Reimportar los videos o continuar igual?"
       )) return;
     }
+    const jobs = queueForProcessing.map((q, i) => store._buildJobFor(q, i)).filter(Boolean);
     store.setProcessing(true);
     useEditorStore.setState({ progressTotal: jobs.length, progressDone: 0 });
 

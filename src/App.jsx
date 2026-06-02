@@ -34,6 +34,7 @@ export default function App() {
     store.loadRecents();
     const onLog = (e) => store.appendLog(e.detail);
     const onProgress = (e) => store.updateProcessingProgress(e.detail);
+    const onJobProgress = (e) => store.updateJobProgress(e.detail);
     const onComplete = (e) => store.markJobDone(e.detail);
     const onJobError = (e) => store.markJobError(e.detail);
     const onFinished = () => store.setProcessing(false);
@@ -46,6 +47,7 @@ export default function App() {
     };
     window.addEventListener("beru:log", onLog);
     window.addEventListener("beru:progress", onProgress);
+    window.addEventListener("beru:jobProgress", onJobProgress);
     window.addEventListener("beru:complete", onComplete);
     window.addEventListener("beru:jobError", onJobError);
     window.addEventListener("beru:finished", onFinished);
@@ -54,6 +56,7 @@ export default function App() {
     return () => {
       window.removeEventListener("beru:log", onLog);
       window.removeEventListener("beru:progress", onProgress);
+      window.removeEventListener("beru:jobProgress", onJobProgress);
       window.removeEventListener("beru:complete", onComplete);
       window.removeEventListener("beru:jobError", onJobError);
       window.removeEventListener("beru:finished", onFinished);

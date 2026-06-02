@@ -3,6 +3,8 @@ import useEditorStore from "../stores/useEditorStore";
 import useCanvas from "../hooks/useCanvas";
 import { regionToScreen, fmtTime } from "../utils/video-utils";
 import DelogoLivePreview from "./DelogoLivePreview";
+import TextOverlay from "./TextOverlay";
+import { getGlobalTextStyleFromState } from "../utils/text-style";
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Eye, EyeOff } from "lucide-react";
 
 const opModeColor = {
@@ -34,7 +36,16 @@ export default function VideoPreview() {
   const [showTimeline, setShowTimeline] = useState(true);
   const [draggingOp, setDraggingOp] = useState(null);
   const [dragStart, setDragStart] = useState(null);
+  const [, setLayoutTick] = useState(0);
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const ro = new ResizeObserver(() => setLayoutTick((t) => t + 1));
+    ro.observe(v);
+    return () => ro.disconnect();
+  }, [sel?.path]);
 
   const seekTo = useCallback((fraction) => {
     const v = videoRef.current;
@@ -242,40 +253,15 @@ export default function VideoPreview() {
               </div>
             );
           }
-          if (op.mode === "text" && op.text) {
-            const fontSize = Math.max(1, (op.fontSize || 24) * s.sy);
-            const bgOn = op.bgEnabled !== false;
-            const baseWeight = op.fontWeight ?? (op.bold ? 700 : 400);
-            const letterSpacing = (op.letterSpacing || 0) * s.sy;
-            const textOpacity = op.textOpacity ?? 1;
-            const align = op.textAlign || "left";
-            const boxPad = bgOn ? Math.max(2, (op.boxBorderWidth || 4) * s.sy) : 0;
+          if (op.mode === "text" && op.text && store.sidebarMode !== "batch") {
             return (
-              <div key={op.id} className="absolute pointer-events-none z-10"
-                style={{ left: s.x, top: s.y, width: s.w, height: s.h }}>
-                {bgOn && (
-                  <div style={{
-                    position: "absolute", inset: 0,
-                    background: op.bgColor || "black",
-                    opacity: op.bgOpacity ?? 0.65,
-                    borderRadius: `${Math.max(3, 6 * s.sy)}px`,
-                  }} />
-                )}
-                <div style={{
-                  position: "relative",
-                  color: op.fontColor || "white",
-                  opacity: textOpacity,
-                  fontSize: `${fontSize}px`,
-                  fontFamily: `"${op.fontFamily || "Arial"}", sans-serif`,
-                  fontWeight: baseWeight,
-                  fontStyle: op.italic ? "italic" : "normal",
-                  letterSpacing: `${letterSpacing}px`,
-                  textAlign: align,
-                  padding: `${boxPad}px`,
-                  whiteSpace: "pre-wrap",
-                  WebkitTextStroke: op.borderWidth > 0 ? `${op.borderWidth * s.sy}px ${op.borderColor || "black"}` : "none",
-                }}>{op.text}</div>
-              </div>
+              <TextOverlay
+                key={op.id}
+                screen={s}
+                text={op.text}
+                style={op}
+                showOutline={false}
+              />
             );
           }
           return null;
@@ -307,74 +293,54 @@ export default function VideoPreview() {
           );
         })()}
 
-        {/* Live text preview while configuring */}
+        {/* Live text preview while configuring (logo mode) */}
         {store.sidebarMode === "logo" && store.activeTool === "text" && store.currentRegion && store.textInput && (() => {
           const s = regionToScreen(store.currentRegion, videoRef.current);
           if (!s) return null;
-          const fontSize = Math.max(1, (store.textFontSize || 32) * s.sy);
-          const bgOn = store.bgEnabled !== false;
-          const baseWeight = store.fontWeight ?? (store.bold ? 700 : 400);
-          const letterSpacing = (store.letterSpacing || 0) * s.sy;
-          const textOpacity = store.textOpacity ?? 1;
-          const align = store.textAlign || "left";
-          const boxPad = bgOn ? Math.max(2, (store.boxBorderWidth || 4) * s.sy) : 0;
           return (
-            <div className="absolute pointer-events-none z-10"
-              style={{ left: s.x, top: s.y, width: s.w, height: s.h }}>
-              {bgOn && (
-                <div style={{
-                  position: "absolute", inset: 0,
-                  background: store.bgColor || "black",
-                  opacity: store.bgOpacity ?? 0.65,
-                  borderRadius: `${Math.max(3, 6 * s.sy)}px`,
-                }} />
-              )}
-              <div style={{
-                position: "relative",
-                color: store.textFontColor || "white",
-                opacity: textOpacity,
-                fontSize: `${fontSize}px`,
-                fontFamily: `"${store.fontFamily || "Arial"}", sans-serif`,
-                fontWeight: baseWeight,
-                fontStyle: store.italic ? "italic" : "normal",
-                letterSpacing: `${letterSpacing}px`,
-                textAlign: align,
-                padding: `${boxPad}px`,
-                whiteSpace: "pre-wrap",
-                WebkitTextStroke: store.borderWidth > 0 ? `${store.borderWidth * s.sy}px ${store.borderColor || "black"}` : "none",
-              }}>{store.textInput}</div>
-            </div>
+            <TextOverlay
+              screen={s}
+              text={store.textInput}
+              style={getGlobalTextStyleFromState(store)}
+              showOutline={false}
+            />
           );
         })()}
 
-        {/* Batch template region overlays */}
-        {store.sidebarMode === "batch" && store.templateRegions.map((tr) => {
-          const s = regionToScreen(tr.region, videoRef.current);
+        {/* Batch: live text preview per template region */}
+        {store.sidebarMode === "batch" && store.selectedIdx >= 0 && store.templateRegions.map((tr) => {
+          const payload = store.getBatchPreviewPayload(store.selectedIdx, tr.id);
+          if (!payload) return null;
+          const s = regionToScreen(payload.region, videoRef.current);
+          if (!s) return null;
+          const isSelected = store.selectedTemplateRegionId === tr.id;
+          return (
+            <TextOverlay
+              key={tr.id}
+              screen={s}
+              text={payload.text}
+              style={payload.style}
+              isFocused={isSelected}
+              showOutline
+              label={tr.label}
+            />
+          );
+        })()}
+
+        {/* Batch: preview while drawing a new region */}
+        {store.sidebarMode === "batch" && store.currentRegion && (() => {
+          const s = regionToScreen(store.currentRegion, videoRef.current);
           if (!s) return null;
           return (
-            <div key={tr.id} className="absolute pointer-events-none z-20"
-              style={{
-                left: s.x, top: s.y, width: s.w, height: s.h,
-                border: "2px solid rgba(168,85,247,0.85)",
-                background: "rgba(168,85,247,0.08)",
-                borderRadius: "3px",
-              }}>
-              <div style={{
-                position: "absolute", top: -18, left: 0,
-                background: "rgba(168,85,247,0.9)",
-                color: "white",
-                fontSize: "10px",
-                fontWeight: 600,
-                padding: "1px 6px",
-                borderRadius: "3px 3px 0 0",
-                whiteSpace: "nowrap",
-                letterSpacing: "0.5px",
-              }}>
-                {tr.label}
-              </div>
-            </div>
+            <TextOverlay
+              screen={s}
+              text="Texto de ejemplo"
+              style={getGlobalTextStyleFromState(store)}
+              isFocused
+              showOutline
+            />
           );
-        })}
+        })()}
 
         {/* Live preview of the in-progress delogo effect (under the selection handles) */}
         <DelogoLivePreview videoRef={videoRef} />

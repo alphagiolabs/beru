@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 const mockApi = {
   startProcessing: vi.fn(async () => ({ success: true })),
   removeRecent: vi.fn(async () => ({ success: true, recent: [] })),
+  getVideoInfoBatch: vi.fn(async () => []),
 };
 
 globalThis.window = { api: mockApi };
@@ -35,8 +36,10 @@ describe("useEditorStore logic regressions", () => {
   beforeEach(() => {
     mockApi.startProcessing.mockClear();
     mockApi.removeRecent.mockClear();
+    mockApi.getVideoInfoBatch.mockClear();
     mockApi.startProcessing.mockResolvedValue({ success: true });
     mockApi.removeRecent.mockResolvedValue({ success: true, recent: [] });
+    mockApi.getVideoInfoBatch.mockResolvedValue([]);
 
     useEditorStore.setState({
       queue: [],
@@ -83,6 +86,41 @@ describe("useEditorStore logic regressions", () => {
     expect(res.ok).toBe(true);
     expect(mockApi.startProcessing).toHaveBeenCalledTimes(1);
     expect(mockApi.startProcessing.mock.calls[0][0][0].id).toBe(1);
+  });
+
+  it("refreshes missing video dimensions before building jobs", async () => {
+    mockApi.getVideoInfoBatch.mockResolvedValueOnce([
+      {
+        width: 1280,
+        height: 720,
+        duration: 12.5,
+        videoCodec: "h264",
+        pixFmt: "yuv420p",
+        frameRate: 30,
+        audioCodec: "aac",
+      },
+    ]);
+    useEditorStore.setState({
+      queue: [
+        queueItem({ path: "C:\\videos\\missing.mp4", filename: "missing.mp4", width: 0, height: 0 }),
+        queueItem({ path: "C:\\videos\\ready.mp4", filename: "ready.mp4", width: 1920, height: 1080 }),
+      ],
+    });
+
+    const refreshed = await useEditorStore.getState().refreshMissingVideoInfo(mockApi);
+    const job = useEditorStore.getState()._buildJobFor(refreshed[0], 0);
+
+    expect(mockApi.getVideoInfoBatch).toHaveBeenCalledWith(["C:\\videos\\missing.mp4"]);
+    expect(refreshed[0]).toEqual(expect.objectContaining({
+      width: 1280,
+      height: 720,
+      duration: 12.5,
+      videoCodec: "h264",
+      frameRate: 30,
+      audioCodec: "aac",
+    }));
+    expect(refreshed[1].width).toBe(1920);
+    expect(job).toEqual(expect.objectContaining({ width: 1280, height: 720 }));
   });
 
   it("reapplies Excel rows using advanced text style defaults", () => {
@@ -151,6 +189,93 @@ describe("useEditorStore logic regressions", () => {
       textOpacity: 0.4,
       boxBorderWidth: 12,
     }));
+  });
+
+  it("getBatchPreviewPayload returns Excel text without a text operation", () => {
+    useEditorStore.setState({
+      queue: [queueItem()],
+      templateRegions: [
+        {
+          id: "region-1",
+          label: "TEXT_1",
+          region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 },
+          style: { fontSize: 48, fontColor: "#ff0000" },
+        },
+      ],
+      excelRows: [{ id: "sample", TEXT_1: "Desde Excel" }],
+      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
+      sidebarMode: "batch",
+    });
+
+    const payload = useEditorStore.getState().getBatchPreviewPayload(0, "region-1");
+
+    expect(payload.text).toBe("Desde Excel");
+    expect(payload.style.fontSize).toBe(48);
+    expect(payload.style.fontColor).toBe("#ff0000");
+  });
+
+  it("patchBatchTextStyle updates template region style and matching ops in the queue", () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      selectedTemplateRegionId: "region-1",
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region, style: { fontSize: 32 } }],
+      queue: [
+        queueItem({
+          operations: [
+            {
+              id: "op-1",
+              mode: "text",
+              region: { ...region },
+              text: "A",
+              fontSize: 32,
+              fontColor: "white",
+            },
+          ],
+        }),
+        queueItem({
+          path: "C:\\videos\\b.mp4",
+          filename: "b.mp4",
+          operations: [
+            {
+              id: "op-2",
+              mode: "text",
+              region: { ...region },
+              text: "B",
+              fontSize: 32,
+              fontColor: "white",
+            },
+          ],
+        }),
+      ],
+    });
+
+    useEditorStore.getState().patchBatchTextStyle({ fontSize: 64, fontColor: "#00ff00" });
+
+    const state = useEditorStore.getState();
+    expect(state.textFontSize).toBe(64);
+    expect(state.textFontColor).toBe("#00ff00");
+    expect(state.templateRegions[0].style.fontSize).toBe(64);
+    expect(state.queue[0].operations[0].fontSize).toBe(64);
+    expect(state.queue[1].operations[0].fontColor).toBe("#00ff00");
+  });
+
+  it("persists per-region style in serialized projects", () => {
+    useEditorStore.setState({
+      templateRegions: [
+        {
+          id: 1,
+          label: "TEXT_1",
+          region: { x: 0, y: 0, w: 0.2, h: 0.1 },
+          style: { fontSize: 44, fontColor: "#abcdef" },
+        },
+      ],
+    });
+
+    const project = useEditorStore.getState().serializeProject();
+    expect(project.templateRegions[0].style).toEqual(
+      expect.objectContaining({ fontSize: 44, fontColor: "#abcdef" }),
+    );
   });
 
   it("does not duplicate recent projects after removing one through IPC", async () => {

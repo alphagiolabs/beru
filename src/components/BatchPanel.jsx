@@ -6,7 +6,7 @@ const api = window.api;
 
 export default function BatchPanel() {
   const store = useEditorStore();
-  const { templateRegions, selectedIdx, excelPath, excelMapping, excelRows } = store;
+  const { templateRegions, selectedIdx, excelPath, excelMapping, excelRows, selectedTemplateRegionId } = store;
   const report = store.getMatchReport();
 
   const handleImportExcel = async () => {
@@ -35,18 +35,41 @@ export default function BatchPanel() {
     <div className="space-y-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
       {/* Template regions */}
       <div className="cap-input-label">Regiones de texto ({templateRegions.length})</div>
-      {templateRegions.map((tr) => (
-        <div key={tr.id} className="flex items-center gap-2 p-2 rounded" style={{ background: "var(--bg-elevated)", border: "1px solid rgba(168,85,247,0.3)" }}>
-          <span className="flex-1 text-[11px] font-mono" style={{ color: "var(--purple)" }}>{tr.label}</span>
+      {templateRegions.length > 0 && (
+        <p className="text-[9px] leading-relaxed mb-1" style={{ color: "var(--text-dim)" }}>
+          Selecciona una región para previsualizar y editar su estilo en el video.
+        </p>
+      )}
+      {templateRegions.map((tr) => {
+        const isSelected = selectedTemplateRegionId === tr.id;
+        return (
+        <div
+          key={tr.id}
+          role="button"
+          tabIndex={0}
+          onClick={() => store.setSelectedTemplateRegion(tr.id)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); store.setSelectedTemplateRegion(tr.id); } }}
+          className="flex items-center gap-2 p-2 rounded cursor-pointer"
+          style={{
+            background: isSelected ? "rgba(168,85,247,0.15)" : "var(--bg-elevated)",
+            border: `1px solid ${isSelected ? "var(--purple)" : "rgba(168,85,247,0.3)"}`,
+            boxShadow: isSelected ? "0 0 0 1px rgba(168,85,247,0.35)" : "none",
+          }}
+        >
+          <span className="flex-1 text-[11px] font-mono" style={{ color: isSelected ? "var(--purple)" : "var(--text-secondary)" }}>{tr.label}</span>
           <span className="text-[10px] font-mono" style={{ color: "var(--text-dim)" }}>
             {(tr.region.x * 100).toFixed(1)}%,{(tr.region.y * 100).toFixed(1)}% {(tr.region.w * 100).toFixed(1)}%×{(tr.region.h * 100).toFixed(1)}%
           </span>
-          <button onClick={() => store.removeTemplateRegion(tr.id)}
-            className="p-0.5 rounded hover:bg-red-500/20" style={{ color: "var(--text-dim)" }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); store.removeTemplateRegion(tr.id); }}
+            className="p-0.5 rounded hover:bg-red-500/20"
+            style={{ color: "var(--text-dim)" }}
+          >
             <Trash2 size={11} />
           </button>
         </div>
-      ))}
+        );
+      })}
 
       <button onClick={store.addTemplateRegion} disabled={!store.currentRegion}
         className="cap-btn-secondary w-full text-[10px]">

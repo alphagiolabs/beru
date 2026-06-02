@@ -3,6 +3,7 @@ import { X, Play, Pause, SkipBack, SkipForward, Bold, Italic, Trash2, Plus, File
 import useEditorStore from "../stores/useEditorStore";
 import { regionToScreen, fmtTime, clampRegionToVideo } from "../utils/video-utils";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS } from "../utils/types";
+import TextOverlay from "./TextOverlay";
 
 function findOpForRegion(operations, region) {
   if (!region) return { op: null, opIdx: -1 };
@@ -50,6 +51,15 @@ export default function TableEditor() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
+  const [, setLayoutTick] = useState(0);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || !showTableEditor) return;
+    const ro = new ResizeObserver(() => setLayoutTick((t) => t + 1));
+    ro.observe(v);
+    return () => ro.disconnect();
+  }, [showTableEditor, focused.videoIdx]);
 
   useEffect(() => {
     if (showTableEditor) {
@@ -245,72 +255,25 @@ export default function TableEditor() {
                     className="max-h-full max-w-full block object-contain"
                     style={{ maxHeight: "calc(90vh - 380px)" }}
                   />
-                  {focusedVideo.operations.map((op) => {
-                    const s = regionToScreen(op.region, videoRef.current);
-                    if (!s || !op.text) return null;
-                    const isFocused = focusedOp && op.id === focusedOp.id;
-                    const fontSize = Math.max(1, (op.fontSize || 24) * s.sy);
-                    const bgOn = op.bgEnabled !== false;
-                    const baseWeight = op.fontWeight ?? (op.bold ? 700 : 400);
-                    const letterSpacing = (op.letterSpacing || 0) * s.sy;
-                    const textOpacity = op.textOpacity ?? 1;
-                    const align = op.textAlign || "left";
-                    const boxPad = bgOn ? Math.max(2, (op.boxBorderWidth || 4) * s.sy) : 0;
+                  {templateRegions.map((tr) => {
+                    const payload = store.getBatchPreviewPayload(focused.videoIdx, tr.id);
+                    if (!payload) return null;
+                    const s = regionToScreen(payload.region, videoRef.current);
+                    if (!s) return null;
+                    const isCellFocused = focused.regionId === tr.id;
                     return (
-                      <div
-                        key={op.id}
-                        className="absolute pointer-events-none"
-                        style={{
-                          left: s.x, top: s.y, width: s.w, height: s.h,
-                          outline: isFocused ? "2px solid var(--accent)" : "1px dashed rgba(168,85,247,0.4)",
-                          outlineOffset: "1px",
-                        }}
-                      >
-                        {bgOn && (
-                          <div style={{
-                            position: "absolute", inset: 0,
-                            background: op.bgColor || "black",
-                            opacity: op.bgOpacity ?? 0.65,
-                            borderRadius: `${Math.max(3, 6 * s.sy)}px`,
-                          }} />
-                        )}
-                        <div style={{
-                          position: "relative",
-                          color: op.fontColor || "white",
-                          opacity: textOpacity,
-                          fontSize: `${fontSize}px`,
-                          fontFamily: `"${op.fontFamily || "Arial"}", sans-serif`,
-                          fontWeight: baseWeight,
-                          fontStyle: op.italic ? "italic" : "normal",
-                          letterSpacing: `${letterSpacing}px`,
-                          textAlign: align,
-                          padding: `${boxPad}px`,
-                          whiteSpace: "pre-wrap",
-                          WebkitTextStroke: op.borderWidth > 0 ? `${op.borderWidth * s.sy}px ${op.borderColor || "black"}` : "none",
-                        }}>{op.text}</div>
-                      </div>
+                      <TextOverlay
+                        key={tr.id}
+                        screen={s}
+                        text={payload.text}
+                        style={isCellFocused && focusedOp ? focusedOp : payload.style}
+                        isFocused={isCellFocused}
+                        showOutline
+                        label={isCellFocused && !payload.text ? `${tr.label} (vacío)` : undefined}
+                        dimmed={!isCellFocused}
+                      />
                     );
                   })}
-                  {/* Focused region outline (when no op yet) */}
-                  {!focusedOp && focusedRegion && (() => {
-                    const s = regionToScreen(focusedRegion.region, videoRef.current);
-                    if (!s) return null;
-                    return (
-                      <div className="absolute pointer-events-none" style={{
-                        left: s.x, top: s.y, width: s.w, height: s.h,
-                        outline: "2px dashed var(--accent)",
-                        background: "rgba(255,255,255,0.04)",
-                      }}>
-                        <div style={{
-                          position: "absolute", top: -18, left: 0,
-                          background: "var(--accent)", color: "var(--bg-app)",
-                          fontSize: "9px", fontWeight: 600,
-                          padding: "1px 6px", borderRadius: "3px 3px 0 0",
-                          whiteSpace: "nowrap",
-                        }}>{focusedRegion.label} (vacío)</div>
-                      </div>
-                    );
-                  })()}
                 </div>
               ) : (
                 <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Sin video</div>

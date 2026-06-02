@@ -3,6 +3,13 @@ import * as XLSX from "xlsx";
 import { createRegion, createOperation, createQueueItem, createPreset, uid, normalizeRegion, denormalizeRegion, ensureNormalized } from "../utils/types";
 import { stripExt, rowGet, clampRegionToVideo, isRegionUsable } from "../utils/video-utils";
 import { sanitizeOperation } from "../utils/delogo-ops";
+import {
+  getGlobalTextStyleFromState,
+  mergeTextStyles,
+  patchToGlobalState,
+  pickTextStyle,
+  regionsMatch,
+} from "../utils/text-style";
 
 const MAX_UNDO_STACK = 50;
 
@@ -78,6 +85,7 @@ const useEditorStore = create((set, get) => ({
   // Template / batch
   templateIdx: -1,
   templateRegions: [],
+  selectedTemplateRegionId: null,
   nextRegionLabel: 1,
 
   // Excel data + mapping
@@ -351,8 +359,14 @@ const useEditorStore = create((set, get) => ({
   addTemplateRegion: () => {
     const { currentRegion, templateRegions, nextRegionLabel } = get();
     if (!currentRegion || !isRegionUsable(currentRegion)) return;
+    const id = Date.now();
+    const style = getGlobalTextStyleFromState(get());
     set({
-      templateRegions: [...templateRegions, { id: Date.now(), region: { ...currentRegion }, label: `TEXT_${nextRegionLabel}` }],
+      templateRegions: [
+        ...templateRegions,
+        { id, region: { ...currentRegion }, label: `TEXT_${nextRegionLabel}`, style },
+      ],
+      selectedTemplateRegionId: id,
       nextRegionLabel: nextRegionLabel + 1,
       currentRegion: null,
     });
@@ -531,6 +545,89 @@ const useEditorStore = create((set, get) => ({
 
   /* ── Batch / Template ────────────────────────────────────────────── */
 
+  getGlobalTextStyle: () => getGlobalTextStyleFromState(get()),
+
+  getTemplateRegionStyle: (regionId) => {
+    const { templateRegions } = get();
+    const tr = templateRegions.find((r) => r.id === regionId);
+    return mergeTextStyles(getGlobalTextStyleFromState(get()), tr?.style);
+  },
+
+  getBatchPreviewText: (videoIdx, regionId) => {
+    const text = get().getCellTextForRegion(videoIdx, regionId);
+    if (text) return text;
+    const tr = get().templateRegions.find((r) => r.id === regionId);
+    return tr?.label || "Texto de ejemplo";
+  },
+
+  getBatchPreviewPayload: (videoIdx, regionId) => {
+    const { queue, templateRegions } = get();
+    const tr = templateRegions.find((r) => r.id === regionId);
+    if (!tr) return null;
+    const globalStyle = getGlobalTextStyleFromState(get());
+    const templateStyle = tr.style || {};
+    let opStyle = {};
+    if (videoIdx >= 0 && videoIdx < queue.length) {
+      const op = queue[videoIdx].operations.find(
+        (o) => o.mode === "text" && regionsMatch(o.region, tr.region),
+      );
+      if (op) opStyle = pickTextStyle(op);
+    }
+    return {
+      region: tr.region,
+      text: get().getBatchPreviewText(videoIdx, regionId),
+      style: mergeTextStyles(globalStyle, templateStyle, opStyle),
+    };
+  },
+
+  setSelectedTemplateRegion: (id) => {
+    const tr = get().templateRegions.find((r) => r.id === id);
+    const style = tr?.style ? mergeTextStyles(getGlobalTextStyleFromState(get()), tr.style) : null;
+    set({
+      selectedTemplateRegionId: id,
+      ...(style ? patchToGlobalState(style) : {}),
+    });
+  },
+
+  patchBatchTextStyle: (patch) => {
+    const opPatch = pickTextStyle(patch);
+    if (Object.keys(opPatch).length === 0) return;
+
+    const globalPatch = patchToGlobalState(opPatch);
+    const { sidebarMode, selectedTemplateRegionId, templateRegions, queue } = get();
+
+    const nextTemplateRegions = sidebarMode === "batch"
+      ? templateRegions.map((tr) =>
+          selectedTemplateRegionId == null || tr.id === selectedTemplateRegionId
+            ? { ...tr, style: mergeTextStyles(tr.style, opPatch) }
+            : tr,
+        )
+      : templateRegions;
+
+    let nextQueue = queue;
+    if (sidebarMode === "batch") {
+      const targets = selectedTemplateRegionId != null
+        ? templateRegions.filter((r) => r.id === selectedTemplateRegionId)
+        : templateRegions;
+      if (targets.length > 0) {
+        nextQueue = queue.map((item) => ({
+          ...item,
+          operations: item.operations.map((op) => {
+            if (op.mode !== "text") return op;
+            const tr = targets.find((t) => regionsMatch(op.region, t.region));
+            return tr ? { ...op, ...opPatch } : op;
+          }),
+        }));
+      }
+    }
+
+    set({
+      ...globalPatch,
+      templateRegions: nextTemplateRegions,
+      queue: nextQueue,
+    });
+  },
+
   applyToAll: () => {
     const { queue, selectedIdx } = get();
     if (selectedIdx < 0) return;
@@ -540,7 +637,7 @@ const useEditorStore = create((set, get) => ({
       if (i === selectedIdx) return item;
       return {
         ...item,
-        operations: sourceOps.map((op) => ({
+        operations: sourceOps.map((op) => sanitizeOperation({
           ...op,
           id: uid(),
           region: op.region ? { ...op.region } : null,
@@ -780,7 +877,10 @@ const useEditorStore = create((set, get) => ({
         );
         const colName = columns[tr.id];
         const textVal = colName ? rowGet(row, colName) : undefined;
-        const baseStyle = existingOp || { fontSize: textFontSize, fontColor: textFontColor, fontFamily, fontWeight, letterSpacing, textAlign, textOpacity, bold, italic, bgEnabled, bgColor, bgOpacity, boxBorderWidth, borderWidth, borderColor };
+        const baseStyle = existingOp || mergeTextStyles(
+          getGlobalTextStyleFromState(get()),
+          tr.style,
+        );
         return createOperation({
           mode: "text",
           region: { ...tr.region },
@@ -815,10 +915,10 @@ const useEditorStore = create((set, get) => ({
   /* ── Presets ────────────────────────────────────────────────────── */
 
   loadPreset: (preset) => {
-    set({
+    const stylePatch = {
       fontFamily: preset.fontFamily,
-      textFontSize: preset.fontSize,
-      textFontColor: preset.fontColor,
+      fontSize: preset.fontSize,
+      fontColor: preset.fontColor,
       bold: preset.bold,
       italic: preset.italic,
       bgEnabled: preset.bgEnabled,
@@ -826,7 +926,12 @@ const useEditorStore = create((set, get) => ({
       bgOpacity: preset.bgOpacity,
       borderWidth: preset.borderWidth,
       borderColor: preset.borderColor,
-    });
+    };
+    if (get().sidebarMode === "batch") {
+      get().patchBatchTextStyle(stylePatch);
+    } else {
+      set(patchToGlobalState(stylePatch));
+    }
   },
 
   deletePreset: (id) => {
@@ -1017,6 +1122,18 @@ const useEditorStore = create((set, get) => ({
     progressTotal: msg.total || get().progressTotal,
   }),
 
+  updateJobProgress: (msg) => set((s) => {
+    const idx = msg.index;
+    if (idx < 0 || idx >= s.queue.length) return {};
+    const updated = [...s.queue];
+    updated[idx] = {
+      ...updated[idx],
+      status: "processing",
+      progress: Math.round(msg.percent ?? updated[idx].progress ?? 0),
+    };
+    return { queue: updated };
+  }),
+
   markJobDone: (msg) => set((s) => {
     const idx = msg.index;
     if (idx < 0 || idx >= s.queue.length) return {};
@@ -1039,6 +1156,49 @@ const useEditorStore = create((set, get) => ({
       updated[idx] = { ...updated[idx], ...patch };
       return { queue: updated };
     });
+  },
+
+  refreshMissingVideoInfo: async (api) => {
+    const missing = get().queue.filter((item) => !item.width || !item.height);
+    if (missing.length === 0 || (!api?.getVideoInfoBatch && !api?.getVideoInfo)) {
+      return get().queue;
+    }
+
+    let infos = [];
+    try {
+      infos = api.getVideoInfoBatch
+        ? await api.getVideoInfoBatch(missing.map((item) => item.path))
+        : await Promise.all(missing.map((item) => api.getVideoInfo(item.path)));
+    } catch {
+      return get().queue;
+    }
+    if (!Array.isArray(infos)) infos = [];
+
+    const infoByPath = new Map(missing.map((item, i) => [item.path, infos[i] || {}]));
+    const current = get().queue;
+    const next = current.map((item) => {
+      if (item.width && item.height) return item;
+      const info = infoByPath.get(item.path);
+      const width = Number(info?.width || 0);
+      const height = Number(info?.height || 0);
+      if (width <= 0 || height <= 0) return item;
+      return {
+        ...item,
+        width,
+        height,
+        duration: Number(info.duration || item.duration || 0),
+        videoCodec: info.videoCodec || item.videoCodec || "",
+        pixFmt: info.pixFmt || item.pixFmt || "yuv420p",
+        frameRate: Number(info.frameRate || item.frameRate || 0),
+        audioCodec: info.audioCodec || item.audioCodec || "",
+      };
+    });
+
+    if (next.some((item, i) => item !== current[i])) {
+      set({ queue: next });
+      return next;
+    }
+    return current;
   },
 
   /* Build a single job object for a queue item, ready for FFmpeg. */
@@ -1103,9 +1263,13 @@ const useEditorStore = create((set, get) => ({
   /* Process a single video. Returns { ok, outputPath } or { ok: false, error }. */
   processSingle: async (videoIdx) => {
     const api = window.api;
-    const { queue, isProcessing } = get();
+    let { queue, isProcessing } = get();
     if (isProcessing) return { ok: false, error: "Ya hay un proceso en ejecución" };
     if (videoIdx < 0 || videoIdx >= queue.length) return { ok: false, error: "Video inválido" };
+    if (!queue[videoIdx].width || !queue[videoIdx].height) {
+      queue = await get().refreshMissingVideoInfo(api);
+      if (videoIdx < 0 || videoIdx >= queue.length) return { ok: false, error: "Video inválido" };
+    }
     const item = queue[videoIdx];
     const job = get()._buildJobFor(item, videoIdx);
     if (!job) return { ok: false, error: "No se pudo construir el job" };
@@ -1186,7 +1350,15 @@ const useEditorStore = create((set, get) => ({
     tempImagePath: val === "image" ? get().tempImagePath : "",
     tempImageDataUrl: val === "image" ? get().tempImageDataUrl : "",
   }),
-  setSidebarMode: (val) => set({ sidebarMode: val }),
+  setSidebarMode: (val) => {
+    if (val === "batch") {
+      const { templateRegions, selectedTemplateRegionId } = get();
+      if (templateRegions.length > 0 && selectedTemplateRegionId == null) {
+        get().setSelectedTemplateRegion(templateRegions[0].id);
+      }
+    }
+    set({ sidebarMode: val });
+  },
   setShowShortcuts: (val) => set({ showShortcuts: val }),
   setShowTableEditor: (val) => {
     if (!val && get().showTableEditor) {
@@ -1203,9 +1375,14 @@ const useEditorStore = create((set, get) => ({
     set((s) => {
       const cols = { ...s.excelMapping.columns };
       delete cols[id];
+      const remaining = s.templateRegions.filter((r) => r.id !== id);
       return {
-        templateRegions: s.templateRegions.filter((r) => r.id !== id),
+        templateRegions: remaining,
         excelMapping: { ...s.excelMapping, columns: cols },
+        selectedTemplateRegionId:
+          s.selectedTemplateRegionId === id
+            ? (remaining[0]?.id ?? null)
+            : s.selectedTemplateRegionId,
       };
     });
   },
@@ -1349,10 +1526,12 @@ const useEditorStore = create((set, get) => ({
           id: r.id,
           label: r.label,
           region: ensureNormalized(r.region),
+          style: r.style ? pickTextStyle(r.style) : undefined,
         }))
       : [];
     set({
       templateRegions,
+      selectedTemplateRegionId: templateRegions[0]?.id ?? null,
       currentRegion: null,
       templateIdx: -1,
       textInput: textStyle.textInput ?? get().textInput,

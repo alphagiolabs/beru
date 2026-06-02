@@ -7,6 +7,9 @@ export default function useProcessing(api) {
       api.onProgress((msg) => {
         window.dispatchEvent(new CustomEvent("beru:progress", { detail: msg }));
       }),
+      api.onJobProgress?.((msg) => {
+        window.dispatchEvent(new CustomEvent("beru:jobProgress", { detail: msg }));
+      }),
       api.onComplete((msg) => {
         window.dispatchEvent(new CustomEvent("beru:complete", { detail: msg }));
       }),
