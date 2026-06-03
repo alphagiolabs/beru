@@ -1,0 +1,75 @@
+import { ipcMain, shell, dialog } from "electron";
+import fs from "fs";
+import path from "path";
+import { getMainWindow } from "../shared-state.js";
+
+const IMAGE_MIMES = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+};
+
+export function registerFileHandlers(pathSecurity) {
+  ipcMain.handle("fs:readExcel", async (_event, filePath) => {
+    const check = pathSecurity.validateReadableFile(filePath, "excel");
+    if (!check.ok) return { error: check.error };
+    try {
+      const buffer = await fs.promises.readFile(check.resolvedPath);
+      return { data: buffer.toString("base64"), name: path.basename(check.resolvedPath) };
+    } catch (e) {
+      return { error: e.message };
+    }
+  });
+
+  ipcMain.handle("image:read", async (_event, imagePath) => {
+    const check = pathSecurity.validateReadableFile(imagePath, "image");
+    if (!check.ok) return { success: false, error: check.error };
+    const ext = path.extname(check.resolvedPath).toLowerCase();
+    const mime = IMAGE_MIMES[ext];
+    if (!mime) {
+      return { success: false, error: `Formato no soportado: ${ext}` };
+    }
+    try {
+      const buf = fs.readFileSync(check.resolvedPath);
+      const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
+      return { success: true, dataUrl, size: buf.length, mime };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle("image:pick", async () => {
+    const win = getMainWindow();
+    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      title: "Elegir imagen",
+      properties: ["openFile"],
+      filters: [{ name: "Imágenes", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],
+    });
+    if (canceled || !filePaths || filePaths.length === 0) return { success: false, canceled: true };
+    pathSecurity.registerAllowedPath(filePaths[0]);
+    return { success: true, path: filePaths[0] };
+  });
+
+  ipcMain.handle("shell:openPath", async (_event, filePath) => {
+    const check = pathSecurity.validateShellPath(filePath);
+    if (!check.ok) return { success: false, error: check.error };
+    filePath = check.resolvedPath;
+    if (!filePath) return { success: false, error: "No path provided" };
+    if (!fs.existsSync(filePath)) {
+      return { success: false, error: "Archivo no existe" };
+    }
+    const result = await shell.openPath(filePath);
+    if (result) return { success: false, error: result };
+    return { success: true };
+  });
+
+  ipcMain.handle("shell:showItemInFolder", async (_event, filePath) => {
+    const check = pathSecurity.validateShellPath(filePath);
+    if (!check.ok) return { success: false, error: check.error };
+    shell.showItemInFolder(check.resolvedPath);
+    return { success: true };
+  });
+}

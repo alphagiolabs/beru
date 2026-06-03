@@ -96,16 +96,20 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
   it("builds valid delogo job for temporal method", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [{
-          id: "delogo-1",
-          mode: "delogo",
-          region,
-          delogoMethod: "temporal",
-          temporalRadius: 5,
-          edgeFeather: 8,
-        }],
-      })],
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-1",
+              mode: "delogo",
+              region,
+              delogoMethod: "temporal",
+              temporalRadius: 5,
+              edgeFeather: 8,
+            },
+          ],
+        }),
+      ],
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
@@ -113,10 +117,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job).not.toBeNull();
     expect(job.operations).toHaveLength(1);
     // Region should be denormalized to pixels
-    expect(job.operations[0].region.x).toBe(192);  // 0.1 * 1920
-    expect(job.operations[0].region.y).toBe(216);  // 0.2 * 1080
-    expect(job.operations[0].region.w).toBe(576);  // 0.3 * 1920
-    expect(job.operations[0].region.h).toBe(108);  // 0.1 * 1080
+    expect(job.operations[0].region.x).toBe(192); // 0.1 * 1920
+    expect(job.operations[0].region.y).toBe(216); // 0.2 * 1080
+    expect(job.operations[0].region.w).toBe(576); // 0.3 * 1920
+    expect(job.operations[0].region.h).toBe(108); // 0.1 * 1080
     // Snake_case keys for Python
     expect(job.operations[0].delogo_method).toBe("temporal");
     expect(job.operations[0].temporal_radius).toBe(5);
@@ -126,15 +130,19 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
   it("builds valid delogo job for mirror method", () => {
     const region = { x: 0.5, y: 0.3, w: 0.15, h: 0.1 };
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [{
-          id: "delogo-2",
-          mode: "delogo",
-          region,
-          delogoMethod: "mirror",
-          mirrorSide: "left",
-        }],
-      })],
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-2",
+              mode: "delogo",
+              region,
+              delogoMethod: "mirror",
+              mirrorSide: "left",
+            },
+          ],
+        }),
+      ],
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
@@ -145,14 +153,18 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
   it("builds valid delogo job for inpaint method", () => {
     const region = { x: 0.05, y: 0.05, w: 0.1, h: 0.08 };
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [{
-          id: "delogo-3",
-          mode: "delogo",
-          region,
-          delogoMethod: "inpaint",
-        }],
-      })],
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-3",
+              mode: "delogo",
+              region,
+              delogoMethod: "inpaint",
+            },
+          ],
+        }),
+      ],
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
@@ -162,18 +174,22 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
   it("sanitizeOperation clamps delogo params before export", () => {
     const region = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 };
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [{
-          id: "delogo-4",
-          mode: "delogo",
-          region,
-          delogoMethod: "invalid-method", // should fallback to "temporal"
-          temporalRadius: 999,  // should clamp to 15
-          mosaicSize: -5,       // should clamp to 4
-          edgeFeather: 100,     // should clamp to 40
-          blurStrength: 0,      // should clamp to 1
-        }],
-      })],
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-4",
+              mode: "delogo",
+              region,
+              delogoMethod: "invalid-method", // should fallback to "temporal"
+              temporalRadius: 999, // should clamp to 15
+              mosaicSize: -5, // should clamp to 4
+              edgeFeather: 100, // should clamp to 40
+              blurStrength: 0, // should clamp to 1
+            },
+          ],
+        }),
+      ],
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
@@ -186,13 +202,41 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
 
   it("mixes delogo + blur + text operations in a single job", () => {
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [
-          { id: "op-1", mode: "blur", region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 }, blurStrength: 30 },
-          { id: "op-2", mode: "delogo", region: { x: 0.5, y: 0.0, w: 0.2, h: 0.05 }, delogoMethod: "inpaint" },
-          { id: "op-3", mode: "text", region: { x: 0.1, y: 0.8, w: 0.5, h: 0.1 }, text: "Hola", fontSize: 48, fontColor: "#ff0000", fontWeight: 700, letterSpacing: 2, textAlign: "center", textOpacity: 0.8, bold: true, bgEnabled: true, bgColor: "white", bgOpacity: 0.5, boxBorderWidth: 6 },
-        ],
-      })],
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "op-1",
+              mode: "blur",
+              region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 },
+              blurStrength: 30,
+            },
+            {
+              id: "op-2",
+              mode: "delogo",
+              region: { x: 0.5, y: 0.0, w: 0.2, h: 0.05 },
+              delogoMethod: "inpaint",
+            },
+            {
+              id: "op-3",
+              mode: "text",
+              region: { x: 0.1, y: 0.8, w: 0.5, h: 0.1 },
+              text: "Hola",
+              fontSize: 48,
+              fontColor: "#ff0000",
+              fontWeight: 700,
+              letterSpacing: 2,
+              textAlign: "center",
+              textOpacity: 0.8,
+              bold: true,
+              bgEnabled: true,
+              bgColor: "white",
+              bgOpacity: 0.5,
+              boxBorderWidth: 6,
+            },
+          ],
+        }),
+      ],
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
@@ -305,15 +349,39 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     const textRegion = { x: 0.1, y: 0.8, w: 0.5, h: 0.1 };
     const delogoRegion = { x: 0.7, y: 0.0, w: 0.15, h: 0.05 };
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [
-          { id: "delogo-1", mode: "delogo", region: delogoRegion, delogoMethod: "inpaint", edgeFeather: 4 },
-          { id: "text-1", mode: "text", region: textRegion, text: "Watermark", fontSize: 36, fontColor: "white", fontWeight: 600, letterSpacing: 1, textAlign: "center", textOpacity: 0.9, bold: false, bgEnabled: true, bgColor: "black", bgOpacity: 0.5, boxBorderWidth: 5, borderWidth: 0, borderColor: "black" },
-        ],
-      })],
-      templateRegions: [
-        { id: "r1", label: "TEXT_1", region: textRegion },
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-1",
+              mode: "delogo",
+              region: delogoRegion,
+              delogoMethod: "inpaint",
+              edgeFeather: 4,
+            },
+            {
+              id: "text-1",
+              mode: "text",
+              region: textRegion,
+              text: "Watermark",
+              fontSize: 36,
+              fontColor: "white",
+              fontWeight: 600,
+              letterSpacing: 1,
+              textAlign: "center",
+              textOpacity: 0.9,
+              bold: false,
+              bgEnabled: true,
+              bgColor: "black",
+              bgOpacity: 0.5,
+              boxBorderWidth: 5,
+              borderWidth: 0,
+              borderColor: "black",
+            },
+          ],
+        }),
       ],
+      templateRegions: [{ id: "r1", label: "TEXT_1", region: textRegion }],
       excelRows: [{ id: "video_0", TEXT_1: "Watermark" }],
       excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
     });
@@ -328,10 +396,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(delogo.mode).toBe("delogo");
     expect(delogo.delogo_method).toBe("inpaint");
     expect(delogo.edge_feather).toBe(4);
-    expect(delogo.region.x).toBe(1344);  // 0.7 * 1920
-    expect(delogo.region.y).toBe(0);     // 0.0 * 1080
-    expect(delogo.region.w).toBe(288);   // 0.15 * 1920
-    expect(delogo.region.h).toBe(54);    // 0.05 * 1080 (may be rounded)
+    expect(delogo.region.x).toBe(1344); // 0.7 * 1920
+    expect(delogo.region.y).toBe(0); // 0.0 * 1080
+    expect(delogo.region.w).toBe(288); // 0.15 * 1920
+    expect(delogo.region.h).toBe(54); // 0.05 * 1080 (may be rounded)
 
     // Text op
     const text = job.operations[1];
@@ -347,24 +415,28 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(text.bg_opacity).toBe(0.5);
     expect(text.box_border_width).toBe(5);
     // Denormalized region
-    expect(text.region.x).toBe(192);  // 0.1 * 1920
-    expect(text.region.y).toBe(864);  // 0.8 * 1080
+    expect(text.region.x).toBe(192); // 0.1 * 1920
+    expect(text.region.y).toBe(864); // 0.8 * 1080
   });
 
   it("Python build_drawtext escapes braces correctly", async () => {
     const region = { x: 0.1, y: 0.1, w: 0.3, h: 0.1 };
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [{
-          id: "text-brace",
-          mode: "text",
-          region,
-          text: "Price: ${99}",
-          fontSize: 32,
-          fontColor: "white",
-          fontFamily: "Arial",
-        }],
-      })],
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "text-brace",
+              mode: "text",
+              region,
+              text: "Price: ${99}",
+              fontSize: 32,
+              fontColor: "white",
+              fontFamily: "Arial",
+            },
+          ],
+        }),
+      ],
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
@@ -373,12 +445,20 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
 
     // Verify Python handles the escaping (use raw string to avoid JS interpolation)
     const { spawnSync } = await import("child_process");
-    const r = spawnSync("py", ["-3", "-c", [
-      "import sys; sys.path.insert(0, 'python')",
-      "import processor",
-      "result = processor.build_drawtext({'text': 'Price: ${99}', 'region': {'x': 100, 'y': 100, 'w': 200, 'h': 50}, 'font_size': 32, 'font_color': 'white', 'font_family': 'Arial'})",
-      "print(result is not None and '\\\\{' in result and '\\\\}' in result)",
-    ].join("\n")], { encoding: "utf8", timeout: 10000 });
+    const r = spawnSync(
+      "py",
+      [
+        "-3",
+        "-c",
+        [
+          "import sys; sys.path.insert(0, 'python')",
+          "import processor",
+          "result = processor.build_drawtext({'text': 'Price: ${99}', 'region': {'x': 100, 'y': 100, 'w': 200, 'h': 50}, 'font_size': 32, 'font_color': 'white', 'font_family': 'Arial'})",
+          "print(result is not None and '\\\\{' in result and '\\\\}' in result)",
+        ].join("\n"),
+      ],
+      { encoding: "utf8", timeout: 10000 },
+    );
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("True");
   });
@@ -402,14 +482,12 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     const textRegion = { x: 0.1, y: 0.8, w: 0.3, h: 0.1 };
     const blurRegion = { x: 0.5, y: 0.5, w: 0.2, h: 0.1 };
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [
-          { id: "blur-1", mode: "blur", region: blurRegion, blurStrength: 25 },
-        ],
-      })],
-      templateRegions: [
-        { id: "r1", label: "TEXT_1", region: textRegion },
+      queue: [
+        queueItem(0, {
+          operations: [{ id: "blur-1", mode: "blur", region: blurRegion, blurStrength: 25 }],
+        }),
       ],
+      templateRegions: [{ id: "r1", label: "TEXT_1", region: textRegion }],
       excelRows: [{ id: "video_0", TEXT_1: "Batch Text" }],
       excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
     });
@@ -431,14 +509,20 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     const textRegion = { x: 0.1, y: 0.8, w: 0.3, h: 0.1 };
     const delogoRegion = { x: 0.7, y: 0.0, w: 0.15, h: 0.05 };
     useEditorStore.setState({
-      queue: [queueItem(0, {
-        operations: [
-          { id: "delogo-1", mode: "delogo", region: delogoRegion, delogoMethod: "blur", blurStrength: 20 },
-        ],
-      })],
-      templateRegions: [
-        { id: "r1", label: "TEXT_1", region: textRegion },
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-1",
+              mode: "delogo",
+              region: delogoRegion,
+              delogoMethod: "blur",
+              blurStrength: 20,
+            },
+          ],
+        }),
       ],
+      templateRegions: [{ id: "r1", label: "TEXT_1", region: textRegion }],
       excelRows: [{ id: "video_0", TEXT_1: "Title" }],
       excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
     });
@@ -456,17 +540,17 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
   it("full pipeline: 5 videos with mixed delogo + batch text", () => {
     const textRegion = { x: 0.1, y: 0.8, w: 0.3, h: 0.1 };
     const delogoRegion = { x: 0.7, y: 0.0, w: 0.15, h: 0.05 };
-    const items = Array.from({ length: 5 }, (_, i) => queueItem(i, {
-      operations: [
-        { id: `delogo-${i}`, mode: "delogo", region: delogoRegion, delogoMethod: "inpaint" },
-      ],
-    }));
+    const items = Array.from({ length: 5 }, (_, i) =>
+      queueItem(i, {
+        operations: [
+          { id: `delogo-${i}`, mode: "delogo", region: delogoRegion, delogoMethod: "inpaint" },
+        ],
+      }),
+    );
 
     useEditorStore.setState({
       queue: items,
-      templateRegions: [
-        { id: "r1", label: "TEXT_1", region: textRegion, style: { fontSize: 40 } },
-      ],
+      templateRegions: [{ id: "r1", label: "TEXT_1", region: textRegion, style: { fontSize: 40 } }],
       excelRows: items.map((item, i) => ({ id: `video_${i}`, TEXT_1: `Video ${i}` })),
       excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
     });
@@ -479,8 +563,9 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     useEditorStore.getState().materializeBatchTextOps();
 
     // Step 3: build jobs
-    const jobs = useEditorStore.getState().queue
-      .map((item, i) => useEditorStore.getState()._buildJobFor(item, i))
+    const jobs = useEditorStore
+      .getState()
+      .queue.map((item, i) => useEditorStore.getState()._buildJobFor(item, i))
       .filter(Boolean);
 
     expect(jobs).toHaveLength(5);

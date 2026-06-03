@@ -60,8 +60,9 @@ describe("Header batch summary", () => {
       root.render(<Header />);
     });
 
-    const summary = Array.from(document.querySelectorAll("span"))
-      .find((span) => span.textContent.includes("0/1 ok") && span.textContent.includes("1 err"));
+    const summary = Array.from(document.querySelectorAll("span")).find(
+      (span) => span.textContent.includes("0/1 ok") && span.textContent.includes("1 err"),
+    );
 
     expect(summary.className).toContain("whitespace-nowrap");
     expect(summary.className).toContain("flex-shrink-0");

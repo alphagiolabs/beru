@@ -71,7 +71,10 @@ function renderMosaic(ctx, video, region, screen, blockSize) {
       const y0 = by * blockSize;
       const x1 = Math.min(x0 + blockSize, sw);
       const y1 = Math.min(y0 + blockSize, sh);
-      let r = 0, g = 0, b = 0, n = 0;
+      let r = 0,
+        g = 0,
+        b = 0,
+        n = 0;
       for (let y = y0; y < y1; y++) {
         for (let x = x0; x < x1; x++) {
           const i = (y * sw + x) * 4;
@@ -139,11 +142,7 @@ function renderMirror(ctx, video, region, screen, side) {
     ctx.translate(0, screen.h);
     ctx.scale(1, -1);
   }
-  ctx.drawImage(
-    video,
-    sample.srcX, sample.srcY, sample.cw, sample.ch,
-    0, 0, screen.w, screen.h,
-  );
+  ctx.drawImage(video, sample.srcX, sample.srcY, sample.cw, sample.ch, 0, 0, screen.w, screen.h);
   ctx.restore();
 }
 
@@ -173,9 +172,11 @@ function renderInpaint(ctx, video, region, screen) {
       const wr = 1 / (sw - x);
       const total = wt + wb + wl + wr;
       const di = (rowOff + x) * 4;
-      dData[di]     = (sData[ti]     * wt + sData[bi]     * wb + sData[li]     * wl + sData[ri]     * wr) / total;
-      dData[di + 1] = (sData[ti + 1] * wt + sData[bi + 1] * wb + sData[li + 1] * wl + sData[ri + 1] * wr) / total;
-      dData[di + 2] = (sData[ti + 2] * wt + sData[bi + 2] * wb + sData[li + 2] * wl + sData[ri + 2] * wr) / total;
+      dData[di] = (sData[ti] * wt + sData[bi] * wb + sData[li] * wl + sData[ri] * wr) / total;
+      dData[di + 1] =
+        (sData[ti + 1] * wt + sData[bi + 1] * wb + sData[li + 1] * wl + sData[ri + 1] * wr) / total;
+      dData[di + 2] =
+        (sData[ti + 2] * wt + sData[bi + 2] * wb + sData[li + 2] * wl + sData[ri + 2] * wr) / total;
       dData[di + 3] = 255;
     }
   }
@@ -219,7 +220,9 @@ function renderTemporal(ctx, video, region, screen, radius) {
 
   for (let i = 0; i < sw * sh; i++) {
     const o = i * 4;
-    const rs = [], gs = [], bs = [];
+    const rs = [],
+      gs = [],
+      bs = [];
     for (let f = 0; f < n; f++) {
       const fd = buffers[f].data;
       rs.push(fd[o]);
@@ -245,12 +248,20 @@ function renderTemporal(ctx, video, region, screen, radius) {
 const CANVAS_METHODS = new Set(["temporal", "mirror", "mosaic", "inpaint"]);
 
 export default function DelogoLivePreview({ videoRef }) {
-  const store = useEditorStore();
+  const currentRegion = useEditorStore((s) => s.currentRegion);
+  const activeTool = useEditorStore((s) => s.activeTool);
+  const sidebarMode = useEditorStore((s) => s.sidebarMode);
+  const delogoMethod = useEditorStore((s) => s.delogoMethod);
+  const blurStrength = useEditorStore((s) => s.blurStrength);
+  const delogoFillColor = useEditorStore((s) => s.delogoFillColor);
+  const delogoFillOpacity = useEditorStore((s) => s.delogoFillOpacity);
+  const mosaicSize = useEditorStore((s) => s.mosaicSize);
+  const mirrorSide = useEditorStore((s) => s.mirrorSide);
+  const temporalRadius = useEditorStore((s) => s.temporalRadius);
   const canvasRef = useRef(null);
   const labelRef = useRef(null);
   const cssRef = useRef(null);
 
-  const { currentRegion, activeTool, sidebarMode, delogoMethod } = store;
   const visible = !!(sidebarMode === "logo" && activeTool === "delogo" && currentRegion);
   const isCanvas = visible && CANVAS_METHODS.has(delogoMethod);
 
@@ -260,7 +271,9 @@ export default function DelogoLivePreview({ videoRef }) {
   const videoSrc = videoRef?.current?.currentSrc || videoRef?.current?.src || "";
   useEffect(() => {
     temporalFrameBuffer.frames = [];
-    return () => { temporalFrameBuffer.frames = []; };
+    return () => {
+      temporalFrameBuffer.frames = [];
+    };
   }, [currentRegion, delogoMethod, videoSrc]);
 
   /* Canvas path — re-draws every frame while visible */
@@ -305,10 +318,10 @@ export default function DelogoLivePreview({ videoRef }) {
       const ctx = canvas.getContext("2d");
       if (typeof ctx.setTransform === "function") ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       const s = useEditorStore.getState();
-      if (method === "mosaic") renderMosaic(ctx, video, region, screen, s.mosaicSize);
-      else if (method === "mirror") renderMirror(ctx, video, region, screen, s.mirrorSide);
+      if (method === "mosaic") renderMosaic(ctx, video, region, screen, mosaicSize);
+      else if (method === "mirror") renderMirror(ctx, video, region, screen, mirrorSide);
       else if (method === "inpaint") renderInpaint(ctx, video, region, screen);
-      else if (method === "temporal") renderTemporal(ctx, video, region, screen, s.temporalRadius);
+      else if (method === "temporal") renderTemporal(ctx, video, region, screen, temporalRadius);
 
       const label = labelRef.current;
       if (label) {
@@ -319,7 +332,10 @@ export default function DelogoLivePreview({ videoRef }) {
       rafId = requestAnimationFrame(draw);
     };
     rafId = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(rafId); clearTimeout(rafId); };
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(rafId);
+    };
   }, [isCanvas, videoRef]);
 
   /* CSS path (blur / fill) — no RAF needed, browser composites the effect */
@@ -339,7 +355,7 @@ export default function DelogoLivePreview({ videoRef }) {
 
     if (delogoMethod === "blur") {
       const scale = Math.max(screen.sx || 1, screen.sy || 1);
-      const px = Math.max(2, store.blurStrength * scale);
+      const px = Math.max(2, blurStrength * scale);
       el.style.backdropFilter = `blur(${px}px)`;
       el.style.WebkitBackdropFilter = `blur(${px}px)`;
       el.style.background = "transparent";
@@ -348,8 +364,8 @@ export default function DelogoLivePreview({ videoRef }) {
     } else if (delogoMethod === "fill") {
       el.style.backdropFilter = "none";
       el.style.WebkitBackdropFilter = "none";
-      el.style.background = store.delogoFillColor || "black";
-      el.style.opacity = String(store.delogoFillOpacity ?? 1);
+      el.style.background = delogoFillColor || "black";
+      el.style.opacity = String(delogoFillOpacity ?? 1);
       el.style.outline = "1px dashed rgba(244,63,94,0.7)";
       el.style.outlineOffset = "-1px";
     }
@@ -359,7 +375,16 @@ export default function DelogoLivePreview({ videoRef }) {
       label.style.left = screen.x + "px";
       label.style.top = Math.max(0, screen.y - 18) + "px";
     }
-  }, [isCanvas, visible, delogoMethod, currentRegion, store.blurStrength, store.delogoFillColor, store.delogoFillOpacity, videoRef]);
+  }, [
+    isCanvas,
+    visible,
+    delogoMethod,
+    currentRegion,
+    blurStrength,
+    delogoFillColor,
+    delogoFillOpacity,
+    videoRef,
+  ]);
 
   if (!visible) return null;
 

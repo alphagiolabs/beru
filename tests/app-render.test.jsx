@@ -1,5 +1,5 @@
 import React, { act } from "react";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import App from "../src/App.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
@@ -24,17 +24,24 @@ if (globalThis.HTMLCanvasElement) {
   });
 }
 
+const noop = () => () => {};
+const asyncNoop = async () => ({});
 window.api = {
-  onProgress: () => () => {},
-  onJobProgress: () => () => {},
-  onComplete: () => () => {},
-  onSummary: () => () => {},
-  onJobError: () => () => {},
-  onFinished: () => () => {},
-  onError: () => () => {},
-  onLog: () => () => {},
-  checkGitHubRelease: async () => ({ ok: true, updateAvailable: false }),
+  onProgress: noop,
+  onJobProgress: noop,
+  onComplete: noop,
+  onSummary: noop,
+  onJobError: noop,
+  onFinished: noop,
+  onError: noop,
+  onLog: noop,
+  onUpdaterEvent: noop,
+  checkForUpdates: asyncNoop,
+  checkGitHubRelease: asyncNoop,
+  resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
 };
+
+let root = null;
 
 describe("App render", () => {
   beforeEach(() => {
@@ -50,15 +57,61 @@ describe("App render", () => {
       showMappingModal: false,
       showTableEditor: false,
       appToast: null,
+      update: {
+        status: "idle",
+        version: null,
+        percent: 0,
+        error: null,
+        transferred: 0,
+        total: 0,
+        releaseNotes: "",
+        releaseUrl: null,
+      },
     });
   });
 
+  afterEach(async () => {
+    if (root) {
+      await act(() => {
+        root.unmount();
+      });
+      root = null;
+    }
+  });
+
   it("mounts landing without throwing", async () => {
-    const root = createRoot(document.getElementById("root"));
+    root = createRoot(document.getElementById("root"));
     await act(async () => {
       root.render(<App />);
     });
     expect(document.body.textContent).toMatch(/Importar videos/i);
+  });
+
+  it("shows the update download screen on the landing view", async () => {
+    useEditorStore.setState({
+      update: {
+        status: "downloading",
+        version: "1.6.0",
+        percent: 25,
+        error: null,
+        transferred: 1024 * 1024,
+        total: 4 * 1024 * 1024,
+        releaseNotes: "",
+        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v1.6.0",
+      },
+    });
+
+    root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(<App />);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    await vi.waitFor(() => {
+      expect(document.body.textContent).toMatch(/Descargando actualización/i);
+      expect(document.body.textContent).toMatch(/Beru v1\.6\.0 se está descargando/i);
+      expect(document.body.textContent).toMatch(/25%/);
+    });
   });
 
   it("mounts batch preview with template regions without throwing", async () => {
@@ -66,7 +119,7 @@ describe("App render", () => {
       queue: [
         createQueueItem({
           path: "C:\\videos\\demo.mp4",
-          src: "",
+          src: "beru://local/C%3A%5Cvideos%5Cdemo.mp4",
           filename: "demo.mp4",
           width: 1920,
           height: 1080,
@@ -86,9 +139,11 @@ describe("App render", () => {
       selectedTemplateRegionId: 1,
     });
 
-    const root = createRoot(document.getElementById("root"));
+    root = createRoot(document.getElementById("root"));
     await act(async () => {
       root.render(<App />);
+      // Flush Suspense lazy resolution (React.lazy chunks resolve on next tick)
+      await new Promise((r) => setTimeout(r, 0));
     });
     expect(document.body.textContent).toMatch(/demo\.mp4/);
   });

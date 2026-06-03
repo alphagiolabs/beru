@@ -8,19 +8,19 @@ const { default: useEditorStore } = await import("../src/stores/useEditorStore.j
 describe("materializeBatchTextOps", () => {
   beforeEach(() => {
     useEditorStore.setState({
-      queue: [{
-        path: "C:\\videos\\clip.mp4",
-        filename: "clip.mp4",
-        width: 1920,
-        height: 1080,
-        operations: [],
-        status: "idle",
-        progress: 0,
-        error: null,
-      }],
-      templateRegions: [
-        { id: "r1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
+      queue: [
+        {
+          path: "C:\\videos\\clip.mp4",
+          filename: "clip.mp4",
+          width: 1920,
+          height: 1080,
+          operations: [],
+          status: "idle",
+          progress: 0,
+          error: null,
+        },
       ],
+      templateRegions: [{ id: "r1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } }],
       excelRows: [{ id: "clip", TEXT_1: "Desde Excel" }],
       excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
     });

@@ -55,7 +55,9 @@ export function sanitizeTextStyle(textStyle = {}) {
 export function sanitizeDefaults(defaults = {}) {
   return {
     blurStrength: clampNum(defaults.blurStrength, 1, 100, 20),
-    delogoMethod: VALID_DELOGO_METHODS.has(defaults.delogoMethod) ? defaults.delogoMethod : "temporal",
+    delogoMethod: VALID_DELOGO_METHODS.has(defaults.delogoMethod)
+      ? defaults.delogoMethod
+      : "temporal",
     delogoFillColor: String(defaults.delogoFillColor ?? "black").slice(0, 32),
     delogoFillOpacity: clampNum(defaults.delogoFillOpacity, 0, 1, 1),
     temporalRadius: clampNum(defaults.temporalRadius, 1, 30, 5),

@@ -9,8 +9,13 @@ import TableEditorGrid from "./table-editor/TableEditorGrid";
 
 export default function TableEditor() {
   const {
-    showTableEditor, queue, templateRegions,
-    excelPath, excelMapping, excelRows, excelMatchStatus,
+    showTableEditor,
+    queue,
+    templateRegions,
+    excelPath,
+    excelMapping,
+    excelRows,
+    excelMatchStatus,
   } = useEditorStore(
     (s) => ({
       showTableEditor: s.showTableEditor,
@@ -56,7 +61,9 @@ export default function TableEditor() {
     if (!v) return;
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    const onTimeUpdate = () => { if (!seeking) setCurrentTime(v.currentTime); };
+    const onTimeUpdate = () => {
+      if (!seeking) setCurrentTime(v.currentTime);
+    };
     const onLoadedMeta = () => setDuration(v.duration);
     const onEnded = () => setPlaying(false);
     v.addEventListener("play", onPlay);
@@ -79,10 +86,13 @@ export default function TableEditor() {
     setDuration(queue[focused.videoIdx]?.duration || 0);
   }, [focused.videoIdx]);
 
-  const seekTo = useCallback((fraction) => {
-    const v = videoRef.current;
-    if (v && duration > 0) v.currentTime = fraction * duration;
-  }, [duration]);
+  const seekTo = useCallback(
+    (fraction) => {
+      const v = videoRef.current;
+      if (v && duration > 0) v.currentTime = fraction * duration;
+    },
+    [duration],
+  );
 
   const startInlineEdit = (videoIdx, regionId, currentText) => {
     setEditingCell({ videoIdx, regionId });
@@ -94,7 +104,10 @@ export default function TableEditor() {
     const { videoIdx, regionId } = editingCell;
     const video = queue[videoIdx];
     const region = templateRegions.find((r) => r.id === regionId);
-    if (!video || !region) { setEditingCell(null); return; }
+    if (!video || !region) {
+      setEditingCell(null);
+      return;
+    }
     const { op, opIdx } = findTextOpForRegion(video.operations, region.region);
     if (op) {
       get().updateOperationText(videoIdx, opIdx, editValue);
@@ -114,7 +127,13 @@ export default function TableEditor() {
     setFocused((f) => {
       const vCount = queue.length;
       const cCount = templateRegions.length;
-      const curCol = f.regionId == null ? 0 : Math.max(0, templateRegions.findIndex((r) => r.id === f.regionId));
+      const curCol =
+        f.regionId == null
+          ? 0
+          : Math.max(
+              0,
+              templateRegions.findIndex((r) => r.id === f.regionId),
+            );
       const newCol = Math.max(0, Math.min(cCount - 1, curCol + deltaCol));
       const newRow = Math.max(0, Math.min(vCount - 1, f.videoIdx + deltaRow));
       return { videoIdx: newRow, regionId: templateRegions[newCol]?.id ?? null };
@@ -123,15 +142,28 @@ export default function TableEditor() {
 
   const handleTableKey = (e) => {
     if (editingCell) {
-      if (e.key === "Enter") { e.preventDefault(); commitInlineEdit(); }
-      else if (e.key === "Escape") { e.preventDefault(); cancelInlineEdit(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commitInlineEdit();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        cancelInlineEdit();
+      }
       return;
     }
-    if (e.key === "ArrowDown") { e.preventDefault(); moveFocus(1, 0); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); moveFocus(-1, 0); }
-    else if (e.key === "ArrowRight") { e.preventDefault(); moveFocus(0, 1); }
-    else if (e.key === "ArrowLeft") { e.preventDefault(); moveFocus(0, -1); }
-    else if (e.key === "Enter" || e.key === "F2") {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveFocus(1, 0);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveFocus(-1, 0);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      moveFocus(0, 1);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      moveFocus(0, -1);
+    } else if (e.key === "Enter" || e.key === "F2") {
       e.preventDefault();
       const region = templateRegions.find((r) => r.id === focused.regionId);
       const video = queue[focused.videoIdx];
@@ -139,7 +171,7 @@ export default function TableEditor() {
       startInlineEdit(
         focused.videoIdx,
         focused.regionId,
-        get().getCellTextForRegion(focused.videoIdx, focused.regionId)
+        get().getCellTextForRegion(focused.videoIdx, focused.regionId),
       );
     } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
@@ -160,7 +192,7 @@ export default function TableEditor() {
   const focusedRegion = templateRegions.find((r) => r.id === focused.regionId);
   const { op: focusedOp, opIdx: focusedOpIdx } = findTextOpForRegion(
     focusedVideo?.operations || [],
-    focusedRegion?.region
+    focusedRegion?.region,
   );
 
   const updateFocused = (patch) => {
@@ -182,7 +214,8 @@ export default function TableEditor() {
   };
 
   const hasRegions = templateRegions.length > 0;
-  const getBatchPreviewPayload = (videoIdx, regionId) => get().getBatchPreviewPayload(videoIdx, regionId);
+  const getBatchPreviewPayload = (videoIdx, regionId) =>
+    get().getBatchPreviewPayload(videoIdx, regionId);
 
   return (
     <div
@@ -196,14 +229,21 @@ export default function TableEditor() {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0" style={{ borderColor: "var(--border)" }}>
+        <div
+          className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
+          style={{ borderColor: "var(--border)" }}
+        >
           <div className="flex items-center gap-2">
             <Layers size={16} style={{ color: "var(--purple)" }} />
             <span className="text-sm font-semibold">Editor de tabla</span>
             <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
               {queue.length} videos · {templateRegions.length} regiones
               {excelPath && excelRows.length > 0 && (
-                <> · Excel ({excelRows.length} filas{excelMapping.idColumn ? `, ID: ${excelMapping.idColumn}` : ""})</>
+                <>
+                  {" "}
+                  · Excel ({excelRows.length} filas
+                  {excelMapping.idColumn ? `, ID: ${excelMapping.idColumn}` : ""})
+                </>
               )}
             </span>
           </div>

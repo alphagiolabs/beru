@@ -89,11 +89,12 @@ const LINUX_ENCODER_PRIORITY = ["h264_nvenc", "h264_vaapi", "h264_qsv", "h264_am
 
 export function pickHwEncoderFromEncodersText(text) {
   if (!text || typeof text !== "string") return null;
-  const priority = process.platform === "win32"
-    ? WIN_ENCODER_PRIORITY
-    : process.platform === "darwin"
-      ? DARWIN_ENCODER_PRIORITY
-      : LINUX_ENCODER_PRIORITY;
+  const priority =
+    process.platform === "win32"
+      ? WIN_ENCODER_PRIORITY
+      : process.platform === "darwin"
+        ? DARWIN_ENCODER_PRIORITY
+        : LINUX_ENCODER_PRIORITY;
   for (const enc of priority) {
     if (text.includes(enc)) return enc;
   }

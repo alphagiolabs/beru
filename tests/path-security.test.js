@@ -38,7 +38,9 @@ describe("pathSecurity", () => {
   afterEach(() => {
     try {
       fs.rmSync(path.dirname(tmpFile), { recursive: true, force: true });
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   });
 
   it("allows explicitly registered excel paths", () => {
@@ -48,9 +50,7 @@ describe("pathSecurity", () => {
 
   it("denies sensitive system paths even with excel extension", () => {
     const res = security.validateReadableFile(
-      process.platform === "win32"
-        ? "C:\\Windows\\System32\\drivers\\etc\\hosts"
-        : "/etc/passwd",
+      process.platform === "win32" ? "C:\\Windows\\System32\\drivers\\etc\\hosts" : "/etc/passwd",
       "excel",
     );
     expect(res.ok).toBe(false);

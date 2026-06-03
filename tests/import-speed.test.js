@@ -20,7 +20,10 @@ describe("optimistic video import", () => {
   it("adds videos to the queue before metadata probing finishes", async () => {
     let resolver;
     mockApi.getVideoInfoBatch.mockImplementation(
-      () => new Promise((r) => { resolver = r; }),
+      () =>
+        new Promise((r) => {
+          resolver = r;
+        }),
     );
 
     const addPromise = useEditorStore.getState().addVideos(["C:\\videos\\a.mp4"], mockApi);
@@ -29,15 +32,17 @@ describe("optimistic video import", () => {
     expect(useEditorStore.getState().queue[0].filename).toBe("a.mp4");
     expect(useEditorStore.getState().queue[0].width).toBe(0);
 
-    resolver([{
-      width: 1280,
-      height: 720,
-      duration: 42,
-      videoCodec: "h264",
-      pixFmt: "yuv420p",
-      frameRate: 30,
-      audioCodec: "aac",
-    }]);
+    resolver([
+      {
+        width: 1280,
+        height: 720,
+        duration: 42,
+        videoCodec: "h264",
+        pixFmt: "yuv420p",
+        frameRate: 30,
+        audioCodec: "aac",
+      },
+    ]);
     await addPromise;
     await vi.waitFor(() => {
       expect(useEditorStore.getState().queue[0].width).toBe(1280);

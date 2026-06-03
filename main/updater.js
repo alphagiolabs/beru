@@ -30,8 +30,15 @@ const tryLoad = () => {
 
 const send = (payload) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
-    try { mainWindow.webContents.send("updater:event", payload); } catch {}
+    try {
+      mainWindow.webContents.send("updater:event", payload);
+    } catch {}
   }
+};
+
+const releaseUrlFor = (version) => {
+  if (!version) return null;
+  return `https://github.com/alphagiolabs/beru/releases/tag/v${String(version).replace(/^v/i, "")}`;
 };
 
 const init = (win) => {
@@ -52,9 +59,24 @@ const init = (win) => {
   au.logger = null;
 
   au.on("checking-for-update", () => send({ type: "checking" }));
-  au.on("update-available", (info) => send({ type: "available", version: info?.version, releaseDate: info?.releaseDate }));
+  au.on("update-available", (info) =>
+    send({
+      type: "available",
+      version: info?.version,
+      releaseDate: info?.releaseDate,
+      releaseNotes: info?.releaseNotes || "",
+      releaseUrl: releaseUrlFor(info?.version),
+    }),
+  );
   au.on("update-not-available", (info) => send({ type: "not-available", version: info?.version }));
-  au.on("download-progress", (p) => send({ type: "downloading", percent: p?.percent ?? 0, transferred: p?.transferred, total: p?.total }));
+  au.on("download-progress", (p) =>
+    send({
+      type: "downloading",
+      percent: p?.percent ?? 0,
+      transferred: p?.transferred,
+      total: p?.total,
+    }),
+  );
   au.on("update-downloaded", (info) => send({ type: "ready", version: info?.version }));
   au.on("error", (err) => send({ type: "error", message: err?.message || String(err) }));
 };
@@ -89,7 +111,9 @@ const install = () => {
   if (isDev) return;
   const au = tryLoad();
   if (!au) return;
-  try { au.quitAndInstall(false, true); } catch {}
+  try {
+    au.quitAndInstall(false, true);
+  } catch {}
 };
 
 /* ── GitHub Releases check (renderer-driven banner) ──────────────────────
@@ -102,14 +126,21 @@ const install = () => {
 
 const parseSemver = (v) => {
   const s = (v || "").replace(/^v/i, "").trim();
-  const core = s.split("-")[0].split(".").map((n) => {
-    const x = parseInt(n, 10);
-    return Number.isFinite(x) ? x : 0;
-  });
+  const core = s
+    .split("-")[0]
+    .split(".")
+    .map((n) => {
+      const x = parseInt(n, 10);
+      return Number.isFinite(x) ? x : 0;
+    });
   const i = s.indexOf("-");
-  const pre = i === -1 ? [] : s.slice(i + 1).split(".").map((p) =>
-    /^\d+$/.test(p) ? Number(p) : p
-  );
+  const pre =
+    i === -1
+      ? []
+      : s
+          .slice(i + 1)
+          .split(".")
+          .map((p) => (/^\d+$/.test(p) ? Number(p) : p));
   return { core, pre };
 };
 
@@ -146,7 +177,9 @@ const compareSemver = (a, b) => {
 
 const pickInstaller = (assets) => {
   if (!Array.isArray(assets)) return null;
-  const exe = assets.find((a) => /\.exe$/i.test(a?.name || "") && !/\.blockmap$/i.test(a?.name || ""));
+  const exe = assets.find(
+    (a) => /\.exe$/i.test(a?.name || "") && !/\.blockmap$/i.test(a?.name || ""),
+  );
   return exe?.browser_download_url || null;
 };
 
@@ -198,7 +231,11 @@ const checkGitHubRelease = async () => {
             htmlUrl: latest.html_url,
             installerUrl: pickInstaller(latest.assets),
             assets: Array.isArray(latest.assets)
-              ? latest.assets.map((a) => ({ name: a.name, url: a.browser_download_url, size: a.size }))
+              ? latest.assets.map((a) => ({
+                  name: a.name,
+                  url: a.browser_download_url,
+                  size: a.size,
+                }))
               : [],
             publishedAt: latest.published_at,
             body: latest.body || "",

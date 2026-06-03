@@ -55,9 +55,7 @@ export function createPathSecurity(app) {
     } else {
       roots.push(app.getAppPath());
     }
-    _cachedTrustedRoots = roots
-      .filter(Boolean)
-      .map((r) => normalizeKey(path.resolve(r)));
+    _cachedTrustedRoots = roots.filter(Boolean).map((r) => normalizeKey(path.resolve(r)));
     return _cachedTrustedRoots;
   };
 
@@ -71,9 +69,7 @@ export function createPathSecurity(app) {
       return null;
     }
     try {
-      return fs.realpathSync.native
-        ? fs.realpathSync.native(filePath)
-        : fs.realpathSync(filePath);
+      return fs.realpathSync.native ? fs.realpathSync.native(filePath) : fs.realpathSync(filePath);
     } catch {
       try {
         return path.resolve(filePath);
@@ -108,7 +104,18 @@ export function createPathSecurity(app) {
   const EXT_BY_KIND = {
     excel: new Set([".xlsx", ".xls", ".xlsm"]),
     image: new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]),
-    video: new Set([".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".mpg", ".mpeg"]),
+    video: new Set([
+      ".mp4",
+      ".mov",
+      ".avi",
+      ".mkv",
+      ".webm",
+      ".flv",
+      ".wmv",
+      ".m4v",
+      ".mpg",
+      ".mpeg",
+    ]),
     project: new Set([".json", ".beru.json"]),
   };
 

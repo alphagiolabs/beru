@@ -7,7 +7,7 @@
     {
       "id": "preset-tb-1",
       "label": "Banner",
-      "region": { "x": 0.15, "y": 0.06, "w": 0.70, "h": 0.10 }
+      "region": { "x": 0.15, "y": 0.06, "w": 0.7, "h": 0.1 }
     }
   ],
   "textStyle": {

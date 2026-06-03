@@ -3,7 +3,12 @@
 import { clampNum } from "./clamp";
 
 export const VALID_DELOGO_METHODS = new Set([
-  "temporal", "mirror", "mosaic", "inpaint", "blur", "fill",
+  "temporal",
+  "mirror",
+  "mosaic",
+  "inpaint",
+  "blur",
+  "fill",
 ]);
 
 export function sanitizeDelogoMethod(method) {

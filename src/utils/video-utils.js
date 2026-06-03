@@ -6,17 +6,28 @@
 export const MIN_REGION_SIZE = 0.01;
 
 export function isRegionUsable(region, minSize = MIN_REGION_SIZE) {
-  return !!region &&
-    Number.isFinite(region.x) && Number.isFinite(region.y) &&
-    Number.isFinite(region.w) && Number.isFinite(region.h) &&
-    Math.abs(region.w) >= minSize && Math.abs(region.h) >= minSize;
+  return (
+    !!region &&
+    Number.isFinite(region.x) &&
+    Number.isFinite(region.y) &&
+    Number.isFinite(region.w) &&
+    Number.isFinite(region.h) &&
+    Math.abs(region.w) >= minSize &&
+    Math.abs(region.h) >= minSize
+  );
 }
 
 export function clampRegionToVideo(region, maxX = 1, maxY = 1, minSize = MIN_REGION_SIZE) {
   if (!region || ![region.x, region.y, region.w, region.h].every(Number.isFinite)) return null;
   let { x, y, w, h } = region;
-  if (w < 0) { x += w; w = Math.abs(w); }
-  if (h < 0) { y += h; h = Math.abs(h); }
+  if (w < 0) {
+    x += w;
+    w = Math.abs(w);
+  }
+  if (h < 0) {
+    y += h;
+    h = Math.abs(h);
+  }
   x = Math.max(0, x);
   y = Math.max(0, y);
   w = Math.max(minSize, w);
@@ -39,8 +50,17 @@ export function contentRect(videoEl) {
   const vr = videoEl.videoWidth / videoEl.videoHeight;
   const cr = br.width / br.height;
   let dw, dh, ox, oy;
-  if (vr > cr) { dw = br.width; dh = br.width / vr; ox = 0; oy = (br.height - dh) / 2; }
-  else { dh = br.height; dw = br.height * vr; ox = (br.width - dw) / 2; oy = 0; }
+  if (vr > cr) {
+    dw = br.width;
+    dh = br.width / vr;
+    ox = 0;
+    oy = (br.height - dh) / 2;
+  } else {
+    dh = br.height;
+    dw = br.height * vr;
+    ox = (br.width - dw) / 2;
+    oy = 0;
+  }
   return { dw, dh, ox, oy, br };
 }
 
@@ -48,8 +68,14 @@ export function toVideoCoords(videoEl, cx, cy) {
   const c = contentRect(videoEl);
   if (!c || !videoEl) return null;
   return {
-    x: Math.max(0, Math.min((cx - c.br.left - c.ox) * (videoEl.videoWidth / c.dw), videoEl.videoWidth)),
-    y: Math.max(0, Math.min((cy - c.br.top - c.oy) * (videoEl.videoHeight / c.dh), videoEl.videoHeight)),
+    x: Math.max(
+      0,
+      Math.min((cx - c.br.left - c.ox) * (videoEl.videoWidth / c.dw), videoEl.videoWidth),
+    ),
+    y: Math.max(
+      0,
+      Math.min((cy - c.br.top - c.oy) * (videoEl.videoHeight / c.dh), videoEl.videoHeight),
+    ),
   };
 }
 
@@ -73,17 +99,30 @@ export function regionToScreen(region, videoEl) {
   const pw = region.w * videoEl.videoWidth;
   const ph = region.h * videoEl.videoHeight;
   return {
-    x: px * sx + c.ox, y: py * sy + c.oy,
-    w: pw * sx, h: ph * sy, sx, sy,
+    x: px * sx + c.ox,
+    y: py * sy + c.oy,
+    w: pw * sx,
+    h: ph * sy,
+    sx,
+    sy,
   };
 }
 
-export function drawRegionOnCanvas(canvas, videoEl, region, tool = "blur", delogoMethod = "inpaint") {
+export function drawRegionOnCanvas(
+  canvas,
+  videoEl,
+  region,
+  tool = "blur",
+  delogoMethod = "inpaint",
+) {
   if (!canvas || !videoEl) return;
   const ctx = canvas.getContext("2d");
   const dpr = Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
   if (typeof ctx.setTransform === "function") {
-    if (canvas.width !== Math.round(canvas.clientWidth * dpr) || canvas.height !== Math.round(canvas.clientHeight * dpr)) {
+    if (
+      canvas.width !== Math.round(canvas.clientWidth * dpr) ||
+      canvas.height !== Math.round(canvas.clientHeight * dpr)
+    ) {
       canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
       canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr));
     }
@@ -141,8 +180,10 @@ export function drawRegionOnCanvas(canvas, videoEl, region, tool = "blur", delog
   ctx.strokeStyle = cornerColor;
   ctx.lineWidth = 2.5;
   [
-    [x, y, ms, 0, 0, ms], [x + w, y, -ms, 0, 0, ms],
-    [x, y + h, ms, 0, 0, -ms], [x + w, y + h, -ms, 0, 0, -ms],
+    [x, y, ms, 0, 0, ms],
+    [x + w, y, -ms, 0, 0, ms],
+    [x, y + h, ms, 0, 0, -ms],
+    [x + w, y + h, -ms, 0, 0, -ms],
   ].forEach(([cx, cy, dx1, dy1, dx2, dy2]) => {
     ctx.beginPath();
     ctx.moveTo(cx + dx1, cy + dy1);
@@ -157,9 +198,14 @@ export function drawRegionOnCanvas(canvas, videoEl, region, tool = "blur", delog
   ctx.strokeStyle = "#ffffff";
   ctx.lineWidth = 1.5;
   [
-    [x, y], [x + w / 2, y], [x + w, y],
-    [x, y + h / 2], [x + w, y + h / 2],
-    [x, y + h], [x + w / 2, y + h], [x + w, y + h],
+    [x, y],
+    [x + w / 2, y],
+    [x + w, y],
+    [x, y + h / 2],
+    [x + w, y + h / 2],
+    [x, y + h],
+    [x + w / 2, y + h],
+    [x + w, y + h],
   ].forEach(([hx, hy]) => {
     ctx.fillRect(hx - hs / 2, hy - hs / 2, hs, hs);
     ctx.strokeRect(hx - hs / 2, hy - hs / 2, hs, hs);
@@ -189,7 +235,17 @@ export function rowGet(row, ...keys) {
     if (v !== undefined && v !== null && v !== "") return v;
   }
   // Broader fallback: try common ID column names
-  const idAliases = ["id", "identificador", "filename", "archivo", "nombre", "video", "name", "codigo", "code"];
+  const idAliases = [
+    "id",
+    "identificador",
+    "filename",
+    "archivo",
+    "nombre",
+    "video",
+    "name",
+    "codigo",
+    "code",
+  ];
   for (const alias of idAliases) {
     if (keys.includes(alias)) continue;
     const v = lower[alias];

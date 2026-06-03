@@ -27,8 +27,16 @@ const isOpActive = (op, t) => {
 
 export default function VideoPreview() {
   const {
-    selectedIdx, queue, sidebarMode, activeTool, currentRegion, textInput,
-    blurStrength, imageDataCache, templateRegions, selectedTemplateRegionId,
+    selectedIdx,
+    queue,
+    sidebarMode,
+    activeTool,
+    currentRegion,
+    textInput,
+    blurStrength,
+    imageDataCache,
+    templateRegions,
+    selectedTemplateRegionId,
   } = useEditorStore(
     (s) => ({
       selectedIdx: s.selectedIdx,
@@ -69,10 +77,13 @@ export default function VideoPreview() {
     return () => ro.disconnect();
   }, [sel?.path]);
 
-  const seekTo = useCallback((fraction) => {
-    const v = videoRef.current;
-    if (v && duration > 0) v.currentTime = fraction * duration;
-  }, [duration]);
+  const seekTo = useCallback(
+    (fraction) => {
+      const v = videoRef.current;
+      if (v && duration > 0) v.currentTime = fraction * duration;
+    },
+    [duration],
+  );
 
   useEffect(() => {
     if (!sel) {
@@ -86,7 +97,9 @@ export default function VideoPreview() {
     if (!v) return;
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    const onTimeUpdate = () => { if (!seeking) setCurrentTime(v.currentTime); };
+    const onTimeUpdate = () => {
+      if (!seeking) setCurrentTime(v.currentTime);
+    };
     const onLoadedMeta = () => setDuration(v.duration);
     const onEnded = () => setPlaying(false);
     v.addEventListener("play", onPlay);
@@ -110,7 +123,8 @@ export default function VideoPreview() {
       if (!v) return;
       const { type, delta, value } = e.detail || {};
       if (type === "toggle-play") {
-        if (v.paused) v.play(); else v.pause();
+        if (v.paused) v.play();
+        else v.pause();
       } else if (type === "seek" && Number.isFinite(delta)) {
         if (!v.duration) return;
         v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + delta));
@@ -147,30 +161,39 @@ export default function VideoPreview() {
     });
   };
 
-  const handleImageDragMove = useCallback((e) => {
-    if (!draggingOp || !dragStart) return;
-    const video = videoRef.current;
-    if (!video) return;
-    
-    const deltaX = e.clientX - dragStart.mouseX;
-    const deltaY = e.clientY - dragStart.mouseY;
-    
-    // Convert pixel delta to normalized coordinates
-    const rect = video.getBoundingClientRect();
-    const normalizedDeltaX = deltaX / rect.width;
-    const normalizedDeltaY = deltaY / rect.height;
-    
-    const newX = Math.max(0, Math.min(1 - draggingOp.op.region.w, dragStart.regionX + normalizedDeltaX));
-    const newY = Math.max(0, Math.min(1 - draggingOp.op.region.h, dragStart.regionY + normalizedDeltaY));
-    
-    const updatedRegion = {
-      ...draggingOp.op.region,
-      x: newX,
-      y: newY,
-    };
-    
-    updateOperationRegion(draggingOp.opIdx, updatedRegion);
-  }, [draggingOp, dragStart, updateOperationRegion]);
+  const handleImageDragMove = useCallback(
+    (e) => {
+      if (!draggingOp || !dragStart) return;
+      const video = videoRef.current;
+      if (!video) return;
+
+      const deltaX = e.clientX - dragStart.mouseX;
+      const deltaY = e.clientY - dragStart.mouseY;
+
+      // Convert pixel delta to normalized coordinates
+      const rect = video.getBoundingClientRect();
+      const normalizedDeltaX = deltaX / rect.width;
+      const normalizedDeltaY = deltaY / rect.height;
+
+      const newX = Math.max(
+        0,
+        Math.min(1 - draggingOp.op.region.w, dragStart.regionX + normalizedDeltaX),
+      );
+      const newY = Math.max(
+        0,
+        Math.min(1 - draggingOp.op.region.h, dragStart.regionY + normalizedDeltaY),
+      );
+
+      const updatedRegion = {
+        ...draggingOp.op.region,
+        x: newX,
+        y: newY,
+      };
+
+      updateOperationRegion(draggingOp.opIdx, updatedRegion);
+    },
+    [draggingOp, dragStart, updateOperationRegion],
+  );
 
   const handleImageDragEnd = useCallback(() => {
     setDraggingOp(null);
@@ -179,11 +202,11 @@ export default function VideoPreview() {
 
   useEffect(() => {
     if (draggingOp) {
-      window.addEventListener('mousemove', handleImageDragMove);
-      window.addEventListener('mouseup', handleImageDragEnd);
+      window.addEventListener("mousemove", handleImageDragMove);
+      window.addEventListener("mouseup", handleImageDragEnd);
       return () => {
-        window.removeEventListener('mousemove', handleImageDragMove);
-        window.removeEventListener('mouseup', handleImageDragEnd);
+        window.removeEventListener("mousemove", handleImageDragMove);
+        window.removeEventListener("mouseup", handleImageDragEnd);
       };
     }
   }, [draggingOp, handleImageDragMove, handleImageDragEnd]);
@@ -191,13 +214,28 @@ export default function VideoPreview() {
   if (!sel) {
     return (
       <div className="flex-1 flex items-center justify-center flex-col gap-3">
-        <div className="w-12 h-12 rounded-full flex items-center justify-center" style={{ background: "var(--bg-elevated)" }}>
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: "var(--text-dim)" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center"
+          style={{ background: "var(--bg-elevated)" }}
+        >
+          <svg
+            className="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            style={{ color: "var(--text-dim)" }}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+            />
           </svg>
         </div>
-        <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>Selecciona un video de la cola</p>
+        <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
+          Selecciona un video de la cola
+        </p>
       </div>
     );
   }
@@ -206,221 +244,314 @@ export default function VideoPreview() {
 
   return (
     <div className="flex-1 flex items-center justify-center p-4 min-h-0 relative">
-      <div className="relative inline-block" style={{ maxWidth: "100%", maxHeight: "100%", overflow: "hidden" }}>
-        <video ref={videoRef} src={sel.src}
+      <div
+        className="relative inline-block"
+        style={{ maxWidth: "100%", maxHeight: "100%", overflow: "hidden" }}
+      >
+        <video
+          ref={videoRef}
+          src={sel.src || null}
           className="max-h-[calc(100vh-200px)] max-w-full block object-contain rounded"
           style={{ imageRendering: "auto" }}
           preload="auto"
           playsInline
           disablePictureInPicture
           controlsList="nodownload noplaybackrate"
-          onLoadedMetadata={() => { setCurrentRegion(null); setDuration(videoRef.current?.duration || 0); setVideoError(null); }}
+          onLoadedMetadata={() => {
+            setCurrentRegion(null);
+            setDuration(videoRef.current?.duration || 0);
+            setVideoError(null);
+          }}
           onError={() => {
             const code = videoRef.current?.error?.code;
             const message = videoRef.current?.error?.message;
-            setVideoError(message ? `${code ? `code ${code}: ` : ""}${message}` : `code ${code || "?"}`);
-          }} />
+            setVideoError(
+              message ? `${code ? `code ${code}: ` : ""}${message}` : `code ${code || "?"}`,
+            );
+          }}
+        />
 
         {videoError && (
           <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-            <div className="pointer-events-auto max-w-[80%] rounded px-3 py-2 text-[11px] font-medium"
-              style={{ background: "rgba(244, 63, 94, 0.95)", color: "white" }}>
-              No se pudo cargar el video ({videoError}). Si el archivo cambió de ubicación, vuelve a importarlo.
+            <div
+              className="pointer-events-auto max-w-[80%] rounded px-3 py-2 text-[11px] font-medium"
+              style={{ background: "rgba(244, 63, 94, 0.95)", color: "white" }}
+            >
+              No se pudo cargar el video ({videoError}). Si el archivo cambió de ubicación, vuelve a
+              importarlo.
             </div>
           </div>
         )}
 
         {/* Operation overlays */}
-        {sel.operations.filter((op) => isOpActive(op, currentTime)).map((op, opIdx) => {
-          const s = regionToScreen(op.region, videoRef.current);
-          if (!s) return null;
-          if (op.mode === "blur") {
-            return (
-              <div key={op.id} className="absolute pointer-events-none z-10"
-                style={{ left: s.x, top: s.y, width: s.w, height: s.h }}>
-                <div style={{ width: "100%", height: "100%",
-                  background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
-                  border: "2px solid rgba(0,240,234,0.6)", borderRadius: "2px" }} />
-                <div style={{ position: "absolute", inset: 0, backdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`, WebkitBackdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)` }} />
-              </div>
-            );
-          }
-          if (op.mode === "crop") {
-            return <div key={op.id} className="absolute pointer-events-none z-10"
-              style={{ left: s.x, top: s.y, width: s.w, height: s.h,
-                outline: "2px dashed #fbbf24", outlineOffset: "-1px" }} />;
-          }
-          if (op.mode === "delogo") {
-            const dm = op.delogoMethod || "inpaint";
-            let overlayStyle = { left: s.x, top: s.y, width: s.w, height: s.h };
-            if (dm === "inpaint") {
-              overlayStyle.background = "repeating-conic-gradient(rgba(239,68,68,0.15) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px";
-              overlayStyle.outline = "2px solid rgba(239,68,68,0.7)";
-            } else if (dm === "blur") {
-              overlayStyle.background = "repeating-linear-gradient(135deg, rgba(59,130,246,0.10) 0px, rgba(59,130,246,0.10) 2px, transparent 2px, transparent 8px)";
-              overlayStyle.backdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
-              overlayStyle.WebkitBackdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
-              overlayStyle.outline = "2px dashed rgba(59,130,246,0.7)";
-            } else {
-              overlayStyle.background = `${op.delogoFillColor || "black"}`;
-              overlayStyle.opacity = op.delogoFillOpacity ?? 1;
-              overlayStyle.outline = "2px solid rgba(239,68,68,0.6)";
+        {sel.operations
+          .filter((op) => isOpActive(op, currentTime))
+          .map((op, opIdx) => {
+            const s = regionToScreen(op.region, videoRef.current);
+            if (!s) return null;
+            if (op.mode === "blur") {
+              return (
+                <div
+                  key={op.id}
+                  className="absolute pointer-events-none z-10"
+                  style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
+                >
+                  <div
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      background:
+                        "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
+                      border: "2px solid rgba(0,240,234,0.6)",
+                      borderRadius: "2px",
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      backdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
+                      WebkitBackdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
+                    }}
+                  />
+                </div>
+              );
             }
-            return <div key={op.id} className="absolute pointer-events-none z-10" style={overlayStyle} />;
-          }
-          if (op.mode === "image" && op.imagePath) {
-            const dataUrl = imageDataCache?.[op.imagePath];
-            const isDragging = draggingOp?.opIdx === opIdx;
+            if (op.mode === "crop") {
+              return (
+                <div
+                  key={op.id}
+                  className="absolute pointer-events-none z-10"
+                  style={{
+                    left: s.x,
+                    top: s.y,
+                    width: s.w,
+                    height: s.h,
+                    outline: "2px dashed #fbbf24",
+                    outlineOffset: "-1px",
+                  }}
+                />
+              );
+            }
+            if (op.mode === "delogo") {
+              const dm = op.delogoMethod || "inpaint";
+              let overlayStyle = { left: s.x, top: s.y, width: s.w, height: s.h };
+              if (dm === "inpaint") {
+                overlayStyle.background =
+                  "repeating-conic-gradient(rgba(239,68,68,0.15) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px";
+                overlayStyle.outline = "2px solid rgba(239,68,68,0.7)";
+              } else if (dm === "blur") {
+                overlayStyle.background =
+                  "repeating-linear-gradient(135deg, rgba(59,130,246,0.10) 0px, rgba(59,130,246,0.10) 2px, transparent 2px, transparent 8px)";
+                overlayStyle.backdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
+                overlayStyle.WebkitBackdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
+                overlayStyle.outline = "2px dashed rgba(59,130,246,0.7)";
+              } else {
+                overlayStyle.background = `${op.delogoFillColor || "black"}`;
+                overlayStyle.opacity = op.delogoFillOpacity ?? 1;
+                overlayStyle.outline = "2px solid rgba(239,68,68,0.6)";
+              }
+              return (
+                <div
+                  key={op.id}
+                  className="absolute pointer-events-none z-10"
+                  style={overlayStyle}
+                />
+              );
+            }
+            if (op.mode === "image" && op.imagePath) {
+              const dataUrl = imageDataCache?.[op.imagePath];
+              const isDragging = draggingOp?.opIdx === opIdx;
+              return (
+                <div
+                  key={op.id}
+                  className={`absolute z-10 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
+                  style={{
+                    left: s.x,
+                    top: s.y,
+                    width: s.w,
+                    height: s.h,
+                    opacity: op.imageOpacity ?? 1,
+                    outline: isDragging
+                      ? "2px solid rgba(16,185,129,1)"
+                      : "1px dashed rgba(16,185,129,0.6)",
+                    pointerEvents: "auto",
+                  }}
+                  onMouseDown={(e) => handleImageDragStart(op, opIdx, e)}
+                >
+                  {dataUrl ? (
+                    <img
+                      src={dataUrl}
+                      alt=""
+                      className="w-full h-full"
+                      style={{ objectFit: "fill" }}
+                      draggable={false}
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full flex items-center justify-center text-[10px]"
+                      style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
+                    >
+                      {op.imagePath.split(/[\\/]/).pop()}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            if (op.mode === "text" && op.text && sidebarMode !== "batch") {
+              return (
+                <TextOverlay key={op.id} screen={s} text={op.text} style={op} showOutline={false} />
+              );
+            }
+            return null;
+          })}
+
+        {/* Live blur preview while configuring */}
+        {sidebarMode === "logo" &&
+          activeTool === "blur" &&
+          currentRegion &&
+          (() => {
+            const s = regionToScreen(currentRegion, videoRef.current);
+            if (!s) return null;
+            const blurPx = Math.max(1, blurStrength || 20);
             return (
-              <div key={op.id} 
-                className={`absolute z-10 ${isDragging ? 'cursor-grabbing' : 'cursor-grab hover:cursor-grab'}`}
-                style={{ 
-                  left: s.x, 
-                  top: s.y, 
-                  width: s.w, 
-                  height: s.h,
-                  opacity: op.imageOpacity ?? 1,
-                  outline: isDragging ? "2px solid rgba(16,185,129,1)" : "1px dashed rgba(16,185,129,0.6)",
-                  pointerEvents: 'auto',
-                }}
-                onMouseDown={(e) => handleImageDragStart(op, opIdx, e)}
+              <div
+                className="absolute pointer-events-none z-10"
+                style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
               >
-                {dataUrl ? (
-                  <img src={dataUrl} alt="" className="w-full h-full" style={{ objectFit: "fill" }} draggable={false} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-[10px]" style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}>
-                    {op.imagePath.split(/[\\/]/).pop()}
-                  </div>
-                )}
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    background:
+                      "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
+                    border: "2px solid rgba(0,240,234,0.6)",
+                    borderRadius: "2px",
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    backdropFilter: `blur(${blurPx}px)`,
+                    WebkitBackdropFilter: `blur(${blurPx}px)`,
+                    borderRadius: "2px",
+                  }}
+                />
               </div>
             );
-          }
-          if (op.mode === "text" && op.text && sidebarMode !== "batch") {
+          })()}
+
+        {/* Live text preview while configuring (logo mode) */}
+        {sidebarMode === "logo" &&
+          activeTool === "text" &&
+          currentRegion &&
+          textInput &&
+          (() => {
+            const s = regionToScreen(currentRegion, videoRef.current);
+            if (!s) return null;
             return (
               <TextOverlay
-                key={op.id}
                 screen={s}
-                text={op.text}
-                style={op}
+                text={textInput}
+                style={getGlobalTextStyleFromState(useEditorStore.getState())}
                 showOutline={false}
               />
             );
-          }
-          return null;
-        })}
-
-        {/* Live blur preview while configuring */}
-        {sidebarMode === "logo" && activeTool === "blur" && currentRegion && (() => {
-          const s = regionToScreen(currentRegion, videoRef.current);
-          if (!s) return null;
-          const blurPx = Math.max(1, blurStrength || 20);
-          return (
-            <div className="absolute pointer-events-none z-10"
-              style={{ left: s.x, top: s.y, width: s.w, height: s.h }}>
-              <div style={{ 
-                width: "100%", 
-                height: "100%",
-                background: "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
-                border: "2px solid rgba(0,240,234,0.6)", 
-                borderRadius: "2px" 
-              }} />
-              <div style={{ 
-                position: "absolute", 
-                inset: 0, 
-                backdropFilter: `blur(${blurPx}px)`, 
-                WebkitBackdropFilter: `blur(${blurPx}px)`,
-                borderRadius: "2px"
-              }} />
-            </div>
-          );
-        })()}
-
-        {/* Live text preview while configuring (logo mode) */}
-        {sidebarMode === "logo" && activeTool === "text" && currentRegion && textInput && (() => {
-          const s = regionToScreen(currentRegion, videoRef.current);
-          if (!s) return null;
-          return (
-            <TextOverlay
-              screen={s}
-              text={textInput}
-              style={getGlobalTextStyleFromState(useEditorStore.getState())}
-              showOutline={false}
-            />
-          );
-        })()}
+          })()}
 
         {/* Batch: live text preview per template region */}
-        {sidebarMode === "batch" && selectedIdx >= 0 && templateRegions.map((tr) => {
-          const payload = getBatchPreviewPayload(selectedIdx, tr.id);
-          if (!payload) return null;
-          const s = regionToScreen(payload.region, videoRef.current);
-          if (!s) return null;
-          const isSelected = selectedTemplateRegionId === tr.id;
-          return (
-            <TextOverlay
-              key={tr.id}
-              screen={s}
-              text={payload.text}
-              style={payload.style}
-              isFocused={isSelected}
-              showOutline
-              label={tr.label}
-            />
-          );
-        })}
+        {sidebarMode === "batch" &&
+          selectedIdx >= 0 &&
+          templateRegions.map((tr) => {
+            const payload = getBatchPreviewPayload(selectedIdx, tr.id);
+            if (!payload) return null;
+            const s = regionToScreen(payload.region, videoRef.current);
+            if (!s) return null;
+            const isSelected = selectedTemplateRegionId === tr.id;
+            return (
+              <TextOverlay
+                key={tr.id}
+                screen={s}
+                text={payload.text}
+                style={payload.style}
+                isFocused={isSelected}
+                showOutline
+                label={tr.label}
+              />
+            );
+          })}
 
         {/* Batch: preview while drawing a new region */}
-        {sidebarMode === "batch" && currentRegion && (() => {
-          const s = regionToScreen(currentRegion, videoRef.current);
-          if (!s) return null;
-          return (
-            <TextOverlay
-              screen={s}
-              text="Texto de ejemplo"
-              style={getGlobalTextStyleFromState(useEditorStore.getState())}
-              isFocused
-              showOutline
-            />
-          );
-        })()}
+        {sidebarMode === "batch" &&
+          currentRegion &&
+          (() => {
+            const s = regionToScreen(currentRegion, videoRef.current);
+            if (!s) return null;
+            return (
+              <TextOverlay
+                screen={s}
+                text="Texto de ejemplo"
+                style={getGlobalTextStyleFromState(useEditorStore.getState())}
+                isFocused
+                showOutline
+              />
+            );
+          })()}
 
         {/* Live preview of the in-progress delogo effect (under the selection handles) */}
         <DelogoLivePreview videoRef={videoRef} />
 
         {/* Drawing canvas */}
-        <canvas ref={canvasRef} className="absolute top-0 left-0"
-          onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} />
+        <canvas
+          ref={canvasRef}
+          className="absolute top-0 left-0"
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+        />
       </div>
 
       {/* Video Player Controls */}
-      <div className="absolute bottom-0 left-0 right-0 z-30"
-        style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.85))", paddingTop: "24px" }}>
+      <div
+        className="absolute bottom-0 left-0 right-0 z-30"
+        style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.85))", paddingTop: "24px" }}
+      >
         {/* Seek bar with timeline markers */}
         <div className="px-3 pb-1 relative">
-          {showTimeline && duration > 0 && sel.operations.some((op) => op.startTime != null || op.endTime != null) && (
-            <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-3 pointer-events-none z-10">
-              {sel.operations.map((op) => {
-                const s = op.startTime ?? 0;
-                const e = op.endTime ?? duration;
-                const left = (s / duration) * 100;
-                const width = Math.max(0.5, ((e - s) / duration) * 100);
-                return (
-                  <div key={op.id}
-                    className="absolute h-1 rounded-sm"
-                    style={{
-                      left: `${left}%`,
-                      width: `${width}%`,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      background: opModeColor[op.mode] || "#888",
-                      opacity: isOpActive(op, currentTime) ? 0.85 : 0.25,
-                    }}
-                    title={`${op.mode} ${fmtTime(s)} → ${fmtTime(e)}`} />
-                );
-              })}
-            </div>
-          )}
-          <input type="range" min={0} max={1} step={0.001}
+          {showTimeline &&
+            duration > 0 &&
+            sel.operations.some((op) => op.startTime != null || op.endTime != null) && (
+              <div className="absolute left-3 right-3 top-1/2 -translate-y-1/2 h-3 pointer-events-none z-10">
+                {sel.operations.map((op) => {
+                  const s = op.startTime ?? 0;
+                  const e = op.endTime ?? duration;
+                  const left = (s / duration) * 100;
+                  const width = Math.max(0.5, ((e - s) / duration) * 100);
+                  return (
+                    <div
+                      key={op.id}
+                      className="absolute h-1 rounded-sm"
+                      style={{
+                        left: `${left}%`,
+                        width: `${width}%`,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        background: opModeColor[op.mode] || "#888",
+                        opacity: isOpActive(op, currentTime) ? 0.85 : 0.25,
+                      }}
+                      title={`${op.mode} ${fmtTime(s)} → ${fmtTime(e)}`}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.001}
             value={seekFrac}
             onMouseDown={() => setSeeking(true)}
             onMouseUp={() => setSeeking(false)}
@@ -433,38 +564,62 @@ export default function VideoPreview() {
             style={{
               accentColor: "var(--accent)",
               background: `linear-gradient(to right, var(--accent) ${seekFrac * 100}%, var(--border) ${seekFrac * 100}%)`,
-            }} />
+            }}
+          />
         </div>
         {/* Buttons & time */}
         <div className="flex items-center gap-2 px-3 pb-2">
-          <button onClick={() => { const v = videoRef.current; if (v) v.currentTime = 0; }}
-            className="p-1 rounded hover:bg-white/10" style={{ color: "var(--text-dim)" }}>
+          <button
+            onClick={() => {
+              const v = videoRef.current;
+              if (v) v.currentTime = 0;
+            }}
+            className="p-1 rounded hover:bg-white/10"
+            style={{ color: "var(--text-dim)" }}
+          >
             <SkipBack size={14} />
           </button>
-          <button onClick={() => {
-            const v = videoRef.current;
-            if (!v) return;
-            if (v.paused) v.play(); else v.pause();
-          }}
+          <button
+            onClick={() => {
+              const v = videoRef.current;
+              if (!v) return;
+              if (v.paused) v.play();
+              else v.pause();
+            }}
             className="p-1.5 rounded-full hover:bg-white/15"
-            style={{ color: "var(--accent)" }}>
+            style={{ color: "var(--accent)" }}
+          >
             {playing ? <Pause size={16} /> : <Play size={16} />}
           </button>
-          <button onClick={() => { const v = videoRef.current; if (v && v.duration) v.currentTime = v.duration; }}
-            className="p-1 rounded hover:bg-white/10" style={{ color: "var(--text-dim)" }}>
+          <button
+            onClick={() => {
+              const v = videoRef.current;
+              if (v && v.duration) v.currentTime = v.duration;
+            }}
+            className="p-1 rounded hover:bg-white/10"
+            style={{ color: "var(--text-dim)" }}
+          >
             <SkipForward size={14} />
           </button>
-          <button onClick={() => {
-            const v = videoRef.current;
-            if (v) { v.muted = !v.muted; setMuted(v.muted); }
-          }}
-            className="p-1 rounded hover:bg-white/10" style={{ color: "var(--text-dim)" }}>
+          <button
+            onClick={() => {
+              const v = videoRef.current;
+              if (v) {
+                v.muted = !v.muted;
+                setMuted(v.muted);
+              }
+            }}
+            className="p-1 rounded hover:bg-white/10"
+            style={{ color: "var(--text-dim)" }}
+          >
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
           </button>
-          <button onClick={() => setShowTimeline((v) => !v)}
+          <button
+            onClick={() => setShowTimeline((v) => !v)}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: showTimeline ? "var(--accent)" : "var(--text-dim)" }}
-            title={showTimeline ? "Ocultar marcadores de tiempo" : "Mostrar marcadores de tiempo"}>
+            title={showTimeline ? "Ocultar marcadores de tiempo" : "Mostrar marcadores de tiempo"}
+          >
             {showTimeline ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
           <span className="text-[10px] font-mono ml-1" style={{ color: "var(--text-secondary)" }}>

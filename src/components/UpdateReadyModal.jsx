@@ -6,11 +6,16 @@ const DISMISS_KEY = "beru.updateReady.dismissedVersion";
 
 const safeStorage = {
   get(k) {
-    try { return typeof localStorage !== "undefined" ? localStorage.getItem(k) : null; }
-    catch { return null; }
+    try {
+      return typeof localStorage !== "undefined" ? localStorage.getItem(k) : null;
+    } catch {
+      return null;
+    }
   },
   set(k, v) {
-    try { if (typeof localStorage !== "undefined") localStorage.setItem(k, v); } catch {}
+    try {
+      if (typeof localStorage !== "undefined") localStorage.setItem(k, v);
+    } catch {}
   },
 };
 
@@ -69,11 +74,7 @@ export default function UpdateReadyModal() {
           >
             <Sparkles size={20} />
           </div>
-          <h2
-            id="update-ready-title"
-            className="text-base font-semibold"
-            style={{ color: "#fff" }}
-          >
+          <h2 id="update-ready-title" className="text-base font-semibold" style={{ color: "#fff" }}>
             {t("updater.modal.title")}
           </h2>
         </div>
@@ -86,7 +87,11 @@ export default function UpdateReadyModal() {
 
         <div
           className="mx-6 my-3 px-3 py-2 rounded text-[11px]"
-          style={{ background: "rgba(244,63,94,0.08)", color: "#fda4af", border: "1px solid rgba(244,63,94,0.2)" }}
+          style={{
+            background: "rgba(244,63,94,0.08)",
+            color: "#fda4af",
+            border: "1px solid rgba(244,63,94,0.2)",
+          }}
         >
           {t("updater.modal.note")}
         </div>

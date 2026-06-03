@@ -17,10 +17,7 @@ describe("batch-process helpers", () => {
   });
 
   it("detects videos missing batch text", () => {
-    const queue = [
-      { filename: "a.mp4" },
-      { filename: "b.mp4" },
-    ];
+    const queue = [{ filename: "a.mp4" }, { filename: "b.mp4" }];
     const regions = [{ id: 1, label: "TEXT_1", region: { x: 0, y: 0, w: 0.2, h: 0.1 } }];
     const getCell = (idx) => (idx === 0 ? "OK" : "");
     expect(videoHasBatchText(0, regions, getCell)).toBe(true);

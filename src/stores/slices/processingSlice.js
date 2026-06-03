@@ -21,52 +21,57 @@ export function createProcessingSlice(set, get) {
     progressTotal: 0,
     logLines: [],
 
-    appendLog: (line) => set((s) => ({
-      logLines: [...s.logLines.slice(-199), line],
-    })),
+    appendLog: (line) =>
+      set((s) => ({
+        logLines: [...s.logLines.slice(-199), line],
+      })),
 
-    updateProcessingProgress: (msg) => set((s) => {
-      const current = msg.current ?? msg.done;
-      const total = msg.total;
-      return {
-        progressDone: current != null ? current : s.progressDone,
-        progressTotal: total != null && total > 0 ? total : s.progressTotal,
-      };
-    }),
+    updateProcessingProgress: (msg) =>
+      set((s) => {
+        const current = msg.current ?? msg.done;
+        const total = msg.total;
+        return {
+          progressDone: current != null ? current : s.progressDone,
+          progressTotal: total != null && total > 0 ? total : s.progressTotal,
+        };
+      }),
 
-    updateJobProgress: (msg) => set((s) => {
-      const idx = msg.index;
-      if (!isQueueJobIndex(idx, s.queue.length)) return {};
-      const updated = [...s.queue];
-      updated[idx] = {
-        ...updated[idx],
-        status: "processing",
-        progress: Math.round(msg.percent ?? updated[idx].progress ?? 0),
-      };
-      return { queue: updated };
-    }),
+    updateJobProgress: (msg) =>
+      set((s) => {
+        const idx = msg.index;
+        if (!isQueueJobIndex(idx, s.queue.length)) return {};
+        const updated = [...s.queue];
+        updated[idx] = {
+          ...updated[idx],
+          status: "processing",
+          progress: Math.round(msg.percent ?? updated[idx].progress ?? 0),
+        };
+        return { queue: updated };
+      }),
 
-    markJobDone: (msg) => set((s) => {
-      const idx = msg.index;
-      if (!isQueueJobIndex(idx, s.queue.length)) return {};
-      const updated = [...s.queue];
-      updated[idx] = { ...updated[idx], status: "done", progress: 100, error: null };
-      return {
-        queue: updated,
-        progressDone: s.progressDone + 1,
-      };
-    }),
+    markJobDone: (msg) =>
+      set((s) => {
+        const idx = msg.index;
+        if (!isQueueJobIndex(idx, s.queue.length)) return {};
+        const updated = [...s.queue];
+        updated[idx] = { ...updated[idx], status: "done", progress: 100, error: null };
+        return {
+          queue: updated,
+          progressDone: s.progressDone + 1,
+        };
+      }),
 
-    markJobError: (msg) => set((s) => {
-      const idx = msg.index;
-      if (!isQueueJobIndex(idx, s.queue.length)) return {};
-      const updated = [...s.queue];
-      updated[idx] = { ...updated[idx], status: "error", error: msg.error };
-      return {
-        queue: updated,
-        progressDone: s.progressDone + 1,
-      };
-    }),
+    markJobError: (msg) =>
+      set((s) => {
+        const idx = msg.index;
+        if (!isQueueJobIndex(idx, s.queue.length)) return {};
+        const updated = [...s.queue];
+        updated[idx] = { ...updated[idx], status: "error", error: msg.error };
+        return {
+          queue: updated,
+          progressDone: s.progressDone + 1,
+        };
+      }),
 
     updateQueueItemStatus: (idx, patch) => {
       set((s) => {
@@ -95,13 +100,17 @@ export function createProcessingSlice(set, get) {
       if (!Array.isArray(infos)) infos = [];
 
       if (api.getVideoInfo) {
-        await Promise.all(missing.map(async (item, i) => {
-          if (hasVideoDimensions({ width: infos[i]?.width, height: infos[i]?.height })) return;
-          try {
-            const retry = await api.getVideoInfo(item.path);
-            if (hasVideoDimensions(retry)) infos[i] = retry;
-          } catch { /* keep prior info */ }
-        }));
+        await Promise.all(
+          missing.map(async (item, i) => {
+            if (hasVideoDimensions({ width: infos[i]?.width, height: infos[i]?.height })) return;
+            try {
+              const retry = await api.getVideoInfo(item.path);
+              if (hasVideoDimensions(retry)) infos[i] = retry;
+            } catch {
+              /* keep prior info */
+            }
+          }),
+        );
       }
 
       const infoByPath = new Map(missing.map((item, i) => [item.path, infos[i] || {}]));
@@ -139,9 +148,9 @@ export function createProcessingSlice(set, get) {
           return {
             mode: safe.mode,
             region: safe.region
-              ? (width > 0 && height > 0
+              ? width > 0 && height > 0
                 ? denormalizeRegion(safe.region, width, height)
-                : safe.region)
+                : safe.region
               : safe.region,
             blur_strength: safe.blurStrength,
             delogo_method: safe.delogoMethod,
@@ -224,7 +233,9 @@ export function createProcessingSlice(set, get) {
       set({ encodeProfile: profile });
       const api = window.api;
       if (api?.saveSettings) {
-        try { await api.saveSettings({ encodeProfile: profile }); } catch (e) {
+        try {
+          await api.saveSettings({ encodeProfile: profile });
+        } catch (e) {
           console.error("[beru] Failed to save encode profile:", e.message);
         }
       }
@@ -236,7 +247,9 @@ export function createProcessingSlice(set, get) {
       set({ batchWorkers: workers });
       const api = window.api;
       if (api?.saveSettings) {
-        try { await api.saveSettings({ batchWorkers: workers }); } catch (e) {
+        try {
+          await api.saveSettings({ batchWorkers: workers });
+        } catch (e) {
           console.error("[beru] Failed to save batch workers:", e.message);
         }
       }
@@ -247,7 +260,9 @@ export function createProcessingSlice(set, get) {
       set({ batchRetryFailed });
       const api = window.api;
       if (api?.saveSettings) {
-        try { await api.saveSettings({ batchRetryFailed }); } catch (e) {
+        try {
+          await api.saveSettings({ batchRetryFailed });
+        } catch (e) {
           console.error("[beru] Failed to save batch retry setting:", e.message);
         }
       }

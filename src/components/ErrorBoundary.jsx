@@ -25,7 +25,8 @@ export default class ErrorBoundary extends React.Component {
       >
         <h1 className="text-lg font-semibold">Beru no pudo iniciar la interfaz</h1>
         <p className="text-sm max-w-md" style={{ color: "#999" }}>
-          Revisa la consola (F12) o reinicia con <code style={{ color: "#00f0ea" }}>npm run dev</code>.
+          Revisa la consola (F12) o reinicia con{" "}
+          <code style={{ color: "#00f0ea" }}>npm run dev</code>.
         </p>
         <pre
           className="text-left text-[11px] max-w-xl w-full overflow-auto p-3 rounded"

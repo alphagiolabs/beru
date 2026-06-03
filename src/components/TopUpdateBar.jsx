@@ -11,11 +11,16 @@ const FIRST_CHECK_DELAY_MS = 2500;
 
 const safeStorage = {
   get(k) {
-    try { return typeof localStorage !== "undefined" ? localStorage.getItem(k) : null; }
-    catch { return null; }
+    try {
+      return typeof localStorage !== "undefined" ? localStorage.getItem(k) : null;
+    } catch {
+      return null;
+    }
   },
   set(k, v) {
-    try { if (typeof localStorage !== "undefined") localStorage.setItem(k, v); } catch {}
+    try {
+      if (typeof localStorage !== "undefined") localStorage.setItem(k, v);
+    } catch {}
   },
 };
 
@@ -66,10 +71,7 @@ export default function TopUpdateBar() {
   }, [fetchLatest]);
 
   const latest = state.latest;
-  const visible =
-    state.status === "available" &&
-    latest &&
-    dismissedVersion !== latest.version;
+  const visible = state.status === "available" && latest && dismissedVersion !== latest.version;
 
   if (state.status === "idle" || state.status === "loading" || state.status === "up-to-date") {
     return null;
@@ -140,9 +142,7 @@ export default function TopUpdateBar() {
       >
         <Download size={14} className="text-white" />
       </div>
-      <span className="truncate">
-        {t("topUpdateBar.message", { version: latest.version })}
-      </span>
+      <span className="truncate">{t("topUpdateBar.message", { version: latest.version })}</span>
       <button
         onClick={handleDownload}
         className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold flex-shrink-0 transition-opacity hover:opacity-80"

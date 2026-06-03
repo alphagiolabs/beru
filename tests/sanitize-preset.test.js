@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  sanitizeTemplateRegions,
-  sanitizeTextStyle,
-} from "../src/utils/sanitize-preset.js";
+import { sanitizeTemplateRegions, sanitizeTextStyle } from "../src/utils/sanitize-preset.js";
 
 describe("sanitize-preset", () => {
   it("drops regions with absurd dimensions", () => {

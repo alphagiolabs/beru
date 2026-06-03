@@ -91,12 +91,13 @@ export function createEditorStyleSlice(set, get) {
     setTempImageDataUrl: (val) => set({ tempImageDataUrl: val || "" }),
     setTempImageOpacity: (val) => set({ tempImageOpacity: Number(val) }),
     setTempImageScale: (val) => set({ tempImageScale: Number(val) }),
-    setActiveTool: (val) => set({
-      activeTool: val,
-      currentRegion: null,
-      tempImagePath: val === "image" ? get().tempImagePath : "",
-      tempImageDataUrl: val === "image" ? get().tempImageDataUrl : "",
-    }),
+    setActiveTool: (val) =>
+      set({
+        activeTool: val,
+        currentRegion: null,
+        tempImagePath: val === "image" ? get().tempImagePath : "",
+        tempImageDataUrl: val === "image" ? get().tempImageDataUrl : "",
+      }),
     setSidebarMode: (val) => {
       if (val === "batch") {
         const { templateRegions, selectedTemplateRegionId } = get();

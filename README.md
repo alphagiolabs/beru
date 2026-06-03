@@ -25,10 +25,10 @@ git log --all --full-history -- "prueba.mp4"
 
 Los releases en GitHub Actions se firman automáticamente si configuras estos secrets del repositorio:
 
-| Secret | Descripción |
-|--------|-------------|
-| `WINDOWS_CERTIFICATE_BASE64` | Certificado `.p12` / `.pfx` en Base64 |
-| `WINDOWS_CERTIFICATE_PASSWORD` | Contraseña del certificado |
+| Secret                         | Descripción                           |
+| ------------------------------ | ------------------------------------- |
+| `WINDOWS_CERTIFICATE_BASE64`   | Certificado `.p12` / `.pfx` en Base64 |
+| `WINDOWS_CERTIFICATE_PASSWORD` | Contraseña del certificado            |
 
 Sin esos secrets, el workflow publica un instalador **sin firmar** (`CSC_IDENTITY_AUTO_DISCOVERY=false`) y Windows SmartScreen mostrará advertencias la primera vez.
 
@@ -59,18 +59,18 @@ Los presets y proyectos importados sanitizan regiones de plantilla (`clampRegion
 
 ## Rendimiento en lote
 
-| Modo | Workers paralelos (típico) |
-|------|----------------------------|
-| Auto (balanceado) | Hasta **5** con NVENC/QSV; **1** con Media Foundation |
-| Manual | 1–16 en el selector del header |
-| Conservador | `batchWorkersMode: "conservative"` en `settings.json` (GPU max 2) |
+| Modo              | Workers paralelos (típico)                                        |
+| ----------------- | ----------------------------------------------------------------- |
+| Auto (balanceado) | Hasta **5** con NVENC/QSV; **1** con Media Foundation             |
+| Manual            | 1–16 en el selector del header                                    |
+| Conservador       | `batchWorkersMode: "conservative"` en `settings.json` (GPU max 2) |
 
 Variables de entorno del procesador Python:
 
-| Variable | Descripción |
-|----------|-------------|
-| `BERU_WORKERS` | `0` = auto; `>0` = fijo |
-| `BERU_WORKERS_MODE` | `balanced` (default) o `conservative` |
+| Variable            | Descripción                                                |
+| ------------------- | ---------------------------------------------------------- |
+| `BERU_WORKERS`      | `0` = auto; `>0` = fijo                                    |
+| `BERU_WORKERS_MODE` | `balanced` (default) o `conservative`                      |
 | `BERU_RETRY_FAILED` | `1` = reintenta fallidos con la mitad de workers (default) |
 
 Benchmark local (requiere clips en una carpeta):

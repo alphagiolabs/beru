@@ -17,7 +17,10 @@ export default function ToolBar() {
   if (!sel || store.sidebarMode !== "logo") return null;
 
   return (
-    <div className="flex items-center gap-1 px-4 py-2 border-t flex-shrink-0" style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}>
+    <div
+      className="flex items-center gap-1 px-4 py-2 border-t flex-shrink-0"
+      style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+    >
       {tools.map((tool) => {
         const active = store.activeTool === tool.id;
         const colors = {
@@ -29,13 +32,16 @@ export default function ToolBar() {
         };
         const Icon = tool.icon;
         return (
-          <button key={tool.id} onClick={() => store.setActiveTool(tool.id)}
+          <button
+            key={tool.id}
+            onClick={() => store.setActiveTool(tool.id)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-medium transition-all"
             style={{
               background: active ? "var(--bg-elevated)" : "transparent",
               color: active ? colors[tool.id] : "var(--text-dim)",
               border: active ? `1px solid ${colors[tool.id]}33` : "1px solid transparent",
-            }}>
+            }}
+          >
             <Icon size={14} /> {t(tool.labelKey)}
           </button>
         );

@@ -54,6 +54,16 @@ describe("useEditorStore logic regressions", () => {
       progressTotal: 0,
       progressDone: 0,
       recent: [],
+      update: {
+        status: "idle",
+        version: null,
+        percent: 0,
+        error: null,
+        transferred: 0,
+        total: 0,
+        releaseNotes: "",
+        releaseUrl: null,
+      },
       textFontSize: 32,
       textFontColor: "white",
       fontFamily: "Arial",
@@ -93,13 +103,15 @@ describe("useEditorStore logic regressions", () => {
     });
     const state = useEditorStore.getState();
 
-    expect(state.queue[0]).toEqual(expect.objectContaining({
-      path: "C:\\videos\\clip.mp4",
-      filename: "clip.mp4",
-      width: 1920,
-      height: 1080,
-      duration: 42,
-    }));
+    expect(state.queue[0]).toEqual(
+      expect.objectContaining({
+        path: "C:\\videos\\clip.mp4",
+        filename: "clip.mp4",
+        width: 1920,
+        height: 1080,
+        duration: 42,
+      }),
+    );
     expect(state.selectedIdx).toBe(0);
   });
 
@@ -133,8 +145,18 @@ describe("useEditorStore logic regressions", () => {
     ]);
     useEditorStore.setState({
       queue: [
-        queueItem({ path: "C:\\videos\\missing.mp4", filename: "missing.mp4", width: 0, height: 0 }),
-        queueItem({ path: "C:\\videos\\ready.mp4", filename: "ready.mp4", width: 1920, height: 1080 }),
+        queueItem({
+          path: "C:\\videos\\missing.mp4",
+          filename: "missing.mp4",
+          width: 0,
+          height: 0,
+        }),
+        queueItem({
+          path: "C:\\videos\\ready.mp4",
+          filename: "ready.mp4",
+          width: 1920,
+          height: 1080,
+        }),
       ],
     });
 
@@ -142,21 +164,25 @@ describe("useEditorStore logic regressions", () => {
     const job = useEditorStore.getState()._buildJobFor(refreshed[0], 0);
 
     expect(mockApi.getVideoInfoBatch).toHaveBeenCalledWith(["C:\\videos\\missing.mp4"]);
-    expect(refreshed[0]).toEqual(expect.objectContaining({
-      width: 1280,
-      height: 720,
-      duration: 12.5,
-      videoCodec: "h264",
-      frameRate: 30,
-      audioCodec: "aac",
-    }));
+    expect(refreshed[0]).toEqual(
+      expect.objectContaining({
+        width: 1280,
+        height: 720,
+        duration: 12.5,
+        videoCodec: "h264",
+        frameRate: 30,
+        audioCodec: "aac",
+      }),
+    );
     expect(refreshed[1].width).toBe(1920);
-    expect(job).toEqual(expect.objectContaining({
-      width: 1280,
-      height: 720,
-      source_width: 1280,
-      source_height: 720,
-    }));
+    expect(job).toEqual(
+      expect.objectContaining({
+        width: 1280,
+        height: 720,
+        source_width: 1280,
+        source_height: 720,
+      }),
+    );
     expect(refreshed[0].sourceWidth).toBe(1280);
     expect(refreshed[0].sourceHeight).toBe(720);
   });
@@ -180,14 +206,16 @@ describe("useEditorStore logic regressions", () => {
     const op = useEditorStore.getState().queue[0].operations[0];
 
     expect(report).toEqual({ matched: 1, unmatched: 0, duplicate: 0, total: 1 });
-    expect(op).toEqual(expect.objectContaining({
-      text: "Hola",
-      fontWeight: 700,
-      letterSpacing: 4,
-      textAlign: "center",
-      textOpacity: 0.75,
-      boxBorderWidth: 9,
-    }));
+    expect(op).toEqual(
+      expect.objectContaining({
+        text: "Hola",
+        fontWeight: 700,
+        letterSpacing: 4,
+        textAlign: "center",
+        textOpacity: 0.75,
+        boxBorderWidth: 9,
+      }),
+    );
   });
 
   it("round-trips advanced text style fields in project and preset data", () => {
@@ -201,13 +229,15 @@ describe("useEditorStore logic regressions", () => {
 
     const project = useEditorStore.getState().serializeProject();
 
-    expect(project.textStyle).toEqual(expect.objectContaining({
-      fontWeight: 900,
-      letterSpacing: 6,
-      textAlign: "right",
-      textOpacity: 0.4,
-      boxBorderWidth: 12,
-    }));
+    expect(project.textStyle).toEqual(
+      expect.objectContaining({
+        fontWeight: 900,
+        letterSpacing: 6,
+        textAlign: "right",
+        textOpacity: 0.4,
+        boxBorderWidth: 12,
+      }),
+    );
 
     useEditorStore.setState({
       fontWeight: 400,
@@ -220,13 +250,15 @@ describe("useEditorStore logic regressions", () => {
     const result = useEditorStore.getState()._applyProject({ ...project, excel: null });
 
     expect(result.ok).toBe(true);
-    expect(useEditorStore.getState()).toEqual(expect.objectContaining({
-      fontWeight: 900,
-      letterSpacing: 6,
-      textAlign: "right",
-      textOpacity: 0.4,
-      boxBorderWidth: 12,
-    }));
+    expect(useEditorStore.getState()).toEqual(
+      expect.objectContaining({
+        fontWeight: 900,
+        letterSpacing: 6,
+        textAlign: "right",
+        textOpacity: 0.4,
+        boxBorderWidth: 12,
+      }),
+    );
   });
 
   it("getBatchPreviewPayload returns Excel text without a text operation", () => {
@@ -321,7 +353,12 @@ describe("useEditorStore logic regressions", () => {
       queue: [
         queueItem({
           operations: [
-            { id: "img-1", mode: "image", imagePath: "C:\\img\\a.png", region: { x: 0, y: 0, w: 0.1, h: 0.1 } },
+            {
+              id: "img-1",
+              mode: "image",
+              imagePath: "C:\\img\\a.png",
+              region: { x: 0, y: 0, w: 0.1, h: 0.1 },
+            },
           ],
         }),
         queueItem({ path: "C:\\videos\\b.mp4", filename: "b.mp4" }),
@@ -339,7 +376,12 @@ describe("useEditorStore logic regressions", () => {
       queue: [
         queueItem({
           operations: [
-            { id: "img-1", mode: "image", imagePath: "C:\\img\\a.png", region: { x: 0, y: 0, w: 0.1, h: 0.1 } },
+            {
+              id: "img-1",
+              mode: "image",
+              imagePath: "C:\\img\\a.png",
+              region: { x: 0, y: 0, w: 0.1, h: 0.1 },
+            },
           ],
         }),
       ],
@@ -368,5 +410,33 @@ describe("useEditorStore logic regressions", () => {
     expect(useEditorStore.getState().recent).toEqual([
       { path: "C:\\projects\\b.beru.json", name: "b.beru.json", exists: true },
     ]);
+  });
+
+  it("keeps updater release metadata while download progress arrives", () => {
+    useEditorStore.getState().applyUpdaterEvent({
+      type: "available",
+      version: "1.6.0",
+      releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v1.6.0",
+      releaseNotes: "Cambios de prueba",
+    });
+
+    useEditorStore.getState().applyUpdaterEvent({
+      type: "downloading",
+      percent: 42.4,
+      transferred: 4200,
+      total: 10000,
+    });
+
+    expect(useEditorStore.getState().update).toEqual(
+      expect.objectContaining({
+        status: "downloading",
+        version: "1.6.0",
+        percent: 42.4,
+        transferred: 4200,
+        total: 10000,
+        releaseNotes: "Cambios de prueba",
+        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v1.6.0",
+      }),
+    );
   });
 });

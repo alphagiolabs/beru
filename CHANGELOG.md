@@ -5,39 +5,77 @@ All notable changes to Beru will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-06-03
+
+### Added
+
+- **Main process modularization**: `main.js` split into `handlers/` (dialog, drop, file, preset, process, project, recent, settings, system, updater, video) and `utils/` (concurrency, drop-resolver, paths, presets, recent, renderer, settings, thumbnail, video-cache, window). New `shared-state.js` centralizes mutable state to avoid circular imports.
+- **TableEditorFocusPanel** rewrite with improved focus and navigation logic.
+- **VideoPreview** enhanced with better playback controls and delogo live preview.
+- **QueueSidebar** and **BatchPanel** improvements for batch workflow UX.
+- **StyleEditor** and **PropertiesPanel** expanded with new style controls.
+- **Header** component overhaul with batch summary and new layout.
+- **UpdateBanner** / **UpdateReadyModal** improvements for auto-update flow.
+- **i18n**: new keys added to `en.json` and `es.json`.
+
+### Changed
+
+- **Zustand slices**: `queueSlice`, `processingSlice`, `batchSlice`, `uiSlice`, `projectSlice`, `editorStyleSlice` refactored for better state management.
+- **useCanvas hook** rewritten for improved canvas rendering pipeline.
+- **useKeyboard hook** expanded with more shortcut bindings.
+- **Python processor** (`processor.py`) and **test_delogo.py** updated.
+- **Preset files** (lower-third, subtitle, top-banner) format tweaks.
+- **CI release workflow** updated for reliability.
+- All tests updated to reflect new module structure and APIs.
+- ESLint/Prettier config refinements.
+- Dependency updates in `package-lock.json`.
+
+### Fixed
+
+- Region matching now uses full normalized box comparison across table editor, Excel re-apply, and batch preview.
+- `imageDataCache` properly pruned when videos or image operations are removed.
+- Video import queue items appear immediately with metadata loading in background.
+
 ## [1.5.2] - 2026-06-02
 
 ### Added
+
 - **`TopUpdateBar`**: persistent top banner that polls `https://api.github.com/repos/alphagiolabs/beru/releases` on app start and shows a dark download banner when a newer stable release is published on GitHub. Rendered in both Landing and editor branches of `App.jsx`. Dismiss is per-version (stored in `localStorage`).
 - **GitHub Releases sync (server-side)**: new `updater.checkGitHubRelease()` in `main/updater.js` uses `app.getVersion()` as the source of truth, fetches releases with `User-Agent: Beru/<version>`, filters drafts/prereleases, picks the highest stable semver, and resolves the Windows installer asset (`Beru-Setup-*.exe`, excluding `.blockmap`). Exposed to the renderer via `window.api.checkGitHubRelease()`.
 - **External link handler**: new `shell:openExternal` IPC + `window.api.openExternal(url)` so the banner opens the installer (or release page fallback) with `shell.openExternal` instead of a raw `<a target="_blank">`.
 
 ### Changed
+
 - The download button in `TopUpdateBar` is now a `<button onClick>` that calls `api.openExternal` rather than an anchor, keeping navigation inside Electron's shell.
 - 30-minute throttle on the GitHub Releases check (timestamp stored in `localStorage`) to stay under the unauthenticated rate limit.
 - Error state surfaces a red banner with a **Reintentar** button (i18n: `topUpdateBar.error`, `topUpdateBar.retry`).
 
 ### i18n
+
 - `es.json` / `en.json`: added `topUpdateBar.message`, `topUpdateBar.cta`, `topUpdateBar.ctaDirect`, `topUpdateBar.dismiss`, `topUpdateBar.error`, `topUpdateBar.retry`.
 
 ## [1.5.1] - 2026-06-02
 
 ### Added
+
 - **ESLint** (flat config) and **Prettier** with `npm run lint`, `lint:fix`, and `format` scripts.
 - Vitest coverage for store import, optimistic `addVideos`, letter-spacing helpers, batch progress, and processing error formatting.
 
 ### Changed
+
 - `useEditorStore` is now a thin composer over six slices: `processing`, `batch`, `queue`, `ui`, `editorStyle`, and `project` (under `src/stores/slices/`).
 - `TableEditor` split into `TableEditorPreview`, `TableEditorGrid`, and `TableEditorFocusPanel`.
 
 ## [1.5.0] - 2026-06-02
 
 ### Added
+
 - **App toasts** (`AppToast`) and store actions `showToast` / `clearAppToast`; batch/header/properties flows no longer use `alert()`.
 - **Global processing errors**: FFmpeg/Python failures surface in the UI via `beru:error` and i18n `errors.processingFailed`.
 - Shared text-style helpers (`src/utils/text-style.js`, `letter-spacing.js`, `color-utils.js`, `format-message.js`, `batch-progress.js`) with unit tests.
 
 ### Changed
+
 - **Letter spacing**: export uses FFmpeg `drawtext` `spacing=` (pixels); preview uses `letterSpacingToPx` instead of inserting spaces between characters.
 - **Region matching**: table editor, Excel re-apply, and batch preview use `regionsMatch` / `findTextOpForRegion` (full normalized box), not x/y-only equality.
 - **IPC / state**: `useProcessing` updates the store directly; removed the `beru:*` CustomEvent bus and duplicate listeners in `App.jsx`.
@@ -45,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Video import**: queue items appear immediately; metadata and thumbnails load in the background (`addVideos` returns the probe promise for `await`).
 
 ### Fixed
+
 - `imageDataCache` pruned when videos or image operations are removed.
 - `BatchPanel` Excel import reads fresh mapping state after the mapping modal closes.
 - Negative letter spacing clamped at export time.
@@ -52,11 +91,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.9] - 2026-06-02
 
 ### Changed
+
 - Repackage 1.4.8 (React + Electron + Python rewrite) on top of the previous Svelte/Tauri codebase. The Electron app now matches the 1.4.x feature set documented above.
 - `vite.config.js` switched to the React plugin and a Vite-relative build root (`outDir: "build"`).
 - `package.json` `build` block configured for electron-builder (NSIS x64, es-ES, `app.beru.desktop`) and `extraResources` for the Python processor + FFmpeg sidecars shipped under `src-tauri/bin/`.
 
 ### Fixed
+
 - `.gitignore` updated: added `dist-electron` and `dist-installer`, dropped `/.svelte-kit` and `/package`. New entries for `__pycache__/`, `*.pyc`, and a stray PowerShell `$null` artifact.
 - `.gitignore` now excludes local AI tooling (`.agents/`, `.commandcode/`, `skills-lock.json`, `AGENTS.md`) so they don't leak into the repo.
 - Removed dead Tauri/Svelte files from the working tree (`.github/workflows/release.yml`, `.vscode/`, `src-tauri/`, `src/routes/`, `src/lib/`, `static/`, `scripts/`, `docs/`, old `skills/`).
@@ -64,6 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0] - 2026-06-01
 
 ### Added
+
 - Excel mapping modal (`ExcelMappingModal`): explicit configuration of ID column and per-region column mapping. Replaces the implicit name-based matching.
 - Match status badges in queue sidebar: green check (matched), amber warning (unmatched), red copy icon (duplicate ID), grey dash (no Excel loaded).
 - Match report in `BatchPanel` after import: counters for matched / unmatched / duplicate.
@@ -73,6 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `getMatchReport()` action in store, `clearExcel()`, `updateExcelMapping()`, `setShowMappingModal()`.
 
 ### Changed
+
 - **BREAKING (data model)**: All regions (`currentRegion`, `templateRegions[].region`, `operations[].region`) are now stored NORMALIZED in 0..1 range. They are denormalized per-video at render time. This makes a single region reusable across videos of any resolution; a template drawn on a 1920×1080 video now correctly positions text on 1280×720, 1080×1920, etc. Manual X/Y/W/H inputs still display in pixels (denormalized to the current video) but store normalized.
 - `importExcel()` rewritten to use explicit `excelMapping.idColumn` and per-region column mapping. Auto-detects initial mapping from column headers and region labels; user can override.
 - `addTemplateRegion`, `addOperation`, `createTextOpForRegion` and all drawing paths now write normalized regions to the store.
@@ -80,11 +123,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Drawing canvas (`useCanvas`) uses `toVideoCoordsNormalized` and treats the current region as normalized throughout drag/resize.
 
 ### Fixed
+
 - Positions defined on a template video no longer break when the rest of the batch has a different resolution.
 
 ## [1.1.1] - 2026-06-01
 
 ### Added
+
 - **Single-video test render**: new "Probar" button in the header renders only the currently selected video, with a result popup offering "Abrir video" and "Mostrar en carpeta" actions.
 - **Per-video context menu** in the queue sidebar (⋯ button): "Procesar este", "Reintentar" (only on error), "Abrir carpeta de salida", "Mostrar en explorador", "Copiar nombre". Closes on outside click / Escape.
 - Toast feedback at the bottom of the queue sidebar for one-shot actions.
@@ -92,22 +137,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Store actions: `_buildJobFor(item, index)` (private, reused by batch and single flows) and `processSingle(videoIdx)` returning `{ ok, outputPath, error }`.
 
 ### Changed
+
 - `python/processor.py` now reports the job's `id` field (queue index) in `complete` / `error` events instead of the position in the jobs array, so single-job runs identify the right queue item.
 - `Header.jsx` batch job generation now delegates to `store._buildJobFor` (no more inline job shape duplication).
 
 ## [1.1.2] - 2026-06-01
 
 ### Added
+
 - **Time-aware live preview**: text, blur and delogo overlays now respect each operation's `startTime` and `endTime` in the in-app video player. Scrubbing the timeline makes the overlay appear / disappear in real time. Operations with no time bounds stay visible for the full clip (unchanged behaviour).
 - **Timeline markers** on the seek bar: each operation with a time range renders a colored band over the seek bar (text = purple, blur = cyan, delogo = red, crop = amber). The active range is opaque; the rest is dimmed. Toggleable via the eye icon next to the mute button.
 - `isOpActive(op, t)` helper in `VideoPreview.jsx` centralises the time-window logic.
 
 ### Changed
+
 - `VideoPreview.jsx` filters `sel.operations` through `isOpActive(op, currentTime)` before rendering overlays, so the live preview matches the FFmpeg-rendered output.
 
 ## [1.2.0] - 2026-06-01
 
 ### Added
+
 - **Project save / load**: two new header buttons (folder-input and save icons) persist the editing session to a `.beru.json` file. A project bundles:
   - Template regions (with normalized coordinates so they round-trip across resolutions)
   - Text style defaults (size, color, family, bold, italic, background, border)
@@ -118,11 +167,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Loading a project with an existing queue prompts for confirmation before replacing per-video operations.
 
 ### Changed
+
 - `useEditorStore.js` `templateRegions` are normalized via `ensureNormalized` on serialize and on apply, keeping the Phase 1 invariant.
 
 ## [1.2.1] - 2026-06-01
 
 ### Added
+
 - **Reusable presets** shipped in `resources/presets/` and packaged via electron-builder `extraResources`:
   - **Lower third YouTube** — bottom-center band, white text on black 70% bg, bold.
   - **Banner superior** — top-center banner, white on cyan 85% bg, bold.
@@ -134,11 +185,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New private helper `_applyTemplateState(data)` shared by `_applyProject` and `applyPreset` to avoid duplicating the 20-line set() call.
 
 ### Changed
+
 - `_applyProject` now also accepts `type: "beru-preset"` payloads (used when re-importing a saved preset file as a project).
 
 ## [1.3.0] - 2026-06-01
 
 ### Added
+
 - **Image overlay** operation (mode `image`): draw a region on the video, pick a PNG/JPG/WebP/GIF/BMP file, and the image is rendered over the video at the region's position and size, with adjustable opacity and time bounds. Works for logos, watermarks, lower-thirds, PNG stickers, etc.
 - New "Image" button in the toolbar (next to Text). Selecting it shows an image picker + opacity slider in the Properties panel.
 - Live preview: the picked image is displayed over the video using an `<img>` element, with a green dashed outline during edit and a placeholder if the cache is cold.
@@ -147,14 +200,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Timeline markers (Phase 3) now color `image` ops green (`#10b981`) for consistency.
 
 ### Changed
+
 - `python/processor.py`: `build_filter_complex` now returns `(filter_str, output_label, image_paths)`. Each unique image path becomes a second `ffmpeg` input (`-loop 1 -i <path>`); the overlay chain scales the image to the region's pixel size, converts to RGBA, applies `colorchannelmixer=aa=<opacity>` for the alpha multiplier, and overlays at `(x, y)`. Time bounds (`start_time` / `end_time`) are honored via `enable=between(t,start,end)` on the overlay. Bug fix: `_build_enable_clause` now reads `start_time`/`end_time` (snake_case) with a fallback to the legacy camelCase keys — the helper had been a no-op for the delogo path because of the casing mismatch.
 
 ### Internal
+
 - `utils/types.js` `MODE_META` now has an `image` entry (green). `createOperation` defaults include `imagePath: ""` and `imageOpacity: 1`. `setActiveTool` clears `tempImagePath` / `tempImageDataUrl` when switching to a non-image tool.
 
 ## [1.4.0] - 2026-06-01
 
 ### Added
+
 - **Keyboard shortcuts** across the app. Press `?` at any time to open the shortcuts modal.
   - **Playback**: `Space` play/pause · `←` / `→` seek ±5s · `Shift + ←` / `Shift + →` seek ±1s · `Home` / `End` start / end.
   - **Queue**: `[` / `]` and `↑` / `↓` previous / next video in the queue.
@@ -165,26 +221,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Video commands from the hook travel via a custom `beru:video:command` window event (`detail: { type: "toggle-play" | "seek" | "seek-abs", delta?, value? }`). `VideoPreview.jsx` subscribes once per video and acts on the live `<video>` element.
 
 ### Changed
+
 - `ShortcutsModal.jsx` reorganized into 5 sections (Reproducción · Cola · Herramientas · Región · Proyecto) with new entries for all of the above. Replaces the previous flat 7-row list.
 
 ## [1.4.1] - 2026-06-01
 
 ### Added
+
 - **Drag & drop improvements** building on the existing root-level handlers in `App.jsx`:
   - **Folder drop**: dropping a directory recursively scans it for video files. The main process exposes a new IPC `fs:resolveDroppedPaths(paths)` that takes a mixed list of file and folder paths, scans folders up to depth 8 (skipping `node_modules`, hidden folders and `System Volume Information`), filters to known video extensions, and returns `{ videoPaths, ignoredCount }`. Capped at 500 files per drop to avoid runaway scans.
   - **Live preview during drag**: `DragOverlay.jsx` now subscribes to `dragover` events and shows a small counter under the "Soltar videos aquí" prompt ("3 videos detectados · 1 otro · También puedes soltar carpetas"). The counter is best-effort based on `dataTransfer.files` (no main-process scan during drag — only after drop).
   - **Post-drop toast** in `App.jsx` (centered bottom, 3.5s) reports what happened: "5 videos agregados", "5 videos agregados · 2 ignorados", or "Sin videos en la selección (3 ignorados)".
 
 ### Fixed
+
 - **Drag-leave flicker**: replaced the unreliable `!e.currentTarget.contains(e.relatedTarget)` check with a counter (`dragCounter.current`). Increments on `dragenter`, decrements on `dragleave`; the overlay hides only when the count reaches 0. This prevents the overlay from blinking when the cursor crosses over child elements inside the drop zone.
 
 ### Internal
+
 - `App.jsx` now also passes the drop handlers to the empty-state `Landing` div, so drag & drop works before any video has been imported.
 - Extended video extension list in main process: `mp4|mov|avi|mkv|webm|flv|wmv|m4v|mpg|mpeg` (was `mp4|mov|avi|mkv|webm`).
 
 ## [1.4.2] - 2026-06-01
 
 ### Added
+
 - **Queue thumbnails**: every video in the queue now shows a 44×25 px frame-0 thumbnail in `QueueSidebar`, extracted automatically when the video is imported.
   - `main/main.js:221-265` — new helper `extractThumbnail(filePath, width)` spawns the bundled `ffmpeg.exe` with `-ss 0 -vframes 1 -vf scale=160:-2 -q:v 6 -f image2pipe -vcodec mjpeg` and pipes the JPEG bytes to a buffer. Returns a base64 data URL on success, `null` on failure (no `ffmpeg`, corrupt file, 8 s timeout).
   - `main/main.js:267-274` — IPC `video:thumbnail` (single) and `video:thumbnailBatch` (parallel, concurrency = min(6, CPU count), uses the same `runWithConcurrency` helper as `getVideoInfoBatch`).
@@ -194,12 +255,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `src/components/QueueSidebar.jsx:8-23` — new inline `Thumbnail` component: shows the data URL in a 44×25 px black-bordered box, or a `FileVideo` icon placeholder while the thumbnail is still loading or extraction failed. The placeholder uses `var(--bg-app)` so it blends with the rest of the sidebar.
 
 ### Internal
+
 - Thumbnails are not persisted: the queue is re-imported on each session, so thumbnails regenerate on import. This keeps storage cost at 0 bytes on disk and avoids cache-invalidation logic.
 - Quality: JPEG `-q:v 6` (~80 KB per thumbnail at 160 px wide). For 500 videos that's ~40 MB transient memory; the cap from Phase 8 already limits imports to 500 files.
 
 ## [1.4.3] - 2026-06-01
 
 ### Added
+
 - **Save as preset** closes the loop opened in v1.2.1 (Phase 5): the user can now persist the current template as a user preset without going through "Save project" and editing the JSON.
   - `main/main.js:501-528` — new IPC `presets:save(name, jsonStr)`. Validates that the payload has `type: "beru-preset"`, sanitizes the name (strips `\/:*?"<>|` and control chars, prepends `_` to leading dots, caps at 80 chars), and appends `.beru.json` if missing. Writes to `<userData>/presets/`, creating the folder if needed. Returns `{ success, fileName, filePath, userDir }` or `{ success: false, error }`.
   - `main/preload.cjs:21` — `window.api.savePreset(name, jsonStr)`.
@@ -210,11 +273,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `src/components/Header.jsx:55-66, 290-321` — modal with a single text input (autofocused, `Enter` submits, `Esc` closes), a brief description, and Cancel/Save buttons. The disabled state on Save mirrors the input's emptiness.
 
 ### Internal
+
 - Preset files written from this flow are indistinguishable from those written by hand or by Phase 5's bundled export. They show up in the Library dropdown with the green "Personalizado" badge (existing behavior from Phase 5).
 
 ## [1.4.4] - 2026-06-01
 
 ### Added
+
 - **Light theme** with a one-click toggle. Beru ships dark by default; flipping the toggle in the header switches to a clean light palette tuned for daytime use. The choice is persisted across sessions.
   - `src/index.css:5-30` — `:root` keeps the dark values (no behavior change for users who never toggle). New `[data-theme="light"]` selector overrides the same 12 CSS vars (`--bg-app`, `--bg-surface`, `--bg-elevated`, `--text-primary/secondary/dim`, `--accent`, `--amber`, `--rose`, `--purple`, `--border`) with light-mode values. Components using `var(--...)` switch automatically — no per-component edits.
   - `main/main.js:534-564` — new IPC `settings:load` and `settings:save(partial)`. Settings live at `<userData>/settings.json`. Defaults: `{ theme: "dark" }`. The save handler merges partial updates into the existing file (so future settings like `language` can reuse it without changing the schema).
@@ -223,12 +288,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `loadSettings()` calls the IPC, applies the theme to `<html>` via `applyThemeToDom(theme)`, and stores it in state.
     - `setTheme(theme)` updates state, applies the DOM attribute, and persists.
     - `toggleTheme()` flips between dark/light.
-    The DOM helper `applyThemeToDom(theme)` sets `data-theme="light"` or removes the attribute (so `:root` applies the dark defaults).
+      The DOM helper `applyThemeToDom(theme)` sets `data-theme="light"` or removes the attribute (so `:root` applies the dark defaults).
   - `src/App.jsx:32` — `store.loadSettings()` is called once at app boot, before the first paint (well, after the React commit but before the user interacts). This is the only change needed for the theme to survive a restart.
   - `src/components/Header.jsx:215-217` — new icon button (`Sun` when in dark mode, `Moon` when in light) with a tooltip. Click toggles.
   - `src/components/Landing.jsx:18` — the Beru logo's hardcoded `fill="#fff"` is now `fill="currentColor"`. The parent inherits `var(--text-primary)` from the body, so the logo is white in dark mode and dark gray in light mode.
 
 ### Internal
+
 - The `--amber` and `--purple` semantic vars were tweaked in light mode (`#b45309` and `#7e22ce` respectively) so they retain enough contrast on the white surface. Their dark-mode values are unchanged.
 - Hardcoded brand colors that work in both themes (the teal-blue `cap-btn-primary` gradient, `opModeColor` for canvas markers, the green/red/amber status dots, the violet for "template video" badge) are intentionally left as-is.
 - Settings file format: `JSON.stringify(obj, null, 2)` — easy to read and edit by hand, easy to diff, easy to extend.
@@ -236,6 +302,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.5] - 2026-06-01
 
 ### Added
+
 - **i18n / multi-language** support. Beru now ships in Spanish (default) and English; the user can switch at any time from a small dropdown in the header. The choice is persisted in `settings.json` (the same file used by the theme in Phase 11). The infrastructure is intentionally tiny — no `i18next` or `react-intl`, just a 25-line hook.
   - `src/i18n/useT.js` — exports `useT()` (returns a `t(key, vars?)` function) and `SUPPORTED_LANGUAGES` (currently `[{code:"es"},{code:"en"}]`). `t(key, vars)` does `{name}`-style interpolation, falls back to Spanish if the key is missing in the current language, and finally to the key itself if missing in Spanish.
   - `src/i18n/messages/es.json` (~140 keys) and `src/i18n/messages/en.json` (~140 keys) — flat namespaced keys organized as `common.*`, `header.*`, `queue.*`, `props.*`, `toolbar.*`, `preview.*`, `excel.*`, `modal.*`, `match.*`, `errors.*`, `style.*`, `drop.*`, `landing.*`, `table.*`, `batch.*`. Adding a new language is a single new JSON file + one entry in `SUPPORTED_LANGUAGES`.
@@ -254,6 +321,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `MatchBadge.jsx` — all 4 status labels and descriptions (Vinculado / Sin match / ID duplicado / Sin Excel).
 
 ### Internal
+
 - The `useT` hook subscribes to the store via `useEditorStore((s) => s.language)`, so any component using `useT` re-renders on language change. This is the only way to react to a switch in the existing infrastructure; the alternative (a Context) would be 4× the code for no real benefit.
 - The English translations are intentionally close to the Spanish — no marketing copy, no cultural adaptation. This keeps the diff small and makes it easy to spot mistranslations during review.
 - Bundle size went from 627 KB → 656 KB (+28 KB raw / +9 KB gzip) for the two language dicts. Acceptable for a one-time cost; adding a third language costs ~12 KB.
@@ -262,6 +330,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.6] - 2026-06-01
 
 ### Added
+
 - **Recent projects dropdown** next to the Load Project button. The last 8 `.beru.json` files saved or opened appear here so the user can reopen them in one click.
   - `main/main.js:571-625` — new IPCs `recent:list`, `recent:add({path, name})`, `recent:remove(path)`. Persistence is `<userData>/recent.json` (separate from `settings.json` so the lists don't mix). List is capped at 8 entries, deduped by normalized path, sorted newest-first. `list` annotates each entry with `exists` (cheap `fs.existsSync`) so the UI can show stale paths dimmed.
   - `main/main.js:611-625` — new IPC `project:loadFromPath(filePath)` that reads and parses a `.beru.json` from a known path (the file picker version is `project:load` and shows a dialog). Returns `{ success, filePath, data, error?, missing? }` where `missing: true` signals the file was deleted between sessions.
@@ -277,6 +346,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `src/i18n/messages/es.json` / `en.json` — 4 new keys: `header.recent`, `header.noRecents`, `header.recentMissing`, `header.confirmLoadRecent`.
 
 ### Internal
+
 - Paths are normalized via `path.normalize` before compare/store so `C:\foo\bar` and `C:\foo\.\bar` are treated as the same entry.
 - The IPC `recent:add` accepts `name` but falls back to `path.basename(path)` if the renderer doesn't supply one.
 - The dropped entries write the list with `JSON.stringify(arr, null, 2)` for consistency with the settings file format.
@@ -285,15 +355,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.4.8] - 2026-06-02
 
 ### Fixed
+
 - **`main/main.js:752`**: removed orphan `});` that left the Electron main process with unbalanced braces; the app would fail to boot when the surrounding handler was last to execute during static analysis / `node --check`.
 - **`src/components/VideoPreview.jsx:181`**: the `opIdx` identifier used inside the per-operation callback (`opIdx + 1` for the React key) was never declared; added `(op, opIdx) =>` to the `.map` signature.
 - **`src/stores/useEditorStore.js`**: deleted the dead **sync** `savePreset` variant that only wrote to `localStorage` and was shadowed by the async IPC version. Callers were always hitting the async one, so the sync path was unreachable dead code with confusing overlapping responsibilities. `loadPresetsFromStorage` (used as first-paint cache) is preserved.
 - **`python/processor.py:25-26`**: `FFMPEG` and `FFPROBE` are now read from `BERU_FFMPEG` / `BERU_FFPROBE` env vars (falling back to bare `"ffmpeg"` / `"ffprobe"` for CLI use). The Electron main process passes the bundled ffmpeg/ffprobe sidecar paths in `python/processor.py` spawn env (`main/main.js`), so packaged installs no longer depend on ffmpeg being in PATH.
 
 ### Changed
+
 - **`src/components/PresetManager.jsx`**: the save flow is now aligned with the async store action. The "Guardar" button shows a `saving` state, disables input + button while in flight, and renders green confirmation (with the file name) or a rose error toast on failure. Feedback auto-clears after 2.5s.
 
 ### Internal
+
 - Added **vitest** + **jsdom** dev dependencies and an `npm test` script. New regression tests:
   - `tests/store.savePreset.test.js` covers the async `savePreset` flow: empty-name rejection, IPC call arguments, and the `listPresets` refresh on success.
   - `tests/python.ffmpeg-path.test.js` covers the env-var override for `BERU_FFMPEG` / `BERU_FFPROBE` and the `"ffmpeg"` / `"ffprobe"` fallback. Skipped automatically when Python is not on PATH.
@@ -301,17 +374,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.3] - 2026-05-28
 
 ### Fixed
+
 - Blur overlay now renders visibly in video preview (fallback stripe pattern for Chromium/Electron where ackdrop-filter doesn't work on <video> elements)
 - Delogo blur method overlay now shows a visible blue-tinted diagonal stripe fallback
 
 ### Changed
+
 - Rewrote frontend from SvelteKit to React (Electron + React + Zustand + Tailwind CSS v3)
 - Replaced Tauri with Electron for desktop shell
-
 
 ## [1.0.0] - 2026-05-28
 
 ### Added
+
 - First stable release of Beru
 - Electron + React desktop application
 - Automated text overlay on videos via Excel database
@@ -324,6 +399,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows NSIS installer with Spanish (es-ES) localization
 
 ### Changed
+
 - Version bumped from 0.1.2 → 1.0.0 for first stable release
 - App identifier updated to `app.beru.desktop`
 - Publisher metadata: "Beru" with Copyright © 2026
@@ -331,6 +407,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.2] - 2026-05-26
 
 ### Changed
+
 - Updated all installer metadata (publisher, copyright, descriptions)
 - Spanish installers (es-ES) for both NSIS and WiX/MSI
 - Publisher "Beru" + copyright 2026 correctly embedded
@@ -339,11 +416,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.1] - 2026-05-25
 
 ### Changed
+
 - Metadata and bundle config improvements
 
 ## [0.1.0] - 2026-05-25
 
 ### Added
+
 - Initial release of Beru - desktop video editor
 - Tauri 2 + SvelteKit 5 desktop application
 - FFmpeg sidecar integration for video processing

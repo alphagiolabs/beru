@@ -35,7 +35,11 @@ export default function ExcelMappingModal() {
         values: templateRegions.map((tr) => {
           const col = draft.columns[tr.id];
           const val = row && col ? rowGet(row, col) : null;
-          return { label: tr.label, value: val === undefined || val === null ? "" : String(val), mapped: !!col };
+          return {
+            label: tr.label,
+            value: val === undefined || val === null ? "" : String(val),
+            mapped: !!col,
+          };
         }),
       };
     });
@@ -52,8 +56,21 @@ export default function ExcelMappingModal() {
   };
 
   const handleReset = () => {
-    const idAliases = ["id", "code", "codigo", "video", "archivo", "filename", "name", "nombre", "identificador"];
-    const idColumn = excelHeaders.find((h) => idAliases.includes(h.toLowerCase().trim())) || excelHeaders[0] || null;
+    const idAliases = [
+      "id",
+      "code",
+      "codigo",
+      "video",
+      "archivo",
+      "filename",
+      "name",
+      "nombre",
+      "identificador",
+    ];
+    const idColumn =
+      excelHeaders.find((h) => idAliases.includes(h.toLowerCase().trim())) ||
+      excelHeaders[0] ||
+      null;
     const columns = {};
     for (const tr of templateRegions) {
       const labelKey = tr.label.toLowerCase().trim();
@@ -75,12 +92,16 @@ export default function ExcelMappingModal() {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0" style={{ borderColor: "var(--border)" }}>
+        <div
+          className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
+          style={{ borderColor: "var(--border)" }}
+        >
           <div className="flex items-center gap-2">
             <FileSpreadsheet size={16} style={{ color: "var(--purple)" }} />
             <span className="text-sm font-semibold">{t("excel.title")}</span>
             <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-              {excelRows.length} filas · {excelHeaders.length} columnas · {templateRegions.length} regiones
+              {excelRows.length} filas · {excelHeaders.length} columnas · {templateRegions.length}{" "}
+              regiones
             </span>
           </div>
           <button
@@ -104,7 +125,9 @@ export default function ExcelMappingModal() {
             >
               <option value="">— Seleccionar columna —</option>
               {excelHeaders.map((h) => (
-                <option key={h} value={h}>{h}</option>
+                <option key={h} value={h}>
+                  {h}
+                </option>
               ))}
             </select>
             <div className="text-[10px] mt-1" style={{ color: "var(--text-dim)" }}>
@@ -116,8 +139,12 @@ export default function ExcelMappingModal() {
           <div>
             <div className="cap-input-label mb-1.5">{t("excel.regionColumn")}</div>
             {templateRegions.length === 0 ? (
-              <div className="text-[11px] p-3 rounded" style={{ background: "var(--bg-surface)", color: "var(--text-secondary)" }}>
-                No hay regiones de plantilla. Dibujá una región en el video y agrégala desde "Texto en lote" antes de mapear.
+              <div
+                className="text-[11px] p-3 rounded"
+                style={{ background: "var(--bg-surface)", color: "var(--text-secondary)" }}
+              >
+                No hay regiones de plantilla. Dibujá una región en el video y agrégala desde "Texto
+                en lote" antes de mapear.
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -127,21 +154,30 @@ export default function ExcelMappingModal() {
                     className="grid grid-cols-[110px_24px_1fr] items-center gap-2 p-2 rounded"
                     style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
                   >
-                    <span className="text-[11px] font-mono truncate" style={{ color: "var(--purple)" }}>{tr.label}</span>
+                    <span
+                      className="text-[11px] font-mono truncate"
+                      style={{ color: "var(--purple)" }}
+                    >
+                      {tr.label}
+                    </span>
                     <ArrowRight size={12} style={{ color: "var(--text-dim)" }} />
                     <select
                       value={draft.columns[tr.id] || ""}
-                      onChange={(e) => setDraft((d) => {
-                        const next = { ...d.columns };
-                        if (e.target.value) next[tr.id] = e.target.value;
-                        else delete next[tr.id];
-                        return { ...d, columns: next };
-                      })}
+                      onChange={(e) =>
+                        setDraft((d) => {
+                          const next = { ...d.columns };
+                          if (e.target.value) next[tr.id] = e.target.value;
+                          else delete next[tr.id];
+                          return { ...d, columns: next };
+                        })
+                      }
                       className="cap-input text-[11px]"
                     >
                       <option value="">— No mapear —</option>
                       {excelHeaders.map((h) => (
-                        <option key={h} value={h}>{h}</option>
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -163,8 +199,24 @@ export default function ExcelMappingModal() {
                 <table className="w-full text-[10px]">
                   <thead className="sticky top-0" style={{ background: "var(--bg-surface)" }}>
                     <tr>
-                      <th className="text-left p-1.5" style={{ color: "var(--text-dim)", borderBottom: "1px solid var(--border)" }}>Video</th>
-                      <th className="text-left p-1.5" style={{ color: "var(--text-dim)", borderBottom: "1px solid var(--border)" }}>ID</th>
+                      <th
+                        className="text-left p-1.5"
+                        style={{
+                          color: "var(--text-dim)",
+                          borderBottom: "1px solid var(--border)",
+                        }}
+                      >
+                        Video
+                      </th>
+                      <th
+                        className="text-left p-1.5"
+                        style={{
+                          color: "var(--text-dim)",
+                          borderBottom: "1px solid var(--border)",
+                        }}
+                      >
+                        ID
+                      </th>
                       {templateRegions.map((tr) => (
                         <th
                           key={tr.id}
@@ -177,7 +229,10 @@ export default function ExcelMappingModal() {
                         >
                           {tr.label}
                           {draft.columns[tr.id] && (
-                            <div className="text-[8px] font-normal" style={{ color: "var(--text-dim)" }}>
+                            <div
+                              className="text-[8px] font-normal"
+                              style={{ color: "var(--text-dim)" }}
+                            >
                               ← {draft.columns[tr.id]}
                             </div>
                           )}
@@ -188,10 +243,16 @@ export default function ExcelMappingModal() {
                   <tbody>
                     {videoPreview.slice(0, 20).map((v) => (
                       <tr key={v.filename} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td className="p-1.5 truncate max-w-[180px]" style={{ color: v.found ? "var(--text-primary)" : "var(--text-dim)" }}>
+                        <td
+                          className="p-1.5 truncate max-w-[180px]"
+                          style={{ color: v.found ? "var(--text-primary)" : "var(--text-dim)" }}
+                        >
                           {v.filename}
                         </td>
-                        <td className="p-1.5 font-mono" style={{ color: v.found ? "var(--accent)" : "var(--rose)" }}>
+                        <td
+                          className="p-1.5 font-mono"
+                          style={{ color: v.found ? "var(--accent)" : "var(--rose)" }}
+                        >
                           {v.id}
                         </td>
                         {v.values.map((vv, i) => (
@@ -210,14 +271,22 @@ export default function ExcelMappingModal() {
                     ))}
                     {videoPreview.length === 0 && (
                       <tr>
-                        <td colSpan={2 + templateRegions.length} className="p-4 text-center" style={{ color: "var(--text-dim)" }}>
+                        <td
+                          colSpan={2 + templateRegions.length}
+                          className="p-4 text-center"
+                          style={{ color: "var(--text-dim)" }}
+                        >
                           No hay videos en la cola
                         </td>
                       </tr>
                     )}
                     {videoPreview.length > 20 && (
                       <tr>
-                        <td colSpan={2 + templateRegions.length} className="p-2 text-center text-[9px]" style={{ color: "var(--text-dim)" }}>
+                        <td
+                          colSpan={2 + templateRegions.length}
+                          className="p-2 text-center text-[9px]"
+                          style={{ color: "var(--text-dim)" }}
+                        >
                           Mostrando 20 de {videoPreview.length} videos
                         </td>
                       </tr>
@@ -233,12 +302,22 @@ export default function ExcelMappingModal() {
             <summary className="text-[10px] cursor-pointer" style={{ color: "var(--text-dim)" }}>
               Ver primeras {PREVIEW_ROWS} filas del Excel
             </summary>
-            <div className="mt-2 rounded overflow-x-auto" style={{ border: "1px solid var(--border)" }}>
+            <div
+              className="mt-2 rounded overflow-x-auto"
+              style={{ border: "1px solid var(--border)" }}
+            >
               <table className="w-full text-[10px]">
                 <thead style={{ background: "var(--bg-surface)" }}>
                   <tr>
                     {excelHeaders.map((h) => (
-                      <th key={h} className="text-left p-1.5" style={{ color: h === idCol ? "var(--accent)" : "var(--text-dim)", borderBottom: "1px solid var(--border)" }}>
+                      <th
+                        key={h}
+                        className="text-left p-1.5"
+                        style={{
+                          color: h === idCol ? "var(--accent)" : "var(--text-dim)",
+                          borderBottom: "1px solid var(--border)",
+                        }}
+                      >
                         {h}
                       </th>
                     ))}
@@ -248,7 +327,11 @@ export default function ExcelMappingModal() {
                   {sample.map((row, i) => (
                     <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
                       {excelHeaders.map((h) => (
-                        <td key={h} className="p-1.5 truncate max-w-[140px]" style={{ color: "var(--text-secondary)" }}>
+                        <td
+                          key={h}
+                          className="p-1.5 truncate max-w-[140px]"
+                          style={{ color: "var(--text-secondary)" }}
+                        >
                           {String(row[h] ?? "")}
                         </td>
                       ))}
@@ -261,11 +344,11 @@ export default function ExcelMappingModal() {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t flex items-center justify-between flex-shrink-0" style={{ borderColor: "var(--border)" }}>
-          <button
-            onClick={handleReset}
-            className="cap-btn-secondary text-[11px]"
-          >
+        <div
+          className="px-4 py-3 border-t flex items-center justify-between flex-shrink-0"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <button onClick={handleReset} className="cap-btn-secondary text-[11px]">
             <RotateCcw size={12} /> Auto-detectar
           </button>
           <div className="flex gap-2">

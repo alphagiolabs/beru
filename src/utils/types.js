@@ -42,10 +42,22 @@ export function uid() {
 }
 
 export const FONT_FAMILIES = [
-  "Arial", "Arial Black", "Bahnschrift", "Calibri", "Cambria",
-  "Candara", "Consolas", "Courier New", "Franklin Gothic Medium",
-  "Georgia", "Impact", "Segoe UI", "Tahoma", "Times New Roman",
-  "Trebuchet MS", "Verdana",
+  "Arial",
+  "Arial Black",
+  "Bahnschrift",
+  "Calibri",
+  "Cambria",
+  "Candara",
+  "Consolas",
+  "Courier New",
+  "Franklin Gothic Medium",
+  "Georgia",
+  "Impact",
+  "Segoe UI",
+  "Tahoma",
+  "Times New Roman",
+  "Trebuchet MS",
+  "Verdana",
 ];
 
 export const FONT_WEIGHTS = [
@@ -68,12 +80,14 @@ export const DELOGO_METHODS = [
   {
     id: "temporal",
     label: "Temporal",
-    description: "Mediana entre N fotogramas: ideal para logos estáticos sobre video en movimiento. Indistinguible.",
+    description:
+      "Mediana entre N fotogramas: ideal para logos estáticos sobre video en movimiento. Indistinguible.",
   },
   {
     id: "mirror",
     label: "Espejo",
-    description: "Refleja un lado de la región sobre el otro. Perfecto para fondos uniformes (cielo, pared, suelo).",
+    description:
+      "Refleja un lado de la región sobre el otro. Perfecto para fondos uniformes (cielo, pared, suelo).",
   },
   {
     id: "mosaic",
@@ -83,7 +97,8 @@ export const DELOGO_METHODS = [
   {
     id: "inpaint",
     label: "Inpaint",
-    description: "Interpolación 4-direcciones del filtro delogo de FFmpeg. Rápido, resultado decente.",
+    description:
+      "Interpolación 4-direcciones del filtro delogo de FFmpeg. Rápido, resultado decente.",
   },
   {
     id: "blur",
@@ -106,24 +121,56 @@ export const MIRROR_SIDES = [
 
 export const TEXT_STYLE_PRESETS = [
   {
-    name: "Caption", fontFamily: "Segoe UI", fontSize: 34, fontColor: "white",
-    bold: true, italic: false, bgEnabled: true, bgColor: "black",
-    bgOpacity: 0.58, borderWidth: 0, borderColor: "black",
+    name: "Caption",
+    fontFamily: "Segoe UI",
+    fontSize: 34,
+    fontColor: "white",
+    bold: true,
+    italic: false,
+    bgEnabled: true,
+    bgColor: "black",
+    bgOpacity: 0.58,
+    borderWidth: 0,
+    borderColor: "black",
   },
   {
-    name: "Title", fontFamily: "Arial Black", fontSize: 56, fontColor: "white",
-    bold: true, italic: false, bgEnabled: false, bgColor: "black",
-    bgOpacity: 0.4, borderWidth: 3, borderColor: "black",
+    name: "Title",
+    fontFamily: "Arial Black",
+    fontSize: 56,
+    fontColor: "white",
+    bold: true,
+    italic: false,
+    bgEnabled: false,
+    bgColor: "black",
+    bgOpacity: 0.4,
+    borderWidth: 3,
+    borderColor: "black",
   },
   {
-    name: "Clean", fontFamily: "Calibri", fontSize: 38, fontColor: "white",
-    bold: false, italic: false, bgEnabled: false, bgColor: "black",
-    bgOpacity: 0, borderWidth: 2, borderColor: "black",
+    name: "Clean",
+    fontFamily: "Calibri",
+    fontSize: 38,
+    fontColor: "white",
+    bold: false,
+    italic: false,
+    bgEnabled: false,
+    bgColor: "black",
+    bgOpacity: 0,
+    borderWidth: 2,
+    borderColor: "black",
   },
   {
-    name: "Mono", fontFamily: "Consolas", fontSize: 30, fontColor: "#f8fafc",
-    bold: false, italic: false, bgEnabled: true, bgColor: "#111827",
-    bgOpacity: 0.72, borderWidth: 0, borderColor: "black",
+    name: "Mono",
+    fontFamily: "Consolas",
+    fontSize: 30,
+    fontColor: "#f8fafc",
+    bold: false,
+    italic: false,
+    bgEnabled: true,
+    bgColor: "#111827",
+    bgOpacity: 0.72,
+    borderWidth: 0,
+    borderColor: "black",
   },
 ];
 

@@ -15,7 +15,9 @@ export function createProjectSlice(set, get) {
     deletePreset: (id) => {
       set((s) => {
         const next = s.presets.filter((p) => p.id !== id);
-        try { localStorage.setItem("beru-presets", JSON.stringify(next)); } catch (e) {
+        try {
+          localStorage.setItem("beru-presets", JSON.stringify(next));
+        } catch (e) {
           console.error("[beru] Failed to persist presets during delete:", e.message);
         }
         return { presets: next };
@@ -28,7 +30,9 @@ export function createProjectSlice(set, get) {
         if (raw) set({ presets: JSON.parse(raw) });
       } catch (e) {
         console.error("[beru] Failed to load presets from storage:", e.message);
-        try { localStorage.removeItem("beru-presets"); } catch {}
+        try {
+          localStorage.removeItem("beru-presets");
+        } catch {}
       }
     },
 
@@ -68,7 +72,12 @@ export function createProjectSlice(set, get) {
           edgeFeather: s.edgeFeather,
         },
         excel: s.excelPath
-          ? { path: s.excelPath, headers: s.excelHeaders, rows: s.excelRows, mapping: s.excelMapping }
+          ? {
+              path: s.excelPath,
+              headers: s.excelHeaders,
+              rows: s.excelRows,
+              mapping: s.excelMapping,
+            }
           : null,
       };
     },
@@ -172,9 +181,10 @@ export function createProjectSlice(set, get) {
           excelPath: excel.path || null,
           excelHeaders: Array.isArray(excel.headers) ? excel.headers : [],
           excelRows: Array.isArray(excel.rows) ? excel.rows : [],
-          excelMapping: excel.mapping && typeof excel.mapping === "object"
-            ? { idColumn: excel.mapping.idColumn ?? null, columns: excel.mapping.columns || {} }
-            : { idColumn: null, columns: {} },
+          excelMapping:
+            excel.mapping && typeof excel.mapping === "object"
+              ? { idColumn: excel.mapping.idColumn ?? null, columns: excel.mapping.columns || {} }
+              : { idColumn: null, columns: {} },
         });
         get()._reapplyExcel();
       } else {
@@ -205,26 +215,28 @@ export function createProjectSlice(set, get) {
         set((s) => ({
           queue: s.queue.map((item) => ({
             ...item,
-            operations: tr.map((r) => createOperation({
-              mode: "text",
-              region: { ...r.region },
-              text: get().textInput || "",
-              fontSize: get().textFontSize,
-              fontColor: get().textFontColor,
-              fontFamily: get().fontFamily,
-              fontWeight: get().fontWeight,
-              letterSpacing: get().letterSpacing,
-              textAlign: get().textAlign,
-              textOpacity: get().textOpacity,
-              bold: get().bold,
-              italic: get().italic,
-              bgEnabled: get().bgEnabled,
-              bgColor: get().bgColor,
-              bgOpacity: get().bgOpacity,
-              boxBorderWidth: get().boxBorderWidth,
-              borderWidth: get().borderWidth,
-              borderColor: get().borderColor,
-            })),
+            operations: tr.map((r) =>
+              createOperation({
+                mode: "text",
+                region: { ...r.region },
+                text: get().textInput || "",
+                fontSize: get().textFontSize,
+                fontColor: get().textFontColor,
+                fontFamily: get().fontFamily,
+                fontWeight: get().fontWeight,
+                letterSpacing: get().letterSpacing,
+                textAlign: get().textAlign,
+                textOpacity: get().textOpacity,
+                bold: get().bold,
+                italic: get().italic,
+                bgEnabled: get().bgEnabled,
+                bgColor: get().bgColor,
+                bgOpacity: get().bgOpacity,
+                boxBorderWidth: get().boxBorderWidth,
+                borderWidth: get().borderWidth,
+                borderColor: get().borderColor,
+              }),
+            ),
           })),
         }));
       }

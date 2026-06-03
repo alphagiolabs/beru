@@ -1173,6 +1173,24 @@ def _is_transient_error(stderr_text):
     return any(m in lower for m in markers)
 
 
+def _is_hardware_encode_error(stderr_text):
+    """Detect hardware encoder failures, including generic filter-layer errors."""
+    if not stderr_text:
+        return False
+    lower = stderr_text.lower()
+    markers = [
+        "nvenc",
+        "amf",
+        "qsv",
+        "videotoolbox",
+        "hwaccel",
+        "error code: -22",
+        "operation not permitted",
+        "error while filtering",
+    ]
+    return any(m in lower for m in markers)
+
+
 def _stderr_buffer_append(buffer, line):
     """Keep stderr bounded while streaming FFmpeg output."""
     buffer.append(line)
@@ -1467,9 +1485,7 @@ def _process_one(idx, job, ffmpeg_path):
     # GPU encode can fail (-22) or destabilize the display stack — retry on CPU
     if not ok:
         hw = detect_hw_encoder(ffmpeg_path)
-        if hw and err and ("nvenc" in err.lower() or "error code: -22" in err.lower()
-                           or "amf" in err.lower() or "qsv" in err.lower()
-                           or "videotoolbox" in err.lower() or "hwaccel" in err.lower()):
+        if hw and _is_hardware_encode_error(err):
             logger.warning("Job %d: hardware path failed, retrying with libx264", idx)
             ok, err = _run_ffmpeg(
                 _build_cmd(force_software=True),

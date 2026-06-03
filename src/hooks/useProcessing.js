@@ -4,12 +4,14 @@ import { tStatic } from "../utils/format-message";
 
 function processingErrorText(detail) {
   const lang = useEditorStore.getState().language || "es";
-  const message = typeof detail === "string"
-    ? detail
-    : (detail?.message || detail?.error || "");
-  return tStatic("errors.processingFailed", {
-    message: message || tStatic("errors.unknown", {}, lang),
-  }, lang);
+  const message = typeof detail === "string" ? detail : detail?.message || detail?.error || "";
+  return tStatic(
+    "errors.processingFailed",
+    {
+      message: message || tStatic("errors.unknown", {}, lang),
+    },
+    lang,
+  );
 }
 
 function bind(apiFn, handler) {

@@ -68,7 +68,12 @@ describe("Stability under heavy load", () => {
 
   it("survives rapid progress updates on a 500-video queue", () => {
     const items = Array.from({ length: 500 }, (_, i) => queueItem(i));
-    useEditorStore.setState({ queue: items, isProcessing: true, progressTotal: 500, progressDone: 0 });
+    useEditorStore.setState({
+      queue: items,
+      isProcessing: true,
+      progressTotal: 500,
+      progressDone: 0,
+    });
 
     // Simulate rapid job_progress messages (1 per video, every few ms)
     for (let i = 0; i < 500; i++) {
@@ -87,7 +92,12 @@ describe("Stability under heavy load", () => {
 
   it("handles rapid error/done alternation without state corruption", () => {
     const items = Array.from({ length: 100 }, (_, i) => queueItem(i));
-    useEditorStore.setState({ queue: items, isProcessing: true, progressTotal: 100, progressDone: 0 });
+    useEditorStore.setState({
+      queue: items,
+      isProcessing: true,
+      progressTotal: 100,
+      progressDone: 0,
+    });
 
     for (let i = 0; i < 100; i++) {
       if (i % 3 === 0) {
@@ -134,7 +144,10 @@ describe("Stability under heavy load", () => {
       queue: items,
       templateRegions: regions,
       excelRows: rows,
-      excelMapping: { idColumn: "id", columns: Object.fromEntries(regions.map((r, i) => [r.id, `TEXT_${i + 1}`])) },
+      excelMapping: {
+        idColumn: "id",
+        columns: Object.fromEntries(regions.map((r, i) => [r.id, `TEXT_${i + 1}`])),
+      },
     });
 
     const report = useEditorStore.getState()._reapplyExcel();
@@ -160,11 +173,16 @@ describe("Stability under heavy load", () => {
     const items = Array.from({ length: 100 }, (_, i) => ({
       ...queueItem(i),
       operations: [
-        { id: `img-${i}`, mode: "image", imagePath: `C:\\img\\${i}.png`, region: { x: 0, y: 0, w: 0.1, h: 0.1 } },
+        {
+          id: `img-${i}`,
+          mode: "image",
+          imagePath: `C:\\img\\${i}.png`,
+          region: { x: 0, y: 0, w: 0.1, h: 0.1 },
+        },
       ],
     }));
     const cache = Object.fromEntries(
-      Array.from({ length: 100 }, (_, i) => [`C:\\img\\${i}.png`, `data:image/png;base64,${i}`])
+      Array.from({ length: 100 }, (_, i) => [`C:\\img\\${i}.png`, `data:image/png;base64,${i}`]),
     );
     useEditorStore.setState({ queue: items, imageDataCache: cache });
 
@@ -182,12 +200,19 @@ describe("Stability under heavy load", () => {
     const items = Array.from({ length: 200 }, (_, i) => ({
       ...queueItem(i),
       operations: [
-        { id: `op-${i}`, mode: "blur", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 }, blurStrength: 20 },
+        {
+          id: `op-${i}`,
+          mode: "blur",
+          region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 },
+          blurStrength: 20,
+        },
       ],
     }));
     useEditorStore.setState({ queue: items });
 
-    const jobs = items.map((item, i) => useEditorStore.getState()._buildJobFor(item, i)).filter(Boolean);
+    const jobs = items
+      .map((item, i) => useEditorStore.getState()._buildJobFor(item, i))
+      .filter(Boolean);
     expect(jobs).toHaveLength(200);
     expect(jobs[0].operations).toHaveLength(1);
     expect(jobs[199].id).toBe(199);

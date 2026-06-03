@@ -16,8 +16,8 @@ export function mergeProbeIntoQueueItem(item, info = {}) {
   const w = Number(info.width || 0);
   const h = Number(info.height || 0);
   const hasProbe = w > 0 && h > 0;
-  const sourceWidth = item.sourceWidth > 0 ? item.sourceWidth : (hasProbe ? w : 0);
-  const sourceHeight = item.sourceHeight > 0 ? item.sourceHeight : (hasProbe ? h : 0);
+  const sourceWidth = item.sourceWidth > 0 ? item.sourceWidth : hasProbe ? w : 0;
+  const sourceHeight = item.sourceHeight > 0 ? item.sourceHeight : hasProbe ? h : 0;
   return {
     ...item,
     width: item.width > 0 ? item.width : w,

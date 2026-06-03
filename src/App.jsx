@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, lazy, Suspense } from "react";
 import useEditorStore from "./stores/useEditorStore";
 import useKeyboard from "./hooks/useKeyboard";
 import useProcessing from "./hooks/useProcessing";
@@ -10,24 +10,23 @@ import PropertiesPanel from "./components/PropertiesPanel";
 import LayerList from "./components/LayerList";
 import BatchProgressBar from "./components/BatchProgressBar";
 import DragOverlay from "./components/DragOverlay";
-import ShortcutsModal from "./components/ShortcutsModal";
-import TableEditor from "./components/TableEditor";
-import ExcelMappingModal from "./components/ExcelMappingModal";
 import Landing from "./components/Landing";
-import UpdateBanner from "./components/UpdateBanner";
-import UpdateReadyModal from "./components/UpdateReadyModal";
 import TopUpdateBar from "./components/TopUpdateBar";
 import AppToast from "./components/AppToast";
 import { useT } from "./i18n/useT";
+
+const ShortcutsModal = lazy(() => import("./components/ShortcutsModal"));
+const TableEditor = lazy(() => import("./components/TableEditor"));
+const ExcelMappingModal = lazy(() => import("./components/ExcelMappingModal"));
+const UpdateBanner = lazy(() => import("./components/UpdateBanner"));
+const UpdateReadyModal = lazy(() => import("./components/UpdateReadyModal"));
 
 const api = window.api;
 
 export default function App() {
   const queueLength = useEditorStore((s) => s.queue.length);
   const isDragging = useEditorStore((s) => s.isDragging);
-  const hasSelection = useEditorStore(
-    (s) => s.selectedIdx >= 0 && s.selectedIdx < s.queue.length,
-  );
+  const hasSelection = useEditorStore((s) => s.selectedIdx >= 0 && s.selectedIdx < s.queue.length);
   const setIsDragging = useEditorStore((s) => s.setIsDragging);
   const addVideos = useEditorStore((s) => s.addVideos);
   const loadPresetsFromStorage = useEditorStore((s) => s.loadPresetsFromStorage);
@@ -40,7 +39,6 @@ export default function App() {
   const appToast = useEditorStore((s) => s.appToast);
   const t = useT();
   const dropRef = useRef(null);
-  const blobUrlsRef = useRef([]);
   const dragCounter = useRef(0);
 
   useKeyboard();
@@ -55,21 +53,18 @@ export default function App() {
   useEffect(() => {
     if (!api?.onUpdaterEvent) return;
     const unsub = api.onUpdaterEvent((payload) => applyUpdaterEvent(payload));
-    return () => { if (typeof unsub === "function") unsub(); };
+    return () => {
+      if (typeof unsub === "function") unsub();
+    };
   }, [applyUpdaterEvent]);
 
   useEffect(() => {
     if (!api?.checkForUpdates) return;
-    const timer = setTimeout(() => { checkForUpdates(); }, 3000);
+    const timer = setTimeout(() => {
+      checkForUpdates();
+    }, 3000);
     return () => clearTimeout(timer);
   }, [checkForUpdates]);
-
-  useEffect(() => {
-    return () => {
-      blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      blobUrlsRef.current = [];
-    };
-  }, []);
 
   useEffect(() => {
     if (!appToast) return;
@@ -83,7 +78,9 @@ export default function App() {
     dragCounter.current += 1;
     if (dragCounter.current === 1) setIsDragging(true);
   };
-  const onDragOver = (e) => { e.preventDefault(); };
+  const onDragOver = (e) => {
+    e.preventDefault();
+  };
   const onDragLeave = (e) => {
     e.preventDefault();
     dragCounter.current = Math.max(0, dragCounter.current - 1);
@@ -137,14 +134,22 @@ export default function App() {
       <div ref={dropRef} {...dropHandlers} className="h-full">
         <TopUpdateBar />
         <Landing />
+        <Suspense fallback={null}>
+          <UpdateBanner />
+          <UpdateReadyModal />
+        </Suspense>
         <AppToast />
       </div>
     );
   }
 
   return (
-    <div ref={dropRef} {...dropHandlers}
-      className="h-screen flex flex-col overflow-hidden" style={{ background: "var(--bg-app)", color: "var(--text-primary)" }}>
+    <div
+      ref={dropRef}
+      {...dropHandlers}
+      className="h-screen flex flex-col overflow-hidden"
+      style={{ background: "var(--bg-app)", color: "var(--text-primary)" }}
+    >
       <TopUpdateBar />
       <Header />
       <BatchProgressBar />
@@ -155,18 +160,23 @@ export default function App() {
           <ToolBar />
         </div>
         {hasSelection && (
-          <aside className="w-[280px] flex-shrink-0 overflow-y-auto border-l" style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}>
+          <aside
+            className="w-[280px] flex-shrink-0 overflow-y-auto border-l"
+            style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+          >
             <PropertiesPanel />
             <LayerList />
           </aside>
         )}
       </div>
       <DragOverlay />
-      <ShortcutsModal />
-      <TableEditor />
-      <ExcelMappingModal />
-      <UpdateBanner />
-      <UpdateReadyModal />
+      <Suspense fallback={null}>
+        <ShortcutsModal />
+        <TableEditor />
+        <ExcelMappingModal />
+        <UpdateBanner />
+        <UpdateReadyModal />
+      </Suspense>
       <AppToast />
     </div>
   );

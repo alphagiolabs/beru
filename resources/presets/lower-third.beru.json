@@ -7,7 +7,7 @@
     {
       "id": "preset-lt-1",
       "label": "Lower third",
-      "region": { "x": 0.10, "y": 0.78, "w": 0.80, "h": 0.12 }
+      "region": { "x": 0.1, "y": 0.78, "w": 0.8, "h": 0.12 }
     }
   ],
   "textStyle": {
@@ -19,7 +19,7 @@
     "italic": false,
     "bgEnabled": true,
     "bgColor": "#000000",
-    "bgOpacity": 0.70,
+    "bgOpacity": 0.7,
     "borderWidth": 0,
     "borderColor": "#000000"
   },

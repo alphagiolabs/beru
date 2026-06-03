@@ -1,9 +1,21 @@
 /** Shared text style shape for preview overlays and batch template regions. */
 
 export const TEXT_STYLE_KEYS = [
-  "fontSize", "fontColor", "fontFamily", "fontWeight", "letterSpacing",
-  "textAlign", "textOpacity", "bold", "italic", "bgEnabled", "bgColor",
-  "bgOpacity", "boxBorderWidth", "borderWidth", "borderColor",
+  "fontSize",
+  "fontColor",
+  "fontFamily",
+  "fontWeight",
+  "letterSpacing",
+  "textAlign",
+  "textOpacity",
+  "bold",
+  "italic",
+  "bgEnabled",
+  "bgColor",
+  "bgOpacity",
+  "boxBorderWidth",
+  "borderWidth",
+  "borderColor",
 ];
 
 const GLOBAL_KEY_MAP = {
@@ -49,9 +61,26 @@ export function patchToGlobalState(patch) {
   const global = {};
   for (const [k, v] of Object.entries(patch)) {
     const gk = GLOBAL_KEY_MAP[k] || k;
-    if (["textFontSize", "textFontColor", "fontFamily", "fontWeight", "letterSpacing",
-      "textAlign", "textOpacity", "bold", "italic", "bgEnabled", "bgColor", "bgOpacity",
-      "boxBorderWidth", "borderWidth", "borderColor", "textInput"].includes(gk)) {
+    if (
+      [
+        "textFontSize",
+        "textFontColor",
+        "fontFamily",
+        "fontWeight",
+        "letterSpacing",
+        "textAlign",
+        "textOpacity",
+        "bold",
+        "italic",
+        "bgEnabled",
+        "bgColor",
+        "bgOpacity",
+        "boxBorderWidth",
+        "borderWidth",
+        "borderColor",
+        "textInput",
+      ].includes(gk)
+    ) {
       global[gk] = v;
     }
   }

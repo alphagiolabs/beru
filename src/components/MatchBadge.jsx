@@ -2,9 +2,24 @@ import { Check, AlertCircle, Copy, Minus } from "lucide-react";
 import { useT } from "../i18n/useT";
 
 const STATUS_META = {
-  matched: { icon: Check, color: "var(--accent)", labelKey: "match.coincide", descKey: "match.coincideDesc" },
-  unmatched: { icon: AlertCircle, color: "var(--amber)", labelKey: "match.sinMatch", descKey: "match.sinMatchDesc" },
-  duplicate: { icon: Copy, color: "var(--rose)", labelKey: "match.multiple", descKey: "match.multipleDesc" },
+  matched: {
+    icon: Check,
+    color: "var(--accent)",
+    labelKey: "match.coincide",
+    descKey: "match.coincideDesc",
+  },
+  unmatched: {
+    icon: AlertCircle,
+    color: "var(--amber)",
+    labelKey: "match.sinMatch",
+    descKey: "match.sinMatchDesc",
+  },
+  duplicate: {
+    icon: Copy,
+    color: "var(--rose)",
+    labelKey: "match.multiple",
+    descKey: "match.multipleDesc",
+  },
   none: { icon: Minus, color: "var(--text-dim)", labelKey: null, descKey: null },
 };
 

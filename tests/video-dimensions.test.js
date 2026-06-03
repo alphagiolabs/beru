@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  getLockedDimensions,
-  mergeProbeIntoQueueItem,
-} from "../src/utils/video-dimensions.js";
+import { getLockedDimensions, mergeProbeIntoQueueItem } from "../src/utils/video-dimensions.js";
 
 describe("video-dimensions", () => {
   it("locks source dimensions on first probe", () => {

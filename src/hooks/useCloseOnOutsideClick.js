@@ -12,7 +12,9 @@ export default function useCloseOnOutsideClick(ref, isOpen, setIsOpen) {
     const onDown = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setIsOpen(false);
     };
-    const onKey = (e) => { if (e.key === "Escape") setIsOpen(false); };
+    const onKey = (e) => {
+      if (e.key === "Escape") setIsOpen(false);
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {

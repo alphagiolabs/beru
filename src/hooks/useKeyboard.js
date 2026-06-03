@@ -2,11 +2,11 @@ import { useEffect } from "react";
 import useEditorStore from "../stores/useEditorStore";
 
 const TOOL_KEYS = {
-  "1": "blur",
-  "2": "crop",
-  "3": "text",
-  "4": "image",
-  "5": "delogo",
+  1: "blur",
+  2: "crop",
+  3: "text",
+  4: "image",
+  5: "delogo",
 };
 
 const isTypingTarget = (target) => {
@@ -28,10 +28,22 @@ export default function useKeyboard() {
 
       // Modals
       if (key === "Escape") {
-        if (store.showShortcuts) { store.setShowShortcuts(false); return; }
-        if (store.showTableEditor) { store.setShowTableEditor(false); return; }
-        if (store.showMappingModal) { store.setShowMappingModal(false); return; }
-        if (store.currentRegion) { store.setCurrentRegion(null); return; }
+        if (store.showShortcuts) {
+          store.setShowShortcuts(false);
+          return;
+        }
+        if (store.showTableEditor) {
+          store.setShowTableEditor(false);
+          return;
+        }
+        if (store.showMappingModal) {
+          store.setShowMappingModal(false);
+          return;
+        }
+        if (store.currentRegion) {
+          store.setCurrentRegion(null);
+          return;
+        }
         return;
       }
 
@@ -76,29 +88,39 @@ export default function useKeyboard() {
       if (key === " " || key === "Spacebar") {
         if (store.queue.length === 0) return;
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent("beru:video:command", { detail: { type: "toggle-play" } }));
+        window.dispatchEvent(
+          new CustomEvent("beru:video:command", { detail: { type: "toggle-play" } }),
+        );
         return;
       }
       if (key === "ArrowLeft") {
         e.preventDefault();
         const step = shiftKey ? 1 : 5;
-        window.dispatchEvent(new CustomEvent("beru:video:command", { detail: { type: "seek", delta: -step } }));
+        window.dispatchEvent(
+          new CustomEvent("beru:video:command", { detail: { type: "seek", delta: -step } }),
+        );
         return;
       }
       if (key === "ArrowRight") {
         e.preventDefault();
         const step = shiftKey ? 1 : 5;
-        window.dispatchEvent(new CustomEvent("beru:video:command", { detail: { type: "seek", delta: step } }));
+        window.dispatchEvent(
+          new CustomEvent("beru:video:command", { detail: { type: "seek", delta: step } }),
+        );
         return;
       }
       if (key === "Home") {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent("beru:video:command", { detail: { type: "seek-abs", value: 0 } }));
+        window.dispatchEvent(
+          new CustomEvent("beru:video:command", { detail: { type: "seek-abs", value: 0 } }),
+        );
         return;
       }
       if (key === "End") {
         e.preventDefault();
-        window.dispatchEvent(new CustomEvent("beru:video:command", { detail: { type: "seek-abs", value: 1 } }));
+        window.dispatchEvent(
+          new CustomEvent("beru:video:command", { detail: { type: "seek-abs", value: 1 } }),
+        );
         return;
       }
 

@@ -99,30 +99,39 @@ CASES = [
     ("edge region bottom-right", [make_op("mirror", region={"x": 540, "y": 300, "w": 100, "h": 60})], 0),
 ]
 
-passed = 0
-failed = 0
-for name, ops, _ in CASES:
-    fc, label, _images = build_filter_complex(ops, 640, 360)
-    # Some degenerate cases (zero-size region) intentionally return None.
-    expect_none = (name == "zero-size region")
-    if expect_none:
+def main():
+    passed = 0
+    failed = 0
+    for name, ops, _ in CASES:
+        fc, label, _images = build_filter_complex(ops, 640, 360)
+        # Some degenerate cases (zero-size region) intentionally return None.
+        expect_none = (name == "zero-size region")
+        if expect_none:
+            if fc is None:
+                print(f"\n=== {name} ===\n  [OK] correctly skipped degenerate region")
+                passed += 1
+            else:
+                print(f"\n=== {name} ===\n  [FAIL] expected None, got filter graph")
+                failed += 1
+            continue
         if fc is None:
-            print(f"\n=== {name} ===\n  [OK] correctly skipped degenerate region")
+            print(f"\n=== {name} ===\n  [FAIL] returned None (no output)")
+            failed += 1
+            continue
+        show(name, fc, label)
+        ok = run_ffmpeg_parse(fc, label)
+        if ok:
             passed += 1
         else:
-            print(f"\n=== {name} ===\n  [FAIL] expected None, got filter graph")
             failed += 1
-        continue
-    if fc is None:
-        print(f"\n=== {name} ===\n  [FAIL] returned None (no output)")
-        failed += 1
-        continue
-    show(name, fc, label)
-    ok = run_ffmpeg_parse(fc, label)
-    if ok:
-        passed += 1
-    else:
-        failed += 1
 
-print(f"\n========\nPassed: {passed}\nFailed: {failed}\n========")
-sys.exit(0 if failed == 0 else 1)
+    print(f"\n========\nPassed: {passed}\nFailed: {failed}\n========")
+    return 0 if failed == 0 else 1
+
+
+def test_delogo_filter_graphs():
+    assert main() == 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

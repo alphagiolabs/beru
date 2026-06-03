@@ -29,13 +29,14 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
     const probe = path.join(os.tmpdir(), `beru-test-ffmpeg-${Date.now()}.bin`);
     writeFileSync(probe, "");
     try {
-      const r = spawnSync(PY, [
-        "-c",
-        PY_CODE_PREFIX + "import processor; print(processor.FFMPEG)",
-      ], {
-        env: { ...process.env, BERU_FFMPEG: probe },
-        encoding: "utf8",
-      });
+      const r = spawnSync(
+        PY,
+        ["-c", PY_CODE_PREFIX + "import processor; print(processor.FFMPEG)"],
+        {
+          env: { ...process.env, BERU_FFMPEG: probe },
+          encoding: "utf8",
+        },
+      );
       if (r.status !== 0) {
         console.error("STDOUT:", r.stdout);
         console.error("STDERR:", r.stderr);
@@ -43,7 +44,9 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
       expect(r.status).toBe(0);
       expect(r.stdout.trim()).toBe(probe);
     } finally {
-      try { unlinkSync(probe); } catch {}
+      try {
+        unlinkSync(probe);
+      } catch {}
     }
   });
 
@@ -51,13 +54,14 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
     const probe = path.join(os.tmpdir(), `beru-test-runtime-ffmpeg-${Date.now()}.bin`);
     writeFileSync(probe, "");
     try {
-      const r = spawnSync(PY, [
-        "-c",
-        PY_CODE_PREFIX + "import processor; print(processor.find_ffmpeg())",
-      ], {
-        env: { ...process.env, BERU_FFMPEG: probe },
-        encoding: "utf8",
-      });
+      const r = spawnSync(
+        PY,
+        ["-c", PY_CODE_PREFIX + "import processor; print(processor.find_ffmpeg())"],
+        {
+          env: { ...process.env, BERU_FFMPEG: probe },
+          encoding: "utf8",
+        },
+      );
       if (r.status !== 0) {
         console.error("STDOUT:", r.stdout);
         console.error("STDERR:", r.stderr);
@@ -65,7 +69,9 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
       expect(r.status).toBe(0);
       expect(r.stdout.trim()).toBe(probe);
     } finally {
-      try { unlinkSync(probe); } catch {}
+      try {
+        unlinkSync(probe);
+      } catch {}
     }
   });
 
@@ -73,13 +79,14 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
     const probe = path.join(os.tmpdir(), `beru-test-ffprobe-${Date.now()}.bin`);
     writeFileSync(probe, "");
     try {
-      const r = spawnSync(PY, [
-        "-c",
-        PY_CODE_PREFIX + "import processor; print(processor.FFPROBE)",
-      ], {
-        env: { ...process.env, BERU_FFPROBE: probe },
-        encoding: "utf8",
-      });
+      const r = spawnSync(
+        PY,
+        ["-c", PY_CODE_PREFIX + "import processor; print(processor.FFPROBE)"],
+        {
+          env: { ...process.env, BERU_FFPROBE: probe },
+          encoding: "utf8",
+        },
+      );
       if (r.status !== 0) {
         console.error("STDOUT:", r.stdout);
         console.error("STDERR:", r.stderr);
@@ -87,7 +94,9 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
       expect(r.status).toBe(0);
       expect(r.stdout.trim()).toBe(probe);
     } finally {
-      try { unlinkSync(probe); } catch {}
+      try {
+        unlinkSync(probe);
+      } catch {}
     }
   });
 
@@ -227,13 +236,20 @@ print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8)))
     writeFileSync(ffmpegProbe, "");
     writeFileSync(ffprobeProbe, "");
     try {
-      const r = spawnSync(PY, [
-        "-c",
-        PY_CODE_PREFIX + "import processor; print(processor.find_ffprobe(r'" + ffmpegProbe.replace(/\\/g, "\\\\") + "'))",
-      ], {
-        env: { ...process.env, BERU_FFPROBE: ffprobeProbe },
-        encoding: "utf8",
-      });
+      const r = spawnSync(
+        PY,
+        [
+          "-c",
+          PY_CODE_PREFIX +
+            "import processor; print(processor.find_ffprobe(r'" +
+            ffmpegProbe.replace(/\\/g, "\\\\") +
+            "'))",
+        ],
+        {
+          env: { ...process.env, BERU_FFPROBE: ffprobeProbe },
+          encoding: "utf8",
+        },
+      );
       if (r.status !== 0) {
         console.error("STDOUT:", r.stdout);
         console.error("STDERR:", r.stderr);
@@ -241,8 +257,12 @@ print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8)))
       expect(r.status).toBe(0);
       expect(r.stdout.trim()).toBe(ffprobeProbe);
     } finally {
-      try { unlinkSync(ffmpegProbe); } catch {}
-      try { unlinkSync(ffprobeProbe); } catch {}
+      try {
+        unlinkSync(ffmpegProbe);
+      } catch {}
+      try {
+        unlinkSync(ffprobeProbe);
+      } catch {}
     }
   });
 
@@ -250,10 +270,11 @@ print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8)))
     const env = { ...process.env };
     delete env.BERU_FFMPEG;
     delete env.BERU_FFPROBE;
-    const r = spawnSync(PY, [
-      "-c",
-      PY_CODE_PREFIX + "import processor; print(processor.FFMPEG, processor.FFPROBE)",
-    ], { env, encoding: "utf8" });
+    const r = spawnSync(
+      PY,
+      ["-c", PY_CODE_PREFIX + "import processor; print(processor.FFMPEG, processor.FFPROBE)"],
+      { env, encoding: "utf8" },
+    );
     if (r.status !== 0) {
       console.error("STDOUT:", r.stdout);
       console.error("STDERR:", r.stderr);
@@ -294,6 +315,76 @@ print(json.dumps({"calls": calls["n"], "result": result}))
     expect(parsed.calls).toBe(2);
     expect(parsed.result.succeeded).toBe(1);
     expect(parsed.result.failed).toBe(0);
+  });
+
+  it("retries generic hardware filter failures with libx264", () => {
+    const code = `
+import json
+import os
+import tempfile
+import processor
+
+tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+tmp.close()
+calls = []
+
+def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
+    calls.append(cmd)
+    if "libx264" in cmd:
+        return True, None
+    return False, "Error while filtering: Operation not permitted"
+
+processor.detect_hw_encoder = lambda _ffmpeg: "h264_nvenc"
+processor.get_system_fonts = lambda: {}
+processor.job_video_info = lambda job, input_path: {
+    "width": 320,
+    "height": 180,
+    "duration": 1.0,
+    "pix_fmt": "yuv420p",
+    "frame_rate": 24,
+    "audio_codec": "aac",
+    "audio_channels": 1,
+    "video_codec": "h264",
+}
+processor._run_ffmpeg = fake_run
+job = {
+    "id": 2,
+    "input_path": tmp.name,
+    "output_path": tmp.name + ".out.mp4",
+    "width": 320,
+    "height": 180,
+    "source_width": 320,
+    "source_height": 180,
+    "video_duration": 1,
+    "operations": [{
+        "mode": "text",
+        "text": "Hola",
+        "region": {"x": 10, "y": 10, "w": 120, "h": 40},
+    }],
+}
+try:
+    result = processor._process_one(0, job, "ffmpeg")
+finally:
+    os.unlink(tmp.name)
+print(json.dumps({
+    "result": result,
+    "calls": len(calls),
+    "second_uses_software": "libx264" in calls[1] if len(calls) > 1 else False,
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.result.status).toBe("succeeded");
+    expect(parsed.calls).toBe(2);
+    expect(parsed.second_uses_software).toBe(true);
   });
 
   it("bounds stderr buffer while streaming progress", () => {

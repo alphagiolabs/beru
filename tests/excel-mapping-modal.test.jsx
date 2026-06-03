@@ -79,8 +79,9 @@ describe("ExcelMappingModal", () => {
       region2Select.dispatchEvent(new Event("change", { bubbles: true }));
     });
 
-    const apply = Array.from(document.querySelectorAll("button"))
-      .find((button) => button.textContent.includes("Aplicar mapeo"));
+    const apply = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent.includes("Aplicar mapeo"),
+    );
 
     act(() => {
       apply.click();
@@ -92,9 +93,11 @@ describe("ExcelMappingModal", () => {
       "89989989865",
       "89989989865",
     ]);
-    expect(useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0).operations.map((op) => op.text)).toEqual([
-      "89989989865",
-      "89989989865",
-    ]);
+    expect(
+      useEditorStore
+        .getState()
+        ._buildJobFor(useEditorStore.getState().queue[0], 0)
+        .operations.map((op) => op.text),
+    ).toEqual(["89989989865", "89989989865"]);
   });
 });

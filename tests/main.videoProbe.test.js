@@ -7,20 +7,22 @@ import { parseFfmpegOutput, parseFfprobeJson, probeVideoFile } from "../main/vid
 
 describe("main/videoProbe metadata parsing", () => {
   it("parses ffprobe JSON metadata", () => {
-    const info = parseFfprobeJson(JSON.stringify({
-      format: { duration: "12.5" },
-      streams: [
-        {
-          codec_type: "video",
-          codec_name: "h264",
-          width: 1920,
-          height: 1080,
-          pix_fmt: "yuv420p",
-          r_frame_rate: "30000/1001",
-        },
-        { codec_type: "audio", codec_name: "aac" },
-      ],
-    }));
+    const info = parseFfprobeJson(
+      JSON.stringify({
+        format: { duration: "12.5" },
+        streams: [
+          {
+            codec_type: "video",
+            codec_name: "h264",
+            width: 1920,
+            height: 1080,
+            pix_fmt: "yuv420p",
+            r_frame_rate: "30000/1001",
+          },
+          { codec_type: "audio", codec_name: "aac" },
+        ],
+      }),
+    );
 
     expect(info.width).toBe(1920);
     expect(info.height).toBe(1080);
@@ -57,13 +59,25 @@ describeIfBundledFfmpeg("main/videoProbe fallback", () => {
   it("falls back to ffmpeg when ffprobe produces no JSON", async () => {
     const tmp = path.join(os.tmpdir(), `beru-video-probe-${Date.now()}.mp4`);
     try {
-      const makeVideo = spawnSync(bundledFfmpeg, [
-        "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", "testsrc=size=320x180:rate=1",
-        "-t", "1",
-        "-pix_fmt", "yuv420p",
-        tmp,
-      ], { encoding: "utf8" });
+      const makeVideo = spawnSync(
+        bundledFfmpeg,
+        [
+          "-hide_banner",
+          "-loglevel",
+          "error",
+          "-y",
+          "-f",
+          "lavfi",
+          "-i",
+          "testsrc=size=320x180:rate=1",
+          "-t",
+          "1",
+          "-pix_fmt",
+          "yuv420p",
+          tmp,
+        ],
+        { encoding: "utf8" },
+      );
 
       expect(makeVideo.status).toBe(0);
 
@@ -78,7 +92,9 @@ describeIfBundledFfmpeg("main/videoProbe fallback", () => {
       expect(info.videoCodec).toBe("h264");
       expect(info.pixFmt).toBe("yuv420p");
     } finally {
-      try { unlinkSync(tmp); } catch {}
+      try {
+        unlinkSync(tmp);
+      } catch {}
     }
   });
 });

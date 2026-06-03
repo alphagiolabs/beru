@@ -37,9 +37,36 @@ export default function TableEditorGrid({
         <table className="w-full text-[11px] border-collapse">
           <thead>
             <tr>
-              <th className="text-left p-2 sticky top-0 z-10 w-[40px]" style={{ background: "var(--bg-elevated)", color: "var(--text-dim)", borderBottom: "1px solid var(--border)" }}>#</th>
-              <th className="text-left p-2 sticky top-0 z-10" style={{ background: "var(--bg-elevated)", color: "var(--text-dim)", borderBottom: "1px solid var(--border)" }}>Video</th>
-              <th className="text-left p-2 sticky top-0 z-10 w-[80px]" style={{ background: "var(--bg-elevated)", color: "var(--text-dim)", borderBottom: "1px solid var(--border)" }}>ID</th>
+              <th
+                className="text-left p-2 sticky top-0 z-10 w-[40px]"
+                style={{
+                  background: "var(--bg-elevated)",
+                  color: "var(--text-dim)",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                #
+              </th>
+              <th
+                className="text-left p-2 sticky top-0 z-10"
+                style={{
+                  background: "var(--bg-elevated)",
+                  color: "var(--text-dim)",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                Video
+              </th>
+              <th
+                className="text-left p-2 sticky top-0 z-10 w-[80px]"
+                style={{
+                  background: "var(--bg-elevated)",
+                  color: "var(--text-dim)",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                ID
+              </th>
               {templateRegions.map((tr) => {
                 const excelCol = excelMapping.columns?.[tr.id];
                 return (
@@ -47,7 +74,8 @@ export default function TableEditorGrid({
                     key={tr.id}
                     className="text-left p-2 sticky top-0 z-10 cursor-pointer"
                     style={{
-                      background: focused.regionId === tr.id ? "rgba(168,85,247,0.15)" : "var(--bg-elevated)",
+                      background:
+                        focused.regionId === tr.id ? "rgba(168,85,247,0.15)" : "var(--bg-elevated)",
                       color: focused.regionId === tr.id ? "var(--purple)" : "var(--purple)",
                       borderBottom: "1px solid var(--border)",
                       borderLeft: focused.regionId === tr.id ? "2px solid var(--purple)" : "none",
@@ -57,7 +85,10 @@ export default function TableEditorGrid({
                   >
                     <div>{tr.label}</div>
                     {excelCol && (
-                      <div className="text-[9px] font-mono font-normal truncate max-w-[120px]" style={{ color: "var(--text-dim)" }}>
+                      <div
+                        className="text-[9px] font-mono font-normal truncate max-w-[120px]"
+                        style={{ color: "var(--text-dim)" }}
+                      >
                         → {excelCol}
                       </div>
                     )}
@@ -81,16 +112,35 @@ export default function TableEditorGrid({
                     borderBottom: "1px solid var(--border)",
                   }}
                 >
-                  <td className="p-2 text-center font-mono" style={{ color: isFocusedRow ? "var(--purple)" : "var(--text-dim)" }}>
+                  <td
+                    className="p-2 text-center font-mono"
+                    style={{ color: isFocusedRow ? "var(--purple)" : "var(--text-dim)" }}
+                  >
                     {idx + 1}
                   </td>
-                  <td className="p-2 font-medium" style={{ color: isFocusedRow ? "var(--text-primary)" : "var(--text-secondary)" }} title={item.filename}>
+                  <td
+                    className="p-2 font-medium"
+                    style={{
+                      color: isFocusedRow ? "var(--text-primary)" : "var(--text-secondary)",
+                    }}
+                    title={item.filename}
+                  >
                     {item.filename}
                   </td>
-                  <td className="p-2 font-mono text-[10px]" style={{ color: "var(--text-dim)" }} title={matchStatus === "matched" ? "Vinculado a Excel" : matchStatus || ""}>
+                  <td
+                    className="p-2 font-mono text-[10px]"
+                    style={{ color: "var(--text-dim)" }}
+                    title={matchStatus === "matched" ? "Vinculado a Excel" : matchStatus || ""}
+                  >
                     {id}
                     {matchStatus === "unmatched" && excelPath && (
-                      <span className="ml-1 text-[9px]" style={{ color: "var(--amber)" }} title="Sin fila en Excel">⚠</span>
+                      <span
+                        className="ml-1 text-[9px]"
+                        style={{ color: "var(--amber)" }}
+                        title="Sin fila en Excel"
+                      >
+                        ⚠
+                      </span>
                     )}
                   </td>
                   {templateRegions.map((tr) => {
@@ -98,11 +148,15 @@ export default function TableEditorGrid({
                     const cellText = get().getCellTextForRegion(idx, tr.id);
                     const fromExcelOnly = !op?.text && !!cellText && excelMapping.columns?.[tr.id];
                     const isCellFocused = focused.videoIdx === idx && focused.regionId === tr.id;
-                    const isEditing = editingCell && editingCell.videoIdx === idx && editingCell.regionId === tr.id;
+                    const isEditing =
+                      editingCell && editingCell.videoIdx === idx && editingCell.regionId === tr.id;
                     return (
                       <td
                         key={tr.id}
-                        onClick={(e) => { e.stopPropagation(); setFocused({ videoIdx: idx, regionId: tr.id }); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFocused({ videoIdx: idx, regionId: tr.id });
+                        }}
                         onDoubleClick={() => startInlineEdit(idx, tr.id, cellText)}
                         className="p-1 align-top"
                         style={{
@@ -117,8 +171,13 @@ export default function TableEditorGrid({
                             onChange={(e) => setEditValue(e.target.value)}
                             onBlur={commitInlineEdit}
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") { e.preventDefault(); commitInlineEdit(); }
-                              else if (e.key === "Escape") { e.preventDefault(); cancelInlineEdit(); }
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                commitInlineEdit();
+                              } else if (e.key === "Escape") {
+                                e.preventDefault();
+                                cancelInlineEdit();
+                              }
                               e.stopPropagation();
                             }}
                             className="w-full px-1.5 py-0.5 rounded text-[11px] outline-none"
@@ -132,10 +191,16 @@ export default function TableEditorGrid({
                           <div
                             className="px-1.5 py-0.5 rounded"
                             style={{
-                              color: fromExcelOnly ? "var(--text-secondary)" : "var(--text-primary)",
+                              color: fromExcelOnly
+                                ? "var(--text-secondary)"
+                                : "var(--text-primary)",
                               fontStyle: fromExcelOnly ? "italic" : "normal",
                             }}
-                            title={fromExcelOnly ? "Valor desde Excel (doble clic para editar)" : undefined}
+                            title={
+                              fromExcelOnly
+                                ? "Valor desde Excel (doble clic para editar)"
+                                : undefined
+                            }
                           >
                             {cellText}
                           </div>

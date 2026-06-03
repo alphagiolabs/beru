@@ -13,7 +13,16 @@ export function createUiSlice(set, get) {
     theme: "dark",
     language: "es",
     recent: [],
-    update: { status: "idle", version: null, percent: 0, error: null },
+    update: {
+      status: "idle",
+      version: null,
+      percent: 0,
+      error: null,
+      transferred: 0,
+      total: 0,
+      releaseNotes: "",
+      releaseUrl: null,
+    },
 
     showShortcuts: false,
     isDragging: false,
@@ -36,9 +45,8 @@ export function createUiSlice(set, get) {
         const batchWorkers = Number.isFinite(Number(settings?.batchWorkers))
           ? Math.max(0, Math.min(16, Math.floor(Number(settings.batchWorkers))))
           : 0;
-        const batchWorkersMode = settings?.batchWorkersMode === "conservative"
-          ? "conservative"
-          : "balanced";
+        const batchWorkersMode =
+          settings?.batchWorkersMode === "conservative" ? "conservative" : "balanced";
         const batchRetryFailed = settings?.batchRetryFailed !== false;
         applyThemeToDom(theme);
         set({
@@ -61,7 +69,9 @@ export function createUiSlice(set, get) {
       set({ theme: next });
       const api = window.api;
       if (api?.saveSettings) {
-        try { await api.saveSettings({ theme: next }); } catch {}
+        try {
+          await api.saveSettings({ theme: next });
+        } catch {}
       }
     },
 
@@ -75,7 +85,9 @@ export function createUiSlice(set, get) {
       set({ language: next });
       const api = window.api;
       if (api?.saveSettings) {
-        try { await api.saveSettings({ language: next }); } catch {}
+        try {
+          await api.saveSettings({ language: next });
+        } catch {}
       }
     },
 
@@ -99,7 +111,9 @@ export function createUiSlice(set, get) {
         if (res?.success && Array.isArray(res.recent)) {
           const decorated = res.recent.map((r) => {
             let exists = true;
-            try { exists = api._statExists ? api._statExists(r.path) : true; } catch {}
+            try {
+              exists = api._statExists ? api._statExists(r.path) : true;
+            } catch {}
             return { ...r, exists };
           });
           set({ recent: decorated });
@@ -144,19 +158,96 @@ export function createUiSlice(set, get) {
       if (!payload || typeof payload !== "object") return;
       const type = payload.type;
       if (type === "checking") {
-        set({ update: { status: "checking", version: null, percent: 0, error: null } });
+        set({
+          update: {
+            status: "checking",
+            version: null,
+            percent: 0,
+            error: null,
+            transferred: 0,
+            total: 0,
+            releaseNotes: "",
+            releaseUrl: null,
+          },
+        });
       } else if (type === "available") {
-        set({ update: { status: "available", version: payload.version, percent: 0, error: null } });
+        set({
+          update: {
+            status: "available",
+            version: payload.version,
+            percent: 0,
+            error: null,
+            transferred: 0,
+            total: 0,
+            releaseNotes: payload.releaseNotes || "",
+            releaseUrl: payload.releaseUrl || null,
+          },
+        });
       } else if (type === "not-available") {
-        set({ update: { status: "idle", version: null, percent: 0, error: null } });
+        set({
+          update: {
+            status: "idle",
+            version: null,
+            percent: 0,
+            error: null,
+            transferred: 0,
+            total: 0,
+            releaseNotes: "",
+            releaseUrl: null,
+          },
+        });
       } else if (type === "downloading") {
-        set({ update: { status: "downloading", version: null, percent: payload.percent || 0, error: null } });
+        set((s) => ({
+          update: {
+            status: "downloading",
+            version: payload.version || s.update?.version || null,
+            percent: payload.percent || 0,
+            error: null,
+            transferred: payload.transferred || 0,
+            total: payload.total || 0,
+            releaseNotes: s.update?.releaseNotes || "",
+            releaseUrl: payload.releaseUrl || s.update?.releaseUrl || null,
+          },
+        }));
       } else if (type === "ready") {
-        set({ update: { status: "ready", version: payload.version, percent: 100, error: null } });
+        set((s) => ({
+          update: {
+            status: "ready",
+            version: payload.version || s.update?.version || null,
+            percent: 100,
+            error: null,
+            transferred: s.update?.total || s.update?.transferred || 0,
+            total: s.update?.total || 0,
+            releaseNotes: s.update?.releaseNotes || "",
+            releaseUrl: payload.releaseUrl || s.update?.releaseUrl || null,
+          },
+        }));
       } else if (type === "error") {
-        set({ update: { status: "error", version: null, percent: 0, error: payload.message || "Error desconocido" } });
+        set({
+          update: {
+            status: "error",
+            version: null,
+            percent: 0,
+            error: payload.message || "Error desconocido",
+            transferred: 0,
+            total: 0,
+            releaseNotes: "",
+            releaseUrl: null,
+          },
+        });
       } else if (type === "disabled") {
-        set({ update: { status: "disabled", version: null, percent: 0, error: null } });
+        set({
+          update: {
+            status: "disabled",
+            version: null,
+            percent: 0,
+            error: null,
+            transferred: 0,
+            total: 0,
+            releaseNotes: "",
+            releaseUrl: null,
+          },
+        });
       }
     },
 

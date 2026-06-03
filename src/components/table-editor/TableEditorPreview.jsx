@@ -21,15 +21,21 @@ export default function TableEditorPreview({
 
   return (
     <div className="flex-1 flex flex-col p-3 min-w-0">
-      <div className="text-[10px] font-semibold tracking-widest uppercase mb-2" style={{ color: "var(--text-dim)" }}>
+      <div
+        className="text-[10px] font-semibold tracking-widest uppercase mb-2"
+        style={{ color: "var(--text-dim)" }}
+      >
         Vista previa
       </div>
-      <div className="flex-1 flex items-center justify-center min-h-0 rounded overflow-hidden" style={{ background: "#000" }}>
+      <div
+        className="flex-1 flex items-center justify-center min-h-0 rounded overflow-hidden"
+        style={{ background: "#000" }}
+      >
         {focusedVideo ? (
           <div className="relative inline-block" style={{ maxWidth: "100%", maxHeight: "100%" }}>
             <video
               ref={videoRef}
-              src={focusedVideo.src}
+              src={focusedVideo.src || null}
               className="max-h-full max-w-full block object-contain"
               style={{ maxHeight: "calc(90vh - 380px)" }}
             />
@@ -54,13 +60,18 @@ export default function TableEditorPreview({
             })}
           </div>
         ) : (
-          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>Sin video</div>
+          <div className="text-[11px]" style={{ color: "var(--text-dim)" }}>
+            Sin video
+          </div>
         )}
       </div>
       {focusedVideo && (
         <div className="mt-2 flex-shrink-0">
           <input
-            type="range" min={0} max={1} step={0.001}
+            type="range"
+            min={0}
+            max={1}
+            step={0.001}
             value={seekFrac}
             onMouseDown={() => setSeeking(true)}
             onMouseUp={() => setSeeking(false)}
@@ -77,7 +88,10 @@ export default function TableEditorPreview({
           />
           <div className="flex items-center gap-1.5 mt-1">
             <button
-              onClick={() => { const v = videoRef.current; if (v) v.currentTime = 0; }}
+              onClick={() => {
+                const v = videoRef.current;
+                if (v) v.currentTime = 0;
+              }}
               className="p-1 rounded hover:bg-white/10"
               style={{ color: "var(--text-dim)" }}
             >
@@ -87,7 +101,8 @@ export default function TableEditorPreview({
               onClick={() => {
                 const v = videoRef.current;
                 if (!v) return;
-                if (v.paused) v.play(); else v.pause();
+                if (v.paused) v.play();
+                else v.pause();
               }}
               className="p-1 rounded hover:bg-white/10"
               style={{ color: "var(--accent)" }}
@@ -95,7 +110,10 @@ export default function TableEditorPreview({
               {playing ? <Pause size={12} /> : <Play size={12} />}
             </button>
             <button
-              onClick={() => { const v = videoRef.current; if (v && v.duration) v.currentTime = v.duration; }}
+              onClick={() => {
+                const v = videoRef.current;
+                if (v && v.duration) v.currentTime = v.duration;
+              }}
               className="p-1 rounded hover:bg-white/10"
               style={{ color: "var(--text-dim)" }}
             >
@@ -105,7 +123,11 @@ export default function TableEditorPreview({
               {fmtTime(currentTime)} / {fmtTime(duration)}
             </span>
             <div className="flex-1" />
-            <span className="text-[10px] truncate max-w-[180px]" style={{ color: "var(--text-dim)" }} title={focusedVideo.filename}>
+            <span
+              className="text-[10px] truncate max-w-[180px]"
+              style={{ color: "var(--text-dim)" }}
+              title={focusedVideo.filename}
+            >
               <FileVideo size={10} className="inline mr-1" />
               {focusedVideo.filename}
             </span>

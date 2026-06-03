@@ -7,7 +7,7 @@
     {
       "id": "preset-sub-1",
       "label": "Subtítulo",
-      "region": { "x": 0.10, "y": 0.85, "w": 0.80, "h": 0.10 }
+      "region": { "x": 0.1, "y": 0.85, "w": 0.8, "h": 0.1 }
     }
   ],
   "textStyle": {

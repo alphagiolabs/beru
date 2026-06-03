@@ -79,7 +79,9 @@ export function createBatchSlice(set, get) {
 
     setSelectedTemplateRegion: (id) => {
       const tr = get().templateRegions.find((r) => r.id === id);
-      const style = tr?.style ? mergeTextStyles(getGlobalTextStyleFromState(get()), tr.style) : null;
+      const style = tr?.style
+        ? mergeTextStyles(getGlobalTextStyleFromState(get()), tr.style)
+        : null;
       set({
         selectedTemplateRegionId: id,
         ...(style ? patchToGlobalState(style) : {}),
@@ -93,19 +95,21 @@ export function createBatchSlice(set, get) {
       const globalPatch = patchToGlobalState(opPatch);
       const { sidebarMode, selectedTemplateRegionId, templateRegions, queue } = get();
 
-      const nextTemplateRegions = sidebarMode === "batch"
-        ? templateRegions.map((tr) =>
-            selectedTemplateRegionId == null || tr.id === selectedTemplateRegionId
-              ? { ...tr, style: mergeTextStyles(tr.style, opPatch) }
-              : tr,
-          )
-        : templateRegions;
+      const nextTemplateRegions =
+        sidebarMode === "batch"
+          ? templateRegions.map((tr) =>
+              selectedTemplateRegionId == null || tr.id === selectedTemplateRegionId
+                ? { ...tr, style: mergeTextStyles(tr.style, opPatch) }
+                : tr,
+            )
+          : templateRegions;
 
       let nextQueue = queue;
       if (sidebarMode === "batch") {
-        const targets = selectedTemplateRegionId != null
-          ? templateRegions.filter((r) => r.id === selectedTemplateRegionId)
-          : templateRegions;
+        const targets =
+          selectedTemplateRegionId != null
+            ? templateRegions.filter((r) => r.id === selectedTemplateRegionId)
+            : templateRegions;
         if (targets.length > 0) {
           nextQueue = queue.map((item) => ({
             ...item,
@@ -134,11 +138,13 @@ export function createBatchSlice(set, get) {
         if (i === selectedIdx) return item;
         return {
           ...item,
-          operations: sourceOps.map((op) => sanitizeOperation({
-            ...op,
-            id: uid(),
-            region: op.region ? { ...op.region } : null,
-          })),
+          operations: sourceOps.map((op) =>
+            sanitizeOperation({
+              ...op,
+              id: uid(),
+              region: op.region ? { ...op.region } : null,
+            }),
+          ),
           status: item.status === "done" || item.status === "error" ? "idle" : item.status,
           progress: 0,
           error: null,
@@ -171,8 +177,19 @@ export function createBatchSlice(set, get) {
 
         const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
 
-        const idAliases = ["id", "code", "codigo", "video", "archivo", "filename", "name", "nombre", "identificador"];
-        const idColumn = headers.find((h) => idAliases.includes(h.toLowerCase().trim())) || headers[0] || null;
+        const idAliases = [
+          "id",
+          "code",
+          "codigo",
+          "video",
+          "archivo",
+          "filename",
+          "name",
+          "nombre",
+          "identificador",
+        ];
+        const idColumn =
+          headers.find((h) => idAliases.includes(h.toLowerCase().trim())) || headers[0] || null;
 
         const { templateRegions } = get();
         const columns = {};
@@ -195,9 +212,10 @@ export function createBatchSlice(set, get) {
           rowCount: rows.length,
           headers,
           ...report,
-          message: report.matched === report.total
-            ? `Vinculados ${report.matched}/${report.total} videos correctamente`
-            : `Vinculados ${report.matched}/${report.total} videos. ${report.unmatched} sin coincidencia, ${report.duplicate} con ID duplicado.`,
+          message:
+            report.matched === report.total
+              ? `Vinculados ${report.matched}/${report.total} videos correctamente`
+              : `Vinculados ${report.matched}/${report.total} videos. ${report.unmatched} sin coincidencia, ${report.duplicate} con ID duplicado.`,
         };
       } catch (e) {
         return { success: false, error: e.message };
@@ -230,7 +248,7 @@ export function createBatchSlice(set, get) {
       const rowIdx = get().getExcelRowIndexForVideo(videoIdx);
       if (rowIdx < 0) return;
       const updatedRows = excelRows.map((row, i) =>
-        (i === rowIdx ? { ...row, [colName]: text } : row),
+        i === rowIdx ? { ...row, [colName]: text } : row,
       );
       set({ excelRows: updatedRows });
     },
@@ -301,7 +319,9 @@ export function createBatchSlice(set, get) {
 
       if (!idColumn || excelRows.length === 0) {
         const status = {};
-        queue.forEach((_, i) => { status[i] = "unmatched"; });
+        queue.forEach((_, i) => {
+          status[i] = "unmatched";
+        });
         set({ excelMatchStatus: status });
         return { matched: 0, unmatched: queue.length, duplicate: 0, total: queue.length };
       }
@@ -317,7 +337,9 @@ export function createBatchSlice(set, get) {
       });
 
       const status = {};
-      let matched = 0; let unmatched = 0; let duplicate = 0;
+      let matched = 0;
+      let unmatched = 0;
+      let duplicate = 0;
       const updated = queue.map((item, i) => {
         const id = stripExt(item.filename).trim().toLowerCase();
         const rowIdx = idToRowIdx.get(id);
@@ -340,10 +362,8 @@ export function createBatchSlice(set, get) {
           const { op: existingOp } = findTextOpForRegion(item.operations, tr.region);
           const colName = columns[tr.id];
           const textVal = colName ? rowGet(row, colName) : undefined;
-          const baseStyle = existingOp || mergeTextStyles(
-            getGlobalTextStyleFromState(get()),
-            tr.style,
-          );
+          const baseStyle =
+            existingOp || mergeTextStyles(getGlobalTextStyleFromState(get()), tr.style);
           return createOperation({
             mode: "text",
             region: { ...tr.region },
@@ -386,13 +406,14 @@ export function createBatchSlice(set, get) {
       get()._reapplyExcel();
     },
 
-    clearExcel: () => set({
-      excelPath: null,
-      excelHeaders: [],
-      excelRows: [],
-      excelMapping: { idColumn: null, columns: {} },
-      excelMatchStatus: {},
-    }),
+    clearExcel: () =>
+      set({
+        excelPath: null,
+        excelHeaders: [],
+        excelRows: [],
+        excelMapping: { idColumn: null, columns: {} },
+        excelMatchStatus: {},
+      }),
 
     getMatchReport: () => {
       const { excelMatchStatus, queue } = get();
@@ -434,12 +455,14 @@ export function createBatchSlice(set, get) {
             if (opIdx >= 0) {
               ops[opIdx] = { ...ops[opIdx], text, ...pickTextStyle(baseStyle) };
             } else {
-              ops.push(createOperation({
-                mode: "text",
-                region: { ...tr.region },
-                text,
-                ...pickTextStyle(baseStyle),
-              }));
+              ops.push(
+                createOperation({
+                  mode: "text",
+                  region: { ...tr.region },
+                  text,
+                  ...pickTextStyle(baseStyle),
+                }),
+              );
             }
           } else if (opIdx >= 0) {
             ops = ops.filter((_, i) => i !== opIdx);

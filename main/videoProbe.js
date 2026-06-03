@@ -70,31 +70,47 @@ function parseStreamCodec(line, type) {
 
 function parsePixFmt(videoLine, resolutionIndex) {
   const beforeResolution = videoLine.slice(0, Math.max(0, resolutionIndex));
-  const parts = beforeResolution.split(",").map((part) => part.trim()).reverse();
+  const parts = beforeResolution
+    .split(",")
+    .map((part) => part.trim())
+    .reverse();
   const pixFmt = parts.find((part) => /^[a-z][a-z0-9_]*(?:\([^)]+\))?$/i.test(part));
   return pixFmt ? pixFmt.replace(/\(.+\)$/, "") : DEFAULT_PIX_FMT;
 }
 
 export function parseFfmpegOutput(output) {
   const text = stripAnsi(output);
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
   const videoLine = lines.find((line) => /\bVideo:\s*/i.test(line)) || "";
   const audioLine = lines.find((line) => /\bAudio:\s*/i.test(line)) || "";
   const resolutionMatches = [...videoLine.matchAll(/(\d{2,6})x(\d{2,6})/g)];
   const resolution = resolutionMatches.find((m) => Number(m[1]) > 0 && Number(m[2]) > 0);
-  const fpsMatch = videoLine.match(/,\s*([0-9]+(?:\.[0-9]+)?)\s*fps\b/i)
-    || videoLine.match(/,\s*([0-9]+(?:\.[0-9]+)?)\s*tbr\b/i);
+  const fpsMatch =
+    videoLine.match(/,\s*([0-9]+(?:\.[0-9]+)?)\s*fps\b/i) ||
+    videoLine.match(/,\s*([0-9]+(?:\.[0-9]+)?)\s*tbr\b/i);
   /* Audio line format: "Audio: aac, 44100 Hz, stereo, fltp, 192 kb/s"
    * The channel layout (mono/stereo/5.1/7.1) appears before the sample format. */
   const channelLayoutMap = {
-    mono: 1, "1.0": 1,
-    stereo: 2, "2.0": 2,
-    "2.1": 3, "3.0": 3,
-    "4.0": 4, "3.1": 4, quad: 4,
-    "5.0": 5, "4.1": 5,
-    "5.1": 6, hexagonal: 6,
-    "6.1": 7, "7.0": 7,
-    "7.1": 8, octagonal: 8,
+    mono: 1,
+    "1.0": 1,
+    stereo: 2,
+    "2.0": 2,
+    2.1: 3,
+    "3.0": 3,
+    "4.0": 4,
+    3.1: 4,
+    quad: 4,
+    "5.0": 5,
+    4.1: 5,
+    5.1: 6,
+    hexagonal: 6,
+    6.1: 7,
+    "7.0": 7,
+    7.1: 8,
+    octagonal: 8,
     "16.0": 16,
   };
   let audioChannels = 0;
@@ -150,28 +166,29 @@ function runProcess(command, args, timeoutMs) {
     proc.on("close", (code) => finish({ code }));
     proc.on("error", (error) => finish({ code: null, error }));
     killTimer = setTimeout(() => {
-      try { proc.kill(); } catch {}
+      try {
+        proc.kill();
+      } catch {}
       finish({ code: null, timedOut: true });
     }, timeoutMs);
   });
 }
 
-export async function probeVideoFile(filePath, {
-  ffprobePath,
-  ffmpegPath,
-  timeoutMs = 5000,
-  allowFfmpegFallback = true,
-} = {}) {
+export async function probeVideoFile(
+  filePath,
+  { ffprobePath, ffmpegPath, timeoutMs = 5000, allowFfmpegFallback = true } = {},
+) {
   if (!filePath || !fs.existsSync(filePath)) {
     return emptyVideoInfo({ exists: false });
   }
 
   let ffprobeInfo = null;
   if (ffprobePath && fs.existsSync(ffprobePath)) {
-    const result = await runProcess(ffprobePath, [
-      "-v", "quiet", "-print_format", "json",
-      "-show_format", "-show_streams", filePath,
-    ], timeoutMs);
+    const result = await runProcess(
+      ffprobePath,
+      ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath],
+      timeoutMs,
+    );
     const raw = result.stdout.trim();
     if (raw) {
       try {
@@ -184,9 +201,7 @@ export async function probeVideoFile(filePath, {
   }
 
   if (allowFfmpegFallback && ffmpegPath && fs.existsSync(ffmpegPath)) {
-    const result = await runProcess(ffmpegPath, [
-      "-hide_banner", "-i", filePath,
-    ], timeoutMs);
+    const result = await runProcess(ffmpegPath, ["-hide_banner", "-i", filePath], timeoutMs);
     const ffmpegInfo = parseFfmpegOutput(`${result.stdout}\n${result.stderr}`);
     if (hasVideoDimensions(ffmpegInfo)) {
       return {
