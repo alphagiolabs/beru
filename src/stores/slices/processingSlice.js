@@ -225,7 +225,11 @@ export function createProcessingSlice(set, get) {
       }
     },
 
-    setProcessing: (val) => set({ isProcessing: val }),
+    setProcessing: (val) =>
+      set((s) => {
+        const isProcessing = !!val;
+        return s.isProcessing === isProcessing ? {} : { isProcessing };
+      }),
     setBatchSummary: (val) => set({ batchSummary: val }),
 
     setEncodeProfile: async (val) => {

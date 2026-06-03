@@ -24,7 +24,18 @@ export function denormalizeRegion(region, videoWidth, videoHeight) {
 
 export function isNormalizedRegion(region) {
   if (!region) return false;
-  return region.x <= 1 && region.y <= 1 && region.w <= 1 && region.h <= 1;
+  return (
+    region.x >= 0 &&
+    region.y >= 0 &&
+    region.w >= 0 &&
+    region.h >= 0 &&
+    region.x <= 1 &&
+    region.y <= 1 &&
+    region.w <= 1 &&
+    region.h <= 1 &&
+    region.x + region.w <= 1 &&
+    region.y + region.h <= 1
+  );
 }
 
 export function ensureNormalized(region, videoWidth, videoHeight) {

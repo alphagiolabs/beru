@@ -17,7 +17,19 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from processor import build_filter_complex  # noqa: E402
 
-FFMPEG = HERE.parent / "src-tauri" / "bin" / "ffmpeg.exe"
+def resolve_ffmpeg():
+    candidates = [
+        os.environ.get("BERU_FFMPEG"),
+        HERE.parent / "bin" / "ffmpeg.exe",
+        HERE.parent / "src-tauri" / "bin" / "ffmpeg.exe",
+    ]
+    for candidate in candidates:
+        if candidate and Path(candidate).exists():
+            return Path(candidate)
+    raise FileNotFoundError("ffmpeg.exe not found in bin/ or src-tauri/bin/")
+
+
+FFMPEG = resolve_ffmpeg()
 FFPROBE = str(FFMPEG).replace("ffmpeg.exe", "ffprobe.exe")
 
 

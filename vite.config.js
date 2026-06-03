@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
+const devPort = Number(process.env.BERU_DEV_PORT || 5173);
+
 export default defineConfig({
   plugins: [react()],
   base: "./",
@@ -18,5 +20,5 @@ export default defineConfig({
     },
   },
   resolve: { alias: { "@": path.resolve("./src") } },
-  server: { port: 5173, strictPort: true },
+  server: { port: devPort, strictPort: true },
 });

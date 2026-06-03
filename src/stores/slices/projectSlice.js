@@ -142,6 +142,7 @@ export function createProjectSlice(set, get) {
         selectedTemplateRegionId: templateRegions[0]?.id ?? null,
         currentRegion: null,
         templateIdx: -1,
+        imageDataCache: {},
         textInput: textStyle.textInput,
         textFontSize: textStyle.textFontSize,
         textFontColor: textStyle.textFontColor,

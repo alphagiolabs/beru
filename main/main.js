@@ -1,15 +1,16 @@
 import { app, BrowserWindow, protocol, net } from "electron";
 import path from "path";
-import fs from "fs";
 import { fileURLToPath, pathToFileURL } from "url";
 import { createPathSecurity } from "./pathSecurity.js";
+import { getPythonProcess } from "./shared-state.js";
+import { validateBeruRequestPath } from "./utils/beru-protocol.js";
 import { createWindow } from "./utils/window.js";
 
 import { registerDialogHandlers } from "./handlers/dialog.js";
 import { registerVideoHandlers } from "./handlers/video.js";
 import { registerDropHandlers } from "./handlers/drop.js";
 import { registerFileHandlers } from "./handlers/file.js";
-import { registerProcessHandlers } from "./handlers/process.js";
+import { cancelActiveProcessing, registerProcessHandlers } from "./handlers/process.js";
 import { registerProjectHandlers } from "./handlers/project.js";
 import { registerPresetHandlers } from "./handlers/preset.js";
 import { registerSettingsHandlers } from "./handlers/settings.js";
@@ -19,6 +20,7 @@ import { registerUpdaterHandlers } from "./handlers/updater.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+let quitCleanupStarted = false;
 
 const pathSecurity = createPathSecurity(app);
 
@@ -39,21 +41,21 @@ protocol.registerSchemesAsPrivileged([
 function registerBeruProtocol() {
   protocol.handle("beru", async (request) => {
     try {
-      const url = new URL(request.url);
-      let absPath = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
-      if (process.platform === "win32" && /^\/[A-Za-z]:/.test(url.pathname)) {
-        absPath = absPath.replace(/^([A-Za-z]:)/, "$1");
+      const check = validateBeruRequestPath(pathSecurity, request.url);
+      if (!check.ok) {
+        const status = check.error === "Archivo no encontrado" ? 404 : 403;
+        return new Response(check.error, { status });
       }
-      if (!absPath || !fs.existsSync(absPath)) {
-        return new Response("Not found", { status: 404 });
-      }
-      return net.fetch(pathToFileURL(absPath).toString());
+      return net.fetch(pathToFileURL(check.resolvedPath).toString());
     } catch (err) {
       console.error("[beru] beru:// handler error:", err);
       return new Response("Internal error", { status: 500 });
     }
   });
 }
+
+// ── Suppress GPU shader disk cache errors on Windows ────────────────────────
+app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
 // ── App lifecycle ─────────────────────────────────────────────────────────
 
@@ -72,6 +74,13 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", (event) => {
+  if (quitCleanupStarted || !getPythonProcess()) return;
+  event.preventDefault();
+  quitCleanupStarted = true;
+  cancelActiveProcessing().finally(() => app.quit());
 });
 
 app.on("activate", () => {

@@ -1,11 +1,13 @@
 import { clampRegionToVideo, isRegionUsable } from "./video-utils";
-import { ensureNormalized } from "./types";
+import { ensureNormalized, isNormalizedRegion } from "./types";
 import { pickTextStyle } from "./text-style";
 import { clampNum } from "./clamp";
 import { VALID_DELOGO_METHODS } from "./delogo-ops";
 
 const MAX_LABEL_LEN = 64;
 const MAX_TEXT_INPUT_LEN = 2000;
+const PRESET_REGION_FALLBACK_WIDTH = 1920;
+const PRESET_REGION_FALLBACK_HEIGHT = 1080;
 
 function clampBool(val, fallback = false) {
   return typeof val === "boolean" ? val : fallback;
@@ -16,7 +18,23 @@ export function sanitizeTemplateRegions(regions) {
   const out = [];
   for (const raw of regions) {
     if (!raw || typeof raw !== "object") continue;
-    const normalized = ensureNormalized(raw.region);
+    if (!isNormalizedRegion(raw.region)) {
+      const { x, y, w, h } = raw.region || {};
+      if (![x, y, w, h].every(Number.isFinite)) continue;
+      if (
+        Math.abs(w) > PRESET_REGION_FALLBACK_WIDTH ||
+        Math.abs(h) > PRESET_REGION_FALLBACK_HEIGHT ||
+        Math.abs(x) > PRESET_REGION_FALLBACK_WIDTH ||
+        Math.abs(y) > PRESET_REGION_FALLBACK_HEIGHT
+      ) {
+        continue;
+      }
+    }
+    const normalized = ensureNormalized(
+      raw.region,
+      PRESET_REGION_FALLBACK_WIDTH,
+      PRESET_REGION_FALLBACK_HEIGHT,
+    );
     const region = clampRegionToVideo(normalized);
     if (!region || !isRegionUsable(region)) continue;
     const id = Number.isFinite(Number(raw.id)) ? Number(raw.id) : Date.now() + out.length;

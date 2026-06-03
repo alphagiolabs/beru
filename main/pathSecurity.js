@@ -183,7 +183,20 @@ export function createPathSecurity(app) {
     if (!allowedFiles.has(key) && !isUnderTrustedRoot(resolved)) {
       return { ok: false, error: "Ruta fuera de ubicaciones permitidas" };
     }
+    let stat;
+    try {
+      stat = fs.statSync(resolved);
+    } catch {
+      return { ok: false, error: "Archivo no encontrado" };
+    }
+    if (!stat.isFile() && !stat.isDirectory()) {
+      return { ok: false, error: "Ruta no permitida" };
+    }
     return { ok: true, resolvedPath: resolved };
+  }
+
+  function validateProtocolFile(filePath) {
+    return validateReadableFile(filePath, "video");
   }
 
   return {
@@ -191,5 +204,6 @@ export function createPathSecurity(app) {
     registerAllowedPaths,
     validateReadableFile,
     validateShellPath,
+    validateProtocolFile,
   };
 }

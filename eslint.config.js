@@ -54,5 +54,15 @@ export default [
       "no-control-regex": "off",
     },
   },
+  {
+    files: ["scripts/dev.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
   eslintConfigPrettier,
 ];

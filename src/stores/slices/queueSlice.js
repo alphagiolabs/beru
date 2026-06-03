@@ -10,6 +10,7 @@ import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-
 import { sanitizeOperation } from "../../utils/delogo-ops";
 
 const MAX_UNDO_STACK = 50;
+const IMAGE_DATA_CACHE_MAX = 50;
 
 function pruneImageDataCache(cache, queue) {
   const used = new Set();
@@ -18,9 +19,13 @@ function pruneImageDataCache(cache, queue) {
       if (op.mode === "image" && op.imagePath) used.add(op.imagePath);
     }
   }
+  const entries = Object.entries(cache || {}).filter(([path]) => used.has(path));
+  if (entries.length > IMAGE_DATA_CACHE_MAX) {
+    entries.splice(0, entries.length - IMAGE_DATA_CACHE_MAX);
+  }
   const next = {};
-  for (const [path, dataUrl] of Object.entries(cache || {})) {
-    if (used.has(path)) next[path] = dataUrl;
+  for (const [path, dataUrl] of entries) {
+    next[path] = dataUrl;
   }
   return next;
 }
@@ -192,6 +197,7 @@ export function createQueueSlice(set, get) {
           selectedIdx: sel,
           excelMatchStatus: newStatus,
           imageDataCache: pruneImageDataCache(s.imageDataCache, next),
+          batchSummary: null,
         };
       });
     },
@@ -225,7 +231,10 @@ export function createQueueSlice(set, get) {
         set({ currentRegion: null });
         return;
       }
-      const safe = ensureNormalized(region, 1920, 1080);
+      const bounds = get().videoBounds();
+      const w = bounds?.width || 1920;
+      const h = bounds?.height || 1080;
+      const safe = ensureNormalized(region, w, h);
       set({ currentRegion: clampRegionToVideo(safe) });
     },
 

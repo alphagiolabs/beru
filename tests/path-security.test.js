@@ -61,4 +61,15 @@ describe("pathSecurity", () => {
     const res = security.validateReadableFile(__filename, "excel");
     expect(res.ok).toBe(false);
   });
+
+  it("limits beru protocol reads to validated video files", () => {
+    const res = security.validateProtocolFile(tmpFile);
+    expect(res.ok).toBe(false);
+  });
+
+  it("rejects missing shell paths", () => {
+    const res = security.validateShellPath(path.join(path.dirname(tmpFile), "missing.mp4"));
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("Archivo no encontrado");
+  });
 });

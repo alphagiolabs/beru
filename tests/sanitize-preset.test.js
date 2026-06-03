@@ -12,6 +12,20 @@ describe("sanitize-preset", () => {
     expect(regions[0].region.w).toBeLessThanOrEqual(1);
   });
 
+  it("normalizes pixel-coordinate template regions", () => {
+    const regions = sanitizeTemplateRegions([
+      { id: 1, label: "PX", region: { x: 96, y: 54, w: 192, h: 108 } },
+    ]);
+
+    expect(regions).toHaveLength(1);
+    expect(regions[0].region).toEqual({
+      x: 0.05,
+      y: 0.05,
+      w: 0.1,
+      h: 0.1,
+    });
+  });
+
   it("clamps text style numeric fields", () => {
     const style = sanitizeTextStyle({
       textFontSize: 9999,

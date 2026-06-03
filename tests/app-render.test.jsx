@@ -83,6 +83,7 @@ describe("App render", () => {
     root = createRoot(document.getElementById("root"));
     await act(async () => {
       root.render(<App />);
+      await new Promise((r) => setTimeout(r, 10));
     });
     expect(document.body.textContent).toMatch(/Importar videos/i);
   });
@@ -104,7 +105,7 @@ describe("App render", () => {
     root = createRoot(document.getElementById("root"));
     await act(async () => {
       root.render(<App />);
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 10));
     });
 
     await vi.waitFor(() => {
@@ -143,7 +144,7 @@ describe("App render", () => {
     await act(async () => {
       root.render(<App />);
       // Flush Suspense lazy resolution (React.lazy chunks resolve on next tick)
-      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 10));
     });
     expect(document.body.textContent).toMatch(/demo\.mp4/);
   });

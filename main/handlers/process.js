@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { spawn, exec } from "child_process";
+import { spawn, execFile } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -12,7 +12,9 @@ import {
   getCurrentTmpFile,
   setCurrentTmpFile,
   getIsProcessing,
-  setIsProcessing,
+  beginProcessingRun,
+  clearProcessingRun,
+  getProcessingRunId,
   getLastProcessingError,
   setLastProcessingError,
 } from "../shared-state.js";
@@ -56,6 +58,61 @@ function dispatchProcessorLine(line) {
   }
 }
 
+function waitForProcessClose(proc, timeoutMs = 5000) {
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(false), timeoutMs);
+    proc.once("close", () => {
+      clearTimeout(timeout);
+      resolve(true);
+    });
+    if (proc.exitCode !== null) {
+      clearTimeout(timeout);
+      resolve(true);
+    }
+  });
+}
+
+function killProcessTree(proc) {
+  if (!proc?.pid) return;
+  if (process.platform === "win32") {
+    execFile("taskkill", ["/F", "/T", "/PID", String(proc.pid)], { windowsHide: true }, (err) => {
+      if (err) console.error("[beru] taskkill error:", err.message);
+    });
+    return;
+  }
+  proc.kill("SIGTERM");
+}
+
+export async function cancelActiveProcessing() {
+  const runId = getProcessingRunId();
+  const currentTmp = getCurrentTmpFile();
+  if (currentTmp) {
+    const cancelFile = currentTmp.replace(".json", ".cancel");
+    try {
+      fs.writeFileSync(cancelFile, "1");
+    } catch {}
+  }
+
+  const proc = getPythonProcess();
+  if (proc?.pid) {
+    const deathPromise = waitForProcessClose(proc);
+    killProcessTree(proc);
+    await deathPromise;
+  }
+
+  setPythonProcess(null);
+  clearProcessingRun(runId);
+  if (currentTmp) {
+    try {
+      fs.unlinkSync(currentTmp);
+    } catch {}
+    try {
+      fs.unlinkSync(currentTmp.replace(".json", ".cancel"));
+    } catch {}
+    if (getCurrentTmpFile() === currentTmp) setCurrentTmpFile(null);
+  }
+}
+
 export function registerProcessHandlers(pathSecurity) {
   ipcMain.handle("process:start", async (_event, jobs) => {
     if (getIsProcessing()) {
@@ -66,21 +123,24 @@ export function registerProcessHandlers(pathSecurity) {
       return { success: false, error: "No hay videos para procesar" };
     }
 
-    try {
-      const scriptPath = getPythonPath();
-      if (!fs.existsSync(scriptPath)) {
-        return { success: false, error: "processor.py not found" };
-      }
+    const scriptPath = getPythonPath();
+    if (!fs.existsSync(scriptPath)) {
+      return { success: false, error: "processor.py not found" };
+    }
 
+    const runId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
+    if (!beginProcessingRun(runId)) {
+      return { success: false, error: "Ya hay un proceso en ejecución" };
+    }
+
+    try {
       for (const job of jobs) {
         if (job?.input_path) pathSecurity.registerAllowedPath(job.input_path);
       }
 
-      setIsProcessing(true);
       setLastProcessingError(null);
 
-      const uid = `${Date.now()}-${randomBytes(4).toString("hex")}`;
-      const tmpFile = path.join(app.getPath("temp"), `beru-jobs-${uid}.json`);
+      const tmpFile = path.join(app.getPath("temp"), `beru-jobs-${runId}.json`);
       setCurrentTmpFile(tmpFile);
       const cancelFile = tmpFile.replace(".json", ".cancel");
       try {
@@ -154,19 +214,34 @@ export function registerProcessHandlers(pathSecurity) {
       setPythonProcess(proc);
 
       let stdoutBuf = "";
+      let stderrBuf = "";
+      let settled = false;
+      const isCurrentRun = () => getProcessingRunId() === runId;
+
+      // Capture tmpFile in closure so this run always cleans up its own file,
+      // even if a new run overwrites the shared _currentTmpFile.
+      const runTmpFile = tmpFile;
+      const runCancelFile = cancelFile;
 
       const finishProcessing = (result) => {
+        if (settled) return result;
+        settled = true;
+        if (!isCurrentRun()) return result;
         setPythonProcess(null);
-        setIsProcessing(false);
+        clearProcessingRun(runId);
         try {
-          const currentTmp = getCurrentTmpFile();
-          currentTmp && fs.unlinkSync(currentTmp);
+          runTmpFile && fs.unlinkSync(runTmpFile);
         } catch {}
-        setCurrentTmpFile(null);
+        try {
+          runCancelFile && fs.unlinkSync(runCancelFile);
+        } catch {}
+        // Only clear shared state if it still belongs to this run
+        if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
         return result;
       };
 
       proc.stdout.on("data", (data) => {
+        if (!isCurrentRun()) return;
         stdoutBuf += data.toString();
         const lines = stdoutBuf.split("\n");
         stdoutBuf = lines.pop() || "";
@@ -174,60 +249,62 @@ export function registerProcessHandlers(pathSecurity) {
       });
 
       proc.stderr.on("data", (data) => {
-        const text = data.toString().trim();
-        if (text) console.error("[beru][processor]", text);
+        if (!isCurrentRun()) return;
+        const text = data.toString();
+        stderrBuf += text;
+        if (text.trim()) console.error("[beru][processor]", text.trim());
       });
 
       return new Promise((resolve) => {
         proc.on("close", (code) => {
+          if (!isCurrentRun()) {
+            resolve(finishProcessing({ success: false, code, error: "Processing superseded" }));
+            return;
+          }
           if (stdoutBuf.trim()) dispatchProcessorLine(stdoutBuf);
           sendToRenderer("process:finished", { code });
           const failed = code !== 0;
+          let errMsg;
+          if (failed) {
+            errMsg = getLastProcessingError();
+            if (!errMsg && stderrBuf.trim()) {
+              const snippet = stderrBuf.trim().slice(-300);
+              errMsg = `Process exited with code ${code}: ${snippet}`;
+              setLastProcessingError(errMsg);
+            } else {
+              errMsg = errMsg || `Process exited with code ${code}`;
+            }
+          }
           resolve(
             finishProcessing({
               success: !failed,
               code,
-              error: failed
-                ? getLastProcessingError() || `Process exited with code ${code}`
-                : undefined,
+              error: failed ? errMsg : undefined,
             }),
           );
         });
 
         proc.on("error", (err) => {
-          setLastProcessingError(err.message);
-          sendToRenderer("process:error", err.message);
+          if (isCurrentRun()) {
+            setLastProcessingError(err.message);
+            sendToRenderer("process:error", err.message);
+          }
           resolve(finishProcessing({ success: false, code: 1, error: err.message }));
         });
       });
     } catch (err) {
-      setIsProcessing(false);
-      setPythonProcess(null);
+      if (getProcessingRunId() === runId) {
+        clearProcessingRun(runId);
+        setPythonProcess(null);
+        setCurrentTmpFile(null);
+      }
       console.error("[beru] process:start failed:", err);
       return { success: false, error: err.message };
     }
   });
 
   ipcMain.handle("process:cancel", async () => {
-    const currentTmp = getCurrentTmpFile();
-    if (currentTmp) {
-      const cancelFile = currentTmp.replace(".json", ".cancel");
-      try {
-        fs.writeFileSync(cancelFile, "1");
-      } catch {}
-    }
-
-    const proc = getPythonProcess();
-    if (proc && proc.pid) {
-      if (process.platform === "win32") {
-        exec(`taskkill /F /T /PID ${proc.pid}`, (err) => {
-          if (err) console.error("[beru] taskkill error:", err.message);
-        });
-      } else {
-        proc.kill("SIGTERM");
-      }
-      setPythonProcess(null);
-    }
+    await cancelActiveProcessing();
     return { success: true };
   });
 }

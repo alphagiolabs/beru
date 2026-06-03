@@ -22,9 +22,25 @@ export const setCurrentTmpFile = (file) => {
 };
 
 let _isProcessing = false;
+let _processingRunId = null;
 export const getIsProcessing = () => _isProcessing;
 export const setIsProcessing = (val) => {
   _isProcessing = !!val;
+  if (!_isProcessing) _processingRunId = null;
+};
+
+export const getProcessingRunId = () => _processingRunId;
+export const beginProcessingRun = (runId) => {
+  if (_isProcessing) return false;
+  _isProcessing = true;
+  _processingRunId = runId;
+  return true;
+};
+export const clearProcessingRun = (runId) => {
+  if (runId && _processingRunId !== runId) return false;
+  _isProcessing = false;
+  _processingRunId = null;
+  return true;
 };
 
 let _lastProcessingError = null;

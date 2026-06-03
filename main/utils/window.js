@@ -7,7 +7,7 @@ import * as updater from "../updater.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const DEV_URL = "http://localhost:5173";
+const DEV_URL = process.env.BERU_DEV_URL || `http://localhost:${process.env.BERU_DEV_PORT || 5173}`;
 const BUILD_INDEX = path.join(__dirname, "..", "..", "build", "index.html");
 
 function loadProductionBuild(win) {
