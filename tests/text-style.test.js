@@ -40,6 +40,21 @@ describe("text-style utilities", () => {
     expect(op.text).toBe("right");
   });
 
+  it("findTextOpForRegion matches batch text by region id after an individual move", () => {
+    const templateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const movedRegion = { x: 0.4, y: 0.3, w: 0.3, h: 0.1 };
+    const operations = [
+      { id: "a", mode: "text", batchRegionId: "r1", region: movedRegion, text: "right" },
+      { id: "b", mode: "text", batchRegionId: "r2", region: templateRegion, text: "wrong" },
+    ];
+
+    const { op, opIdx } = findTextOpForRegion(operations, templateRegion, "r1");
+
+    expect(opIdx).toBe(0);
+    expect(op.text).toBe("right");
+    expect(op.region).toEqual(movedRegion);
+  });
+
   it("patchToGlobalState maps fontSize to textFontSize", () => {
     expect(patchToGlobalState({ fontSize: 64, fontColor: "#fff" })).toEqual({
       textFontSize: 64,

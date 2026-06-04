@@ -144,7 +144,7 @@ export default function TableEditorGrid({
                     )}
                   </td>
                   {templateRegions.map((tr) => {
-                    const { op } = findTextOpForRegion(item.operations, tr.region);
+                    const { op } = findTextOpForRegion(item.operations, tr.region, tr.id);
                     const cellText = get().getCellTextForRegion(idx, tr.id);
                     const fromExcelOnly = !op?.text && !!cellText && excelMapping.columns?.[tr.id];
                     const isCellFocused = focused.videoIdx === idx && focused.regionId === tr.id;

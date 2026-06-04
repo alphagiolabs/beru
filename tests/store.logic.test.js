@@ -330,6 +330,40 @@ describe("useEditorStore logic regressions", () => {
     expect(state.queue[1].operations[0].fontColor).toBe("#00ff00");
   });
 
+  it("reapplying Excel preserves an individually moved batch text region", () => {
+    const templateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const movedRegion = { x: 0.35, y: 0.28, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      queue: [
+        queueItem({
+          operations: [
+            {
+              id: "op-1",
+              mode: "text",
+              batchRegionId: "region-1",
+              region: movedRegion,
+              text: "Antes",
+              fontSize: 32,
+              fontColor: "white",
+            },
+          ],
+        }),
+      ],
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region: templateRegion }],
+      excelRows: [{ id: "sample", TEXT_1: "Desde Excel" }],
+      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
+    });
+
+    useEditorStore.getState()._reapplyExcel();
+    const op = useEditorStore.getState().queue[0].operations[0];
+    const payload = useEditorStore.getState().getBatchPreviewPayload(0, "region-1");
+
+    expect(op.batchRegionId).toBe("region-1");
+    expect(op.text).toBe("Desde Excel");
+    expect(op.region).toEqual(movedRegion);
+    expect(payload.region).toEqual(movedRegion);
+  });
+
   it("persists per-region style in serialized projects", () => {
     useEditorStore.setState({
       templateRegions: [

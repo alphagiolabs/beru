@@ -15,6 +15,10 @@ export default function TextOverlay({
   focusedOutlineColor = "var(--accent)",
   label,
   dimmed = false,
+  interactive = false,
+  cursor,
+  onMouseDown,
+  zIndex,
 }) {
   if (!screen) return null;
 
@@ -31,12 +35,15 @@ export default function TextOverlay({
 
   return (
     <div
-      className="absolute pointer-events-none"
+      className={`absolute ${interactive ? "pointer-events-auto" : "pointer-events-none"}`}
+      onMouseDown={onMouseDown}
       style={{
         left: screen.x,
         top: screen.y,
         width: screen.w,
         height: screen.h,
+        cursor,
+        zIndex,
         outline: showOutline
           ? isFocused
             ? `2px solid ${focusedOutlineColor}`

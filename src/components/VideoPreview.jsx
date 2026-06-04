@@ -5,7 +5,7 @@ import useCanvas from "../hooks/useCanvas";
 import { regionToScreen, fmtTime } from "../utils/video-utils";
 import DelogoLivePreview from "./DelogoLivePreview";
 import TextOverlay from "./TextOverlay";
-import { getGlobalTextStyleFromState } from "../utils/text-style";
+import { findTextOpForRegion, getGlobalTextStyleFromState } from "../utils/text-style";
 import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Eye, EyeOff } from "lucide-react";
 
 const opModeColor = {
@@ -72,6 +72,8 @@ export default function VideoPreview() {
   const [showTimeline, setShowTimeline] = useState(true);
   const [draggingOp, setDraggingOp] = useState(null);
   const [dragStart, setDragStart] = useState(null);
+  const [draggingBatchText, setDraggingBatchText] = useState(null);
+  const [batchTextDragStart, setBatchTextDragStart] = useState(null);
   const [, setLayoutTick] = useState(0);
   const [videoError, setVideoError] = useState(null);
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
@@ -220,6 +222,80 @@ export default function VideoPreview() {
       };
     }
   }, [draggingOp, handleImageDragMove, handleImageDragEnd]);
+
+  const handleBatchTextDragStart = (tr, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video) return;
+    if (!video.paused) video.pause();
+
+    const state = useEditorStore.getState();
+    const videoIdx = state.selectedIdx;
+    const item = state.queue[videoIdx];
+    if (videoIdx < 0 || !item) return;
+
+    state.setSelectedTemplateRegion(tr.id);
+    let { op, opIdx } = findTextOpForRegion(item.operations, tr.region, tr.id);
+    if (!op) {
+      const text = state.getCellTextForRegion(videoIdx, tr.id);
+      opIdx = state.createTextOpForRegion(videoIdx, tr.id);
+      if (opIdx < 0) return;
+      if (String(text ?? "").length > 0) {
+        state.updateOperationText(videoIdx, opIdx, String(text));
+      }
+      op = useEditorStore.getState().queue[videoIdx]?.operations?.[opIdx];
+    }
+    if (!op?.region) return;
+
+    setDraggingBatchText({ videoIdx, opIdx, regionId: tr.id });
+    setBatchTextDragStart({
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      region: { ...op.region },
+    });
+  };
+
+  const handleBatchTextDragMove = useCallback(
+    (e) => {
+      if (!draggingBatchText || !batchTextDragStart) return;
+      const video = videoRef.current;
+      if (!video) return;
+      const rect = video.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      const startRegion = batchTextDragStart.region;
+      const deltaX = (e.clientX - batchTextDragStart.mouseX) / rect.width;
+      const deltaY = (e.clientY - batchTextDragStart.mouseY) / rect.height;
+      const nextRegion = {
+        ...startRegion,
+        x: Math.max(0, Math.min(1 - startRegion.w, startRegion.x + deltaX)),
+        y: Math.max(0, Math.min(1 - startRegion.h, startRegion.y + deltaY)),
+      };
+
+      useEditorStore
+        .getState()
+        .updateOperation(draggingBatchText.videoIdx, draggingBatchText.opIdx, {
+          region: nextRegion,
+        });
+    },
+    [draggingBatchText, batchTextDragStart],
+  );
+
+  const handleBatchTextDragEnd = useCallback(() => {
+    setDraggingBatchText(null);
+    setBatchTextDragStart(null);
+  }, []);
+
+  useEffect(() => {
+    if (!draggingBatchText) return;
+    window.addEventListener("mousemove", handleBatchTextDragMove);
+    window.addEventListener("mouseup", handleBatchTextDragEnd);
+    return () => {
+      window.removeEventListener("mousemove", handleBatchTextDragMove);
+      window.removeEventListener("mouseup", handleBatchTextDragEnd);
+    };
+  }, [draggingBatchText, handleBatchTextDragMove, handleBatchTextDragEnd]);
 
   if (!sel) {
     return (
@@ -479,6 +555,8 @@ export default function VideoPreview() {
             const s = regionToScreen(payload.region, videoRef.current);
             if (!s) return null;
             const isSelected = selectedTemplateRegionId === tr.id;
+            const isDragging =
+              draggingBatchText?.videoIdx === selectedIdx && draggingBatchText.regionId === tr.id;
             return (
               <TextOverlay
                 key={tr.id}
@@ -488,6 +566,10 @@ export default function VideoPreview() {
                 isFocused={isSelected}
                 showOutline
                 label={tr.label}
+                interactive
+                cursor={isDragging ? "grabbing" : "grab"}
+                zIndex={20}
+                onMouseDown={(e) => handleBatchTextDragStart(tr, e)}
               />
             );
           })}

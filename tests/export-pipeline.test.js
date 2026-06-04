@@ -345,6 +345,41 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(op.fontColor).toBe("#abcdef");
   });
 
+  it("export pipeline uses the per-video moved batch text region", () => {
+    const templateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const movedRegion = { x: 0.4, y: 0.3, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "text-1",
+              mode: "text",
+              batchRegionId: "r1",
+              region: movedRegion,
+              text: "Watermark",
+              fontSize: 36,
+              fontColor: "white",
+            },
+          ],
+        }),
+      ],
+      templateRegions: [{ id: "r1", label: "TEXT_1", region: templateRegion }],
+      excelRows: [{ id: "video_0", TEXT_1: "Watermark" }],
+      excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
+    });
+
+    useEditorStore.getState().materializeBatchTextOps();
+    const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
+
+    expect(job.operations).toHaveLength(1);
+    expect(job.operations[0].mode).toBe("text");
+    expect(job.operations[0].region.x).toBe(768);
+    expect(job.operations[0].region.y).toBe(324);
+    expect(job.operations[0].region.w).toBe(576);
+    expect(job.operations[0].region.h).toBe(108);
+  });
+
   it("export pipeline: batch text + delogo ops produce valid Python job", () => {
     const textRegion = { x: 0.1, y: 0.8, w: 0.5, h: 0.1 };
     const delogoRegion = { x: 0.7, y: 0.0, w: 0.15, h: 0.05 };

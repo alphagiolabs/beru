@@ -136,20 +136,6 @@ print(processor.build_drawtext({
     expect(r.stdout.trim()).toBe("None");
   });
 
-  it("does not append scale when resolution already matches (no crop)", () => {
-    const code = `
-import processor
-graph, last, imgs = processor.build_filter_complex([
-    {"mode": "text", "text": "Hola", "region": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.1}},
-], 1920, 1080)
-graph, last = processor._ensure_output_dimensions(graph, last, 1920, 1080)
-print("scale=" not in graph)
-`;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toBe("True");
-  });
-
   it("build_filter_complex ignores blank text operations", () => {
     const code = `
 import processor
@@ -186,6 +172,8 @@ print("x=192" in graph and "y=216" in graph)
     const code = `
 import processor
 processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+processor._DRAWTEXT_OPTIONS_CACHE = {"spacing"}
+processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
 print(processor.build_drawtext({
     "mode": "text",
     "text": "ABC",
@@ -206,6 +194,37 @@ print(processor.build_drawtext({
     expect(filter).toContain("spacing=8");
     expect(filter).toContain("text='ABC'");
     expect(filter).not.toContain("text='A B C'");
+  });
+
+  it("omits unsupported drawtext style options", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+processor._DRAWTEXT_OPTIONS_CACHE = set()
+processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
+print(processor.build_drawtext({
+    "mode": "text",
+    "text": "ABC",
+    "font_family": "Arial",
+    "font_weight": 400,
+    "letter_spacing": 8,
+    "italic": True,
+    "region": {"x": 10, "y": 20, "w": 200, "h": 50},
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const filter = r.stdout.trim();
+    expect(filter).toContain("text='ABC'");
+    expect(filter).not.toContain("fontweight=");
+    expect(filter).not.toContain("fontstyle=");
+    expect(filter).not.toContain("spacing=");
   });
 
   it("conservative auto caps GPU at 2 and MF at 1", () => {

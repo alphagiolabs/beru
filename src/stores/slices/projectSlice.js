@@ -219,6 +219,7 @@ export function createProjectSlice(set, get) {
             operations: tr.map((r) =>
               createOperation({
                 mode: "text",
+                batchRegionId: r.id,
                 region: { ...r.region },
                 text: get().textInput || "",
                 fontSize: get().textFontSize,

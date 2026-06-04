@@ -439,6 +439,7 @@ export function createQueueSlice(set, get) {
       if (!tr) return -1;
       const op = createOperation({
         mode: "text",
+        batchRegionId: tr.id,
         region: { ...tr.region },
         text: "",
         fontSize: textFontSize,

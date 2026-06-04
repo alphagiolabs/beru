@@ -97,11 +97,17 @@ export function regionsMatch(r1, r2) {
   );
 }
 
+export function textOpMatchesRegion(op, region, regionId = null) {
+  if (!op || op.mode !== "text") return false;
+  if (regionId != null && op.batchRegionId != null) {
+    return String(op.batchRegionId) === String(regionId);
+  }
+  return !!op.region && regionsMatch(op.region, region);
+}
+
 /** Find the text operation whose region matches a template/table region. */
-export function findTextOpForRegion(operations, region) {
+export function findTextOpForRegion(operations, region, regionId = null) {
   if (!region || !Array.isArray(operations)) return { op: null, opIdx: -1 };
-  const idx = operations.findIndex(
-    (o) => o.mode === "text" && o.region && regionsMatch(o.region, region),
-  );
+  const idx = operations.findIndex((o) => textOpMatchesRegion(o, region, regionId));
   return { op: idx >= 0 ? operations[idx] : null, opIdx: idx };
 }

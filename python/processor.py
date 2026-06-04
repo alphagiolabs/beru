@@ -132,6 +132,8 @@ _AUDIO_COPY_CODECS = {
 }
 
 _HW_ENCODER_CACHE = None
+_DRAWTEXT_OPTIONS_CACHE = None
+_DRAWTEXT_OPTIONS_CACHE_FOR = None
 
 
 def detect_hw_encoder(ffmpeg_path):
@@ -174,6 +176,32 @@ def build_hwaccel_args(hw_encoder, has_video_filters=False):
     if not hw_encoder or has_video_filters or os.environ.get("BERU_HWACCEL", "1") == "0":
         return []
     return ["-hwaccel", "auto"]
+
+
+def _get_drawtext_options():
+    """Return supported drawtext option names for the active FFmpeg binary."""
+    global _DRAWTEXT_OPTIONS_CACHE, _DRAWTEXT_OPTIONS_CACHE_FOR
+    if _DRAWTEXT_OPTIONS_CACHE is not None and _DRAWTEXT_OPTIONS_CACHE_FOR == FFMPEG:
+        return _DRAWTEXT_OPTIONS_CACHE
+
+    options = set()
+    try:
+        result = subprocess.run(
+            [FFMPEG, "-hide_banner", "-h", "filter=drawtext"],
+            capture_output=True, text=True, timeout=10,
+        )
+        help_text = (result.stdout or "") + (result.stderr or "")
+        options = set(re.findall(r"^\s+([A-Za-z0-9_]+)\s+<", help_text, re.MULTILINE))
+    except Exception as e:
+        logger.warning("drawtext option detection failed: %s", e)
+
+    _DRAWTEXT_OPTIONS_CACHE = options
+    _DRAWTEXT_OPTIONS_CACHE_FOR = FFMPEG
+    return options
+
+
+def _drawtext_supports(option_name):
+    return option_name in _get_drawtext_options()
 
 
 MAX_WORKERS_CAP = 16
@@ -335,20 +363,21 @@ def find_ffmpeg():
     if env_ffmpeg and os.path.isfile(env_ffmpeg):
         return env_ffmpeg
 
-    script_dir = Path(__file__).resolve().parent  # python/
-    project_root = script_dir.parent               # beru/
-    resources_root = script_dir.parent             # resources/ (when packaged: resources/python/processor.py)
+    script_dir = Path(__file__).resolve().parent  # python/ (dev) or resources/python/ (packaged)
+    project_root = script_dir.parent               # beru/ (dev) or resources/ (packaged)
+
+    _exe = ".exe" if platform.system() == "Windows" else ""
 
     candidates = [
-        project_root / "src-tauri" / "bin" / "ffmpeg.exe",   # dev: beru/src-tauri/bin
-        project_root / "bin" / "ffmpeg.exe",                  # dev fallback
-        resources_root / "bin" / "ffmpeg.exe",                # packaged: resources/bin/ (python is resources/python/)
+        project_root / "src-tauri" / "bin" / f"ffmpeg{_exe}",   # dev: beru/src-tauri/bin
+        project_root / "bin" / f"ffmpeg{_exe}",                  # dev fallback
+        project_root / "bin" / f"ffmpeg{_exe}",                  # packaged: resources/bin/ (python is resources/python/)
     ]
     for c in candidates:
         if c.exists():
             return str(c)
 
-    found = shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
+    found = shutil.which("ffmpeg") or shutil.which(f"ffmpeg{_exe}")
     if found:
         return found
     return "ffmpeg"
@@ -362,20 +391,22 @@ def find_ffprobe(ffmpeg_bin):
 
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
+    _exe = ".exe" if platform.system() == "Windows" else ""
+
     candidates = [
-        Path(ffmpeg_bin).with_name("ffprobe.exe"),
-        Path(ffmpeg_bin).parent / "ffprobe.exe",
-        project_root / "src-tauri" / "bin" / "ffprobe.exe",
-        project_root / "bin" / "ffprobe.exe",
+        Path(ffmpeg_bin).with_name(f"ffprobe{_exe}"),
+        Path(ffmpeg_bin).parent / f"ffprobe{_exe}",
+        project_root / "src-tauri" / "bin" / f"ffprobe{_exe}",
+        project_root / "bin" / f"ffprobe{_exe}",
     ]
     for candidate in candidates:
         if candidate.exists():
             return str(candidate)
 
-    found = shutil.which("ffprobe") or shutil.which("ffprobe.exe")
+    found = shutil.which("ffprobe") or shutil.which(f"ffprobe{_exe}")
     if found:
         return found
-    return ffmpeg_bin.replace("ffmpeg.exe", "ffprobe.exe").replace("ffmpeg", "ffprobe")
+    return ffmpeg_bin.replace(f"ffmpeg{_exe}", f"ffprobe{_exe}").replace("ffmpeg", "ffprobe")
 
 
 def _parse_frame_rate(rate_str):
@@ -602,7 +633,7 @@ def build_drawtext(op):
     font_weight = op.get("font_weight")
     if font_weight is None and bold:
         font_weight = 700
-    if font_weight is not None:
+    if font_weight is not None and _drawtext_supports("fontweight"):
         try:
             fw = int(font_weight)
             if 100 <= fw <= 1000:
@@ -610,7 +641,7 @@ def build_drawtext(op):
         except (TypeError, ValueError):
             pass
 
-    if italic:
+    if italic and _drawtext_supports("fontstyle"):
         parts.append("fontstyle=italic")
 
     # Letter spacing (drawtext spacing= pixels between glyphs; matches CSS preview)
@@ -619,7 +650,7 @@ def build_drawtext(op):
         spacing_px = int(round(float(letter_spacing)))
     except (TypeError, ValueError):
         spacing_px = 0
-    if spacing_px > 0:
+    if spacing_px > 0 and _drawtext_supports("spacing"):
         parts.append(f"spacing={spacing_px}")
 
     # Background box
@@ -1105,34 +1136,6 @@ def build_filter_complex(operations, video_w, video_h):
     return ";".join(filters), f"[tmp{n - 1}]", image_paths
 
 
-def _crop_changes_output_size(operations):
-    """True when a full-duration crop op changes the export canvas size."""
-    for raw_op in operations:
-        op = _normalize_operation(raw_op)
-        if op.get("mode") != "crop":
-            continue
-        if _build_enable_clause(op):
-            continue
-        return True
-    return False
-
-
-def _ensure_output_dimensions(filter_complex, output_label, target_w, target_h):
-    """Force final frame size to match resolution locked at import.
-
-    Called only when no full-duration crop is present. In that case the
-    filter chain's default output is the source resolution (vw x vh), which
-    equals the target. Appending `scale` would be a no-op that still
-    allocates buffers and runs a lanczos resample, so skip it.
-
-    If a future op changes the main video frame size before the output
-    label, this function should be revisited.
-    """
-    if not filter_complex or target_w <= 0 or target_h <= 0:
-        return filter_complex, output_label
-    return filter_complex, output_label
-
-
 MAX_RETRIES = 2
 RETRY_DELAYS = [2, 5]
 MAX_STDERR_LINES = 256
@@ -1174,20 +1177,24 @@ def _is_transient_error(stderr_text):
 
 
 def _is_hardware_encode_error(stderr_text):
-    """Detect hardware encoder failures, including generic filter-layer errors."""
+    """Detect hardware encoder failures and related GPU/resource errors.
+
+    Used both for per-job GPU→CPU fallback and for batch retry eligibility.
+    """
     if not stderr_text:
         return False
     lower = stderr_text.lower()
-    markers = [
-        "nvenc",
-        "amf",
-        "qsv",
-        "videotoolbox",
+    markers = (
+        "nvenc", "amf", "qsv", "videotoolbox", "vaapi", "h264_mf",
         "hwaccel",
         "error code: -22",
         "operation not permitted",
         "error while filtering",
-    ]
+        "no capable devices",
+        "cannot create cuda",
+        "out of memory",
+        "encoder init",
+    )
     return any(m in lower for m in markers)
 
 
@@ -1207,24 +1214,11 @@ def _retry_failed_enabled():
     return flag not in ("0", "false", "no", "off")
 
 
-def _is_hw_encoder_error(err_text):
-    """Errors that often clear when fewer parallel GPU encodes run."""
-    if not err_text:
-        return False
-    lower = err_text.lower()
-    markers = (
-        "nvenc", "amf", "qsv", "videotoolbox", "vaapi", "h264_mf",
-        "error code: -22", "hwaccel", "no capable devices",
-        "cannot create cuda", "out of memory", "encoder init",
-    )
-    return any(m in lower for m in markers)
-
-
 def _should_retry_failed_job(result, max_workers):
     if result.get("status") != "failed":
         return False
     err = result.get("error") or ""
-    if _is_hw_encoder_error(err):
+    if _is_hardware_encode_error(err):
         return True
     if max_workers >= 3 and "timeout" in err.lower():
         return True
@@ -1419,11 +1413,6 @@ def _process_one(idx, job, ffmpeg_path):
     ]
 
     filter_complex, output_label, image_paths = build_filter_complex(operations, vw, vh)
-
-    if filter_complex and not _crop_changes_output_size(operations):
-        filter_complex, output_label = _ensure_output_dimensions(
-            filter_complex, output_label, vw, vh,
-        )
 
     if not filter_complex and operations:
         err = (

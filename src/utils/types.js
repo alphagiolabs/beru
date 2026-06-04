@@ -211,6 +211,7 @@ export function createOperation(overrides = {}) {
     startTime: null,
     endTime: null,
     text: "",
+    batchRegionId: null,
     fontSize: 32,
     fontColor: "white",
     fontFamily: "Arial",

@@ -117,7 +117,7 @@ export default function TableEditor() {
       setEditingCell(null);
       return;
     }
-    const { op, opIdx } = findTextOpForRegion(video.operations, region.region);
+    const { op, opIdx } = findTextOpForRegion(video.operations, region.region, regionId);
     if (op) {
       get().updateOperationText(videoIdx, opIdx, editValue);
     } else if (editValue.length > 0) {
@@ -187,7 +187,7 @@ export default function TableEditor() {
       const region = templateRegions.find((r) => r.id === focused.regionId);
       const video = queue[focused.videoIdx];
       if (!region || !video) return;
-      const { opIdx } = findTextOpForRegion(video.operations, region.region);
+      const { opIdx } = findTextOpForRegion(video.operations, region.region, focused.regionId);
       if (opIdx >= 0) get().removeOperationAt(focused.videoIdx, opIdx);
     } else if (e.key === "Escape") {
       e.preventDefault();
@@ -202,6 +202,7 @@ export default function TableEditor() {
   const { op: focusedOp, opIdx: focusedOpIdx } = findTextOpForRegion(
     focusedVideo?.operations || [],
     focusedRegion?.region,
+    focusedRegion?.id,
   );
 
   const updateFocused = (patch) => {

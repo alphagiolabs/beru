@@ -9,6 +9,7 @@ import {
   pickTextStyle,
   regionsMatch,
   findTextOpForRegion,
+  textOpMatchesRegion,
 } from "../../utils/text-style";
 
 /** Template regions, Excel import/mapping, and batch table editor state. */
@@ -66,12 +67,16 @@ export function createBatchSlice(set, get) {
       const globalStyle = getGlobalTextStyleFromState(get());
       const templateStyle = tr.style || {};
       let opStyle = {};
+      let region = tr.region;
       if (videoIdx >= 0 && videoIdx < queue.length) {
-        const { op } = findTextOpForRegion(queue[videoIdx].operations, tr.region);
-        if (op) opStyle = pickTextStyle(op);
+        const { op } = findTextOpForRegion(queue[videoIdx].operations, tr.region, tr.id);
+        if (op) {
+          opStyle = pickTextStyle(op);
+          region = op.region || tr.region;
+        }
       }
       return {
-        region: tr.region,
+        region,
         text: get().getBatchPreviewText(videoIdx, regionId),
         style: mergeTextStyles(globalStyle, templateStyle, opStyle),
       };
@@ -115,7 +120,7 @@ export function createBatchSlice(set, get) {
             ...item,
             operations: item.operations.map((op) => {
               if (op.mode !== "text") return op;
-              const tr = targets.find((t) => regionsMatch(op.region, t.region));
+              const tr = targets.find((t) => textOpMatchesRegion(op, t.region, t.id));
               return tr ? { ...op, ...opPatch } : op;
             }),
           }));
@@ -225,7 +230,12 @@ export function createBatchSlice(set, get) {
     findTemplateRegionIdForOp: (op) => {
       if (!op || op.mode !== "text" || !op.region) return null;
       const { templateRegions } = get();
-      const tr = templateRegions.find((r) => r.region && regionsMatch(r.region, op.region));
+      const linked =
+        op.batchRegionId != null
+          ? templateRegions.find((r) => String(r.id) === String(op.batchRegionId))
+          : null;
+      const tr =
+        linked || templateRegions.find((r) => r.region && regionsMatch(r.region, op.region));
       return tr?.id ?? null;
     },
 
@@ -276,7 +286,7 @@ export function createBatchSlice(set, get) {
         templateRegions.forEach((tr) => {
           const colName = excelMapping.columns[tr.id];
           if (!colName) return;
-          const { op } = findTextOpForRegion(item.operations, tr.region);
+          const { op } = findTextOpForRegion(item.operations, tr.region, tr.id);
           const nextText = op?.text ?? "";
           if (String(rows[rowIdx][colName] ?? "") !== nextText) {
             rows[rowIdx] = { ...rows[rowIdx], [colName]: nextText };
@@ -294,7 +304,7 @@ export function createBatchSlice(set, get) {
       const tr = templateRegions.find((r) => r.id === regionId);
       if (!tr) return "";
       const item = queue[videoIdx];
-      const { op } = findTextOpForRegion(item.operations, tr.region);
+      const { op } = findTextOpForRegion(item.operations, tr.region, tr.id);
       if (op?.text) return op.text;
       const rowIdx = get().getExcelRowIndexForVideo(videoIdx);
       const colName = excelMapping.columns?.[regionId];
@@ -356,17 +366,20 @@ export function createBatchSlice(set, get) {
         const row = excelRows[rowIdx];
         const preservedOps = item.operations.filter((op) => {
           if (op.mode !== "text") return true;
-          return !templateRegions.some((tr) => tr.region && regionsMatch(op.region, tr.region));
+          return !templateRegions.some(
+            (tr) => tr.region && textOpMatchesRegion(op, tr.region, tr.id),
+          );
         });
         const newTextOps = templateRegions.map((tr) => {
-          const { op: existingOp } = findTextOpForRegion(item.operations, tr.region);
+          const { op: existingOp } = findTextOpForRegion(item.operations, tr.region, tr.id);
           const colName = columns[tr.id];
           const textVal = colName ? rowGet(row, colName) : undefined;
           const baseStyle =
             existingOp || mergeTextStyles(getGlobalTextStyleFromState(get()), tr.style);
           return createOperation({
             mode: "text",
-            region: { ...tr.region },
+            batchRegionId: tr.id,
+            region: { ...(existingOp?.region || tr.region) },
             text: textVal !== undefined && textVal !== null ? String(textVal) : "",
             ...pickTextStyle(baseStyle),
           });
@@ -448,16 +461,22 @@ export function createBatchSlice(set, get) {
 
         for (const tr of templateRegions) {
           const text = String(get().getCellTextForRegion(videoIdx, tr.id) ?? "").trim();
-          const { op, opIdx } = findTextOpForRegion(ops, tr.region);
+          const { op, opIdx } = findTextOpForRegion(ops, tr.region, tr.id);
 
           if (text) {
             const baseStyle = mergeTextStyles(globalStyle, tr.style, op || {});
             if (opIdx >= 0) {
-              ops[opIdx] = { ...ops[opIdx], text, ...pickTextStyle(baseStyle) };
+              ops[opIdx] = {
+                ...ops[opIdx],
+                batchRegionId: tr.id,
+                text,
+                ...pickTextStyle(baseStyle),
+              };
             } else {
               ops.push(
                 createOperation({
                   mode: "text",
+                  batchRegionId: tr.id,
                   region: { ...tr.region },
                   text,
                   ...pickTextStyle(baseStyle),
