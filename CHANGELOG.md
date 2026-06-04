@@ -5,6 +5,21 @@ All notable changes to Beru will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-06-04
+
+### Added
+
+- **`normalizeMatchId` utility**: canonical ID for matching queue videos to Excel rows (trim, lowercase, strip extension). Replaces ad-hoc `.trim().toLowerCase()` chains across `batchSlice`, `ExcelMappingModal`.
+- **Auto-update via native updater**: `TopUpdateBar` now triggers `checkForUpdates` automatically instead of opening GitHub. New "starting" UI state with spinner.
+- **i18n keys** for auto-update flow (`topUpdateBar.starting`, revised `cta`/`message`) in `en.json` and `es.json`.
+- **Tests**: `excel-match-id.test.js` (normalizeMatchId + extension-in-ID matching), `top-update-bar.test.jsx` (auto-update behavior), pixel-coordinates test for normalized text regions.
+
+### Fixed
+
+- **Text drawtext filter now receives region**: `processor.py` passes `region` into `build_drawtext` so normalized coordinates resolve to pixel positions.
+- **Batch text ops materialized before single-video process**: `processingSlice.processSingle` calls `materializeBatchTextOps()` when template regions exist.
+- **Queue state reset on re-process**: `Header.jsx` resets all queue items to `idle`/0 progress/`null` error before starting processing.
+
 ## [1.6.0] - 2026-06-03
 
 ### Added

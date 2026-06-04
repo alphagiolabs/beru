@@ -227,6 +227,12 @@ export function stripExt(name) {
   return i > 0 ? name.slice(0, i) : name;
 }
 
+/** Canonical ID for matching queue videos to Excel rows (trim, lowercase, no extension). */
+export function normalizeMatchId(name) {
+  if (name === undefined || name === null) return "";
+  return stripExt(String(name).trim()).toLowerCase();
+}
+
 export function rowGet(row, ...keys) {
   const lower = {};
   for (const k of Object.keys(row)) lower[k.toLowerCase().trim()] = row[k];

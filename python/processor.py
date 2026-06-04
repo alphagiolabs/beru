@@ -1023,7 +1023,7 @@ def build_filter_complex(operations, video_w, video_h):
         if mode == "text":
             if not (op.get("text") or "").strip():
                 continue
-            dt = build_drawtext(op)
+            dt = build_drawtext({**op, "region": region})
             if not dt:
                 continue
             if n == 0:

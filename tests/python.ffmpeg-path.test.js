@@ -164,6 +164,24 @@ print(graph is not None and "drawtext" in graph and "Hola" in graph)
     expect(r.stdout.trim()).toBe("True");
   });
 
+  it("uses pixel coordinates for normalized text regions in filter graphs", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+graph, last, imgs = processor.build_filter_complex([
+    {"mode": "text", "text": "Hola", "font_family": "Arial", "region": {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.1}},
+], 1920, 1080)
+print("x=192" in graph and "y=216" in graph)
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("True");
+  });
+
   it("emits drawtext spacing for letter_spacing instead of inserting spaces", () => {
     const code = `
 import processor

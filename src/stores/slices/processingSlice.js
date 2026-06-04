@@ -194,6 +194,9 @@ export function createProcessingSlice(set, get) {
 
     processSingle: async (videoIdx) => {
       const api = window.api;
+      if (get().templateRegions.length > 0) {
+        get().materializeBatchTextOps();
+      }
       let { queue, isProcessing } = get();
       if (isProcessing) return { ok: false, error: "Ya hay un proceso en ejecución" };
       if (videoIdx < 0 || videoIdx >= queue.length) return { ok: false, error: "Video inválido" };

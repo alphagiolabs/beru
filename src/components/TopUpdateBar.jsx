@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Download, X, RefreshCw, AlertCircle } from "lucide-react";
+import { X, RefreshCw, AlertCircle } from "lucide-react";
+import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 
 const api = typeof window !== "undefined" ? window.api : null;
@@ -28,7 +29,10 @@ export default function TopUpdateBar() {
   const t = useT();
   const [state, setState] = useState({ status: "idle", latest: null, error: null });
   const [dismissedVersion, setDismissedVersion] = useState(() => safeStorage.get(DISMISS_KEY));
+  const updateStatus = useEditorStore((s) => s.update?.status);
+  const checkForUpdates = useEditorStore((s) => s.checkForUpdates);
   const abortedRef = useRef(false);
+  const autoStartedVersionRef = useRef(null);
 
   const fetchLatest = useCallback(async () => {
     if (!api?.checkGitHubRelease) {
@@ -70,8 +74,41 @@ export default function TopUpdateBar() {
     };
   }, [fetchLatest]);
 
+  const startAutomaticUpdate = useCallback(async () => {
+    if (!api?.checkForUpdates) {
+      setState((s) => ({ ...s, status: "error", error: "updater-unavailable" }));
+      return;
+    }
+    setState((s) => ({ ...s, status: "starting", error: null }));
+    try {
+      const res = await checkForUpdates();
+      if (abortedRef.current) return;
+      if (!res || res.ok !== true) {
+        setState((s) => ({
+          ...s,
+          status: "error",
+          error: res?.error || res?.reason || "updater-unavailable",
+        }));
+      }
+    } catch (e) {
+      if (abortedRef.current) return;
+      setState((s) => ({ ...s, status: "error", error: e?.message || "updater-unavailable" }));
+    }
+  }, [checkForUpdates]);
+
   const latest = state.latest;
-  const visible = state.status === "available" && latest && dismissedVersion !== latest.version;
+  const visible =
+    (state.status === "available" || state.status === "starting") &&
+    latest &&
+    dismissedVersion !== latest.version;
+
+  useEffect(() => {
+    if (!visible || state.status !== "available") return;
+    if (!["idle", "disabled", "not-available", "error"].includes(updateStatus || "idle")) return;
+    if (autoStartedVersionRef.current === latest.version) return;
+    autoStartedVersionRef.current = latest.version;
+    startAutomaticUpdate();
+  }, [latest?.version, startAutomaticUpdate, state.status, updateStatus, visible]);
 
   if (state.status === "idle" || state.status === "loading" || state.status === "up-to-date") {
     return null;
@@ -107,16 +144,9 @@ export default function TopUpdateBar() {
 
   if (!visible) return null;
 
-  const downloadUrl = latest.installerUrl || latest.htmlUrl;
-  const downloadIsDirect = !!latest.installerUrl;
-
-  const handleDownload = (e) => {
+  const handleUpdate = (e) => {
     e.preventDefault();
-    if (api?.openExternal) {
-      api.openExternal(downloadUrl);
-    } else if (typeof window !== "undefined") {
-      window.open(downloadUrl, "_blank", "noopener,noreferrer");
-    }
+    startAutomaticUpdate();
   };
 
   const handleDismiss = () => {
@@ -140,16 +170,26 @@ export default function TopUpdateBar() {
         style={{ background: "#1a1a1a", border: "1px solid #2a2a2a" }}
         aria-hidden="true"
       >
-        <Download size={14} className="text-white" />
+        <RefreshCw size={14} className={state.status === "starting" ? "animate-spin" : ""} />
       </div>
-      <span className="truncate">{t("topUpdateBar.message", { version: latest.version })}</span>
+      <span className="truncate">
+        {state.status === "starting"
+          ? t("topUpdateBar.starting", { version: latest.version })
+          : t("topUpdateBar.message", { version: latest.version })}
+      </span>
       <button
-        onClick={handleDownload}
+        onClick={handleUpdate}
+        disabled={state.status === "starting"}
         className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold flex-shrink-0 transition-opacity hover:opacity-80"
-        style={{ background: "#ffffff", color: "#000" }}
-        title={downloadIsDirect ? t("topUpdateBar.ctaDirect") : t("topUpdateBar.cta")}
+        style={{
+          background: "#ffffff",
+          color: "#000",
+          opacity: state.status === "starting" ? 0.7 : 1,
+        }}
+        title={t("topUpdateBar.cta")}
       >
-        <Download size={12} /> {t("topUpdateBar.cta")}
+        <RefreshCw size={12} className={state.status === "starting" ? "animate-spin" : ""} />{" "}
+        {t("topUpdateBar.cta")}
       </button>
       <button
         onClick={handleDismiss}

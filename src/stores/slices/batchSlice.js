@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { createOperation, uid } from "../../utils/types";
-import { stripExt, rowGet, isRegionUsable } from "../../utils/video-utils";
+import { stripExt, rowGet, isRegionUsable, normalizeMatchId } from "../../utils/video-utils";
 import { sanitizeOperation } from "../../utils/delogo-ops";
 import {
   getGlobalTextStyleFromState,
@@ -233,10 +233,10 @@ export function createBatchSlice(set, get) {
       const { queue, excelRows, excelMapping } = get();
       const idColumn = excelMapping.idColumn;
       if (!idColumn || videoIdx < 0 || videoIdx >= queue.length) return -1;
-      const id = stripExt(queue[videoIdx].filename).trim().toLowerCase();
+      const id = normalizeMatchId(queue[videoIdx].filename);
       return excelRows.findIndex((row) => {
         const v = rowGet(row, idColumn);
-        return v !== undefined && v !== null && String(v).trim().toLowerCase() === id;
+        return v !== undefined && v !== null && normalizeMatchId(v) === id;
       });
     },
 
@@ -261,7 +261,7 @@ export function createBatchSlice(set, get) {
       excelRows.forEach((row, idx) => {
         const raw = rowGet(row, excelMapping.idColumn);
         if (raw === undefined || raw === null || raw === "") return;
-        const key = String(raw).trim().toLowerCase();
+        const key = normalizeMatchId(raw);
         if (!idToRowIdx.has(key)) idToRowIdx.set(key, idx);
       });
 
@@ -269,7 +269,7 @@ export function createBatchSlice(set, get) {
       const rows = excelRows.map((row) => ({ ...row }));
 
       queue.forEach((item) => {
-        const id = stripExt(item.filename).trim().toLowerCase();
+        const id = normalizeMatchId(item.filename);
         const rowIdx = idToRowIdx.get(id);
         if (rowIdx === undefined) return;
 
@@ -331,7 +331,7 @@ export function createBatchSlice(set, get) {
       excelRows.forEach((row, idx) => {
         const raw = rowGet(row, idColumn);
         if (raw === undefined || raw === null || raw === "") return;
-        const key = String(raw).trim().toLowerCase();
+        const key = normalizeMatchId(raw);
         if (idToRowIdx.has(key)) duplicateIds.add(key);
         else idToRowIdx.set(key, idx);
       });
@@ -341,7 +341,7 @@ export function createBatchSlice(set, get) {
       let unmatched = 0;
       let duplicate = 0;
       const updated = queue.map((item, i) => {
-        const id = stripExt(item.filename).trim().toLowerCase();
+        const id = normalizeMatchId(item.filename);
         const rowIdx = idToRowIdx.get(id);
         if (rowIdx === undefined) {
           status[i] = "unmatched";

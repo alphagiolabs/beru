@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { X, FileSpreadsheet, ArrowRight, RotateCcw } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
-import { stripExt, rowGet } from "../utils/video-utils";
+import { stripExt, rowGet, normalizeMatchId } from "../utils/video-utils";
 import { useT } from "../i18n/useT";
 
 const PREVIEW_ROWS = 5;
@@ -23,10 +23,10 @@ export default function ExcelMappingModal() {
   const videoPreview = useMemo(() => {
     if (!idCol) return [];
     return queue.map((item) => {
-      const id = stripExt(item.filename).trim().toLowerCase();
+      const id = normalizeMatchId(item.filename);
       const row = excelRows.find((r) => {
         const v = rowGet(r, idCol);
-        return v !== undefined && v !== null && String(v).trim().toLowerCase() === id;
+        return v !== undefined && v !== null && normalizeMatchId(v) === id;
       });
       return {
         filename: item.filename,

@@ -269,8 +269,19 @@ export default function Header() {
       showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
       return;
     }
-    get().setProcessing(true);
-    useEditorStore.setState({ progressTotal: jobs.length, progressDone: 0 });
+
+    const queueReset = get().queue.map((item) => ({
+      ...item,
+      status: "idle",
+      progress: 0,
+      error: null,
+    }));
+    useEditorStore.setState({
+      queue: queueReset,
+      progressTotal: jobs.length,
+      progressDone: 0,
+      isProcessing: true,
+    });
 
     api
       .startProcessing(jobs)
