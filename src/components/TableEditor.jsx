@@ -7,6 +7,13 @@ import TableEditorPreview from "./table-editor/TableEditorPreview";
 import TableEditorFocusPanel from "./table-editor/TableEditorFocusPanel";
 import TableEditorGrid from "./table-editor/TableEditorGrid";
 
+function resolvedDuration(video, fallback) {
+  const mediaDuration = Number(video?.duration);
+  if (Number.isFinite(mediaDuration) && mediaDuration > 0) return mediaDuration;
+  const fallbackDuration = Number(fallback);
+  return Number.isFinite(fallbackDuration) && fallbackDuration > 0 ? fallbackDuration : 0;
+}
+
 export default function TableEditor() {
   const {
     showTableEditor,
@@ -39,6 +46,7 @@ export default function TableEditor() {
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
   const [, setLayoutTick] = useState(0);
+  const focusedVideoDuration = queue[focused.videoIdx]?.duration;
 
   useEffect(() => {
     const v = videoRef.current;
@@ -64,7 +72,7 @@ export default function TableEditor() {
     const onTimeUpdate = () => {
       if (!seeking) setCurrentTime(v.currentTime);
     };
-    const onLoadedMeta = () => setDuration(v.duration);
+    const onLoadedMeta = () => setDuration(resolvedDuration(v, focusedVideoDuration));
     const onEnded = () => setPlaying(false);
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
@@ -78,7 +86,7 @@ export default function TableEditor() {
       v.removeEventListener("loadedmetadata", onLoadedMeta);
       v.removeEventListener("ended", onEnded);
     };
-  }, [focused.videoIdx, seeking]);
+  }, [focused.videoIdx, focusedVideoDuration, seeking]);
 
   useEffect(() => {
     setPlaying(false);
@@ -89,9 +97,10 @@ export default function TableEditor() {
   const seekTo = useCallback(
     (fraction) => {
       const v = videoRef.current;
-      if (v && duration > 0) v.currentTime = fraction * duration;
+      const d = resolvedDuration(v, duration || focusedVideoDuration);
+      if (v && d > 0) v.currentTime = Math.max(0, Math.min(d, fraction * d));
     },
-    [duration],
+    [duration, focusedVideoDuration],
   );
 
   const startInlineEdit = (videoIdx, regionId, currentText) => {

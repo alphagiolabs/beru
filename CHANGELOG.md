@@ -5,6 +5,21 @@ All notable changes to Beru will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.3] - 2026-06-04
+
+### Added
+
+- **HTTP Range requests for beru:// protocol**: `createBeruVideoResponse` streams video with byte-range support (206 Partial Content, 416 Range Not Satisfiable), enabling native video seeking in `<video>` elements.
+- **Content-Type detection** for video extensions (.mp4, .mov, .webm, .mkv, .avi, etc.).
+
+### Fixed
+
+- **`resolvedDuration` fallback**: VideoPreview and TableEditor use queue item duration when `HTMLMediaElement.duration` is NaN/unavailable, fixing seek and timeline when metadata hasn't loaded.
+- **Seek slider disabled** when duration is 0, preventing NaN seeks.
+- **Pointer capture** on seek sliders for reliable drag behavior.
+- **`preload="metadata"`** on video elements instead of `preload="auto"`, reducing unnecessary data loading.
+- **Skip-to-end button** uses resolved duration instead of raw `v.duration`.
+
 ## [1.6.2] - 2026-06-04
 
 ### Added

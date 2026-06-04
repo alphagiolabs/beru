@@ -38,6 +38,7 @@ export default function TableEditorPreview({
               src={focusedVideo.src || null}
               className="max-h-full max-w-full block object-contain"
               style={{ maxHeight: "calc(90vh - 380px)" }}
+              preload="metadata"
             />
             {templateRegions.map((tr) => {
               const payload = getBatchPreviewPayload(focused.videoIdx, tr.id);
@@ -73,10 +74,16 @@ export default function TableEditorPreview({
             max={1}
             step={0.001}
             value={seekFrac}
-            onMouseDown={() => setSeeking(true)}
-            onMouseUp={() => setSeeking(false)}
+            disabled={duration <= 0}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              setSeeking(true);
+            }}
+            onPointerUp={() => setSeeking(false)}
+            onPointerCancel={() => setSeeking(false)}
             onChange={(e) => {
               const frac = parseFloat(e.target.value);
+              if (duration <= 0) return;
               setCurrentTime(frac * duration);
               seekTo(frac);
             }}
@@ -112,7 +119,7 @@ export default function TableEditorPreview({
             <button
               onClick={() => {
                 const v = videoRef.current;
-                if (v && v.duration) v.currentTime = v.duration;
+                if (v && duration > 0) v.currentTime = duration;
               }}
               className="p-1 rounded hover:bg-white/10"
               style={{ color: "var(--text-dim)" }}

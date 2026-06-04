@@ -25,6 +25,13 @@ const isOpActive = (op, t) => {
   return true;
 };
 
+function resolvedDuration(video, fallback) {
+  const mediaDuration = Number(video?.duration);
+  if (Number.isFinite(mediaDuration) && mediaDuration > 0) return mediaDuration;
+  const fallbackDuration = Number(fallback);
+  return Number.isFinite(fallbackDuration) && fallbackDuration > 0 ? fallbackDuration : 0;
+}
+
 export default function VideoPreview() {
   const {
     selectedIdx,
@@ -80,9 +87,10 @@ export default function VideoPreview() {
   const seekTo = useCallback(
     (fraction) => {
       const v = videoRef.current;
-      if (v && duration > 0) v.currentTime = fraction * duration;
+      const d = resolvedDuration(v, duration || sel?.duration);
+      if (v && d > 0) v.currentTime = Math.max(0, Math.min(d, fraction * d));
     },
-    [duration],
+    [duration, sel?.duration],
   );
 
   useEffect(() => {
@@ -100,7 +108,7 @@ export default function VideoPreview() {
     const onTimeUpdate = () => {
       if (!seeking) setCurrentTime(v.currentTime);
     };
-    const onLoadedMeta = () => setDuration(v.duration);
+    const onLoadedMeta = () => setDuration(resolvedDuration(v, sel?.duration));
     const onEnded = () => setPlaying(false);
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
@@ -114,7 +122,7 @@ export default function VideoPreview() {
       v.removeEventListener("loadedmetadata", onLoadedMeta);
       v.removeEventListener("ended", onEnded);
     };
-  }, [sel?.path, seeking]);
+  }, [sel?.path, sel?.duration, seeking]);
 
   /* Keyboard commands dispatched by useKeyboard (play/pause, seek) */
   useEffect(() => {
@@ -126,16 +134,18 @@ export default function VideoPreview() {
         if (v.paused) v.play();
         else v.pause();
       } else if (type === "seek" && Number.isFinite(delta)) {
-        if (!v.duration) return;
-        v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + delta));
+        const d = resolvedDuration(v, sel?.duration);
+        if (!d) return;
+        v.currentTime = Math.max(0, Math.min(d, v.currentTime + delta));
       } else if (type === "seek-abs" && Number.isFinite(value)) {
-        if (!v.duration) return;
-        v.currentTime = value >= 1 ? v.duration - 0.05 : value * v.duration;
+        const d = resolvedDuration(v, sel?.duration);
+        if (!d) return;
+        v.currentTime = value >= 1 ? Math.max(0, d - 0.05) : value * d;
       }
     };
     window.addEventListener("beru:video:command", onCommand);
     return () => window.removeEventListener("beru:video:command", onCommand);
-  }, [sel?.path]);
+  }, [sel?.path, sel?.duration]);
 
   useEffect(() => {
     setPlaying(false);
@@ -253,13 +263,13 @@ export default function VideoPreview() {
           src={sel.src || null}
           className="max-h-[calc(100vh-200px)] max-w-full block object-contain rounded"
           style={{ imageRendering: "auto" }}
-          preload="auto"
+          preload="metadata"
           playsInline
           disablePictureInPicture
           controlsList="nodownload noplaybackrate"
           onLoadedMetadata={() => {
             setCurrentRegion(null);
-            setDuration(videoRef.current?.duration || 0);
+            setDuration(resolvedDuration(videoRef.current, sel?.duration));
             setVideoError(null);
           }}
           onError={() => {
@@ -553,10 +563,16 @@ export default function VideoPreview() {
             max={1}
             step={0.001}
             value={seekFrac}
-            onMouseDown={() => setSeeking(true)}
-            onMouseUp={() => setSeeking(false)}
+            disabled={duration <= 0}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              setSeeking(true);
+            }}
+            onPointerUp={() => setSeeking(false)}
+            onPointerCancel={() => setSeeking(false)}
             onChange={(e) => {
               const frac = parseFloat(e.target.value);
+              if (duration <= 0) return;
               setCurrentTime(frac * duration);
               seekTo(frac);
             }}
@@ -594,7 +610,8 @@ export default function VideoPreview() {
           <button
             onClick={() => {
               const v = videoRef.current;
-              if (v && v.duration) v.currentTime = v.duration;
+              const d = resolvedDuration(v, sel?.duration);
+              if (v && d) v.currentTime = d;
             }}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}

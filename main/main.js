@@ -1,9 +1,9 @@
-import { app, BrowserWindow, protocol, net } from "electron";
+import { app, BrowserWindow, protocol } from "electron";
 import path from "path";
-import { fileURLToPath, pathToFileURL } from "url";
+import { fileURLToPath } from "url";
 import { createPathSecurity } from "./pathSecurity.js";
 import { getPythonProcess } from "./shared-state.js";
-import { validateBeruRequestPath } from "./utils/beru-protocol.js";
+import { createBeruVideoResponse, validateBeruRequestPath } from "./utils/beru-protocol.js";
 import { createWindow } from "./utils/window.js";
 
 import { registerDialogHandlers } from "./handlers/dialog.js";
@@ -46,7 +46,7 @@ function registerBeruProtocol() {
         const status = check.error === "Archivo no encontrado" ? 404 : 403;
         return new Response(check.error, { status });
       }
-      return net.fetch(pathToFileURL(check.resolvedPath).toString());
+      return createBeruVideoResponse(check.resolvedPath, request);
     } catch (err) {
       console.error("[beru] beru:// handler error:", err);
       return new Response("Internal error", { status: 500 });
