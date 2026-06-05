@@ -38,4 +38,41 @@ print(json.dumps({
     expect(parsed.message).toContain("Memoria insuficiente");
     expect(parsed.message).toContain("4 videos en paralelo");
   });
+
+  it("does not treat generic filter failures as hardware encode errors", () => {
+    const code = `
+import json
+from batch_errors import is_hardware_encode_error
+
+msg = "Error while filtering: Cannot allocate memory for filter graph"
+print(json.dumps(is_hardware_encode_error(msg)))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout.trim())).toBe(false);
+  });
+
+  it("removes partial ffmpeg output after timeout cleanup", () => {
+    const code = `
+import json
+import os
+import tempfile
+import processor
+
+with tempfile.TemporaryDirectory() as tmp:
+    out = os.path.join(tmp, "partial.mp4")
+    with open(out, "wb") as fh:
+        fh.write(b"partial")
+    cmd = ["ffmpeg", "-y", "-i", os.path.join(tmp, "in.mp4"), "-c", "copy", out]
+    processor._cleanup_ffmpeg_partial(cmd)
+    print(json.dumps({"exists": os.path.exists(out)}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout.trim()).exists).toBe(false);
+  });
 });

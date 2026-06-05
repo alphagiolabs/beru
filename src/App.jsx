@@ -13,6 +13,7 @@ import DragOverlay from "./components/DragOverlay";
 import Landing from "./components/Landing";
 import TopUpdateBar from "./components/TopUpdateBar";
 import AppToast from "./components/AppToast";
+import ConfirmDialog from "./components/ConfirmDialog";
 import { useT } from "./i18n/useT";
 
 const ShortcutsModal = lazy(() => import("./components/ShortcutsModal"));
@@ -39,7 +40,8 @@ export default function App() {
   const appToast = useEditorStore((s) => s.appToast);
   const t = useT();
   const dropRef = useRef(null);
-  const dragCounter = useRef(0);
+  const dragDepthRef = useRef(0);
+  const DRAG_DEPTH_MAX = 32;
 
   useKeyboard();
   useProcessing(api);
@@ -72,23 +74,34 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [appToast, clearAppToast]);
 
+  useEffect(() => {
+    const resetDragState = () => {
+      dragDepthRef.current = 0;
+      setIsDragging(false);
+    };
+    window.addEventListener("dragend", resetDragState);
+    return () => window.removeEventListener("dragend", resetDragState);
+  }, [setIsDragging]);
+
   /* ── Drag & drop ──────────────────────────────────────────────── */
   const onDragEnter = (e) => {
     e.preventDefault();
-    dragCounter.current += 1;
-    if (dragCounter.current === 1) setIsDragging(true);
+    dragDepthRef.current = Math.min(dragDepthRef.current + 1, DRAG_DEPTH_MAX);
+    if (dragDepthRef.current === 1) setIsDragging(true);
   };
   const onDragOver = (e) => {
     e.preventDefault();
   };
   const onDragLeave = (e) => {
     e.preventDefault();
-    dragCounter.current = Math.max(0, dragCounter.current - 1);
-    if (dragCounter.current === 0) setIsDragging(false);
+    const related = e.relatedTarget;
+    if (related && e.currentTarget.contains(related)) return;
+    dragDepthRef.current = 0;
+    setIsDragging(false);
   };
   const onDrop = async (e) => {
     e.preventDefault();
-    dragCounter.current = 0;
+    dragDepthRef.current = 0;
     setIsDragging(false);
 
     const rawPaths = Array.from(e.dataTransfer.files)
@@ -139,6 +152,7 @@ export default function App() {
           <UpdateReadyModal />
         </Suspense>
         <AppToast />
+        <ConfirmDialog />
       </div>
     );
   }
@@ -178,6 +192,7 @@ export default function App() {
         <UpdateReadyModal />
       </Suspense>
       <AppToast />
+      <ConfirmDialog />
     </div>
   );
 }

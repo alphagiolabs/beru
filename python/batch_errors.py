@@ -16,11 +16,12 @@ def is_hardware_encode_error(stderr_text):
         "hwaccel",
         "error code: -22",
         "operation not permitted",
-        "error while filtering",
         "no capable devices",
         "cannot create cuda",
-        "out of memory",
         "encoder init",
+        "failed to initialize",
+        "cannot load nvcuda",
+        "cuda error",
     )
     return any(m in lower for m in markers)
 

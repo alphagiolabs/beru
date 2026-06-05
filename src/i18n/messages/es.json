@@ -16,6 +16,8 @@
   "common.continue": "Continuar",
   "common.back": "Atrás",
 
+  "dialog.confirmTitle": "Confirmar acción",
+
   "header.selectOutput": "Carpeta de salida",
   "header.openOutput": "Abrir carpeta de salida",
   "header.processAll": "Procesar todos",

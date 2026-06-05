@@ -2,32 +2,50 @@ import { useEffect, useRef } from "react";
 import useEditorStore from "../stores/useEditorStore";
 import { regionToScreen } from "../utils/video-utils";
 
-/* ── Cached offscreen canvases (one per size class, reused per frame) ─── */
+/* ── Per-preview workspace (released on unmount) ─────────────────────── */
 
-const sourceCache = { canvas: null, ctx: null };
-const tinyCache = { canvas: null, ctx: null };
+function createPreviewWorkspace() {
+  return {
+    source: { canvas: null, ctx: null },
+    tiny: { canvas: null, ctx: null },
+    temporalFrames: [],
+  };
+}
 
-function getSourceCanvas(w, h) {
-  if (!sourceCache.canvas) {
-    sourceCache.canvas = document.createElement("canvas");
-    sourceCache.ctx = sourceCache.canvas.getContext("2d", { willReadFrequently: true });
+function releasePreviewWorkspace(ws) {
+  if (!ws) return;
+  ws.temporalFrames.length = 0;
+  for (const cache of [ws.source, ws.tiny]) {
+    if (cache.canvas) {
+      cache.canvas.width = 0;
+      cache.canvas.height = 0;
+      cache.canvas = null;
+      cache.ctx = null;
+    }
   }
-  const c = sourceCache.canvas;
+}
+
+function getSourceCanvas(w, h, ws) {
+  if (!ws.source.canvas) {
+    ws.source.canvas = document.createElement("canvas");
+    ws.source.ctx = ws.source.canvas.getContext("2d", { willReadFrequently: true });
+  }
+  const c = ws.source.canvas;
   if (c.width !== w || c.height !== h) {
     c.width = w;
     c.height = h;
   }
-  sourceCache.ctx.imageSmoothingEnabled = true;
-  sourceCache.ctx.imageSmoothingQuality = "high";
+  ws.source.ctx.imageSmoothingEnabled = true;
+  ws.source.ctx.imageSmoothingQuality = "high";
   return c;
 }
 
-function getTinyCanvas(w, h) {
-  if (!tinyCache.canvas) {
-    tinyCache.canvas = document.createElement("canvas");
-    tinyCache.ctx = tinyCache.canvas.getContext("2d");
+function getTinyCanvas(w, h, ws) {
+  if (!ws.tiny.canvas) {
+    ws.tiny.canvas = document.createElement("canvas");
+    ws.tiny.ctx = ws.tiny.canvas.getContext("2d");
   }
-  const c = tinyCache.canvas;
+  const c = ws.tiny.canvas;
   if (c.width !== w || c.height !== h) {
     c.width = w;
     c.height = h;
@@ -50,18 +68,18 @@ function sourceRect(region, video) {
 
 /* ── Effect renderers (draw into the provided 2D context at screen size) ─ */
 
-function renderMosaic(ctx, video, region, screen, blockSize) {
+function renderMosaic(ctx, video, region, screen, blockSize, ws) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
-  const src = getSourceCanvas(sw, sh);
-  const sctx = sourceCache.ctx;
+  const src = getSourceCanvas(sw, sh, ws);
+  const sctx = ws.source.ctx;
   sctx.clearRect(0, 0, sw, sh);
   sctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
   const data = sctx.getImageData(0, 0, sw, sh).data;
 
   const cols = Math.max(1, Math.ceil(sw / blockSize));
   const rows = Math.max(1, Math.ceil(sh / blockSize));
-  const tiny = getTinyCanvas(cols, rows);
-  const tctx = tinyCache.ctx;
+  const tiny = getTinyCanvas(cols, rows, ws);
+  const tctx = ws.tiny.ctx;
   const tinyData = tctx.createImageData(cols, rows);
   const tData = tinyData.data;
 
@@ -146,10 +164,10 @@ function renderMirror(ctx, video, region, screen, side) {
   ctx.restore();
 }
 
-function renderInpaint(ctx, video, region, screen) {
+function renderInpaint(ctx, video, region, screen, ws) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
-  const src = getSourceCanvas(sw, sh);
-  const sctx = sourceCache.ctx;
+  const src = getSourceCanvas(sw, sh, ws);
+  const sctx = ws.source.ctx;
   sctx.clearRect(0, 0, sw, sh);
   sctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
   const sData = sctx.getImageData(0, 0, sw, sh).data;
@@ -190,32 +208,29 @@ function renderInpaint(ctx, video, region, screen) {
   ctx.restore();
 }
 
-const temporalFrameBuffer = { frames: [], max: 7 };
-
 function medianChannel(values) {
   const sorted = values.slice().sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
-function renderTemporal(ctx, video, region, screen, radius) {
+function renderTemporal(ctx, video, region, screen, radius, ws) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
-  const src = getSourceCanvas(sw, sh);
-  const sctx = sourceCache.ctx;
+  const src = getSourceCanvas(sw, sh, ws);
+  const sctx = ws.source.ctx;
   sctx.clearRect(0, 0, sw, sh);
   sctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
   const frame = sctx.getImageData(0, 0, sw, sh);
 
   const maxFrames = Math.max(3, Math.min(15, radius * 2 + 1));
-  temporalFrameBuffer.max = maxFrames;
-  temporalFrameBuffer.frames.push(frame);
-  if (temporalFrameBuffer.frames.length > maxFrames) {
-    temporalFrameBuffer.frames.shift();
+  ws.temporalFrames.push(frame);
+  if (ws.temporalFrames.length > maxFrames) {
+    ws.temporalFrames.shift();
   }
 
   const out = sctx.createImageData(sw, sh);
   const d = out.data;
-  const buffers = temporalFrameBuffer.frames;
+  const buffers = ws.temporalFrames;
   const n = buffers.length;
 
   for (let i = 0; i < sw * sh; i++) {
@@ -261,19 +276,20 @@ export default function DelogoLivePreview({ videoRef }) {
   const canvasRef = useRef(null);
   const labelRef = useRef(null);
   const cssRef = useRef(null);
+  const workspaceRef = useRef(null);
+  if (!workspaceRef.current) {
+    workspaceRef.current = createPreviewWorkspace();
+  }
 
   const visible = !!(sidebarMode === "logo" && activeTool === "delogo" && currentRegion);
   const isCanvas = visible && CANVAS_METHODS.has(delogoMethod);
 
-  /* Reset temporal buffer when region, method, or video source changes.
-   * Without the src check, rapid video switching could feed leftover frames
-   * from the previous video into the first ~3 frames of the new one. */
+  useEffect(() => () => releasePreviewWorkspace(workspaceRef.current), []);
+
+  /* Reset temporal buffer when region, method, or video source changes. */
   const videoSrc = videoRef?.current?.currentSrc || videoRef?.current?.src || "";
   useEffect(() => {
-    temporalFrameBuffer.frames = [];
-    return () => {
-      temporalFrameBuffer.frames = [];
-    };
+    workspaceRef.current.temporalFrames.length = 0;
   }, [currentRegion, delogoMethod, videoSrc]);
 
   /* Canvas path — re-draws every frame while visible */
@@ -281,6 +297,7 @@ export default function DelogoLivePreview({ videoRef }) {
     if (!isCanvas) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const ws = workspaceRef.current;
 
     let rafId = 0;
     const draw = () => {
@@ -289,7 +306,6 @@ export default function DelogoLivePreview({ videoRef }) {
       const method = useEditorStore.getState().delogoMethod;
       const paused = !video || video.paused || !region || video.readyState < 2;
       if (document.hidden) {
-        // Tab is hidden — poll at low frequency instead of 60fps RAF loop
         rafId = setTimeout(draw, 1000);
         return;
       }
@@ -317,11 +333,10 @@ export default function DelogoLivePreview({ videoRef }) {
 
       const ctx = canvas.getContext("2d");
       if (typeof ctx.setTransform === "function") ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      const s = useEditorStore.getState();
-      if (method === "mosaic") renderMosaic(ctx, video, region, screen, mosaicSize);
+      if (method === "mosaic") renderMosaic(ctx, video, region, screen, mosaicSize, ws);
       else if (method === "mirror") renderMirror(ctx, video, region, screen, mirrorSide);
-      else if (method === "inpaint") renderInpaint(ctx, video, region, screen);
-      else if (method === "temporal") renderTemporal(ctx, video, region, screen, temporalRadius);
+      else if (method === "inpaint") renderInpaint(ctx, video, region, screen, ws);
+      else if (method === "temporal") renderTemporal(ctx, video, region, screen, temporalRadius, ws);
 
       const label = labelRef.current;
       if (label) {
@@ -336,7 +351,7 @@ export default function DelogoLivePreview({ videoRef }) {
       cancelAnimationFrame(rafId);
       clearTimeout(rafId);
     };
-  }, [isCanvas, videoRef]);
+  }, [isCanvas, videoRef, mosaicSize, mirrorSide, temporalRadius]);
 
   /* CSS path (blur / fill) — no RAF needed, browser composites the effect */
   useEffect(() => {

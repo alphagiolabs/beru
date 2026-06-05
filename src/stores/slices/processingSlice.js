@@ -192,6 +192,9 @@ export function createProcessingSlice(set, get) {
 
     processSingle: async (videoIdx) => {
       const api = window.api;
+      if (!api?.startProcessing) {
+        return { ok: false, error: "API de procesamiento no disponible" };
+      }
       if (get().templateRegions.length > 0) {
         get().materializeBatchTextOps();
       }

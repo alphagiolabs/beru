@@ -27,9 +27,36 @@ export function createUiSlice(set, get) {
     showShortcuts: false,
     isDragging: false,
     appToast: null,
+    confirmDialog: null,
 
     showToast: (toast) => set({ appToast: toast }),
     clearAppToast: () => set({ appToast: null }),
+
+    requestConfirm: ({
+      title = "",
+      message = "",
+      confirmLabel,
+      cancelLabel,
+      variant = "default",
+    } = {}) =>
+      new Promise((resolve) => {
+        set({
+          confirmDialog: {
+            title,
+            message,
+            confirmLabel,
+            cancelLabel,
+            variant,
+            resolve,
+          },
+        });
+      }),
+
+    resolveConfirm: (confirmed) => {
+      const { confirmDialog } = get();
+      confirmDialog?.resolve?.(!!confirmed);
+      set({ confirmDialog: null });
+    },
 
     loadSettings: async () => {
       const api = window.api;

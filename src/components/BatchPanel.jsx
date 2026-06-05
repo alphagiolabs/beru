@@ -37,7 +37,8 @@ export default function BatchPanel() {
     // Warn if any videos have manual (non-text) operations that will be overwritten
     const hasManualOps = queue.some((v) => v.operations.some((op) => op.mode !== "text"));
     if (hasManualOps) {
-      if (!confirm(t("batch.confirmExcelOverwrite"))) return;
+      const ok = await get().requestConfirm({ message: t("batch.confirmExcelOverwrite") });
+      if (!ok) return;
     }
 
     const path = await api?.openExcel();

@@ -16,7 +16,12 @@ export function registerSystemHandlers() {
         : settings.encodeProfile;
     const explicitWorkers =
       Number(settings.batchWorkers) > 0 ? Math.floor(Number(settings.batchWorkers)) : 0;
-    const hwEncoder = await detectHwEncoderCached();
+    let hwEncoder = null;
+    try {
+      hwEncoder = await detectHwEncoderCached();
+    } catch (err) {
+      console.error("[beru] HW encoder detection failed:", err?.message || err);
+    }
     const rec = recommendBatchWorkers({
       hwEncoder,
       jobCount,

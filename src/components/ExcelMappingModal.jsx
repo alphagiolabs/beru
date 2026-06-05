@@ -95,13 +95,11 @@ export default function ExcelMappingModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.75)" }}
+      className="cap-modal-overlay"
       onClick={() => getState().setShowMappingModal(false)}
     >
       <div
-        className="w-[min(960px,95vw)] max-h-[90vh] flex flex-col rounded-lg shadow-2xl overflow-hidden"
-        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+        className="cap-modal-panel w-[min(960px,95vw)] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

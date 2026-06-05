@@ -141,6 +141,16 @@ export function createPathSecurity(app) {
       return { ok: false, error: "Ruta no permitida" };
     }
 
+    let stat;
+    try {
+      stat = fs.statSync(resolved);
+    } catch {
+      return { ok: false, error: "Archivo no encontrado" };
+    }
+    if (!stat.isFile()) {
+      return { ok: false, error: "La ruta no es un archivo" };
+    }
+
     const ext = path.extname(resolved).toLowerCase();
     const allowedExt = EXT_BY_KIND[kind];
     if (!allowedExt?.has(ext)) {
@@ -152,16 +162,6 @@ export function createPathSecurity(app) {
     if (!explicitlyAllowed && !isUnderTrustedRoot(resolved)) {
       console.warn("[beru][security] Path outside trusted roots:", resolved);
       return { ok: false, error: "Archivo fuera de ubicaciones permitidas" };
-    }
-
-    let stat;
-    try {
-      stat = fs.statSync(resolved);
-    } catch {
-      return { ok: false, error: "Archivo no encontrado" };
-    }
-    if (!stat.isFile()) {
-      return { ok: false, error: "La ruta no es un archivo" };
     }
 
     const maxBytes = MAX_BYTES_BY_KIND[kind] ?? 50 * 1024 * 1024;

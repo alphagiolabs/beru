@@ -16,6 +16,8 @@
   "common.continue": "Continue",
   "common.back": "Back",
 
+  "dialog.confirmTitle": "Confirm action",
+
   "header.selectOutput": "Output folder",
   "header.openOutput": "Open output folder",
   "header.processAll": "Process all",

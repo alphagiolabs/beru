@@ -532,8 +532,7 @@ def find_ffmpeg():
 
     candidates = [
         project_root / "src-tauri" / "bin" / f"ffmpeg{_exe}",   # dev: beru/src-tauri/bin
-        project_root / "bin" / f"ffmpeg{_exe}",                  # dev fallback
-        project_root / "bin" / f"ffmpeg{_exe}",                  # packaged: resources/bin/ (python is resources/python/)
+        project_root / "bin" / f"ffmpeg{_exe}",                  # dev: beru/bin/  OR  packaged: resources/bin/
     ]
     for c in candidates:
         if c.exists():
@@ -1366,12 +1365,11 @@ def _is_resource_pressure_error(stderr_text):
 def _stderr_buffer_append(buffer, line):
     """Keep stderr bounded while streaming FFmpeg output."""
     buffer.append(line)
-    while len(buffer) > MAX_STDERR_LINES:
+    while buffer and (
+        len(buffer) > MAX_STDERR_LINES
+        or len("".join(buffer)) > MAX_STDERR_CHARS
+    ):
         buffer.pop(0)
-    joined = "".join(buffer)
-    while len(joined) > MAX_STDERR_CHARS and buffer:
-        buffer.pop(0)
-        joined = "".join(buffer)
 
 
 def _retry_failed_enabled():
@@ -1408,6 +1406,45 @@ def _extract_error_line(stderr_text):
 
 def _remove_partial_output(output_path, input_path=None):
     return remove_partial_output(output_path, input_path, logger=logger)
+
+
+def _output_path_from_ffmpeg_cmd(cmd):
+    """Last non-flag argv token is typically the output file."""
+    if not cmd:
+        return None
+    for token in reversed(cmd):
+        s = str(token)
+        if s and not s.startswith("-"):
+            return s
+    return None
+
+
+def _input_path_from_ffmpeg_cmd(cmd):
+    """First path argument after -i."""
+    if not cmd:
+        return None
+    args = [str(x) for x in cmd]
+    for i, token in enumerate(args):
+        if token == "-i" and i + 1 < len(args):
+            candidate = args[i + 1]
+            if candidate and not candidate.startswith("-"):
+                return candidate
+    return None
+
+
+def _cleanup_ffmpeg_partial(cmd):
+    output_path = _output_path_from_ffmpeg_cmd(cmd)
+    if output_path:
+        _remove_partial_output(output_path, _input_path_from_ffmpeg_cmd(cmd))
+
+
+def _should_retry_ffmpeg(stderr, attempt):
+    if attempt >= MAX_RETRIES:
+        return False
+    text = str(stderr or "")
+    if _is_transient_error(text):
+        return True
+    return "timeout" in text.lower()
 
 
 def _format_processing_error(raw_error, *, max_workers=None):
@@ -1468,19 +1505,23 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
                 logger.info("FFmpeg finished in %.1fs (job=%s)", elapsed, job_id)
                 return True, None
             stderr = err or ""
-            if _is_transient_error(stderr) and attempt < MAX_RETRIES:
+            if _should_retry_ffmpeg(stderr, attempt):
+                _cleanup_ffmpeg_partial(cmd)
                 logger.warning("Transient error, retry %d/%d: %s",
                                attempt + 1, MAX_RETRIES, (stderr or "")[:150])
                 time.sleep(RETRY_DELAYS[attempt])
                 continue
+            _cleanup_ffmpeg_partial(cmd)
             return False, stderr if stderr else "Unknown error"
         except subprocess.TimeoutExpired:
+            _cleanup_ffmpeg_partial(cmd)
             if attempt < MAX_RETRIES:
                 logger.warning("Timeout, retry %d/%d", attempt + 1, MAX_RETRIES)
                 time.sleep(RETRY_DELAYS[attempt])
                 continue
             return False, f"Timeout after {timeout_sec}s"
         except Exception as e:
+            _cleanup_ffmpeg_partial(cmd)
             if attempt < MAX_RETRIES:
                 logger.warning("Exception, retry %d/%d: %s", attempt + 1, MAX_RETRIES, e)
                 time.sleep(RETRY_DELAYS[attempt])
@@ -1525,6 +1566,7 @@ def _run_ffmpeg_with_progress(cmd, timeout_sec, job_id, duration_sec):
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait(timeout=5)
+        _cleanup_ffmpeg_partial(cmd)
         return False, f"Timeout after {timeout_sec}s"
     stderr = "".join(stderr_lines)
     if proc.returncode == 0:

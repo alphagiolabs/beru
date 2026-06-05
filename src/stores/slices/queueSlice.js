@@ -96,7 +96,9 @@ export function createQueueSlice(set, get) {
       }
       outputName = outputName || `${stem}_beru.${exportFormat}`;
       const outDir = outputDir || item.path.replace(/[\\/][^\\/]*$/, "");
-      return `${outDir.replace(/[\\/]+$/, "")}\\${outputName}`;
+      const base = outDir.replace(/[\\/]+$/, "");
+      const sep = base.includes("\\") ? "\\" : "/";
+      return `${base}${sep}${outputName}`;
     },
 
     /* ── Queue management ───────────────────────────────────────────── */
@@ -117,6 +119,9 @@ export function createQueueSlice(set, get) {
 
     _scheduleThumbnailLoads: (api, toAdd, startIdx) => {
       if (!api?.getThumbnailBatch || toAdd.length === 0) return;
+
+      const THUMB_CHUNK = 12;
+      const MAX_THUMB_BATCHES_IN_FLIGHT = 2;
 
       const applyThumbResults = (paths, results, offset) => {
         if (!Array.isArray(results) || results.length === 0) return;
@@ -146,11 +151,28 @@ export function createQueueSlice(set, get) {
       if (rest.length === 0) return;
 
       const loadRestInChunks = () => {
-        const CHUNK = 12;
-        for (let off = 0; off < rest.length; off += CHUNK) {
-          const slice = rest.slice(off, off + CHUNK);
-          loadChunk(slice, startIdx + firstCount + off);
-        }
+        let nextOff = 0;
+        let inFlight = 0;
+
+        const pump = () => {
+          while (inFlight < MAX_THUMB_BATCHES_IN_FLIGHT && nextOff < rest.length) {
+            const off = nextOff;
+            nextOff += THUMB_CHUNK;
+            const slice = rest.slice(off, off + THUMB_CHUNK);
+            const offset = startIdx + firstCount + off;
+            inFlight++;
+            api
+              .getThumbnailBatch(slice)
+              .then((results) => applyThumbResults(slice, results, offset))
+              .catch(() => {})
+              .finally(() => {
+                inFlight--;
+                pump();
+              });
+          }
+        };
+
+        pump();
       };
 
       if (typeof requestIdleCallback === "function") {

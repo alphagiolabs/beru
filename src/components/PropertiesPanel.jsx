@@ -99,7 +99,7 @@ export default function PropertiesPanel() {
         </span>
       </div>
 
-      {currentRegion ? (
+      {currentRegion && (
         <>
           {/* Coordinate inputs (display in pixels for the current video) */}
           <div className="grid grid-cols-2 gap-2 mb-3">
@@ -604,13 +604,6 @@ export default function PropertiesPanel() {
             </div>
           )}
         </>
-      ) : (
-        <div
-          className="text-[11px] mb-4 leading-relaxed cap-card"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          Dibuja un rectángulo sobre el video. Ajusta con los handles o valores numéricos.
-        </div>
       )}
 
       {/* Batch panel */}

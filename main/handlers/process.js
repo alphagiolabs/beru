@@ -227,19 +227,25 @@ export function registerProcessHandlers(pathSecurity) {
       const runTmpFile = tmpFile;
       const runCancelFile = cancelFile;
 
-      const finishProcessing = (result) => {
+      const cleanupRunArtifacts = () => {
+        try {
+          if (runTmpFile) fs.unlinkSync(runTmpFile);
+        } catch {}
+        try {
+          if (runCancelFile) fs.unlinkSync(runCancelFile);
+        } catch {}
+      };
+
+      const settleRun = (result) => {
         if (settled) return result;
         settled = true;
-        if (!isCurrentRun()) return result;
+        if (!isCurrentRun()) {
+          cleanupRunArtifacts();
+          return result;
+        }
         setPythonProcess(null);
         clearProcessingRun(runId);
-        try {
-          runTmpFile && fs.unlinkSync(runTmpFile);
-        } catch {}
-        try {
-          runCancelFile && fs.unlinkSync(runCancelFile);
-        } catch {}
-        // Only clear shared state if it still belongs to this run
+        cleanupRunArtifacts();
         if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
         return result;
       };
@@ -262,7 +268,9 @@ export function registerProcessHandlers(pathSecurity) {
       return new Promise((resolve) => {
         proc.on("close", (code) => {
           if (!isCurrentRun()) {
-            resolve(finishProcessing({ success: false, code, error: "Processing superseded" }));
+            resolve(
+              settleRun({ success: false, code, error: "Processing superseded", superseded: true }),
+            );
             return;
           }
           if (stdoutBuf.trim()) dispatchProcessorLine(stdoutBuf);
@@ -280,7 +288,7 @@ export function registerProcessHandlers(pathSecurity) {
             }
           }
           resolve(
-            finishProcessing({
+            settleRun({
               success: !failed,
               code,
               error: failed ? errMsg : undefined,
@@ -293,7 +301,7 @@ export function registerProcessHandlers(pathSecurity) {
             setLastProcessingError(err.message);
             sendToRenderer("process:error", err.message);
           }
-          resolve(finishProcessing({ success: false, code: 1, error: err.message }));
+          resolve(settleRun({ success: false, code: 1, error: err.message }));
         });
       });
     } catch (err) {

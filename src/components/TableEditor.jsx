@@ -228,14 +228,9 @@ export default function TableEditor() {
     get().getBatchPreviewPayload(videoIdx, regionId);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.75)" }}
-      onClick={() => get().setShowTableEditor(false)}
-    >
+    <div className="cap-modal-overlay" onClick={() => get().setShowTableEditor(false)}>
       <div
-        className="w-[95vw] max-w-[1200px] max-h-[90vh] flex flex-col rounded-lg shadow-2xl overflow-hidden"
-        style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+        className="cap-modal-panel w-[95vw] max-w-[1200px] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

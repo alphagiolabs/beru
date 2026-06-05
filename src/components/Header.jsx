@@ -125,9 +125,14 @@ export default function Header() {
     setPresetsOpen((v) => !v);
   };
 
-  const handleApplyPreset = (preset) => {
+  const handleApplyPreset = async (preset) => {
     setPresetsOpen(false);
-    if (queueLength > 0 && !confirm(t("header.confirmApplyPreset", { name: preset.name }))) return;
+    if (queueLength > 0) {
+      const ok = await get().requestConfirm({
+        message: t("header.confirmApplyPreset", { name: preset.name }),
+      });
+      if (!ok) return;
+    }
     const res = get().applyPreset(preset.data);
     if (res.ok) flashToast("ok", t("header.presetApplied", { name: preset.name }));
     else flashToast("err", res.error || t("header.couldNotApply"));
@@ -159,7 +164,10 @@ export default function Header() {
   };
 
   const handleLoadProject = async () => {
-    if (queueLength > 0 && !confirm(t("header.confirmLoadQueue"))) return;
+    if (queueLength > 0) {
+      const ok = await get().requestConfirm({ message: t("header.confirmLoadQueue") });
+      if (!ok) return;
+    }
     const res = await get().loadProject();
     if (res.canceled) return;
     if (res.ok)
@@ -170,7 +178,10 @@ export default function Header() {
   const handleOpenRecent = async (entry) => {
     setRecentOpen(false);
     if (!entry?.path) return;
-    if (queueLength > 0 && !confirm(t("header.confirmLoadRecent"))) return;
+    if (queueLength > 0) {
+      const ok = await get().requestConfirm({ message: t("header.confirmLoadRecent") });
+      if (!ok) return;
+    }
     const res = await get().loadProjectFromPath(entry.path);
     if (res.ok)
       flashToast(
@@ -226,7 +237,10 @@ export default function Header() {
   };
 
   const handleProcessAll = async () => {
-    if (!api) return;
+    if (!api?.startProcessing) {
+      showToast({ kind: "err", text: t("errors.noApi") });
+      return;
+    }
     get().setBatchSummary(null);
 
     const { templateRegions, sidebarMode } = get();
@@ -692,13 +706,11 @@ export default function Header() {
 
       {testResult && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.5)" }}
+          className="cap-modal-overlay"
           onClick={() => testResult.status !== "running" && setTestResult(null)}
         >
           <div
-            className="rounded-lg shadow-2xl p-5 w-[420px]"
-            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+            className="cap-modal-panel max-w-[420px] p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
@@ -773,14 +785,9 @@ export default function Header() {
       )}
 
       {savePresetOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.5)" }}
-          onClick={() => setSavePresetOpen(false)}
-        >
+        <div className="cap-modal-overlay" onClick={() => setSavePresetOpen(false)}>
           <div
-            className="rounded-lg shadow-2xl p-5 w-[380px]"
-            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+            className="cap-modal-panel max-w-[380px] p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-3">
