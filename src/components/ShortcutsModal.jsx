@@ -3,9 +3,9 @@ import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 
 export default function ShortcutsModal() {
-  const store = useEditorStore();
+  const showShortcuts = useEditorStore((s) => s.showShortcuts);
   const t = useT();
-  if (!store.showShortcuts) return null;
+  if (!showShortcuts) return null;
 
   const groups = [
     {
@@ -67,7 +67,7 @@ export default function ShortcutsModal() {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       style={{ background: "rgba(0,0,0,0.7)" }}
-      onClick={() => store.setShowShortcuts(false)}
+      onClick={() => useEditorStore.getState().setShowShortcuts(false)}
     >
       <div
         className="w-[400px] rounded-lg shadow-2xl"
@@ -80,7 +80,7 @@ export default function ShortcutsModal() {
         >
           <span className="text-sm font-semibold">{t("modal.shortcuts.title")}</span>
           <button
-            onClick={() => store.setShowShortcuts(false)}
+            onClick={() => useEditorStore.getState().setShowShortcuts(false)}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
           >

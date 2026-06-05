@@ -32,6 +32,11 @@ export default function TextOverlay({
   const textOpacity = style.textOpacity ?? 1;
   const align = style.textAlign || "left";
   const boxPad = bgOn ? Math.max(2, (style.boxBorderWidth || 4) * screen.sy) : 0;
+  const shadowX = Number(style.textShadowOffsetX ?? 2) * screen.sy;
+  const shadowY = Number(style.textShadowOffsetY ?? 2) * screen.sy;
+  const textShadow = style.textShadowEnabled
+    ? `${shadowX}px ${shadowY}px 0 ${style.textShadowColor || "black"}`
+    : "none";
 
   return (
     <div
@@ -97,6 +102,7 @@ export default function TextOverlay({
             padding: `${boxPad}px`,
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
+            textShadow,
             WebkitTextStroke:
               style.borderWidth > 0
                 ? `${style.borderWidth * screen.sy}px ${style.borderColor || "black"}`

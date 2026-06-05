@@ -35,7 +35,7 @@ function resolvedDuration(video, fallback) {
 export default function VideoPreview() {
   const {
     selectedIdx,
-    queue,
+    sel,
     sidebarMode,
     activeTool,
     currentRegion,
@@ -47,7 +47,10 @@ export default function VideoPreview() {
   } = useEditorStore(
     (s) => ({
       selectedIdx: s.selectedIdx,
-      queue: s.queue,
+      sel:
+        s.selectedIdx >= 0 && s.selectedIdx < s.queue.length
+          ? s.queue[s.selectedIdx]
+          : null,
       sidebarMode: s.sidebarMode,
       activeTool: s.activeTool,
       currentRegion: s.currentRegion,
@@ -62,7 +65,6 @@ export default function VideoPreview() {
   const setCurrentRegion = useEditorStore((s) => s.setCurrentRegion);
   const updateOperationRegion = useEditorStore((s) => s.updateOperationRegion);
   const getBatchPreviewPayload = useEditorStore((s) => s.getBatchPreviewPayload);
-  const sel = selectedIdx >= 0 && selectedIdx < queue.length ? queue[selectedIdx] : null;
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);

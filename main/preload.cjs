@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("api", {
   readExcel: (path) => ipcRenderer.invoke("fs:readExcel", path),
   startProcessing: (jobs) => ipcRenderer.invoke("process:start", jobs),
   cancelProcessing: () => ipcRenderer.invoke("process:cancel"),
+  exportProcessingLogs: (text) => ipcRenderer.invoke("process:exportLogs", text),
   openPath: (path) => ipcRenderer.invoke("shell:openPath", path),
   showItemInFolder: (path) => ipcRenderer.invoke("shell:showItemInFolder", path),
   saveProject: (payload) => ipcRenderer.invoke("project:save", payload),

@@ -85,7 +85,12 @@ export function createQueueSlice(set, get) {
           templateRegions.find((r) => textFor(r).trim()) ||
           templateRegions.find((r) => String(r.label || "").toUpperCase() === "TEXT_1") ||
           templateRegions[0];
-        const id = videoIdx >= 0 ? get().getExcelDisplayId(videoIdx).replace(/\.[^.]+$/, "") : stem;
+        const id =
+          videoIdx >= 0
+            ? get()
+                .getExcelDisplayId(videoIdx)
+                .replace(/\.[^.]+$/, "")
+            : stem;
         const text = textFor(firstTextRegion);
         outputName = buildIdTextOutputName(id, text, exportFormat);
       }
@@ -296,13 +301,22 @@ export function createQueueSlice(set, get) {
           fontSize: get().textFontSize,
           fontColor: get().textFontColor,
           fontFamily: get().fontFamily,
+          fontWeight: get().fontWeight,
+          letterSpacing: get().letterSpacing,
+          textAlign: get().textAlign,
+          textOpacity: get().textOpacity,
           bold: get().bold,
           italic: get().italic,
           bgEnabled: get().bgEnabled,
           bgColor: get().bgColor,
           bgOpacity: get().bgOpacity,
+          boxBorderWidth: get().boxBorderWidth,
           borderWidth: get().borderWidth,
           borderColor: get().borderColor,
+          textShadowEnabled: get().textShadowEnabled,
+          textShadowColor: get().textShadowColor,
+          textShadowOffsetX: get().textShadowOffsetX,
+          textShadowOffsetY: get().textShadowOffsetY,
           imagePath: get().tempImagePath,
           imageOpacity: get().tempImageOpacity,
           startTime: get().tempStart,
@@ -352,12 +366,14 @@ export function createQueueSlice(set, get) {
     moveOperation: (fromIdx, toIdx) => {
       const { queue, selectedIdx } = get();
       if (selectedIdx < 0) return;
+      const ops = queue[selectedIdx]?.operations;
+      if (!ops || fromIdx < 0 || fromIdx >= ops.length || toIdx < 0 || toIdx > ops.length) return;
       get()._saveUndo();
       const updated = [...queue];
-      const ops = [...updated[selectedIdx].operations];
-      const [moved] = ops.splice(fromIdx, 1);
-      ops.splice(toIdx, 0, moved);
-      updated[selectedIdx] = { ...updated[selectedIdx], operations: ops };
+      const nextOps = [...updated[selectedIdx].operations];
+      const [moved] = nextOps.splice(fromIdx, 1);
+      nextOps.splice(toIdx, 0, moved);
+      updated[selectedIdx] = { ...updated[selectedIdx], operations: nextOps };
       set({ queue: updated });
     },
 
@@ -450,6 +466,10 @@ export function createQueueSlice(set, get) {
         boxBorderWidth,
         borderWidth,
         borderColor,
+        textShadowEnabled,
+        textShadowColor,
+        textShadowOffsetX,
+        textShadowOffsetY,
       } = get();
       if (videoIdx < 0 || videoIdx >= queue.length) return -1;
       const tr = templateRegions.find((r) => r.id === regionId);
@@ -474,6 +494,10 @@ export function createQueueSlice(set, get) {
         boxBorderWidth,
         borderWidth,
         borderColor,
+        textShadowEnabled,
+        textShadowColor,
+        textShadowOffsetX,
+        textShadowOffsetY,
       });
       const updated = [...queue];
       updated[videoIdx] = {

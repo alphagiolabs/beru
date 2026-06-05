@@ -1,4 +1,5 @@
 import { Bold, Italic, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
+import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS } from "../utils/types";
 
@@ -38,9 +39,8 @@ function normalizeColor(c) {
 }
 
 export default function StyleEditor() {
-  const store = useEditorStore();
-  const isBatch = store.sidebarMode === "batch";
   const {
+    isBatch,
     fontFamily,
     bold,
     italic,
@@ -56,26 +56,65 @@ export default function StyleEditor() {
     textAlign,
     textOpacity,
     boxBorderWidth,
-  } = store;
+    textShadowEnabled,
+    textShadowColor,
+    textShadowOffsetX,
+    textShadowOffsetY,
+  } = useEditorStore(
+    (s) => ({
+      isBatch: s.sidebarMode === "batch",
+      fontFamily: s.fontFamily,
+      bold: s.bold,
+      italic: s.italic,
+      textFontSize: s.textFontSize,
+      textFontColor: s.textFontColor,
+      bgEnabled: s.bgEnabled,
+      bgColor: s.bgColor,
+      bgOpacity: s.bgOpacity,
+      borderWidth: s.borderWidth,
+      borderColor: s.borderColor,
+      fontWeight: s.fontWeight,
+      letterSpacing: s.letterSpacing,
+      textAlign: s.textAlign,
+      textOpacity: s.textOpacity,
+      boxBorderWidth: s.boxBorderWidth,
+      textShadowEnabled: s.textShadowEnabled,
+      textShadowColor: s.textShadowColor,
+      textShadowOffsetX: s.textShadowOffsetX,
+      textShadowOffsetY: s.textShadowOffsetY,
+    }),
+    shallow,
+  );
 
   const patch = (stylePatch) => {
-    if (isBatch) store.patchBatchTextStyle(stylePatch);
+    const getState = useEditorStore.getState;
+    if (isBatch) getState().patchBatchTextStyle(stylePatch);
     else {
-      if (stylePatch.fontSize != null) store.setTextFontSize(stylePatch.fontSize);
-      if (stylePatch.fontColor != null) store.setTextFontColor(stylePatch.fontColor);
-      if (stylePatch.fontFamily != null) store.setFontFamily(stylePatch.fontFamily);
-      if (stylePatch.fontWeight != null) store.setFontWeight(stylePatch.fontWeight);
-      if (stylePatch.letterSpacing != null) store.setLetterSpacing(stylePatch.letterSpacing);
-      if (stylePatch.textAlign != null) store.setTextAlign(stylePatch.textAlign);
-      if (stylePatch.textOpacity != null) store.setTextOpacity(stylePatch.textOpacity);
-      if (stylePatch.bold != null) store.setBold(stylePatch.bold);
-      if (stylePatch.italic != null) store.setItalic(stylePatch.italic);
-      if (stylePatch.bgEnabled != null) store.setBgEnabled(stylePatch.bgEnabled);
-      if (stylePatch.bgColor != null) store.setBgColor(stylePatch.bgColor);
-      if (stylePatch.bgOpacity != null) store.setBgOpacity(stylePatch.bgOpacity);
-      if (stylePatch.boxBorderWidth != null) store.setBoxBorderWidth(stylePatch.boxBorderWidth);
-      if (stylePatch.borderWidth != null) store.setBorderWidth(stylePatch.borderWidth);
-      if (stylePatch.borderColor != null) store.setBorderColor(stylePatch.borderColor);
+      if (stylePatch.fontSize != null) getState().setTextFontSize(stylePatch.fontSize);
+      if (stylePatch.fontColor != null) getState().setTextFontColor(stylePatch.fontColor);
+      if (stylePatch.fontFamily != null) getState().setFontFamily(stylePatch.fontFamily);
+      if (stylePatch.fontWeight != null) getState().setFontWeight(stylePatch.fontWeight);
+      if (stylePatch.letterSpacing != null) getState().setLetterSpacing(stylePatch.letterSpacing);
+      if (stylePatch.textAlign != null) getState().setTextAlign(stylePatch.textAlign);
+      if (stylePatch.textOpacity != null) getState().setTextOpacity(stylePatch.textOpacity);
+      if (stylePatch.bold != null) getState().setBold(stylePatch.bold);
+      if (stylePatch.italic != null) getState().setItalic(stylePatch.italic);
+      if (stylePatch.bgEnabled != null) getState().setBgEnabled(stylePatch.bgEnabled);
+      if (stylePatch.bgColor != null) getState().setBgColor(stylePatch.bgColor);
+      if (stylePatch.bgOpacity != null) getState().setBgOpacity(stylePatch.bgOpacity);
+      if (stylePatch.boxBorderWidth != null) getState().setBoxBorderWidth(stylePatch.boxBorderWidth);
+      if (stylePatch.borderWidth != null) getState().setBorderWidth(stylePatch.borderWidth);
+      if (stylePatch.borderColor != null) getState().setBorderColor(stylePatch.borderColor);
+      if (stylePatch.textShadowEnabled != null) {
+        getState().setTextShadowEnabled(stylePatch.textShadowEnabled);
+      }
+      if (stylePatch.textShadowColor != null) getState().setTextShadowColor(stylePatch.textShadowColor);
+      if (stylePatch.textShadowOffsetX != null) {
+        getState().setTextShadowOffsetX(stylePatch.textShadowOffsetX);
+      }
+      if (stylePatch.textShadowOffsetY != null) {
+        getState().setTextShadowOffsetY(stylePatch.textShadowOffsetY);
+      }
     }
   };
 
@@ -357,6 +396,74 @@ export default function StyleEditor() {
             </div>
           </label>
         </div>
+      </div>
+
+      <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="cap-input-label !mb-0">Sombra</span>
+          <label
+            className="flex items-center gap-1.5 text-[10px] cursor-pointer"
+            style={{ color: "var(--text-dim)" }}
+          >
+            <input
+              type="checkbox"
+              checked={!!textShadowEnabled}
+              onChange={(e) => patch({ textShadowEnabled: e.target.checked })}
+            />{" "}
+            activa
+          </label>
+        </div>
+        {textShadowEnabled && (
+          <div className="space-y-1.5">
+            <label>
+              <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                Color
+              </span>
+              <div className="flex gap-1">
+                <input
+                  type="color"
+                  value={normalizeColor(textShadowColor) || "#000000"}
+                  onChange={(e) => patch({ textShadowColor: e.target.value })}
+                  className="w-6 h-6 rounded border-0 p-0 cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={textShadowColor}
+                  onChange={(e) => patch({ textShadowColor: e.target.value })}
+                  className="cap-input flex-1 font-mono text-[10px]"
+                />
+              </div>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label>
+                <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                  Offset X
+                </span>
+                <input
+                  type="number"
+                  value={textShadowOffsetX ?? 2}
+                  onChange={(e) => patch({ textShadowOffsetX: Number(e.target.value) })}
+                  className="cap-input font-mono text-[11px]"
+                  min={-64}
+                  max={64}
+                />
+              </label>
+              <label>
+                <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                  Offset Y
+                </span>
+                <input
+                  type="number"
+                  value={textShadowOffsetY ?? 2}
+                  onChange={(e) => patch({ textShadowOffsetY: Number(e.target.value) })}
+                  className="cap-input font-mono text-[11px]"
+                  min={-64}
+                  max={64}
+                />
+              </label>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

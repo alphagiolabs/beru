@@ -3,17 +3,18 @@ import { Save, Trash2 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 
 export default function PresetManager() {
-  const store = useEditorStore();
+  const presets = useEditorStore((s) => s.presets);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const getState = useEditorStore.getState;
 
   const handleSave = async () => {
     const cleanName = name.trim();
     if (!cleanName || saving) return;
     setSaving(true);
     setFeedback(null);
-    const res = await store.savePreset(cleanName);
+    const res = await getState().savePreset(cleanName);
     setSaving(false);
     if (res?.ok) {
       setName("");
@@ -55,18 +56,18 @@ export default function PresetManager() {
         </div>
       )}
       <div className="flex flex-wrap gap-1 max-h-[100px] overflow-y-auto">
-        {store.presets.map((p) => (
+        {presets.map((p) => (
           <div
             key={p.id}
             className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] cursor-pointer"
             style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-            onClick={() => store.loadPreset(p)}
+            onClick={() => getState().loadPreset(p)}
           >
             <span style={{ color: "var(--text-secondary)" }}>{p.name}</span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                store.deletePreset(p.id);
+                getState().deletePreset(p.id);
               }}
               style={{ color: "var(--text-dim)" }}
               className="hover:text-red-400"

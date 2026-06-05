@@ -69,6 +69,10 @@ const BASE_STATE = {
   boxBorderWidth: 4,
   borderWidth: 0,
   borderColor: "black",
+  textShadowEnabled: false,
+  textShadowColor: "black",
+  textShadowOffsetX: 2,
+  textShadowOffsetY: 2,
   // Delogo defaults
   blurStrength: 20,
   delogoMethod: "temporal",
@@ -233,6 +237,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
               bgColor: "white",
               bgOpacity: 0.5,
               boxBorderWidth: 6,
+              textShadowEnabled: true,
+              textShadowColor: "#111111",
+              textShadowOffsetX: 3,
+              textShadowOffsetY: 4,
             },
           ],
         }),
@@ -258,6 +266,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[2].bg_color).toBe("white");
     expect(job.operations[2].bg_opacity).toBe(0.5);
     expect(job.operations[2].box_border_width).toBe(6);
+    expect(job.operations[2].text_shadow_enabled).toBe(true);
+    expect(job.operations[2].text_shadow_color).toBe("#111111");
+    expect(job.operations[2].text_shadow_offset_x).toBe(3);
+    expect(job.operations[2].text_shadow_offset_y).toBe(4);
   });
 
   // ═══════════════════════════════════════════════════════════════════
@@ -269,7 +281,12 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     useEditorStore.setState({
       queue: [queueItem(0)],
       templateRegions: [
-        { id: "r1", label: "TEXT_1", region, style: { fontSize: 48, fontColor: "#ff0000" } },
+        {
+          id: "r1",
+          label: "TEXT_1",
+          region,
+          style: { fontSize: 48, fontColor: "#ff0000", textShadowOffsetX: 6 },
+        },
       ],
       excelRows: [{ id: "video_0", TEXT_1: "Nombre" }],
       excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
@@ -288,6 +305,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
       boxBorderWidth: 4,
       borderWidth: 2,
       borderColor: "white",
+      textShadowEnabled: true,
+      textShadowColor: "#000000",
+      textShadowOffsetX: 2,
+      textShadowOffsetY: 3,
     });
 
     useEditorStore.getState().materializeBatchTextOps();
@@ -311,6 +332,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(ops[0].boxBorderWidth).toBe(4);
     expect(ops[0].borderWidth).toBe(2);
     expect(ops[0].borderColor).toBe("white");
+    expect(ops[0].textShadowEnabled).toBe(true);
+    expect(ops[0].textShadowColor).toBe("#000000");
+    expect(ops[0].textShadowOffsetX).toBe(6);
+    expect(ops[0].textShadowOffsetY).toBe(3);
   });
 
   it("_reapplyExcel produces same text ops as before the refactor", () => {

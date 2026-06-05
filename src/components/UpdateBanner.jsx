@@ -26,9 +26,9 @@ function formatBytes(value) {
 }
 
 export default function UpdateBanner() {
-  const store = useEditorStore();
+  const update = useEditorStore((s) => s.update);
   const t = useT();
-  const { update } = store;
+  const getState = useEditorStore.getState;
 
   if (
     !update ||
@@ -83,7 +83,7 @@ export default function UpdateBanner() {
               </h2>
               <button
                 type="button"
-                onClick={() => store.dismissUpdateBanner()}
+                onClick={() => getState().dismissUpdateBanner()}
                 className="mt-0.5 rounded p-1 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-white/30"
                 title={t("updater.minimize")}
                 aria-label={t("updater.minimize")}
@@ -169,7 +169,7 @@ export default function UpdateBanner() {
 
       {status === "available" && (
         <button
-          onClick={() => store.downloadUpdate()}
+          onClick={() => getState().downloadUpdate()}
           className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold"
           style={{ background: styles.fg, color: "#000" }}
         >
@@ -178,7 +178,7 @@ export default function UpdateBanner() {
       )}
       {status === "ready" && (
         <button
-          onClick={() => store.installUpdate()}
+          onClick={() => getState().installUpdate()}
           className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold"
           style={{ background: styles.fg, color: "#000" }}
         >
@@ -187,7 +187,7 @@ export default function UpdateBanner() {
       )}
       {status !== "downloading" && (
         <button
-          onClick={() => store.dismissUpdateBanner()}
+          onClick={() => getState().dismissUpdateBanner()}
           className="p-0.5 rounded hover:bg-white/10"
           title={t("updater.dismiss")}
         >

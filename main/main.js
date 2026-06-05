@@ -1,4 +1,5 @@
 import { app, BrowserWindow, protocol } from "electron";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createPathSecurity } from "./pathSecurity.js";
@@ -23,6 +24,50 @@ const isDev = !app.isPackaged;
 let quitCleanupStarted = false;
 
 const pathSecurity = createPathSecurity(app);
+
+// ── Global cleanup helpers ───────────────────────────────────────────
+
+function cleanupTempFiles() {
+  try {
+    const tmpDir = app.getPath("temp");
+    const files = fs.readdirSync(tmpDir);
+    for (const f of files) {
+      if (f.startsWith("beru-jobs-") && (f.endsWith(".json") || f.endsWith(".cancel"))) {
+        try {
+          fs.unlinkSync(path.join(tmpDir, f));
+        } catch {}
+      }
+    }
+  } catch {}
+}
+
+function onFatalError(err) {
+  console.error("[beru] FATAL:", err);
+  try {
+    cleanupTempFiles();
+    const proc = getPythonProcess();
+    if (proc?.pid) {
+      try {
+        proc.kill();
+      } catch {}
+    }
+  } catch {}
+  app.quit();
+}
+
+app.on("will-quit", (event) => {
+  if (quitCleanupStarted) return;
+  event.preventDefault();
+  quitCleanupStarted = true;
+  cleanupTempFiles();
+  cancelActiveProcessing().finally(() => {
+    app.quit();
+  });
+});
+
+app.on("render-process-gone", (event, _webContents, details) => {
+  console.error("[beru] renderer process gone:", details.reason, details.exitCode);
+});
 
 // ── Register beru:// protocol before app is ready ────────────────────────────
 protocol.registerSchemesAsPrivileged([
@@ -59,13 +104,8 @@ app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
 // ── App lifecycle ─────────────────────────────────────────────────────────
 
-process.on("uncaughtException", (err) => {
-  console.error("[beru] uncaughtException:", err);
-});
-
-process.on("unhandledRejection", (reason) => {
-  console.error("[beru] unhandledRejection:", reason);
-});
+process.on("uncaughtException", onFatalError);
+process.on("unhandledRejection", onFatalError);
 
 app.whenReady().then(() => {
   registerBeruProtocol();

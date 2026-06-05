@@ -2,6 +2,9 @@ import { denormalizeRegion } from "../../utils/types";
 import { sanitizeOperation } from "../../utils/delogo-ops";
 import { filterOperationsForExport, hasVideoDimensions } from "../../utils/batch-process";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
+import { textStyleToPythonPayload } from "../../utils/text-style";
+import { createJobManifest } from "../../utils/job-manifest";
+import { appendProcessingLog, formatProcessingLogs } from "../../utils/processing-logs";
 
 function isQueueJobIndex(idx, queueLength) {
   return Number.isInteger(idx) && idx >= 0 && idx < queueLength;
@@ -23,8 +26,17 @@ export function createProcessingSlice(set, get) {
 
     appendLog: (line) =>
       set((s) => ({
-        logLines: [...s.logLines.slice(-199), line],
+        logLines: appendProcessingLog(s.logLines, line),
       })),
+
+    exportProcessingLogsText: () =>
+      formatProcessingLogs(get().logLines, {
+        summary: get().batchSummary
+          ? `${get().batchSummary.succeeded || 0}/${get().batchSummary.total || 0} OK, ${
+              get().batchSummary.failed || 0
+            } failed`
+          : "",
+      }),
 
     updateProcessingProgress: (msg) =>
       set((s) => {
@@ -57,7 +69,7 @@ export function createProcessingSlice(set, get) {
         updated[idx] = { ...updated[idx], status: "done", progress: 100, error: null };
         return {
           queue: updated,
-          progressDone: s.progressDone + 1,
+          progressDone: Math.min(s.progressDone + 1, s.progressTotal),
         };
       }),
 
@@ -69,7 +81,7 @@ export function createProcessingSlice(set, get) {
         updated[idx] = { ...updated[idx], status: "error", error: msg.error };
         return {
           queue: updated,
-          progressDone: s.progressDone + 1,
+          progressDone: Math.min(s.progressDone + 1, s.progressTotal),
         };
       }),
 
@@ -161,21 +173,7 @@ export function createProcessingSlice(set, get) {
             mirror_side: safe.mirrorSide,
             edge_feather: safe.edgeFeather,
             text: safe.text,
-            font_size: safe.fontSize,
-            font_color: safe.fontColor,
-            font_family: safe.fontFamily,
-            font_weight: safe.fontWeight,
-            letter_spacing: safe.letterSpacing,
-            text_align: safe.textAlign,
-            text_opacity: safe.textOpacity,
-            bold: safe.bold,
-            italic: safe.italic,
-            bg_enabled: safe.bgEnabled,
-            bg_color: safe.bgColor,
-            bg_opacity: safe.bgOpacity,
-            box_border_width: safe.boxBorderWidth,
-            border_width: safe.borderWidth,
-            border_color: safe.borderColor,
+            ...textStyleToPythonPayload(safe),
             image_path: safe.imagePath,
             image_opacity: safe.imageOpacity,
             start_time: safe.startTime,
@@ -214,7 +212,9 @@ export function createProcessingSlice(set, get) {
       set({ queue: updated });
 
       try {
-        const result = await api.startProcessing([job]);
+        const result = await api.startProcessing(
+          createJobManifest([job], { profile: get().encodeProfile }),
+        );
         const itemError = get().queue[videoIdx]?.error;
         return {
           ok: !!result?.success,

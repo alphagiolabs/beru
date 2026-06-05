@@ -44,8 +44,16 @@ export function registerVideoHandlers(pathSecurity) {
 
   ipcMain.handle("video:thumbnailBatch", async (_event, filePaths) => {
     if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
+    const validated = filePaths
+      .map((p) => pathSecurity.validateReadableFile(p, "video"))
+      .filter((c) => c.ok);
+    if (validated.length === 0) return [];
     const cpus = os.cpus()?.length || 4;
-    const limit = Math.max(2, Math.min(8, filePaths.length, cpus));
-    return await runWithConcurrency(filePaths, limit, (p) => extractThumbnail(p, 80));
+    const limit = Math.max(2, Math.min(8, validated.length, cpus));
+    return await runWithConcurrency(
+      validated.map((c) => c.resolvedPath),
+      limit,
+      (p) => extractThumbnail(p, 80),
+    );
   });
 }

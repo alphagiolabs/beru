@@ -19,8 +19,7 @@ const DELOGO_ICONS = {
 
 export default function PropertiesPanel() {
   const {
-    selectedIdx,
-    queue,
+    sel,
     currentRegion,
     activeTool,
     sidebarMode,
@@ -38,8 +37,10 @@ export default function PropertiesPanel() {
     edgeFeather,
   } = useEditorStore(
     (s) => ({
-      selectedIdx: s.selectedIdx,
-      queue: s.queue,
+      sel:
+        s.selectedIdx >= 0 && s.selectedIdx < s.queue.length
+          ? s.queue[s.selectedIdx]
+          : null,
       currentRegion: s.currentRegion,
       activeTool: s.activeTool,
       sidebarMode: s.sidebarMode,
@@ -61,7 +62,6 @@ export default function PropertiesPanel() {
   const showToast = useEditorStore((s) => s.showToast);
   const get = useEditorStore.getState;
   const t = useT();
-  const sel = selectedIdx >= 0 && selectedIdx < queue.length ? queue[selectedIdx] : null;
 
   return (
     <div className="cap-section">

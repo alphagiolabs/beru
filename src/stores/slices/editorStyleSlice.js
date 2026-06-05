@@ -1,4 +1,4 @@
-import { patchToGlobalState } from "../../utils/text-style";
+import { GLOBAL_TEXT_STYLE_DEFAULTS, patchToGlobalState } from "../../utils/text-style";
 
 /** Active tool, sidebar mode, text/blur/delogo defaults, and style setters. */
 export function createEditorStyleSlice(set, get) {
@@ -6,22 +6,7 @@ export function createEditorStyleSlice(set, get) {
     activeTool: "blur",
     sidebarMode: "logo",
 
-    textInput: "Sample Text",
-    textFontSize: 32,
-    textFontColor: "white",
-    fontFamily: "Arial",
-    fontWeight: 400,
-    letterSpacing: 0,
-    textAlign: "left",
-    textOpacity: 1,
-    bold: false,
-    italic: false,
-    bgEnabled: true,
-    bgColor: "black",
-    bgOpacity: 0.65,
-    boxBorderWidth: 4,
-    borderWidth: 0,
-    borderColor: "black",
+    ...GLOBAL_TEXT_STYLE_DEFAULTS,
     blurStrength: 20,
     delogoMethod: "temporal",
     delogoFillColor: "black",
@@ -51,8 +36,13 @@ export function createEditorStyleSlice(set, get) {
         bgEnabled: preset.bgEnabled,
         bgColor: preset.bgColor,
         bgOpacity: preset.bgOpacity,
+        boxBorderWidth: preset.boxBorderWidth,
         borderWidth: preset.borderWidth,
         borderColor: preset.borderColor,
+        textShadowEnabled: preset.textShadowEnabled,
+        textShadowColor: preset.textShadowColor,
+        textShadowOffsetX: preset.textShadowOffsetX,
+        textShadowOffsetY: preset.textShadowOffsetY,
       };
       if (get().sidebarMode === "batch") {
         get().patchBatchTextStyle(stylePatch);
@@ -84,6 +74,10 @@ export function createEditorStyleSlice(set, get) {
     setBgOpacity: (val) => set({ bgOpacity: Number(val) }),
     setBorderWidth: (val) => set({ borderWidth: Number(val) }),
     setBorderColor: (val) => set({ borderColor: val }),
+    setTextShadowEnabled: (val) => set({ textShadowEnabled: !!val }),
+    setTextShadowColor: (val) => set({ textShadowColor: val }),
+    setTextShadowOffsetX: (val) => set({ textShadowOffsetX: Number(val) }),
+    setTextShadowOffsetY: (val) => set({ textShadowOffsetY: Number(val) }),
     setBlurStrength: (val) => set({ blurStrength: Number(val) }),
     setTempStart: (val) => set({ tempStart: val === null || val === "" ? null : Number(val) }),
     setTempEnd: (val) => set({ tempEnd: val === null || val === "" ? null : Number(val) }),

@@ -1,4 +1,5 @@
 import { Trash2, Copy, ChevronUp, ChevronDown } from "lucide-react";
+import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 
@@ -16,11 +17,19 @@ const colors = {
 };
 
 export default function LayerList() {
-  const store = useEditorStore();
+  const { selectedIdx, ops } = useEditorStore(
+    (s) => ({
+      selectedIdx: s.selectedIdx,
+      ops:
+        s.selectedIdx >= 0 && s.selectedIdx < s.queue.length
+          ? s.queue[s.selectedIdx].operations
+          : null,
+    }),
+    shallow,
+  );
   const t = useT();
-  const sel = store.selected();
-  if (!sel) return null;
-  const ops = sel.operations;
+  const getState = useEditorStore.getState;
+  if (!ops) return null;
 
   return (
     <div className="cap-section">
@@ -54,7 +63,7 @@ export default function LayerList() {
               </span>
               <div className="flex items-center gap-0.5">
                 <button
-                  onClick={() => store.moveOperation(i, i - 1)}
+                  onClick={() => getState().moveOperation(i, i - 1)}
                   disabled={i === 0}
                   className="text-[10px] p-0.5 rounded hover:bg-white/10"
                   style={{ color: "var(--text-dim)" }}
@@ -62,7 +71,7 @@ export default function LayerList() {
                   <ChevronUp size={12} />
                 </button>
                 <button
-                  onClick={() => store.moveOperation(i, i + 1)}
+                  onClick={() => getState().moveOperation(i, i + 1)}
                   disabled={i === ops.length - 1}
                   className="text-[10px] p-0.5 rounded hover:bg-white/10"
                   style={{ color: "var(--text-dim)" }}
@@ -70,7 +79,7 @@ export default function LayerList() {
                   <ChevronDown size={12} />
                 </button>
                 <button
-                  onClick={() => store.duplicateOperation(i)}
+                  onClick={() => getState().duplicateOperation(i)}
                   className="text-[10px] p-0.5 rounded hover:bg-white/10"
                   style={{ color: "var(--text-dim)" }}
                   title={t("props.actions.duplicate")}
@@ -78,7 +87,7 @@ export default function LayerList() {
                   <Copy size={12} />
                 </button>
                 <button
-                  onClick={() => store.removeOperation(i)}
+                  onClick={() => getState().removeOperation(i)}
                   className="text-[10px] p-0.5 rounded hover:bg-red-500/20 hover:text-red-400"
                   style={{ color: "var(--text-dim)" }}
                 >

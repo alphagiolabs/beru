@@ -31,9 +31,15 @@ describe("sanitize-preset", () => {
       textFontSize: 9999,
       textOpacity: 4,
       letterSpacing: -5,
+      textShadowEnabled: true,
+      textShadowOffsetX: 999,
+      textShadowOffsetY: -999,
     });
     expect(style.textFontSize).toBe(200);
     expect(style.textOpacity).toBe(1);
     expect(style.letterSpacing).toBe(0);
+    expect(style.textShadowEnabled).toBe(true);
+    expect(style.textShadowOffsetX).toBe(64);
+    expect(style.textShadowOffsetY).toBe(-64);
   });
 });

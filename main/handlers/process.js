@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, dialog } from "electron";
 import { spawn, execFile } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -23,6 +23,7 @@ import { probeVideo } from "../utils/video-cache.js";
 import { readSettings } from "../utils/settings.js";
 import { sendToRenderer } from "../utils/renderer.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
+import { createProcessorManifest, unwrapJobManifest } from "../utils/jobManifest.js";
 
 function resolvePythonSpawn() {
   if (process.env.BERU_PYTHON && fs.existsSync(process.env.BERU_PYTHON)) {
@@ -114,11 +115,11 @@ export async function cancelActiveProcessing() {
 }
 
 export function registerProcessHandlers(pathSecurity) {
-  ipcMain.handle("process:start", async (_event, jobs) => {
-    if (getIsProcessing()) {
-      return { success: false, error: "Ya hay un proceso en ejecución" };
+  ipcMain.handle("process:start", async (_event, payload) => {
+    const { jobs, manifest, error } = unwrapJobManifest(payload);
+    if (error) {
+      return { success: false, error };
     }
-
     if (!Array.isArray(jobs) || jobs.length === 0) {
       return { success: false, error: "No hay videos para procesar" };
     }
@@ -184,7 +185,10 @@ export function registerProcessHandlers(pathSecurity) {
         }),
       );
 
-      await fs.promises.writeFile(tmpFile, JSON.stringify(enrichedJobs));
+      await fs.promises.writeFile(
+        tmpFile,
+        JSON.stringify(createProcessorManifest(manifest, enrichedJobs)),
+      );
 
       const firstProfile = enrichedJobs[0]?.encode_profile || "balanced";
       const settings = readSettings();
@@ -306,5 +310,17 @@ export function registerProcessHandlers(pathSecurity) {
   ipcMain.handle("process:cancel", async () => {
     await cancelActiveProcessing();
     return { success: true };
+  });
+
+  ipcMain.handle("process:exportLogs", async (_event, text) => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const res = await dialog.showSaveDialog({
+      title: "Exportar logs de procesamiento",
+      defaultPath: path.join(app.getPath("documents"), `beru-processing-${stamp}.txt`),
+      filters: [{ name: "Text", extensions: ["txt"] }],
+    });
+    if (res.canceled || !res.filePath) return { success: false, canceled: true };
+    await fs.promises.writeFile(res.filePath, String(text || ""), "utf8");
+    return { success: true, filePath: res.filePath };
   });
 }

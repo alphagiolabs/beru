@@ -26,6 +26,7 @@ import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
 import useEditorStore from "../stores/useEditorStore";
 import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
 import { hasVideoDimensions, listVideosMissingBatchText } from "../utils/batch-process";
+import { createJobManifest } from "../utils/job-manifest";
 
 const api = window.api;
 
@@ -38,7 +39,7 @@ export default function Header() {
     batchWorkers,
     batchRetryFailed,
     outputDir,
-    queue,
+    queueLength,
     templateRegions,
     selectedIdx,
     presets,
@@ -54,7 +55,7 @@ export default function Header() {
       batchWorkers: s.batchWorkers,
       batchRetryFailed: s.batchRetryFailed,
       outputDir: s.outputDir,
-      queue: s.queue,
+      queueLength: s.queue.length,
       templateRegions: s.templateRegions,
       selectedIdx: s.selectedIdx,
       presets: s.presets,
@@ -92,15 +93,16 @@ export default function Header() {
   useEffect(() => {
     if (!api?.getBatchCapacity) return undefined;
     let cancelled = false;
-    const jobCount = Math.max(1, queue.length);
+    const currentQueue = get().queue;
+    const jobCount = Math.max(1, currentQueue.length);
     let maxSourcePixels = 0;
-    for (const item of queue) {
+    for (const item of currentQueue) {
       const w = Number(item.sourceWidth || item.width || 0);
       const h = Number(item.sourceHeight || item.height || 0);
       if (w > 0 && h > 0) maxSourcePixels = Math.max(maxSourcePixels, w * h);
     }
     const hasVideoFilters =
-      templateRegions.length > 0 || queue.some((item) => (item.operations || []).length > 0);
+      templateRegions.length > 0 || currentQueue.some((item) => (item.operations || []).length > 0);
     api
       .getBatchCapacity({ jobCount, maxSourcePixels, hasVideoFilters, encodeProfile })
       .then((cap) => {
@@ -112,7 +114,7 @@ export default function Header() {
     return () => {
       cancelled = true;
     };
-  }, [queue, templateRegions, encodeProfile]);
+  }, [queueLength, templateRegions, encodeProfile]);
 
   const flashToast = (kind, text) => showToast({ kind, text });
 
@@ -125,7 +127,7 @@ export default function Header() {
 
   const handleApplyPreset = (preset) => {
     setPresetsOpen(false);
-    if (queue.length > 0 && !confirm(t("header.confirmApplyPreset", { name: preset.name }))) return;
+    if (queueLength > 0 && !confirm(t("header.confirmApplyPreset", { name: preset.name }))) return;
     const res = get().applyPreset(preset.data);
     if (res.ok) flashToast("ok", t("header.presetApplied", { name: preset.name }));
     else flashToast("err", res.error || t("header.couldNotApply"));
@@ -157,7 +159,7 @@ export default function Header() {
   };
 
   const handleLoadProject = async () => {
-    if (queue.length > 0 && !confirm(t("header.confirmLoadQueue"))) return;
+    if (queueLength > 0 && !confirm(t("header.confirmLoadQueue"))) return;
     const res = await get().loadProject();
     if (res.canceled) return;
     if (res.ok)
@@ -168,7 +170,7 @@ export default function Header() {
   const handleOpenRecent = async (entry) => {
     setRecentOpen(false);
     if (!entry?.path) return;
-    if (queue.length > 0 && !confirm(t("header.confirmLoadRecent"))) return;
+    if (queueLength > 0 && !confirm(t("header.confirmLoadRecent"))) return;
     const res = await get().loadProjectFromPath(entry.path);
     if (res.ok)
       flashToast(
@@ -288,7 +290,7 @@ export default function Header() {
     });
 
     api
-      .startProcessing(jobs)
+      .startProcessing(createJobManifest(jobs, { profile: get().encodeProfile }))
       .then((result) => {
         if (!result.success) {
           // Runtime failures are toasted via useProcessing → onError; only pre-spawn errors here.
@@ -328,7 +330,7 @@ export default function Header() {
     get().setProcessing(false);
   };
 
-  const canTest = !isProcessing && selectedIdx >= 0 && selectedIdx < queue.length;
+  const canTest = !isProcessing && selectedIdx >= 0 && selectedIdx < queueLength;
 
   return (
     <header
@@ -438,7 +440,7 @@ export default function Header() {
         {!isProcessing ? (
           <button
             onClick={handleProcessAll}
-            disabled={queue.length === 0}
+            disabled={queueLength === 0}
             className="cap-btn-primary whitespace-nowrap"
           >
             <Play size={14} /> {t("header.processAll")}

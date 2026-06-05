@@ -60,6 +60,10 @@ export function createProjectSlice(set, get) {
           boxBorderWidth: s.boxBorderWidth,
           borderWidth: s.borderWidth,
           borderColor: s.borderColor,
+          textShadowEnabled: s.textShadowEnabled,
+          textShadowColor: s.textShadowColor,
+          textShadowOffsetX: s.textShadowOffsetX,
+          textShadowOffsetY: s.textShadowOffsetY,
         },
         defaults: {
           blurStrength: s.blurStrength,
@@ -159,6 +163,10 @@ export function createProjectSlice(set, get) {
         boxBorderWidth: textStyle.boxBorderWidth,
         borderWidth: textStyle.borderWidth,
         borderColor: textStyle.borderColor,
+        textShadowEnabled: textStyle.textShadowEnabled,
+        textShadowColor: textStyle.textShadowColor,
+        textShadowOffsetX: textStyle.textShadowOffsetX,
+        textShadowOffsetY: textStyle.textShadowOffsetY,
         blurStrength: defaults.blurStrength,
         delogoMethod: defaults.delogoMethod,
         delogoFillColor: defaults.delogoFillColor,
@@ -187,6 +195,7 @@ export function createProjectSlice(set, get) {
               ? { idColumn: excel.mapping.idColumn ?? null, columns: excel.mapping.columns || {} }
               : { idColumn: null, columns: {} },
         });
+        get()._buildExcelRowIndex();
         get()._reapplyExcel();
       } else {
         set({
@@ -237,6 +246,10 @@ export function createProjectSlice(set, get) {
                 boxBorderWidth: get().boxBorderWidth,
                 borderWidth: get().borderWidth,
                 borderColor: get().borderColor,
+                textShadowEnabled: get().textShadowEnabled,
+                textShadowColor: get().textShadowColor,
+                textShadowOffsetX: get().textShadowOffsetX,
+                textShadowOffsetY: get().textShadowOffsetY,
               }),
             ),
           })),

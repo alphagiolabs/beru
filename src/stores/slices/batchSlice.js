@@ -25,6 +25,7 @@ export function createBatchSlice(set, get) {
     excelRows: [],
     excelMapping: { idColumn: null, columns: {} },
     excelMatchStatus: {},
+    excelRowIndexByFilename: {},
 
     showMappingModal: false,
     showTableEditor: false,
@@ -211,6 +212,7 @@ export function createBatchSlice(set, get) {
           excelMapping: { idColumn, columns },
         });
 
+        get()._buildExcelRowIndex();
         const report = get()._reapplyExcel();
         return {
           success: true,
@@ -239,11 +241,31 @@ export function createBatchSlice(set, get) {
       return tr?.id ?? null;
     },
 
+    _buildExcelRowIndex: () => {
+      const { excelRows, excelMapping } = get();
+      const { idColumn } = excelMapping;
+      if (!idColumn || excelRows.length === 0) {
+        set({ excelRowIndexByFilename: {} });
+        return;
+      }
+      const map = {};
+      for (let i = 0; i < excelRows.length; i++) {
+        const val = rowGet(excelRows[i], idColumn);
+        if (val === undefined || val === null) continue;
+        const key = normalizeMatchId(val);
+        if (key && !(key in map)) map[key] = i;
+      }
+      set({ excelRowIndexByFilename: map });
+    },
+
     getExcelRowIndexForVideo: (videoIdx) => {
-      const { queue, excelRows, excelMapping } = get();
+      const { queue, excelMapping, excelRowIndexByFilename } = get();
       const idColumn = excelMapping.idColumn;
       if (!idColumn || videoIdx < 0 || videoIdx >= queue.length) return -1;
       const id = normalizeMatchId(queue[videoIdx].filename);
+      if (id in excelRowIndexByFilename) return excelRowIndexByFilename[id];
+      // Fallback: linear scan if map stale or missing
+      const { excelRows } = get();
       return excelRows.findIndex((row) => {
         const v = rowGet(row, idColumn);
         return v !== undefined && v !== null && normalizeMatchId(v) === id;
@@ -261,6 +283,7 @@ export function createBatchSlice(set, get) {
         i === rowIdx ? { ...row, [colName]: text } : row,
       );
       set({ excelRows: updatedRows });
+      get()._buildExcelRowIndex();
     },
 
     syncAllOperationsToExcel: () => {
@@ -295,7 +318,10 @@ export function createBatchSlice(set, get) {
         });
       });
 
-      if (changed) set({ excelRows: rows });
+      if (changed) {
+        set({ excelRows: rows });
+        get()._buildExcelRowIndex();
+      }
     },
 
     getCellTextForRegion: (videoIdx, regionId) => {
@@ -425,6 +451,7 @@ export function createBatchSlice(set, get) {
 
     updateExcelMapping: (mapping) => {
       set({ excelMapping: mapping });
+      get()._buildExcelRowIndex();
       get()._reapplyExcel();
     },
 

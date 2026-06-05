@@ -1,4 +1,6 @@
-/** Shared text style shape for preview overlays and batch template regions. */
+/** Shared text style shape for preview overlays, projects, batch jobs, and FFmpeg export. */
+
+import { clampNum } from "./clamp";
 
 export const TEXT_STYLE_KEYS = [
   "fontSize",
@@ -16,12 +18,65 @@ export const TEXT_STYLE_KEYS = [
   "boxBorderWidth",
   "borderWidth",
   "borderColor",
+  "textShadowEnabled",
+  "textShadowColor",
+  "textShadowOffsetX",
+  "textShadowOffsetY",
 ];
 
 const GLOBAL_KEY_MAP = {
   fontSize: "textFontSize",
   fontColor: "textFontColor",
 };
+
+export const TEXT_STYLE_DEFAULTS = Object.freeze({
+  fontSize: 32,
+  fontColor: "white",
+  fontFamily: "Arial",
+  fontWeight: 400,
+  letterSpacing: 0,
+  textAlign: "left",
+  textOpacity: 1,
+  bold: false,
+  italic: false,
+  bgEnabled: true,
+  bgColor: "black",
+  bgOpacity: 0.65,
+  boxBorderWidth: 4,
+  borderWidth: 0,
+  borderColor: "black",
+  textShadowEnabled: false,
+  textShadowColor: "black",
+  textShadowOffsetX: 2,
+  textShadowOffsetY: 2,
+});
+
+export const GLOBAL_TEXT_STYLE_DEFAULTS = Object.freeze({
+  textInput: "Sample Text",
+  textFontSize: TEXT_STYLE_DEFAULTS.fontSize,
+  textFontColor: TEXT_STYLE_DEFAULTS.fontColor,
+  fontFamily: TEXT_STYLE_DEFAULTS.fontFamily,
+  fontWeight: TEXT_STYLE_DEFAULTS.fontWeight,
+  letterSpacing: TEXT_STYLE_DEFAULTS.letterSpacing,
+  textAlign: TEXT_STYLE_DEFAULTS.textAlign,
+  textOpacity: TEXT_STYLE_DEFAULTS.textOpacity,
+  bold: TEXT_STYLE_DEFAULTS.bold,
+  italic: TEXT_STYLE_DEFAULTS.italic,
+  bgEnabled: TEXT_STYLE_DEFAULTS.bgEnabled,
+  bgColor: TEXT_STYLE_DEFAULTS.bgColor,
+  bgOpacity: TEXT_STYLE_DEFAULTS.bgOpacity,
+  boxBorderWidth: TEXT_STYLE_DEFAULTS.boxBorderWidth,
+  borderWidth: TEXT_STYLE_DEFAULTS.borderWidth,
+  borderColor: TEXT_STYLE_DEFAULTS.borderColor,
+  textShadowEnabled: TEXT_STYLE_DEFAULTS.textShadowEnabled,
+  textShadowColor: TEXT_STYLE_DEFAULTS.textShadowColor,
+  textShadowOffsetX: TEXT_STYLE_DEFAULTS.textShadowOffsetX,
+  textShadowOffsetY: TEXT_STYLE_DEFAULTS.textShadowOffsetY,
+});
+
+function clampBool(val, fallback = false) {
+  return typeof val === "boolean" ? val : fallback;
+}
 
 export function pickTextStyle(obj) {
   if (!obj) return {};
@@ -32,8 +87,35 @@ export function pickTextStyle(obj) {
   return out;
 }
 
-export function getGlobalTextStyleFromState(s) {
+export function normalizeTextStyle(style = {}, defaults = TEXT_STYLE_DEFAULTS) {
+  const source = { ...defaults, ...pickTextStyle(style) };
   return {
+    fontSize: clampNum(source.fontSize, 8, 200, defaults.fontSize),
+    fontColor: String(source.fontColor ?? defaults.fontColor).slice(0, 32),
+    fontFamily: String(source.fontFamily ?? defaults.fontFamily).slice(0, 64),
+    fontWeight: clampNum(source.fontWeight, 100, 900, defaults.fontWeight),
+    letterSpacing: clampNum(source.letterSpacing, 0, 80, defaults.letterSpacing),
+    textAlign: ["left", "center", "right"].includes(source.textAlign)
+      ? source.textAlign
+      : defaults.textAlign,
+    textOpacity: clampNum(source.textOpacity, 0, 1, defaults.textOpacity),
+    bold: clampBool(source.bold, defaults.bold),
+    italic: clampBool(source.italic, defaults.italic),
+    bgEnabled: clampBool(source.bgEnabled, defaults.bgEnabled),
+    bgColor: String(source.bgColor ?? defaults.bgColor).slice(0, 32),
+    bgOpacity: clampNum(source.bgOpacity, 0, 1, defaults.bgOpacity),
+    boxBorderWidth: clampNum(source.boxBorderWidth, 0, 48, defaults.boxBorderWidth),
+    borderWidth: clampNum(source.borderWidth, 0, 24, defaults.borderWidth),
+    borderColor: String(source.borderColor ?? defaults.borderColor).slice(0, 32),
+    textShadowEnabled: clampBool(source.textShadowEnabled, defaults.textShadowEnabled),
+    textShadowColor: String(source.textShadowColor ?? defaults.textShadowColor).slice(0, 32),
+    textShadowOffsetX: clampNum(source.textShadowOffsetX, -64, 64, defaults.textShadowOffsetX),
+    textShadowOffsetY: clampNum(source.textShadowOffsetY, -64, 64, defaults.textShadowOffsetY),
+  };
+}
+
+export function getGlobalTextStyleFromState(s) {
+  return normalizeTextStyle({
     fontSize: s.textFontSize,
     fontColor: s.textFontColor,
     fontFamily: s.fontFamily,
@@ -49,17 +131,47 @@ export function getGlobalTextStyleFromState(s) {
     boxBorderWidth: s.boxBorderWidth,
     borderWidth: s.borderWidth,
     borderColor: s.borderColor,
-  };
+    textShadowEnabled: s.textShadowEnabled,
+    textShadowColor: s.textShadowColor,
+    textShadowOffsetX: s.textShadowOffsetX,
+    textShadowOffsetY: s.textShadowOffsetY,
+  });
 }
 
 export function mergeTextStyles(...layers) {
   return layers.reduce((acc, layer) => ({ ...acc, ...pickTextStyle(layer) }), {});
 }
 
+export function textStyleToPythonPayload(style = {}) {
+  const safe = normalizeTextStyle(style);
+  return {
+    font_size: safe.fontSize,
+    font_color: safe.fontColor,
+    font_family: safe.fontFamily,
+    font_weight: safe.fontWeight,
+    letter_spacing: safe.letterSpacing,
+    text_align: safe.textAlign,
+    text_opacity: safe.textOpacity,
+    bold: safe.bold,
+    italic: safe.italic,
+    bg_enabled: safe.bgEnabled,
+    bg_color: safe.bgColor,
+    bg_opacity: safe.bgOpacity,
+    box_border_width: safe.boxBorderWidth,
+    border_width: safe.borderWidth,
+    border_color: safe.borderColor,
+    text_shadow_enabled: safe.textShadowEnabled,
+    text_shadow_color: safe.textShadowColor,
+    text_shadow_offset_x: safe.textShadowOffsetX,
+    text_shadow_offset_y: safe.textShadowOffsetY,
+  };
+}
+
 /** Map operation-style patch keys to global store field names. */
 export function patchToGlobalState(patch) {
   const global = {};
   for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
     const gk = GLOBAL_KEY_MAP[k] || k;
     if (
       [
@@ -78,6 +190,10 @@ export function patchToGlobalState(patch) {
         "boxBorderWidth",
         "borderWidth",
         "borderColor",
+        "textShadowEnabled",
+        "textShadowColor",
+        "textShadowOffsetX",
+        "textShadowOffsetY",
         "textInput",
       ].includes(gk)
     ) {

@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { X, FileSpreadsheet, ArrowRight, RotateCcw } from "lucide-react";
+import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { stripExt, rowGet, normalizeMatchId } from "../utils/video-utils";
 import { useT } from "../i18n/useT";
@@ -7,9 +8,19 @@ import { useT } from "../i18n/useT";
 const PREVIEW_ROWS = 5;
 
 export default function ExcelMappingModal() {
-  const store = useEditorStore();
   const t = useT();
-  const { showMappingModal, excelHeaders, excelRows, excelMapping, templateRegions, queue } = store;
+  const { showMappingModal, excelHeaders, excelRows, excelMapping, templateRegions, queue } =
+    useEditorStore(
+      (s) => ({
+        showMappingModal: s.showMappingModal,
+        excelHeaders: s.excelHeaders,
+        excelRows: s.excelRows,
+        excelMapping: s.excelMapping,
+        templateRegions: s.templateRegions,
+        queue: s.queue,
+      }),
+      shallow,
+    );
   const [draft, setDraft] = useState(excelMapping);
 
   useEffect(() => {
@@ -50,9 +61,11 @@ export default function ExcelMappingModal() {
 
   if (!showMappingModal) return null;
 
+  const getState = useEditorStore.getState;
+
   const handleApply = () => {
-    store.updateExcelMapping(draft);
-    store.setShowMappingModal(false);
+    getState().updateExcelMapping(draft);
+    getState().setShowMappingModal(false);
   };
 
   const handleReset = () => {
@@ -84,7 +97,7 @@ export default function ExcelMappingModal() {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.75)" }}
-      onClick={() => store.setShowMappingModal(false)}
+      onClick={() => getState().setShowMappingModal(false)}
     >
       <div
         className="w-[min(960px,95vw)] max-h-[90vh] flex flex-col rounded-lg shadow-2xl overflow-hidden"
@@ -105,7 +118,7 @@ export default function ExcelMappingModal() {
             </span>
           </div>
           <button
-            onClick={() => store.setShowMappingModal(false)}
+            onClick={() => getState().setShowMappingModal(false)}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
           >
@@ -353,7 +366,7 @@ export default function ExcelMappingModal() {
           </button>
           <div className="flex gap-2">
             <button
-              onClick={() => store.setShowMappingModal(false)}
+              onClick={() => getState().setShowMappingModal(false)}
               className="cap-btn-secondary text-[11px]"
             >
               {t("common.cancel")}

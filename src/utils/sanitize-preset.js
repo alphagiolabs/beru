@@ -1,6 +1,6 @@
 import { clampRegionToVideo, isRegionUsable } from "./video-utils";
 import { ensureNormalized, isNormalizedRegion } from "./types";
-import { pickTextStyle } from "./text-style";
+import { normalizeTextStyle, pickTextStyle } from "./text-style";
 import { clampNum } from "./clamp";
 import { VALID_DELOGO_METHODS } from "./delogo-ops";
 
@@ -8,10 +8,6 @@ const MAX_LABEL_LEN = 64;
 const MAX_TEXT_INPUT_LEN = 2000;
 const PRESET_REGION_FALLBACK_WIDTH = 1920;
 const PRESET_REGION_FALLBACK_HEIGHT = 1080;
-
-function clampBool(val, fallback = false) {
-  return typeof val === "boolean" ? val : fallback;
-}
 
 export function sanitizeTemplateRegions(regions) {
   if (!Array.isArray(regions)) return [];
@@ -49,25 +45,48 @@ export function sanitizeTemplateRegions(regions) {
 }
 
 export function sanitizeTextStyle(textStyle = {}) {
+  const style = normalizeTextStyle({
+    fontSize: textStyle.textFontSize,
+    fontColor: textStyle.textFontColor,
+    fontFamily: textStyle.fontFamily,
+    fontWeight: textStyle.fontWeight,
+    letterSpacing: textStyle.letterSpacing,
+    textAlign: textStyle.textAlign,
+    textOpacity: textStyle.textOpacity,
+    bold: textStyle.bold,
+    italic: textStyle.italic,
+    bgEnabled: textStyle.bgEnabled,
+    bgColor: textStyle.bgColor,
+    bgOpacity: textStyle.bgOpacity,
+    boxBorderWidth: textStyle.boxBorderWidth,
+    borderWidth: textStyle.borderWidth,
+    borderColor: textStyle.borderColor,
+    textShadowEnabled: textStyle.textShadowEnabled,
+    textShadowColor: textStyle.textShadowColor,
+    textShadowOffsetX: textStyle.textShadowOffsetX,
+    textShadowOffsetY: textStyle.textShadowOffsetY,
+  });
   return {
     textInput: String(textStyle.textInput ?? "").slice(0, MAX_TEXT_INPUT_LEN),
-    textFontSize: clampNum(textStyle.textFontSize, 8, 200, 32),
-    textFontColor: String(textStyle.textFontColor ?? "white").slice(0, 32),
-    fontFamily: String(textStyle.fontFamily ?? "Arial").slice(0, 64),
-    fontWeight: clampNum(textStyle.fontWeight, 100, 900, 400),
-    letterSpacing: clampNum(textStyle.letterSpacing, 0, 80, 0),
-    textAlign: ["left", "center", "right"].includes(textStyle.textAlign)
-      ? textStyle.textAlign
-      : "left",
-    textOpacity: clampNum(textStyle.textOpacity, 0, 1, 1),
-    bold: clampBool(textStyle.bold),
-    italic: clampBool(textStyle.italic),
-    bgEnabled: clampBool(textStyle.bgEnabled, true),
-    bgColor: String(textStyle.bgColor ?? "black").slice(0, 32),
-    bgOpacity: clampNum(textStyle.bgOpacity, 0, 1, 0.65),
-    boxBorderWidth: clampNum(textStyle.boxBorderWidth, 0, 48, 4),
-    borderWidth: clampNum(textStyle.borderWidth, 0, 24, 0),
-    borderColor: String(textStyle.borderColor ?? "black").slice(0, 32),
+    textFontSize: style.fontSize,
+    textFontColor: style.fontColor,
+    fontFamily: style.fontFamily,
+    fontWeight: style.fontWeight,
+    letterSpacing: style.letterSpacing,
+    textAlign: style.textAlign,
+    textOpacity: style.textOpacity,
+    bold: style.bold,
+    italic: style.italic,
+    bgEnabled: style.bgEnabled,
+    bgColor: style.bgColor,
+    bgOpacity: style.bgOpacity,
+    boxBorderWidth: style.boxBorderWidth,
+    borderWidth: style.borderWidth,
+    borderColor: style.borderColor,
+    textShadowEnabled: style.textShadowEnabled,
+    textShadowColor: style.textShadowColor,
+    textShadowOffsetX: style.textShadowOffsetX,
+    textShadowOffsetY: style.textShadowOffsetY,
   };
 }
 export function sanitizeDefaults(defaults = {}) {

@@ -196,6 +196,35 @@ print(processor.build_drawtext({
     expect(filter).not.toContain("text='A B C'");
   });
 
+  it("emits drawtext shadow options for text shadow styles", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+print(processor.build_drawtext({
+    "mode": "text",
+    "text": "ABC",
+    "font_family": "Arial",
+    "text_shadow_enabled": True,
+    "text_shadow_color": "#111111",
+    "text_shadow_offset_x": 3,
+    "text_shadow_offset_y": 4,
+    "region": {"x": 10, "y": 20, "w": 200, "h": 50},
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const filter = r.stdout.trim();
+    expect(filter).toContain("shadowcolor=#111111");
+    expect(filter).toContain("shadowx=3");
+    expect(filter).toContain("shadowy=4");
+  });
+
   it("omits unsupported drawtext style options", () => {
     const code = `
 import processor
@@ -426,6 +455,47 @@ print(json.dumps({"calls": calls, "result": result}))
     expect(parsed.result.failed).toBe(0);
   });
 
+  it("removes partial outputs and keeps raw memory errors for retry logic", () => {
+    const code = `
+import json
+import os
+import tempfile
+import processor
+
+inp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+inp.close()
+out = inp.name + ".out.mp4"
+
+def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
+    with open(out, "wb") as f:
+        f.write(b"partial")
+    return False, "x264 [error]: malloc of size 11619264 failed"
+
+processor._run_ffmpeg = fake_run
+processor._BATCH_ACTIVE_WORKERS = 4
+job = {"id": 9, "input_path": inp.name, "output_path": out, "operations": []}
+try:
+    result = processor._process_one(0, job, "ffmpeg")
+    exists_after = os.path.exists(out)
+finally:
+    os.unlink(inp.name)
+    if os.path.exists(out):
+        os.unlink(out)
+
+print(json.dumps({"result": result, "exists_after": exists_after}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.exists_after).toBe(false);
+    expect(parsed.result.status).toBe("failed");
+    expect(parsed.result.error).toContain("Memoria insuficiente");
+    expect(parsed.result.raw_error).toContain("malloc");
+  });
+
   it("bounds libx264 threads per active batch worker", () => {
     const code = `
 import json
@@ -514,6 +584,60 @@ print(json.dumps({
     expect(parsed.result.status).toBe("succeeded");
     expect(parsed.calls).toBe(2);
     expect(parsed.second_uses_software).toBe(true);
+  });
+
+  it("main passes the verified preflight encoder into process_jobs", () => {
+    const code = `
+import json
+import os
+import sys
+import tempfile
+import processor
+
+fd, jobs_path = tempfile.mkstemp(suffix=".json")
+os.close(fd)
+ffmpeg = tempfile.NamedTemporaryFile(delete=False, suffix=".exe")
+ffmpeg.close()
+ffprobe = tempfile.NamedTemporaryFile(delete=False, suffix=".exe")
+ffprobe.close()
+
+seen = {}
+
+def fake_process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
+    seen["jobs"] = jobs
+    seen["ffmpeg_path"] = ffmpeg_path
+    seen["hw_encoder"] = hw_encoder
+    return {"total": len(jobs), "succeeded": len(jobs), "failed": 0}
+
+try:
+    with open(jobs_path, "w", encoding="utf-8") as f:
+        json.dump([{"id": 0, "input_path": "C:/tmp/in.mp4", "output_path": "C:/tmp/out.mp4"}], f)
+    processor.find_ffmpeg = lambda: ffmpeg.name
+    processor.find_ffprobe = lambda _ffmpeg: ffprobe.name
+    processor.detect_hw_encoder = lambda _ffmpeg, force_test=False: "h264_nvenc" if force_test else None
+    processor.get_system_fonts = lambda: {}
+    processor.process_jobs = fake_process_jobs
+    sys.argv = ["processor.py", jobs_path]
+    processor.main()
+finally:
+    os.unlink(jobs_path)
+    os.unlink(ffmpeg.name)
+    os.unlink(ffprobe.name)
+
+print(json.dumps(seen))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.hw_encoder).toBe("h264_nvenc");
+    expect(parsed.jobs).toHaveLength(1);
   });
 
   it("bounds stderr buffer while streaming progress", () => {

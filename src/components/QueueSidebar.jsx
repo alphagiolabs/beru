@@ -41,18 +41,12 @@ function Thumbnail({ value, status }) {
 }
 
 export default function QueueSidebar() {
-  const { queue, selectedIdx, templateIdx, excelMatchStatus, excelPath, isProcessing } =
-    useEditorStore(
-      (s) => ({
-        queue: s.queue,
-        selectedIdx: s.selectedIdx,
-        templateIdx: s.templateIdx,
-        excelMatchStatus: s.excelMatchStatus,
-        excelPath: s.excelPath,
-        isProcessing: s.isProcessing,
-      }),
-      shallow,
-    );
+  const queue = useEditorStore((s) => s.queue);
+  const selectedIdx = useEditorStore((s) => s.selectedIdx);
+  const templateIdx = useEditorStore((s) => s.templateIdx);
+  const excelMatchStatus = useEditorStore((s) => s.excelMatchStatus);
+  const excelPath = useEditorStore((s) => s.excelPath);
+  const isProcessing = useEditorStore((s) => s.isProcessing);
   const showToast = useEditorStore((s) => s.showToast);
   const get = useEditorStore.getState;
   const t = useT();

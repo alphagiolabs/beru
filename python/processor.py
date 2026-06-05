@@ -23,8 +23,17 @@ import threading
 import concurrent.futures
 from pathlib import Path
 
+from batch_errors import (
+    format_processing_error,
+    is_hardware_encode_error,
+    is_resource_pressure_error,
+    remove_partial_output,
+)
+
 FFMPEG = os.environ.get("BERU_FFMPEG", "ffmpeg")
 FFPROBE = os.environ.get("BERU_FFPROBE", "ffprobe")
+JOB_MANIFEST_TYPE = "beru-job-manifest"
+JOB_MANIFEST_VERSION = 1
 
 FONT_DIRS = []
 
@@ -823,6 +832,23 @@ def build_drawtext(op):
         border_color = op.get("border_color", "black")
         parts.append(f"bordercolor={border_color}:borderw={border_w}")
 
+    # Drop shadow. FFmpeg drawtext uses whole-pixel offsets; preview scales the
+    # same operation-style values to screen pixels.
+    if op.get("text_shadow_enabled"):
+        shadow_color = op.get("text_shadow_color", "black")
+        try:
+            shadow_x = int(round(float(op.get("text_shadow_offset_x", 2))))
+        except (TypeError, ValueError):
+            shadow_x = 2
+        try:
+            shadow_y = int(round(float(op.get("text_shadow_offset_y", 2))))
+        except (TypeError, ValueError):
+            shadow_y = 2
+        shadow_x = max(-64, min(64, shadow_x))
+        shadow_y = max(-64, min(64, shadow_y))
+        if shadow_x or shadow_y:
+            parts.append(f"shadowcolor={shadow_color}:shadowx={shadow_x}:shadowy={shadow_y}")
+
     # Time range (enable clause)
     enable_clause = _build_enable_clause(op)
     if enable_clause:
@@ -1330,41 +1356,11 @@ def _is_transient_error(stderr_text):
 
 
 def _is_hardware_encode_error(stderr_text):
-    """Detect hardware encoder failures and related GPU/resource errors.
-
-    Used both for per-job GPU→CPU fallback and for batch retry eligibility.
-    """
-    if not stderr_text:
-        return False
-    lower = stderr_text.lower()
-    markers = (
-        "nvenc", "amf", "qsv", "videotoolbox", "vaapi", "h264_mf",
-        "hwaccel",
-        "error code: -22",
-        "operation not permitted",
-        "error while filtering",
-        "no capable devices",
-        "cannot create cuda",
-        "out of memory",
-        "encoder init",
-    )
-    return any(m in lower for m in markers)
+    return is_hardware_encode_error(stderr_text)
 
 
 def _is_resource_pressure_error(stderr_text):
-    """Detect memory/resource pressure where rerunning with fewer workers may succeed."""
-    if not stderr_text:
-        return False
-    lower = stderr_text.lower()
-    markers = (
-        "malloc",
-        "cannot allocate memory",
-        "not enough memory",
-        "insufficient memory",
-        "out of memory",
-        "resource temporarily unavailable",
-    )
-    return any(m in lower for m in markers)
+    return is_resource_pressure_error(stderr_text)
 
 
 def _stderr_buffer_append(buffer, line):
@@ -1386,7 +1382,7 @@ def _retry_failed_enabled():
 def _should_retry_failed_job(result, max_workers):
     if result.get("status") != "failed":
         return False
-    err = result.get("error") or ""
+    err = result.get("raw_error") or result.get("error") or ""
     if _is_hardware_encode_error(err):
         return True
     if max_workers > 1 and _is_resource_pressure_error(err):
@@ -1408,6 +1404,26 @@ def _extract_error_line(stderr_text):
     if len(lines) > 1:
         return lines[-2].strip()[-400:]
     return stderr_text.strip()[-400:]
+
+
+def _remove_partial_output(output_path, input_path=None):
+    return remove_partial_output(output_path, input_path, logger=logger)
+
+
+def _format_processing_error(raw_error, *, max_workers=None):
+    return format_processing_error(raw_error, max_workers=max_workers)
+
+
+def _job_failed_result(job_id, raw_error, *, max_workers=None):
+    user_error = _format_processing_error(raw_error, max_workers=max_workers)
+    payload = {"type": "error", "index": job_id, "error": user_error}
+    if raw_error and raw_error != user_error:
+        payload["raw_error"] = str(raw_error)[-1000:]
+    _safe_print(json.dumps(payload))
+    result = {"index": job_id, "status": "failed", "error": user_error}
+    if raw_error and raw_error != user_error:
+        result["raw_error"] = str(raw_error)
+    return result
 
 
 def _emit_job_progress(job_id, percent, speed):
@@ -1526,9 +1542,7 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     """
     if not isinstance(job, dict):
         logger.error("Job %d: invalid payload (expected object, got %s)", idx, type(job).__name__)
-        _safe_print(json.dumps({"type": "error", "index": idx,
-                                "error": "Invalid job payload"}))
-        return {"index": idx, "status": "failed"}
+        return _job_failed_result(idx, "Invalid job payload", max_workers=_BATCH_ACTIVE_WORKERS)
 
     input_path = job.get("input_path")
     output_path = job.get("output_path")
@@ -1541,16 +1555,14 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         return {"index": job_id, "status": "cancelled"}
 
     if not input_path or not os.path.exists(input_path):
-        logger.error("Job %d: input not found: %s", idx, input_path)
-        _safe_print(json.dumps({"type": "error", "index": job_id,
-                                "error": f"Input not found: {input_path}"}))
-        return {"index": job_id, "status": "failed"}
+        raw_err = f"Input not found: {input_path}"
+        logger.error("Job %d: %s", idx, raw_err)
+        return _job_failed_result(job_id, raw_err, max_workers=_BATCH_ACTIVE_WORKERS)
 
     if os.path.abspath(input_path) == os.path.abspath(output_path):
+        raw_err = "Output would overwrite input file"
         logger.error("Job %d: output path equals input, skipping: %s", idx, input_path)
-        _safe_print(json.dumps({"type": "error", "index": job_id,
-                                "error": "Output would overwrite input file"}))
-        return {"index": job_id, "status": "failed"}
+        return _job_failed_result(job_id, raw_err, max_workers=_BATCH_ACTIVE_WORKERS)
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     raw_operations = job.get("operations", [])
@@ -1567,21 +1579,21 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
             return {"index": job_id, "status": "succeeded"}
         else:
             logger.error("Job %d: copy failed: %s", idx, err)
-            _safe_print(json.dumps({"type": "error", "index": job_id, "error": err}))
-            return {"index": job_id, "status": "failed"}
+            _remove_partial_output(output_path, input_path)
+            return _job_failed_result(job_id, err, max_workers=_BATCH_ACTIVE_WORKERS)
 
     info = job_video_info(job, input_path)
     vw = int(job.get("source_width") or job.get("width") or info.get("width") or 0)
     vh = int(job.get("source_height") or job.get("height") or info.get("height") or 0)
     duration = float(info.get("duration") or 0)
     if vw <= 0 or vh <= 0:
+        ffprobe_status = f"ffprobe={FFPROBE}" if FFPROBE else "ffprobe no configurado"
         err = (
-            "No se pudo leer la resolución del video. "
-            "Vuelve a importar el archivo o comprueba que ffprobe esté disponible."
+            "No se pudo leer la resolución del video: ffprobe no encontró dimensiones válidas "
+            f"para '{fname}' ({ffprobe_status})."
         )
         logger.error("Job %d: invalid dimensions %dx%d for %s", idx, vw, vh, fname)
-        _safe_print(json.dumps({"type": "error", "index": job_id, "error": err}))
-        return {"index": job_id, "status": "failed"}
+        return _job_failed_result(job_id, err, max_workers=_BATCH_ACTIVE_WORKERS)
 
     operations = [
         _optimize_delogo_for_speed(_normalize_operation(op), vw, vh)
@@ -1596,8 +1608,7 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
             "Comprueba que cada región tenga tamaño suficiente y esté dentro del video."
         )
         logger.error("Job %d: empty filter graph with %d ops", idx, len(operations))
-        _safe_print(json.dumps({"type": "error", "index": job_id, "error": err}))
-        return {"index": job_id, "status": "failed"}
+        return _job_failed_result(job_id, err, max_workers=_BATCH_ACTIVE_WORKERS)
 
     src_pix_fmt = job.get("pix_fmt") or info.get("pix_fmt", "yuv420p")
     src_frame_rate = job.get("frame_rate") or info.get("frame_rate", 0)
@@ -1668,8 +1679,8 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         return {"index": job_id, "status": "succeeded"}
     else:
         logger.error("Job %d: ffmpeg failed: %s", idx, err[:200] if err else "")
-        _safe_print(json.dumps({"type": "error", "index": job_id, "error": err or "Unknown error"}))
-        return {"index": job_id, "status": "failed", "error": err or "Unknown error"}
+        _remove_partial_output(output_path, input_path)
+        return _job_failed_result(job_id, err or "Unknown error", max_workers=_BATCH_ACTIVE_WORKERS)
 
 
 def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True, hw_encoder=None):
@@ -1685,7 +1696,7 @@ def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True, 
         except Exception as e:
             job_pos = getattr(fut, "_beru_job_pos", -1)
             job_id = jobs[job_pos].get("id", job_pos) if 0 <= job_pos < total else -1
-            result = {"index": job_id, "status": "failed", "error": str(e)}
+            result = _job_failed_result(job_id, str(e), max_workers=max_workers)
 
         with state_lock:
             idx = result.get("index", -1)
@@ -1835,7 +1846,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
         and not _check_cancelled()
     ):
         resource_retry = any(
-            _is_resource_pressure_error((result.get("error") or ""))
+            _is_resource_pressure_error((result.get("raw_error") or result.get("error") or ""))
             for _job, result in pass1["failed_jobs"]
             if _should_retry_failed_job(result, max_workers)
         )
@@ -1895,7 +1906,21 @@ def main():
 
     if isinstance(payload, list):
         jobs = payload
-    elif isinstance(payload, dict) and isinstance(payload.get("jobs"), list):
+    elif isinstance(payload, dict):
+        manifest_type = payload.get("type")
+        manifest_version = payload.get("version")
+        if manifest_type != JOB_MANIFEST_TYPE:
+            logger.error("Invalid jobs manifest type: %s", manifest_type)
+            print(json.dumps({"type": "error", "error": "Invalid jobs manifest type"}))
+            sys.exit(1)
+        if manifest_version != JOB_MANIFEST_VERSION:
+            logger.error("Unsupported jobs manifest version: %s", manifest_version)
+            print(json.dumps({"type": "error", "error": "Unsupported jobs manifest version"}))
+            sys.exit(1)
+        if not isinstance(payload.get("jobs"), list):
+            logger.error("Invalid jobs manifest: jobs must be an array")
+            print(json.dumps({"type": "error", "error": "Invalid jobs manifest"}))
+            sys.exit(1)
         jobs = payload["jobs"]
     else:
         logger.error("Invalid jobs file: expected array or {jobs:[]}")
@@ -1910,7 +1935,7 @@ def main():
     if preflight_hw is None:
         logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
 
-    result = process_jobs(jobs, FFMPEG, preflight_hw=preflight_hw)
+    result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw)
     print(json.dumps({"type": "summary", **result}))
 
 

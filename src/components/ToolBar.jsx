@@ -1,4 +1,5 @@
 import { Droplet, Crop, Type, Eraser, Image } from "lucide-react";
+import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 
@@ -11,10 +12,17 @@ const tools = [
 ];
 
 export default function ToolBar() {
-  const store = useEditorStore();
+  const { activeTool, sidebarMode, hasSelection } = useEditorStore(
+    (s) => ({
+      activeTool: s.activeTool,
+      sidebarMode: s.sidebarMode,
+      hasSelection:
+        s.selectedIdx >= 0 && s.selectedIdx < s.queue.length,
+    }),
+    shallow,
+  );
   const t = useT();
-  const sel = store.selected();
-  if (!sel || store.sidebarMode !== "logo") return null;
+  if (!hasSelection || sidebarMode !== "logo") return null;
 
   return (
     <div
@@ -22,7 +30,7 @@ export default function ToolBar() {
       style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
     >
       {tools.map((tool) => {
-        const active = store.activeTool === tool.id;
+        const active = activeTool === tool.id;
         const colors = {
           blur: "var(--accent)",
           crop: "var(--amber)",
@@ -34,7 +42,7 @@ export default function ToolBar() {
         return (
           <button
             key={tool.id}
-            onClick={() => store.setActiveTool(tool.id)}
+            onClick={() => useEditorStore.getState().setActiveTool(tool.id)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-medium transition-all"
             style={{
               background: active ? "var(--bg-elevated)" : "transparent",

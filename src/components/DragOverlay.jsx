@@ -5,12 +5,12 @@ import { useT } from "../i18n/useT";
 const VIDEO_EXT = /\.(mp4|mov|avi|mkv|webm|flv|wmv|m4v|mpg|mpeg)$/i;
 
 export default function DragOverlay() {
-  const store = useEditorStore();
+  const isDragging = useEditorStore((s) => s.isDragging);
   const t = useT();
   const [preview, setPreview] = useState(null);
 
   useEffect(() => {
-    if (!store.isDragging) {
+    if (!isDragging) {
       setPreview(null);
       return;
     }
@@ -33,9 +33,9 @@ export default function DragOverlay() {
       cancelled = true;
       window.removeEventListener("dragover", handler);
     };
-  }, [store.isDragging]);
+  }, [isDragging]);
 
-  if (!store.isDragging) return null;
+  if (!isDragging) return null;
 
   return (
     <div

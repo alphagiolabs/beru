@@ -79,6 +79,10 @@ describe("useEditorStore logic regressions", () => {
       boxBorderWidth: 4,
       borderWidth: 0,
       borderColor: "black",
+      textShadowEnabled: false,
+      textShadowColor: "black",
+      textShadowOffsetX: 2,
+      textShadowOffsetY: 2,
     });
   });
 
@@ -128,7 +132,10 @@ describe("useEditorStore logic regressions", () => {
 
     expect(res.ok).toBe(true);
     expect(mockApi.startProcessing).toHaveBeenCalledTimes(1);
-    expect(mockApi.startProcessing.mock.calls[0][0][0].id).toBe(1);
+    const manifest = mockApi.startProcessing.mock.calls[0][0];
+    expect(manifest.type).toBe("beru-job-manifest");
+    expect(manifest.version).toBe(1);
+    expect(manifest.jobs[0].id).toBe(1);
   });
 
   it("uses ID_TEXT-1 as the output name for batch text jobs", () => {
@@ -235,6 +242,10 @@ describe("useEditorStore logic regressions", () => {
       textAlign: "center",
       textOpacity: 0.75,
       boxBorderWidth: 9,
+      textShadowEnabled: true,
+      textShadowColor: "#111111",
+      textShadowOffsetX: 3,
+      textShadowOffsetY: 4,
     });
 
     const report = useEditorStore.getState()._reapplyExcel();
@@ -249,6 +260,10 @@ describe("useEditorStore logic regressions", () => {
         textAlign: "center",
         textOpacity: 0.75,
         boxBorderWidth: 9,
+        textShadowEnabled: true,
+        textShadowColor: "#111111",
+        textShadowOffsetX: 3,
+        textShadowOffsetY: 4,
       }),
     );
   });
@@ -260,6 +275,10 @@ describe("useEditorStore logic regressions", () => {
       textAlign: "right",
       textOpacity: 0.4,
       boxBorderWidth: 12,
+      textShadowEnabled: true,
+      textShadowColor: "#222222",
+      textShadowOffsetX: 8,
+      textShadowOffsetY: 9,
     });
 
     const project = useEditorStore.getState().serializeProject();
@@ -271,6 +290,10 @@ describe("useEditorStore logic regressions", () => {
         textAlign: "right",
         textOpacity: 0.4,
         boxBorderWidth: 12,
+        textShadowEnabled: true,
+        textShadowColor: "#222222",
+        textShadowOffsetX: 8,
+        textShadowOffsetY: 9,
       }),
     );
 
@@ -280,6 +303,10 @@ describe("useEditorStore logic regressions", () => {
       textAlign: "left",
       textOpacity: 1,
       boxBorderWidth: 4,
+      textShadowEnabled: false,
+      textShadowColor: "black",
+      textShadowOffsetX: 2,
+      textShadowOffsetY: 2,
     });
 
     const result = useEditorStore.getState()._applyProject({ ...project, excel: null });
@@ -292,6 +319,10 @@ describe("useEditorStore logic regressions", () => {
         textAlign: "right",
         textOpacity: 0.4,
         boxBorderWidth: 12,
+        textShadowEnabled: true,
+        textShadowColor: "#222222",
+        textShadowOffsetX: 8,
+        textShadowOffsetY: 9,
       }),
     );
   });
@@ -355,14 +386,23 @@ describe("useEditorStore logic regressions", () => {
       ],
     });
 
-    useEditorStore.getState().patchBatchTextStyle({ fontSize: 64, fontColor: "#00ff00" });
+    useEditorStore.getState().patchBatchTextStyle({
+      fontSize: 64,
+      fontColor: "#00ff00",
+      textShadowEnabled: true,
+      textShadowOffsetY: 6,
+    });
 
     const state = useEditorStore.getState();
     expect(state.textFontSize).toBe(64);
     expect(state.textFontColor).toBe("#00ff00");
     expect(state.templateRegions[0].style.fontSize).toBe(64);
+    expect(state.templateRegions[0].style.textShadowEnabled).toBe(true);
+    expect(state.templateRegions[0].style.textShadowOffsetY).toBe(6);
     expect(state.queue[0].operations[0].fontSize).toBe(64);
     expect(state.queue[1].operations[0].fontColor).toBe("#00ff00");
+    expect(state.queue[1].operations[0].textShadowEnabled).toBe(true);
+    expect(state.queue[1].operations[0].textShadowOffsetY).toBe(6);
   });
 
   it("reapplying Excel preserves an individually moved batch text region", () => {

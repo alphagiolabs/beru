@@ -471,6 +471,79 @@ export default function TableEditorFocusPanel({
               </div>
             </div>
 
+            {/* Text shadow */}
+            <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="cap-input-label !mb-0">Sombra</span>
+                <label
+                  className="flex items-center gap-1.5 text-[10px] cursor-pointer"
+                  style={{ color: "var(--text-dim)" }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!focusedOp?.textShadowEnabled}
+                    onChange={(e) => updateFocused({ textShadowEnabled: e.target.checked })}
+                    disabled={!focusedOp}
+                  />
+                  activa
+                </label>
+              </div>
+              {focusedOp?.textShadowEnabled && (
+                <div className="space-y-1.5">
+                  <div className="flex gap-1">
+                    <input
+                      type="color"
+                      value={normalizeColor(focusedOp.textShadowColor) || "#000000"}
+                      onChange={(e) => updateFocused({ textShadowColor: e.target.value })}
+                      disabled={!focusedOp}
+                      className="w-6 h-6 rounded border-0 p-0 cursor-pointer flex-shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={focusedOp.textShadowColor || "#000000"}
+                      onChange={(e) => updateFocused({ textShadowColor: e.target.value })}
+                      disabled={!focusedOp}
+                      className="cap-input flex-1 font-mono text-[10px]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <label>
+                      <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                        Offset X
+                      </span>
+                      <input
+                        type="number"
+                        value={focusedOp.textShadowOffsetX ?? 2}
+                        onChange={(e) =>
+                          updateFocused({ textShadowOffsetX: Number(e.target.value) })
+                        }
+                        disabled={!focusedOp}
+                        min={-64}
+                        max={64}
+                        className="cap-input font-mono text-[10px] !py-0.5 text-center"
+                      />
+                    </label>
+                    <label>
+                      <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                        Offset Y
+                      </span>
+                      <input
+                        type="number"
+                        value={focusedOp.textShadowOffsetY ?? 2}
+                        onChange={(e) =>
+                          updateFocused({ textShadowOffsetY: Number(e.target.value) })
+                        }
+                        disabled={!focusedOp}
+                        min={-64}
+                        max={64}
+                        className="cap-input font-mono text-[10px] !py-0.5 text-center"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Position */}
             {focusedOp?.region && (
               <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
