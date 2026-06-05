@@ -264,9 +264,9 @@ import processor
 os.environ.pop("BERU_WORKERS", None)
 os.environ["BERU_WORKERS_MODE"] = "conservative"
 print(json.dumps([
-    processor.resolve_max_workers("h264_nvenc", 4),
-    processor.resolve_max_workers("h264_mf", 4),
-    processor.resolve_max_workers(None, 1),
+    processor.resolve_max_workers("h264_nvenc", 4, consider_memory=False),
+    processor.resolve_max_workers("h264_mf", 4, consider_memory=False),
+    processor.resolve_max_workers(None, 1, consider_memory=False),
 ]))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
