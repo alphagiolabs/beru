@@ -21,6 +21,23 @@ export function listVideosMissingBatchText(queue, templateRegions, getCellTextFo
     .map(({ item }) => item.customOutputName || item.filename);
 }
 
+export function sanitizeFilenamePart(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[<>:"/\\|?*]/g, " ")
+    .replace(/./g, (char) => (char.charCodeAt(0) < 32 ? " " : char))
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "");
+}
+
+export function buildIdTextOutputName(idValue, textValue, exportFormat) {
+  const id = sanitizeFilenamePart(idValue);
+  const text = sanitizeFilenamePart(textValue);
+  const ext = sanitizeFilenamePart(exportFormat || "mp4") || "mp4";
+  if (!id || !text) return "";
+  return `${id}_${text}-1.${ext.replace(/^\.+/, "") || "mp4"}`;
+}
+
 /** Filter operations sent to FFmpeg — drop blank drawtext ops. */
 export function filterOperationsForExport(operations) {
   if (!Array.isArray(operations)) return [];

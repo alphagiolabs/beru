@@ -8,6 +8,7 @@ import {
 import { clampRegionToVideo, isRegionUsable } from "../../utils/video-utils";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { sanitizeOperation } from "../../utils/delogo-ops";
+import { buildIdTextOutputName } from "../../utils/batch-process";
 
 const MAX_UNDO_STACK = 50;
 const IMAGE_DATA_CACHE_MAX = 50;
@@ -69,10 +70,26 @@ export function createQueueSlice(set, get) {
     /* Compute the output file path for a queue item. */
     outputPathFor: (item) => {
       if (!item) return null;
-      const { outputDir, exportFormat } = get();
+      const { outputDir, exportFormat, templateRegions } = get();
       const filename = item.path.split(/[\\/]/).pop();
       const stem = filename.replace(/\.[^.]+$/, "");
-      const outputName = item.customOutputName || `${stem}_beru.${exportFormat}`;
+      let outputName = item.customOutputName;
+      if (!outputName && templateRegions.length > 0) {
+        const videoIdx = get().queue.findIndex((q) => q === item || q.path === item.path);
+        const textFor = (region) =>
+          videoIdx >= 0 ? String(get().getCellTextForRegion(videoIdx, region.id) ?? "") : "";
+        const firstTextRegion =
+          templateRegions.find(
+            (r) => String(r.label || "").toUpperCase() === "TEXT_1" && textFor(r).trim(),
+          ) ||
+          templateRegions.find((r) => textFor(r).trim()) ||
+          templateRegions.find((r) => String(r.label || "").toUpperCase() === "TEXT_1") ||
+          templateRegions[0];
+        const id = videoIdx >= 0 ? get().getExcelDisplayId(videoIdx).replace(/\.[^.]+$/, "") : stem;
+        const text = textFor(firstTextRegion);
+        outputName = buildIdTextOutputName(id, text, exportFormat);
+      }
+      outputName = outputName || `${stem}_beru.${exportFormat}`;
       const outDir = outputDir || item.path.replace(/[\\/][^\\/]*$/, "");
       return `${outDir.replace(/[\\/]+$/, "")}\\${outputName}`;
     },

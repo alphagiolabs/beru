@@ -4,13 +4,20 @@ const mockApi = { startProcessing: vi.fn(async () => ({ success: true })) };
 globalThis.window = { api: mockApi };
 
 const { default: useEditorStore } = await import("../src/stores/useEditorStore.js");
-const { normalizeMatchId } = await import("../src/utils/video-utils.js");
+const { normalizeMatchId, rowGet } = await import("../src/utils/video-utils.js");
 
 describe("normalizeMatchId", () => {
   it("strips extension and normalizes case", () => {
     expect(normalizeMatchId("Clip.MP4")).toBe("clip");
     expect(normalizeMatchId("clip.mp4")).toBe("clip");
     expect(normalizeMatchId("  Intro_001  ")).toBe("intro_001");
+  });
+});
+
+describe("rowGet", () => {
+  it("does not fall back to ID columns when reading an empty text column", () => {
+    expect(rowGet({ id: "promo", TEXT_1: "", TEXT_2: "Subtitulo" }, "TEXT_1")).toBeUndefined();
+    expect(rowGet({ id: "promo" }, "id")).toBe("promo");
   });
 });
 

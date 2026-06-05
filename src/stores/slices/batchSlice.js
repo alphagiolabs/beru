@@ -228,7 +228,7 @@ export function createBatchSlice(set, get) {
     },
 
     findTemplateRegionIdForOp: (op) => {
-      if (!op || op.mode !== "text" || !op.region) return null;
+      if (!op || op.mode !== "text") return null;
       const { templateRegions } = get();
       const linked =
         op.batchRegionId != null
@@ -396,11 +396,20 @@ export function createBatchSlice(set, get) {
 
     removeTemplateRegion: (id) => {
       set((s) => {
+        const removed = s.templateRegions.find((r) => r.id === id);
         const cols = { ...s.excelMapping.columns };
         delete cols[id];
         const remaining = s.templateRegions.filter((r) => r.id !== id);
         return {
           templateRegions: remaining,
+          queue: removed
+            ? s.queue.map((item) => ({
+                ...item,
+                operations: item.operations.filter(
+                  (op) => !textOpMatchesRegion(op, removed.region, removed.id),
+                ),
+              }))
+            : s.queue,
           excelMapping: { ...s.excelMapping, columns: cols },
           selectedTemplateRegionId:
             s.selectedTemplateRegionId === id

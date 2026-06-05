@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildIdTextOutputName,
   filterOperationsForExport,
   listVideosMissingBatchText,
+  sanitizeFilenamePart,
   videoHasBatchText,
 } from "../src/utils/batch-process.js";
 
@@ -23,5 +25,13 @@ describe("batch-process helpers", () => {
     expect(videoHasBatchText(0, regions, getCell)).toBe(true);
     expect(videoHasBatchText(1, regions, getCell)).toBe(false);
     expect(listVideosMissingBatchText(queue, regions, getCell)).toEqual(["b.mp4"]);
+  });
+
+  it("builds ID_TEXT-1 output names with safe filename parts", () => {
+    expect(buildIdTextOutputName("promo", "Oferta: 50% / hoy", "mp4")).toBe(
+      "promo_Oferta 50% hoy-1.mp4",
+    );
+    expect(sanitizeFilenamePart("  a/b:c*  ")).toBe("a b c");
+    expect(buildIdTextOutputName("", "Texto", "mp4")).toBe("");
   });
 });

@@ -131,6 +131,41 @@ describe("useEditorStore logic regressions", () => {
     expect(mockApi.startProcessing.mock.calls[0][0][0].id).toBe(1);
   });
 
+  it("uses ID_TEXT-1 as the output name for batch text jobs", () => {
+    useEditorStore.setState({
+      queue: [queueItem({ path: "C:\\videos\\promo.mp4", filename: "promo.mp4" })],
+      outputDir: "C:\\output",
+      templateRegions: [
+        { id: "region-1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
+      ],
+      excelRows: [{ id: "promo.mp4", TEXT_1: "Oferta: 50% / hoy" }],
+      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
+    });
+
+    useEditorStore.getState()._reapplyExcel();
+    const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
+
+    expect(job.output_path).toBe("C:\\output\\promo_Oferta 50% hoy-1.mp4");
+  });
+
+  it("uses the first non-empty batch text when TEXT_1 is empty", () => {
+    useEditorStore.setState({
+      queue: [queueItem({ path: "C:\\videos\\promo.mp4", filename: "promo.mp4" })],
+      outputDir: "C:\\output",
+      templateRegions: [
+        { id: "region-1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
+        { id: "region-2", label: "TEXT_2", region: { x: 0.1, y: 0.4, w: 0.3, h: 0.1 } },
+      ],
+      excelRows: [{ id: "promo", TEXT_1: "", TEXT_2: "Subtitulo" }],
+      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1", "region-2": "TEXT_2" } },
+    });
+
+    useEditorStore.getState()._reapplyExcel();
+    const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
+
+    expect(job.output_path).toBe("C:\\output\\promo_Subtitulo-1.mp4");
+  });
+
   it("refreshes missing video dimensions before building jobs", async () => {
     mockApi.getVideoInfoBatch.mockResolvedValueOnce([
       {
@@ -362,6 +397,79 @@ describe("useEditorStore logic regressions", () => {
     expect(op.text).toBe("Desde Excel");
     expect(op.region).toEqual(movedRegion);
     expect(payload.region).toEqual(movedRegion);
+  });
+
+  it("syncs edited moved batch text back to Excel through batchRegionId", () => {
+    const templateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const movedRegion = { x: 0.35, y: 0.28, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      queue: [
+        queueItem({
+          operations: [
+            {
+              id: "op-1",
+              mode: "text",
+              batchRegionId: "region-1",
+              region: movedRegion,
+              text: "Antes",
+            },
+          ],
+        }),
+      ],
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region: templateRegion }],
+      excelRows: [{ id: "sample", TEXT_1: "Antes" }],
+      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
+    });
+
+    useEditorStore.getState().updateOperationText(0, 0, "Despues");
+
+    expect(useEditorStore.getState().excelRows[0].TEXT_1).toBe("Despues");
+  });
+
+  it("removes moved batch text operations when deleting their template region", () => {
+    const removedTemplateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const movedRegion = { x: 0.35, y: 0.28, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      queue: [
+        queueItem({
+          operations: [
+            {
+              id: "batch-op",
+              mode: "text",
+              batchRegionId: "region-1",
+              region: movedRegion,
+              text: "Se borra",
+            },
+            {
+              id: "manual-op",
+              mode: "text",
+              region: { x: 0.7, y: 0.7, w: 0.2, h: 0.1 },
+              text: "Se queda",
+            },
+            {
+              id: "blur-op",
+              mode: "blur",
+              region: { x: 0, y: 0, w: 0.1, h: 0.1 },
+              blurStrength: 20,
+            },
+          ],
+        }),
+      ],
+      templateRegions: [
+        { id: "region-1", label: "TEXT_1", region: removedTemplateRegion },
+        { id: "region-2", label: "TEXT_2", region: { x: 0.5, y: 0.2, w: 0.3, h: 0.1 } },
+      ],
+      selectedTemplateRegionId: "region-1",
+      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1", "region-2": "TEXT_2" } },
+    });
+
+    useEditorStore.getState().removeTemplateRegion("region-1");
+    const state = useEditorStore.getState();
+
+    expect(state.templateRegions.map((r) => r.id)).toEqual(["region-2"]);
+    expect(state.selectedTemplateRegionId).toBe("region-2");
+    expect(state.excelMapping.columns).toEqual({ "region-2": "TEXT_2" });
+    expect(state.queue[0].operations.map((op) => op.id)).toEqual(["manual-op", "blur-op"]);
   });
 
   it("persists per-region style in serialized projects", () => {

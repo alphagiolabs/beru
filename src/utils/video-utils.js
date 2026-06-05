@@ -236,6 +236,7 @@ export function normalizeMatchId(name) {
 export function rowGet(row, ...keys) {
   const lower = {};
   for (const k of Object.keys(row)) lower[k.toLowerCase().trim()] = row[k];
+  const normalizedKeys = keys.map((k) => String(k).toLowerCase().trim());
   for (const k of keys) {
     const v = lower[k.toLowerCase().trim()];
     if (v !== undefined && v !== null && v !== "") return v;
@@ -252,8 +253,9 @@ export function rowGet(row, ...keys) {
     "codigo",
     "code",
   ];
+  if (!normalizedKeys.some((k) => idAliases.includes(k))) return undefined;
   for (const alias of idAliases) {
-    if (keys.includes(alias)) continue;
+    if (normalizedKeys.includes(alias)) continue;
     const v = lower[alias];
     if (v !== undefined && v !== null && v !== "") return v;
   }
