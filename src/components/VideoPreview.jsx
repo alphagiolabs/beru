@@ -47,10 +47,7 @@ export default function VideoPreview() {
   } = useEditorStore(
     (s) => ({
       selectedIdx: s.selectedIdx,
-      sel:
-        s.selectedIdx >= 0 && s.selectedIdx < s.queue.length
-          ? s.queue[s.selectedIdx]
-          : null,
+      sel: s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null,
       sidebarMode: s.sidebarMode,
       activeTool: s.activeTool,
       currentRegion: s.currentRegion,

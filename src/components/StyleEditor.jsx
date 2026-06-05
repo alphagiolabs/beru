@@ -102,13 +102,15 @@ export default function StyleEditor() {
       if (stylePatch.bgEnabled != null) getState().setBgEnabled(stylePatch.bgEnabled);
       if (stylePatch.bgColor != null) getState().setBgColor(stylePatch.bgColor);
       if (stylePatch.bgOpacity != null) getState().setBgOpacity(stylePatch.bgOpacity);
-      if (stylePatch.boxBorderWidth != null) getState().setBoxBorderWidth(stylePatch.boxBorderWidth);
+      if (stylePatch.boxBorderWidth != null)
+        getState().setBoxBorderWidth(stylePatch.boxBorderWidth);
       if (stylePatch.borderWidth != null) getState().setBorderWidth(stylePatch.borderWidth);
       if (stylePatch.borderColor != null) getState().setBorderColor(stylePatch.borderColor);
       if (stylePatch.textShadowEnabled != null) {
         getState().setTextShadowEnabled(stylePatch.textShadowEnabled);
       }
-      if (stylePatch.textShadowColor != null) getState().setTextShadowColor(stylePatch.textShadowColor);
+      if (stylePatch.textShadowColor != null)
+        getState().setTextShadowColor(stylePatch.textShadowColor);
       if (stylePatch.textShadowOffsetX != null) {
         getState().setTextShadowOffsetX(stylePatch.textShadowOffsetX);
       }

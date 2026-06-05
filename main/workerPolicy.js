@@ -65,7 +65,8 @@ export function resolveBatchWorkers({
     workers = Math.min(workers, 2);
   }
 
-  const profile = encodeProfile === "quality" || encodeProfile === "fast" ? encodeProfile : "balanced";
+  const profile =
+    encodeProfile === "quality" || encodeProfile === "fast" ? encodeProfile : "balanced";
   if (hasVideoFilters && maxSourcePixels >= 1920 * 1080) {
     workers = Math.min(workers, profile === "quality" ? 2 : 3);
   }

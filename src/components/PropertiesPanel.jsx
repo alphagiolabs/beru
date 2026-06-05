@@ -37,10 +37,7 @@ export default function PropertiesPanel() {
     edgeFeather,
   } = useEditorStore(
     (s) => ({
-      sel:
-        s.selectedIdx >= 0 && s.selectedIdx < s.queue.length
-          ? s.queue[s.selectedIdx]
-          : null,
+      sel: s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null,
       currentRegion: s.currentRegion,
       activeTool: s.activeTool,
       sidebarMode: s.sidebarMode,

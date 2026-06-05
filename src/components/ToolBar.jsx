@@ -16,8 +16,7 @@ export default function ToolBar() {
     (s) => ({
       activeTool: s.activeTool,
       sidebarMode: s.sidebarMode,
-      hasSelection:
-        s.selectedIdx >= 0 && s.selectedIdx < s.queue.length,
+      hasSelection: s.selectedIdx >= 0 && s.selectedIdx < s.queue.length,
     }),
     shallow,
   );
