@@ -22,7 +22,7 @@ export function filePathFromBeruUrl(requestUrl) {
   const decoded = decodeURIComponent(url.pathname || "");
   if (!decoded) return null;
 
-  if (process.platform === "win32" && /^\/[A-Za-z]:[\\/]/.test(decoded)) {
+  if (/^\/[A-Za-z]:[\\/]/.test(decoded)) {
     return decoded.slice(1);
   }
   if (decoded.startsWith("//")) {

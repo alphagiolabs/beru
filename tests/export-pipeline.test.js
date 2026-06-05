@@ -505,10 +505,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
 
     // Verify Python handles the escaping (use raw string to avoid JS interpolation)
     const { spawnSync } = await import("child_process");
+    const py = process.platform === "win32" ? "python" : "python3";
     const r = spawnSync(
-      "py",
+      py,
       [
-        "-3",
         "-c",
         [
           "import sys; sys.path.insert(0, 'python')",
