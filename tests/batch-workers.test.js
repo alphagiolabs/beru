@@ -57,6 +57,33 @@ describe("workerPolicy", () => {
     ).toBe(2);
   });
 
+  it("1080p quality batches with filters cap automatic workers at 2", () => {
+    expect(
+      resolveBatchWorkers({
+        hwEncoder: "h264_nvenc",
+        jobCount: 8,
+        maxSourcePixels: 1920 * 1080,
+        mode: "balanced",
+        hasVideoFilters: true,
+        encodeProfile: "quality",
+      }),
+    ).toBe(2);
+  });
+
+  it("manual worker count still overrides memory-aware automatic caps", () => {
+    expect(
+      resolveBatchWorkers({
+        hwEncoder: "h264_nvenc",
+        jobCount: 8,
+        maxSourcePixels: 1920 * 1080,
+        mode: "balanced",
+        hasVideoFilters: true,
+        encodeProfile: "quality",
+        explicitWorkers: 4,
+      }),
+    ).toBe(4);
+  });
+
   it("recommendBatchWorkers returns structured hint", () => {
     const r = recommendBatchWorkers({
       hwEncoder: "h264_mf",

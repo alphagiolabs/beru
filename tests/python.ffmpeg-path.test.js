@@ -258,13 +258,46 @@ import os
 import processor
 os.environ.pop("BERU_WORKERS", None)
 os.environ["BERU_WORKERS_MODE"] = "balanced"
-print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8)))
+print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8, consider_memory=False)))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
       encoding: "utf8",
     });
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout.trim())).toBe(5);
+  });
+
+  it("caps automatic workers for 1080p quality batches with video filters", () => {
+    const code = `
+import json
+import os
+import processor
+os.environ.pop("BERU_WORKERS", None)
+os.environ["BERU_WORKERS_MODE"] = "balanced"
+print(json.dumps({
+    "filtered_quality": processor.resolve_max_workers(
+        "h264_nvenc",
+        8,
+        1920 * 1080,
+        consider_memory=False,
+        has_video_filters=True,
+        encode_profile="quality",
+    ),
+    "no_filters": processor.resolve_max_workers(
+        "h264_nvenc",
+        8,
+        1920 * 1080,
+        consider_memory=False,
+        has_video_filters=False,
+        encode_profile="quality",
+    ),
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+    });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout.trim())).toEqual({ filtered_quality: 2, no_filters: 5 });
   });
 
   it("uses BERU_FFPROBE when resolving the runtime ffprobe path", () => {
@@ -328,7 +361,7 @@ import processor
 
 calls = {"n": 0}
 
-def fake_process(idx, job, ffmpeg_path):
+def fake_process(idx, job, ffmpeg_path, **kwargs):
     calls["n"] += 1
     job_id = job.get("id", idx)
     if calls["n"] <= 1:
@@ -352,6 +385,65 @@ print(json.dumps({"calls": calls["n"], "result": result}))
     expect(parsed.calls).toBe(2);
     expect(parsed.result.succeeded).toBe(1);
     expect(parsed.result.failed).toBe(0);
+  });
+
+  it("retries memory-pressure batch failures sequentially", () => {
+    const code = `
+import json
+import os
+import processor
+
+calls = []
+
+def fake_process(idx, job, ffmpeg_path, **kwargs):
+    workers = processor._BATCH_ACTIVE_WORKERS
+    calls.append(workers)
+    job_id = job.get("id", idx)
+    if workers > 1:
+        return {"index": job_id, "status": "failed", "error": "x264 [error]: malloc of size 11619264 failed"}
+    return {"index": job_id, "status": "succeeded"}
+
+processor.detect_hw_encoder = lambda _ffmpeg: "h264_nvenc"
+processor.get_system_fonts = lambda: {}
+processor._process_one = fake_process
+os.environ["BERU_RETRY_FAILED"] = "1"
+jobs = [
+    {"id": i, "input_path": f"C:/tmp/{i}.mp4", "output_path": f"C:/tmp/out-{i}.mp4"}
+    for i in range(4)
+]
+result = processor.process_jobs(jobs, "ffmpeg", max_workers=4)
+print(json.dumps({"calls": calls, "result": result}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.calls.slice(0, 4)).toEqual([4, 4, 4, 4]);
+    expect(parsed.calls.slice(4)).toEqual([1, 1, 1, 1]);
+    expect(parsed.result.succeeded).toBe(4);
+    expect(parsed.result.failed).toBe(0);
+  });
+
+  it("bounds libx264 threads per active batch worker", () => {
+    const code = `
+import json
+import processor
+
+processor.os.cpu_count = lambda: 16
+processor._BATCH_ACTIVE_WORKERS = 4
+args = processor.build_encode_args("ffmpeg", "quality", {}, force_software=True)
+threads_idx = args.index("-threads")
+print(json.dumps({"threads": args[threads_idx + 1], "args": args}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.threads).toBe("4");
   });
 
   it("retries generic hardware filter failures with libx264", () => {
@@ -445,7 +537,7 @@ import json
 import processor
 processor.detect_hw_encoder = lambda _ffmpeg: None
 processor.get_system_fonts = lambda: {}
-processor._process_one = lambda idx, job, ffmpeg_path: {"index": job.get("id", idx), "status": "succeeded"}
+processor._process_one = lambda idx, job, ffmpeg_path, **kwargs: {"index": job.get("id", idx), "status": "succeeded"}
 result = processor.process_jobs([{"id": 7, "input_path": "C:/tmp/a.mp4"}], "ffmpeg", max_workers=1)
 print("RESULT", json.dumps(result, sort_keys=True))
 `;

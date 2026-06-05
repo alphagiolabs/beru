@@ -9,6 +9,11 @@ export function registerSystemHandlers() {
     const mode = settings.batchWorkersMode === "conservative" ? "conservative" : "balanced";
     const jobCount = Math.max(1, Number(opts.jobCount) || 1);
     const maxSourcePixels = Math.max(0, Number(opts.maxSourcePixels) || 0);
+    const hasVideoFilters = !!opts.hasVideoFilters;
+    const encodeProfile =
+      opts.encodeProfile === "fast" || opts.encodeProfile === "quality"
+        ? opts.encodeProfile
+        : settings.encodeProfile;
     const explicitWorkers =
       Number(settings.batchWorkers) > 0 ? Math.floor(Number(settings.batchWorkers)) : 0;
     const hwEncoder = await detectHwEncoderCached();
@@ -18,6 +23,8 @@ export function registerSystemHandlers() {
       maxSourcePixels,
       mode,
       explicitWorkers,
+      hasVideoFilters,
+      encodeProfile,
     });
     return {
       ...rec,

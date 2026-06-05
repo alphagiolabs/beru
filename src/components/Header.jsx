@@ -39,6 +39,7 @@ export default function Header() {
     batchRetryFailed,
     outputDir,
     queue,
+    templateRegions,
     selectedIdx,
     presets,
     theme,
@@ -54,6 +55,7 @@ export default function Header() {
       batchRetryFailed: s.batchRetryFailed,
       outputDir: s.outputDir,
       queue: s.queue,
+      templateRegions: s.templateRegions,
       selectedIdx: s.selectedIdx,
       presets: s.presets,
       theme: s.theme,
@@ -97,8 +99,10 @@ export default function Header() {
       const h = Number(item.sourceHeight || item.height || 0);
       if (w > 0 && h > 0) maxSourcePixels = Math.max(maxSourcePixels, w * h);
     }
+    const hasVideoFilters =
+      templateRegions.length > 0 || queue.some((item) => (item.operations || []).length > 0);
     api
-      .getBatchCapacity({ jobCount, maxSourcePixels })
+      .getBatchCapacity({ jobCount, maxSourcePixels, hasVideoFilters, encodeProfile })
       .then((cap) => {
         if (!cancelled && Number(cap?.recommended) > 0) {
           setAutoWorkerHint(cap.recommended);
@@ -108,7 +112,7 @@ export default function Header() {
     return () => {
       cancelled = true;
     };
-  }, [queue]);
+  }, [queue, templateRegions, encodeProfile]);
 
   const flashToast = (kind, text) => showToast({ kind, text });
 

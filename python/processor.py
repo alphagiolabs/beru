@@ -136,10 +136,36 @@ _DRAWTEXT_OPTIONS_CACHE = None
 _DRAWTEXT_OPTIONS_CACHE_FOR = None
 
 
-def detect_hw_encoder(ffmpeg_path):
-    """Detect first usable hardware H.264 encoder. Cached for process lifetime."""
+def _test_hw_encoder_real(ffmpeg_path, encoder):
+    """Smoke-test the encoder with a tiny 1-frame encode to verify it actually works."""
+    test_src = "testsrc=duration=0.1:size=320x240:rate=1"
+    try:
+        result = subprocess.run(
+            [
+                ffmpeg_path, "-hide_banner", "-f", "lavfi", "-i", test_src,
+                "-c:v", encoder, "-preset", "p1", "-frames:v", "1",
+                "-f", "null", "-",
+            ],
+            capture_output=True, text=True, timeout=20,
+        )
+        if result.returncode == 0:
+            return True
+        err = (result.stderr or "")[:500]
+        logger.info("Encoder %s probe failed: %s", encoder, err)
+        return False
+    except Exception as e:
+        logger.info("Encoder %s probe exception: %s", encoder, e)
+        return False
+
+
+def detect_hw_encoder(ffmpeg_path, *, force_test=False):
+    """Detect first usable hardware H.264 encoder.
+
+    Cached for process lifetime. If force_test is True, also validates the
+    encoder with a real 1-frame encode (recommended before a batch run).
+    """
     global _HW_ENCODER_CACHE
-    if _HW_ENCODER_CACHE is not None:
+    if _HW_ENCODER_CACHE is not None and not force_test:
         return _HW_ENCODER_CACHE or None
 
     encoders_text = ""
@@ -163,6 +189,12 @@ def detect_hw_encoder(ffmpeg_path):
 
     for enc in priority:
         if enc in encoders_text:
+            if force_test:
+                if _test_hw_encoder_real(ffmpeg_path, enc):
+                    _HW_ENCODER_CACHE = enc
+                    logger.info("Using hardware encoder: %s (verified)", enc)
+                    return enc
+                continue
             _HW_ENCODER_CACHE = enc
             logger.info("Using hardware encoder: %s", enc)
             return enc
@@ -238,6 +270,13 @@ def build_filter_thread_args(active_workers=None):
     return ["-filter_threads", str(n), "-filter_complex_threads", str(n)]
 
 
+def resolve_x264_threads(active_workers=None):
+    """Bound libx264 threads per job so CPU fallback batches do not exhaust RAM."""
+    workers = active_workers if active_workers is not None else _BATCH_ACTIVE_WORKERS
+    cpus = os.cpu_count() or 4
+    return max(1, min(8, cpus // max(1, int(workers))))
+
+
 def build_audio_args(output_path, src_audio_codec, src_audio_channels=0):
     """Copy audio when the container supports the source codec; else AAC.
 
@@ -255,11 +294,21 @@ def build_audio_args(output_path, src_audio_codec, src_audio_channels=0):
     return args
 
 
-def build_encode_args(ffmpeg_path, profile_name, job, force_software=False):
-    """Return ffmpeg video encode argument list for the given profile."""
+def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_encoder=None):
+    """Return ffmpeg video encode argument list for the given profile.
+
+    If hw_encoder is provided (from batch pre-flight), it is used directly
+    without re-detecting.  This avoids re-probing and allows the batch-level
+    pre-flight test to skip a broken GPU path entirely.
+    """
     profile = ENCODE_PROFILES.get(profile_name, ENCODE_PROFILES["balanced"])
     use_hw = not force_software and profile.get("hw_cq") is not None
-    hw = detect_hw_encoder(ffmpeg_path) if use_hw else None
+    if hw_encoder is not None and use_hw:
+        hw = hw_encoder
+    elif use_hw:
+        hw = detect_hw_encoder(ffmpeg_path)
+    else:
+        hw = None
 
     if hw == "h264_nvenc":
         cq = profile.get("hw_cq", 23)
@@ -287,17 +336,107 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False):
         qp = profile.get("hw_cq", 23)
         return ["-c:v", "h264_vaapi", "-qp", str(qp)]
 
-    # Software fallback (libx264)
+    # Software fallback (libx264) — cap threads to avoid RAM exhaustion when
+    # many CPU jobs run concurrently.
     preset = job.get("speed_preset") or profile["preset"]
+    threads = resolve_x264_threads()
     return [
         "-c:v", "libx264",
         "-crf", str(profile["crf"]),
         "-preset", preset,
-        "-threads", "0",
+        "-threads", str(threads),
     ]
 
 
-def resolve_max_workers(hw_encoder, job_count, max_source_pixels=0):
+def _get_available_ram_mb():
+    """Return available physical RAM in MB, or 0 if detection fails."""
+    try:
+        import psutil
+        return int(psutil.virtual_memory().available / (1024 * 1024))
+    except Exception:
+        pass
+    try:
+        if platform.system() == "Windows":
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_uint32),
+                    ("dwMemoryLoad", ctypes.c_uint32),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            mem = MEMORYSTATUSEX()
+            mem.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if kernel32.GlobalMemoryStatusEx(ctypes.byref(mem)):
+                return int(mem.ullAvailPhys / (1024 * 1024))
+    except Exception:
+        pass
+    return 0
+
+
+# Rough per-job memory estimates for 1080p with common presets (MB).
+# Values derived from typical x264/NVENC memory usage at 1080p.
+_RAM_PER_JOB_MB = {
+    "software": 512,   # libx264
+    "nvenc": 256,    # h264_nvenc
+    "qsv": 128,      # h264_qsv
+    "amf": 128,      # h264_amf
+    "mf": 64,        # h264_mf
+    "vaapi": 128,    # h264_vaapi
+    "videotoolbox": 128,
+}
+
+
+def _memory_cap_workers(
+    hw_encoder,
+    job_count,
+    max_source_pixels,
+    desired_workers,
+    has_video_filters=False,
+    encode_profile="balanced",
+):
+    """Clamp worker count based on available RAM."""
+    avail_mb = _get_available_ram_mb()
+    if avail_mb <= 0:
+        return desired_workers
+    profile = (encode_profile or "balanced").strip().lower()
+    key = "software" if (has_video_filters and profile == "quality") else \
+          "nvenc" if hw_encoder == "h264_nvenc" else \
+          "qsv" if hw_encoder == "h264_qsv" else \
+          "amf" if hw_encoder == "h264_amf" else \
+          "mf" if hw_encoder == "h264_mf" else \
+          "vaapi" if hw_encoder == "h264_vaapi" else \
+          "videotoolbox" if hw_encoder == "h264_videotoolbox" else "software"
+    per_job = _RAM_PER_JOB_MB.get(key, 512)
+    if has_video_filters:
+        per_job = int(per_job * 1.5)
+    if profile == "quality":
+        per_job = int(per_job * 1.35)
+    # 4K+ needs more RAM per encode.
+    if max_source_pixels >= 3840 * 2160:
+        per_job = int(per_job * 2.5)
+    elif max_source_pixels >= 1920 * 1080:
+        per_job = int(per_job * 1.5)
+    # Leave 20% headroom for OS / other apps.
+    cap = max(1, int((avail_mb * 0.8) / per_job))
+    return max(1, min(cap, desired_workers, MAX_WORKERS_CAP))
+
+
+def resolve_max_workers(
+    hw_encoder,
+    job_count,
+    max_source_pixels=0,
+    *,
+    consider_memory=True,
+    has_video_filters=False,
+    encode_profile=None,
+):
     """Pick parallel job count: env override, then GPU/CPU-aware caps (balanced | conservative)."""
     env_raw = os.environ.get("BERU_WORKERS", "0") or "0"
     try:
@@ -335,6 +474,20 @@ def resolve_max_workers(hw_encoder, job_count, max_source_pixels=0):
     # Reduce parallel 4K+ encodes to limit VRAM/RAM spikes.
     if max_source_pixels >= 3840 * 2160:
         workers = min(workers, 2)
+
+    profile = (encode_profile or os.environ.get("BERU_ENCODE_PROFILE") or "balanced").strip().lower()
+    if has_video_filters and max_source_pixels >= 1920 * 1080:
+        workers = min(workers, 2 if profile == "quality" else 3)
+
+    if consider_memory:
+        workers = _memory_cap_workers(
+            hw_encoder,
+            job_count,
+            max_source_pixels,
+            workers,
+            has_video_filters=has_video_filters,
+            encode_profile=profile,
+        )
 
     return workers
 
@@ -1198,6 +1351,22 @@ def _is_hardware_encode_error(stderr_text):
     return any(m in lower for m in markers)
 
 
+def _is_resource_pressure_error(stderr_text):
+    """Detect memory/resource pressure where rerunning with fewer workers may succeed."""
+    if not stderr_text:
+        return False
+    lower = stderr_text.lower()
+    markers = (
+        "malloc",
+        "cannot allocate memory",
+        "not enough memory",
+        "insufficient memory",
+        "out of memory",
+        "resource temporarily unavailable",
+    )
+    return any(m in lower for m in markers)
+
+
 def _stderr_buffer_append(buffer, line):
     """Keep stderr bounded while streaming FFmpeg output."""
     buffer.append(line)
@@ -1219,6 +1388,8 @@ def _should_retry_failed_job(result, max_workers):
         return False
     err = result.get("error") or ""
     if _is_hardware_encode_error(err):
+        return True
+    if max_workers > 1 and _is_resource_pressure_error(err):
         return True
     if max_workers >= 3 and "timeout" in err.lower():
         return True
@@ -1346,8 +1517,13 @@ def _run_ffmpeg_with_progress(cmd, timeout_sec, job_id, duration_sec):
     return False, _extract_error_line(stderr)
 
 
-def _process_one(idx, job, ffmpeg_path):
-    """Process a single job. Thread-safe."""
+def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
+    """Process a single job. Thread-safe.""
+
+    If hw_encoder is provided (from the batch pre-flight), it is used
+    directly instead of re-detecting. This avoids per-job detection overhead
+    and lets the batch-level pre-flight skip a broken GPU encoder for all jobs.
+    """
     if not isinstance(job, dict):
         logger.error("Job %d: invalid payload (expected object, got %s)", idx, type(job).__name__)
         _safe_print(json.dumps({"type": "error", "index": idx,
@@ -1427,13 +1603,14 @@ def _process_one(idx, job, ffmpeg_path):
     src_frame_rate = job.get("frame_rate") or info.get("frame_rate", 0)
     src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
-    hw_encoder = detect_hw_encoder(ffmpeg_path)
+    # Use the batch-level pre-flight encoder if provided; otherwise detect locally.
+    local_hw_encoder = hw_encoder if hw_encoder is not None else detect_hw_encoder(ffmpeg_path)
 
     def _build_cmd(force_software=False):
         loglevel = "info" if duration > 0 else "error"
         cmd = [ffmpeg_path, "-y", "-loglevel", loglevel]
         if not force_software:
-            cmd += build_hwaccel_args(hw_encoder, has_video_filters=bool(filter_complex))
+            cmd += build_hwaccel_args(local_hw_encoder, has_video_filters=bool(filter_complex))
         cmd += ["-i", input_path]
         for img_path in image_paths:
             if duration > 0:
@@ -1445,7 +1622,7 @@ def _process_one(idx, job, ffmpeg_path):
             cmd += ["-filter_complex", filter_complex, "-map", output_label]
         if image_paths:
             cmd += ["-shortest"]
-        cmd += build_encode_args(ffmpeg_path, encode_profile, job, force_software=force_software)
+        cmd += build_encode_args(ffmpeg_path, encode_profile, job, force_software=force_software, hw_encoder=local_hw_encoder)
         if src_pix_fmt:
             cmd += ["-pix_fmt", src_pix_fmt]
         else:
@@ -1461,7 +1638,7 @@ def _process_one(idx, job, ffmpeg_path):
     logger.info(
         "Job %d: processing '%s' [%dx%d, %d ops, profile=%s, encoder=%s]",
         idx, fname, vw, vh, len(operations), encode_profile,
-        hw_encoder or "libx264",
+        local_hw_encoder or "libx264",
     )
 
     # Dynamic timeout: base 5 mins + 2x video duration, min 10 mins, max 2 hours
@@ -1471,17 +1648,19 @@ def _process_one(idx, job, ffmpeg_path):
         _build_cmd(), timeout_sec=estimated_timeout, job_id=job_id, duration_sec=duration,
     )
 
-    # GPU encode can fail (-22) or destabilize the display stack — retry on CPU
-    if not ok:
-        hw = detect_hw_encoder(ffmpeg_path)
-        if hw and _is_hardware_encode_error(err):
-            logger.warning("Job %d: hardware path failed, retrying with libx264", idx)
-            ok, err = _run_ffmpeg(
-                _build_cmd(force_software=True),
-                timeout_sec=estimated_timeout,
-                job_id=job_id,
-                duration_sec=duration,
-            )
+    # GPU encode can fail (-22) or destabilize the display stack — retry on CPU.
+    # Only attempt the fallback if the batch-level pre-flight actually found a GPU
+    # encoder (local_hw_encoder is not None).  If the pre-flight was skipped, fail
+    # fast so the real error is surfaced to the user instead of hiding it behind a
+    # redundant software retry.
+    if not ok and local_hw_encoder is not None and _is_hardware_encode_error(err):
+        logger.warning("Job %d: hardware path failed, retrying with libx264", idx)
+        ok, err = _run_ffmpeg(
+            _build_cmd(force_software=True),
+            timeout_sec=estimated_timeout,
+            job_id=job_id,
+            duration_sec=duration,
+        )
 
     if ok:
         logger.info("Job %d: completed -> %s", idx, os.path.basename(output_path))
@@ -1493,7 +1672,7 @@ def _process_one(idx, job, ffmpeg_path):
         return {"index": job_id, "status": "failed", "error": err or "Unknown error"}
 
 
-def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True):
+def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True, hw_encoder=None):
     """Run one concurrent pass; returns per-job results and failure list."""
     total = len(jobs)
     results = {}
@@ -1563,7 +1742,7 @@ def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True):
                     "type": "error", "index": job_id, "error": "Cancelled",
                 }))
                 continue
-            fut = executor.submit(_process_one, i, job, ffmpeg_path)
+            fut = executor.submit(_process_one, i, job, ffmpeg_path, hw_encoder=hw_encoder)
             fut._beru_job_pos = i
             fut.add_done_callback(_on_done)
             futures.append(fut)
@@ -1585,8 +1764,13 @@ def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True):
     }
 
 
-def process_jobs(jobs, ffmpeg_path, max_workers=None):
-    """Process jobs concurrently. Report progress to stdout."""
+def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
+    """Process jobs concurrently. Report progress to stdout.
+
+    Args:
+        hw_encoder: If provided (from batch pre-flight), it is used directly
+            in build_encode_args. If None, each job falls back to libx264.
+    """
     global _cancel_event, _jobs_file, _BATCH_ACTIVE_WORKERS
     _cancel_event.clear()
     _last_job_progress_emit.clear()
@@ -1594,8 +1778,11 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None):
     # Warm font cache before parallel workers hit drawtext
     get_system_fonts()
 
-    hw = detect_hw_encoder(ffmpeg_path)
+    # If pre-flight hw_encoder was given, trust it; otherwise detect fresh.
+    hw = hw_encoder if hw_encoder is not None else detect_hw_encoder(ffmpeg_path)
     max_pixels = 0
+    has_video_filters = False
+    encode_profiles = set()
     for job in jobs:
         if not isinstance(job, dict):
             continue
@@ -1603,9 +1790,27 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None):
         h = int(job.get("source_height") or job.get("height") or 0)
         if w > 0 and h > 0:
             max_pixels = max(max_pixels, w * h)
+        if job.get("operations"):
+            has_video_filters = True
+        profile = (job.get("encode_profile") or "").strip().lower()
+        if profile:
+            encode_profiles.add(profile)
+
+    encode_profile = (
+        "quality" if "quality" in encode_profiles else
+        "balanced" if "balanced" in encode_profiles else
+        "fast" if "fast" in encode_profiles else
+        (os.environ.get("BERU_ENCODE_PROFILE") or "balanced")
+    )
 
     if max_workers is None:
-        max_workers = resolve_max_workers(hw, len(jobs), max_pixels)
+        max_workers = resolve_max_workers(
+            hw,
+            len(jobs),
+            max_pixels,
+            has_video_filters=has_video_filters,
+            encode_profile=encode_profile,
+        )
 
     total = len(jobs)
     mode = (os.environ.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
@@ -1614,7 +1819,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None):
         total, max_workers, mode, hw or "libx264", max_pixels, ffmpeg_path,
     )
 
-    pass1 = _execute_batch(jobs, ffmpeg_path, max_workers, emit_batch_progress=True)
+    pass1 = _execute_batch(jobs, ffmpeg_path, max_workers, emit_batch_progress=True, hw_encoder=hw)
     succeeded = pass1["succeeded"]
     failed = pass1["failed"]
     cancelled = pass1["cancelled"]
@@ -1629,13 +1834,18 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None):
         and retry_candidates
         and not _check_cancelled()
     ):
-        reduced_workers = max(1, max_workers // 2)
+        resource_retry = any(
+            _is_resource_pressure_error((result.get("error") or ""))
+            for _job, result in pass1["failed_jobs"]
+            if _should_retry_failed_job(result, max_workers)
+        )
+        reduced_workers = 1 if resource_retry else max(1, max_workers // 2)
         logger.info(
             "Retry pass: %d failed jobs at %d workers (was %d)",
             len(retry_candidates), reduced_workers, max_workers,
         )
         pass2 = _execute_batch(
-            retry_candidates, ffmpeg_path, reduced_workers, emit_batch_progress=False,
+            retry_candidates, ffmpeg_path, reduced_workers, emit_batch_progress=False, hw_encoder=hw,
         )
         for job in retry_candidates:
             job_id = job.get("id")
@@ -1693,7 +1903,14 @@ def main():
         sys.exit(1)
 
     get_system_fonts()
-    result = process_jobs(jobs, FFMPEG)
+
+    # Pre-flight hardware validation: detect and test the encoder before committing
+    # workers. If a 1-frame smoke test fails, force software for the whole batch.
+    preflight_hw = detect_hw_encoder(FFMPEG, force_test=True)
+    if preflight_hw is None:
+        logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
+
+    result = process_jobs(jobs, FFMPEG, preflight_hw=preflight_hw)
     print(json.dumps({"type": "summary", **result}))
 
 

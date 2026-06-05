@@ -31,6 +31,8 @@ export function resolveBatchWorkers({
   maxSourcePixels = 0,
   mode = "balanced",
   explicitWorkers = 0,
+  hasVideoFilters = false,
+  encodeProfile = "balanced",
 }) {
   const jobs = Math.max(1, Math.floor(Number(jobCount) || 1));
   const explicit = Math.floor(Number(explicitWorkers) || 0);
@@ -61,6 +63,11 @@ export function resolveBatchWorkers({
 
   if (maxSourcePixels >= 3840 * 2160) {
     workers = Math.min(workers, 2);
+  }
+
+  const profile = encodeProfile === "quality" || encodeProfile === "fast" ? encodeProfile : "balanced";
+  if (hasVideoFilters && maxSourcePixels >= 1920 * 1080) {
+    workers = Math.min(workers, profile === "quality" ? 2 : 3);
   }
 
   return workers;
