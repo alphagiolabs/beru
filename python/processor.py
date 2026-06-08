@@ -9,6 +9,7 @@ Reads a JSON job manifest and processes videos with:
 Outputs progress as JSON lines to stdout.
 """
 
+import base64
 import json
 import re
 import platform
@@ -23,6 +24,11 @@ import threading
 import concurrent.futures
 from pathlib import Path
 
+from encode_profiles import (
+    ENCODE_PROFILES,
+    effective_hw_encoder as resolve_effective_hw_encoder,
+    profile_allows_hardware,
+)
 from batch_errors import (
     format_processing_error,
     is_hardware_encode_error,
@@ -123,13 +129,6 @@ def setup_logging():
 
 
 logger = setup_logging()
-
-# Encode profiles: fast (batch throughput), balanced (default), quality (max fidelity, CPU)
-ENCODE_PROFILES = {
-    "fast": {"crf": 26, "preset": "ultrafast", "hw_cq": 28, "nvenc_preset": "p1"},
-    "balanced": {"crf": 23, "preset": "fast", "hw_cq": 23, "nvenc_preset": "p4"},
-    "quality": {"crf": 18, "preset": "medium", "hw_cq": 18, "nvenc_preset": "p6"},
-}
 
 # Audio codecs that can be stream-copied into each container (no re-encode).
 _AUDIO_COPY_CODECS = {
@@ -311,7 +310,7 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_e
     pre-flight test to skip a broken GPU path entirely.
     """
     profile = ENCODE_PROFILES.get(profile_name, ENCODE_PROFILES["balanced"])
-    use_hw = not force_software and profile.get("hw_cq") is not None
+    use_hw = not force_software and profile_allows_hardware(profile_name)
     if hw_encoder is not None and use_hw:
         hw = hw_encoder
     elif use_hw:
@@ -415,7 +414,7 @@ def _memory_cap_workers(
     if avail_mb <= 0:
         return desired_workers
     profile = (encode_profile or "balanced").strip().lower()
-    key = "software" if (has_video_filters and ENCODE_PROFILES.get(profile, {}).get("hw_cq") is None) else \
+    key = "software" if (has_video_filters and not profile_allows_hardware(profile)) else \
           "nvenc" if hw_encoder == "h264_nvenc" else \
           "qsv" if hw_encoder == "h264_qsv" else \
           "amf" if hw_encoder == "h264_amf" else \
@@ -425,7 +424,7 @@ def _memory_cap_workers(
     per_job = _RAM_PER_JOB_MB.get(key, 512)
     if has_video_filters:
         per_job = int(per_job * 1.5)
-    if ENCODE_PROFILES.get(profile, {}).get("hw_cq") is None:
+    if not profile_allows_hardware(profile):
         per_job = int(per_job * 1.35)
     # 4K+ needs more RAM per encode.
     if max_source_pixels >= 3840 * 2160:
@@ -464,7 +463,7 @@ def resolve_max_workers(
     profile = (
         encode_profile or os.environ.get("BERU_ENCODE_PROFILE") or "balanced"
     ).strip().lower()
-    effective_hw_encoder = hw_encoder if ENCODE_PROFILES.get(profile, {}).get("hw_cq") is not None else None
+    effective_hw_encoder = resolve_effective_hw_encoder(profile, hw_encoder)
 
     if effective_hw_encoder:
         cap = caps.get(effective_hw_encoder, caps.get("h264_nvenc", 2))
@@ -488,7 +487,7 @@ def resolve_max_workers(
     if max_source_pixels >= 3840 * 2160:
         workers = min(workers, 2)
 
-    if has_video_filters and ENCODE_PROFILES.get(profile, {}).get("hw_cq") is None:
+    if has_video_filters and not profile_allows_hardware(profile):
         workers = min(workers, 2)
     elif has_video_filters and max_source_pixels >= 1920 * 1080:
         workers = min(workers, 3)
@@ -738,11 +737,124 @@ def ffprobe(path):
     return _ffprobe_via_ffmpeg(path)
 
 
+def _estimate_char_width(font_size):
+    try:
+        font_size = float(font_size)
+    except (TypeError, ValueError):
+        font_size = 32
+    return max(4.0, font_size * 0.55)
+
+
+def _wrap_text_to_width(text, max_width_px, font_size):
+    raw = str(text or "")
+    if not raw or max_width_px <= 0:
+        return raw
+    max_chars = max(1, int(max_width_px / _estimate_char_width(font_size)))
+    lines = []
+    for paragraph in raw.split("\n"):
+        if paragraph == "":
+            lines.append("")
+            continue
+        words = paragraph.split()
+        current = ""
+        for word in words:
+            test = f"{current} {word}".strip() if current else word
+            if len(test) <= max_chars:
+                current = test
+            else:
+                if current:
+                    lines.append(current)
+                while len(word) > max_chars:
+                    lines.append(word[:max_chars])
+                    word = word[max_chars:]
+                current = word
+        lines.append(current)
+    return "\n".join(lines)
+
+
+def _truncate_text(text, max_width_px, font_size, mode):
+    raw = str(text or "")
+    if mode != "ellipsis" or not raw or max_width_px <= 0:
+        return raw
+    max_chars = max(1, int(max_width_px / _estimate_char_width(font_size)))
+    if len(raw.replace("\n", "")) <= max_chars:
+        return raw
+    keep = max(1, max_chars - 1)
+    return raw[:keep].rstrip() + "…"
+
+
+def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_size=8):
+    try:
+        base_size = int(base_size)
+    except (TypeError, ValueError):
+        base_size = 32
+    try:
+        line_height = float(line_height)
+    except (TypeError, ValueError):
+        line_height = 1.2
+    try:
+        region_w = int(region_w)
+        region_h = int(region_h)
+    except (TypeError, ValueError):
+        region_w = 0
+        region_h = 0
+    min_size = max(8, int(min_size))
+    size = max(min_size, base_size)
+    if region_w <= 0 or region_h <= 0:
+        return size
+    while size >= min_size:
+        display = _wrap_text_to_width(text, region_w, size) if wrap else str(text or "")
+        line_count = max(1, display.count("\n") + 1) if display else 1
+        longest = max((len(line) for line in display.split("\n")), default=0)
+        total_h = line_count * size * line_height
+        line_w = longest * _estimate_char_width(size)
+        if total_h <= region_h and line_w <= region_w:
+            return size
+        size -= 1
+    return min_size
+
+
 def build_drawtext(op):
     """Build ffmpeg drawtext filter string from operation."""
     text = (op.get("text") or "").strip()
     if not text:
         return None
+
+    region = op.get("region", {}) or {}
+    try:
+        safe_margin = int(op.get("safe_margin", 0) or 0)
+    except (TypeError, ValueError):
+        safe_margin = 0
+    safe_margin = max(0, safe_margin)
+
+    x = int(region.get("x", 0)) + safe_margin
+    y = int(region.get("y", 0)) + safe_margin
+    region_w = max(0, int(region.get("w", 0)) - (2 * safe_margin))
+    region_h = max(0, int(region.get("h", 0)) - (2 * safe_margin))
+
+    font_size = op.get("font_size", 32)
+    try:
+        line_height = float(op.get("line_height", 1.2))
+    except (TypeError, ValueError):
+        line_height = 1.2
+    text_wrap = op.get("text_wrap", True)
+    if isinstance(text_wrap, str):
+        text_wrap = text_wrap.lower() not in ("0", "false", "no")
+    truncate = str(op.get("truncate") or "none").lower()
+    auto_fit = bool(op.get("auto_fit"))
+
+    if auto_fit and region_w > 0 and region_h > 0:
+        font_size = _fit_font_size(text, region_w, region_h, font_size, line_height, text_wrap)
+    else:
+        try:
+            font_size = int(font_size)
+        except (TypeError, ValueError):
+            font_size = 32
+
+    if text_wrap and region_w > 0:
+        text = _wrap_text_to_width(text, region_w, font_size)
+    if not auto_fit:
+        text = _truncate_text(text, region_w, font_size, truncate)
 
     # Escape the text for FFmpeg drawtext syntax
     text = (text
@@ -758,18 +870,13 @@ def build_drawtext(op):
             .replace("\n", "\\n")
             .replace("\r", ""))
 
-    font_size = op.get("font_size", 32)
     font_color = op.get("font_color", "white")
     font_family = op.get("font_family", "Arial")
     bold = 1 if op.get("bold") else 0
     italic = 1 if op.get("italic") else 0
-    region = op.get("region", {})
-    x = int(region.get("x", 0))
-    y = int(region.get("y", 0))
     
-    # 3. Dynamic text alignment using FFmpeg's native text_w variable
+    # Dynamic text alignment using FFmpeg's native text_w variable
     text_align = op.get("text_align", "left")
-    region_w = region.get("w", 0)
     
     if text_align == "center" and region_w > 0:
         x_expr = f"{x} + ({region_w} - text_w) / 2"
@@ -777,6 +884,14 @@ def build_drawtext(op):
         x_expr = f"{x} + {region_w} - text_w"
     else:
         x_expr = str(x)
+
+    vertical_align = str(op.get("vertical_align") or "top").lower()
+    if vertical_align == "center" and region_h > 0:
+        y_expr = f"{y} + ({region_h} - text_h) / 2"
+    elif vertical_align == "bottom" and region_h > 0:
+        y_expr = f"{y} + {region_h} - text_h"
+    else:
+        y_expr = str(y)
 
     font_key, font_val, is_fontfile = _resolve_font(font_family)
     if is_fontfile:
@@ -798,7 +913,7 @@ def build_drawtext(op):
         f"fontcolor={font_color}",
         f"{font_key}={font_val}",
         f"x={x_expr}",
-        f"y={y}",
+        f"y={y_expr}",
     ]
 
     # Numeric font weight (100-900). "bold" is a convenience alias.
@@ -824,6 +939,10 @@ def build_drawtext(op):
         spacing_px = 0
     if spacing_px > 0 and _drawtext_supports("spacing"):
         parts.append(f"spacing={spacing_px}")
+
+    line_spacing_px = int(round(float(font_size) * max(0.0, line_height - 1.0)))
+    if line_spacing_px > 0 and _drawtext_supports("line_spacing"):
+        parts.append(f"line_spacing={line_spacing_px}")
 
     # Background box
     if op.get("bg_enabled", True):
@@ -1800,7 +1919,7 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
     # Use the batch-level pre-flight encoder if provided; otherwise detect locally.
-    if ENCODE_PROFILES.get(encode_profile, {}).get("hw_cq") is None:
+    if not profile_allows_hardware(encode_profile):
         local_hw_encoder = None
     elif hw_encoder is not None:
         local_hw_encoder = hw_encoder
@@ -2003,7 +2122,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
         "fast" if "fast" in encode_profiles else
         (os.environ.get("BERU_ENCODE_PROFILE") or "balanced")
     )
-    effective_hw = hw if ENCODE_PROFILES.get(encode_profile, {}).get("hw_cq") is not None else None
+    effective_hw = resolve_effective_hw_encoder(encode_profile, hw)
 
     if max_workers is None:
         max_workers = resolve_max_workers(
@@ -2080,8 +2199,111 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
     return {"total": total, "succeeded": succeeded, "failed": failed + cancelled}
 
 
+def _init_ffmpeg_globals():
+    """Configure module-level FFMPEG/FFPROBE paths. Returns False if ffmpeg is missing."""
+    global FFMPEG, FFPROBE
+
+    ffmpeg_bin = find_ffmpeg()
+    ffprobe_bin = find_ffprobe(ffmpeg_bin)
+    if not (os.path.isfile(ffmpeg_bin) or shutil.which(ffmpeg_bin)):
+        logger.error("ffmpeg not found at %s", ffmpeg_bin)
+        return False
+
+    FFMPEG = ffmpeg_bin
+    FFPROBE = ffprobe_bin
+    logger.info("Using ffmpeg: %s", FFMPEG)
+    logger.info("Using ffprobe: %s", FFPROBE)
+    return True
+
+
+def render_preview_frame(payload):
+    """Render one video frame with export-equivalent filters.
+
+    Returns a dict: {ok, data_url?, error?, width?, height?, timestamp?}
+    """
+    input_path = payload.get("input_path")
+    if not input_path or not os.path.exists(input_path):
+        return {"ok": False, "error": f"Input not found: {input_path}"}
+
+    try:
+        timestamp = max(0.0, float(payload.get("timestamp", 0)))
+    except (TypeError, ValueError):
+        timestamp = 0.0
+
+    info = job_video_info(payload, input_path)
+    vw = int(payload.get("source_width") or payload.get("width") or info.get("width") or 0)
+    vh = int(payload.get("source_height") or payload.get("height") or info.get("height") or 0)
+    if vw <= 0 or vh <= 0:
+        return {"ok": False, "error": "No se pudo leer la resolución del video"}
+
+    raw_operations = payload.get("operations") or []
+    operations = [
+        _optimize_delogo_for_speed(_normalize_operation(op), vw, vh)
+        for op in raw_operations
+    ]
+    watermark = payload.get("watermark")
+    filter_complex, output_label, image_paths = build_filter_complex(
+        operations, vw, vh, watermark=watermark,
+    )
+
+    cmd = [
+        FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
+        "-ss", f"{timestamp:.3f}",
+        "-i", input_path,
+    ]
+    for img_path in image_paths:
+        cmd += ["-loop", "1", "-i", img_path]
+    if filter_complex:
+        cmd += ["-filter_complex", filter_complex, "-map", output_label]
+    else:
+        cmd += ["-map", "0:v:0"]
+    cmd += ["-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=45)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Timeout al renderizar el frame"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    if result.returncode != 0:
+        err = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+        return {"ok": False, "error": err or f"FFmpeg exited with code {result.returncode}"}
+
+    buf = result.stdout or b""
+    if len(buf) < 64:
+        return {"ok": False, "error": "FFmpeg no produjo imagen"}
+
+    data_url = "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
+    return {
+        "ok": True,
+        "data_url": data_url,
+        "width": vw,
+        "height": vh,
+        "timestamp": timestamp,
+    }
+
+
+def preview_frame_main(json_path):
+    if not _init_ffmpeg_globals():
+        print(json.dumps({"ok": False, "error": "ffmpeg not found"}))
+        sys.exit(1)
+
+    with open(json_path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    get_system_fonts()
+    result = render_preview_frame(payload)
+    print(json.dumps(result))
+    sys.exit(0 if result.get("ok") else 1)
+
+
 def main():
     global FFMPEG, FFPROBE, _jobs_file
+
+    if len(sys.argv) >= 3 and sys.argv[1] == "--preview-frame":
+        preview_frame_main(sys.argv[2])
+        return
 
     if len(sys.argv) < 2:
         logger.error("Missing jobs.json argument")
@@ -2090,17 +2312,9 @@ def main():
 
     _jobs_file = sys.argv[1]
 
-    ffmpeg_bin = find_ffmpeg()
-    ffprobe_bin = find_ffprobe(ffmpeg_bin)
-    if not (os.path.isfile(ffmpeg_bin) or shutil.which(ffmpeg_bin)):
-        logger.error("ffmpeg not found at %s", ffmpeg_bin)
-        print(json.dumps({"type": "error", "error": f"ffmpeg not found at {ffmpeg_bin}"}))
+    if not _init_ffmpeg_globals():
+        print(json.dumps({"type": "error", "error": f"ffmpeg not found at {find_ffmpeg()}"}))
         sys.exit(1)
-
-    FFMPEG = ffmpeg_bin
-    FFPROBE = ffprobe_bin
-    logger.info("Using ffmpeg: %s", FFMPEG)
-    logger.info("Using ffprobe: %s", FFPROBE)
 
     with open(sys.argv[1], "r", encoding="utf-8") as f:
         payload = json.load(f)

@@ -1,6 +1,6 @@
 {
   "name": "beru",
-  "version": "1.6.10",
+  "version": "1.6.11",
   "description": "Beru — Editor de video masivo con overlays de texto vía base de datos Excel",
   "main": "main/main.js",
   "type": "module",
@@ -76,6 +76,10 @@
       {
         "from": "resources/presets",
         "to": "presets"
+      },
+      {
+        "from": "resources/encode-profiles.json",
+        "to": "encode-profiles.json"
       }
     ],
     "win": {

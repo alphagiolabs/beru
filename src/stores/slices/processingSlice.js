@@ -1,6 +1,7 @@
 import { denormalizeRegion } from "../../utils/types";
 import { sanitizeOperation } from "../../utils/delogo-ops";
 import { filterOperationsForExport, hasVideoDimensions } from "../../utils/batch-process";
+import { buildBatchTextOperationsForPreview } from "../../utils/preview-frame-job";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { textStyleToPythonPayload } from "../../utils/text-style";
 import { createJobManifest } from "../../utils/job-manifest";
@@ -210,6 +211,26 @@ export function createProcessingSlice(set, get) {
         audio_channels: item.audioChannels || 0,
         encode_profile: encodeProfile,
         watermark: get().watermark?.enabled ? get().watermark : null,
+      };
+    },
+
+    buildPreviewFrameJob: (videoIdx, timestamp) => {
+      const state = get();
+      const item = state.queue[videoIdx];
+      if (!item) return null;
+
+      const operations =
+        state.templateRegions?.length > 0
+          ? buildBatchTextOperationsForPreview(state, videoIdx)
+          : item.operations;
+      const syntheticItem = { ...item, operations };
+      const job = get()._buildJobFor(syntheticItem, videoIdx);
+      if (!job) return null;
+
+      const ts = Number(timestamp);
+      return {
+        ...job,
+        timestamp: Number.isFinite(ts) && ts >= 0 ? ts : 0,
       };
     },
 

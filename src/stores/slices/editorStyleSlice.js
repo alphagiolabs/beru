@@ -43,6 +43,12 @@ export function createEditorStyleSlice(set, get) {
         textShadowColor: preset.textShadowColor,
         textShadowOffsetX: preset.textShadowOffsetX,
         textShadowOffsetY: preset.textShadowOffsetY,
+        autoFit: preset.autoFit,
+        lineHeight: preset.lineHeight,
+        verticalAlign: preset.verticalAlign,
+        textWrap: preset.textWrap,
+        safeMargin: preset.safeMargin,
+        truncate: preset.truncate,
       };
       if (get().sidebarMode === "batch") {
         get().patchBatchTextStyle(stylePatch);
@@ -78,6 +84,12 @@ export function createEditorStyleSlice(set, get) {
     setTextShadowColor: (val) => set({ textShadowColor: val }),
     setTextShadowOffsetX: (val) => set({ textShadowOffsetX: Number(val) }),
     setTextShadowOffsetY: (val) => set({ textShadowOffsetY: Number(val) }),
+    setAutoFit: (val) => set({ autoFit: !!val }),
+    setLineHeight: (val) => set({ lineHeight: Number(val) }),
+    setVerticalAlign: (val) => set({ verticalAlign: val }),
+    setTextWrap: (val) => set({ textWrap: !!val }),
+    setSafeMargin: (val) => set({ safeMargin: Number(val) }),
+    setTruncate: (val) => set({ truncate: val }),
     setBlurStrength: (val) => set({ blurStrength: Number(val) }),
     setTempStart: (val) => set({ tempStart: val === null || val === "" ? null : Number(val) }),
     setTempEnd: (val) => set({ tempEnd: val === null || val === "" ? null : Number(val) }),

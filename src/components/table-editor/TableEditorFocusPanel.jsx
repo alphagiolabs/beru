@@ -2,6 +2,7 @@ import { Bold, Italic, Trash2, Plus, AlignLeft, AlignCenter, AlignRight } from "
 import { clampRegionToVideo } from "../../utils/video-utils";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS } from "../../utils/types";
 import { normalizeColor } from "../../utils/color-utils";
+import TextLayoutControls from "../TextLayoutControls";
 
 export default function TableEditorFocusPanel({
   hasRegions,
@@ -123,6 +124,19 @@ export default function TableEditorFocusPanel({
                 })}
               </div>
             </div>
+
+            <TextLayoutControls
+              values={{
+                autoFit: focusedOp?.autoFit,
+                lineHeight: focusedOp?.lineHeight,
+                verticalAlign: focusedOp?.verticalAlign,
+                textWrap: focusedOp?.textWrap,
+                safeMargin: focusedOp?.safeMargin,
+                truncate: focusedOp?.truncate,
+              }}
+              onPatch={updateFocused}
+              disabled={!focusedOp}
+            />
 
             {/* Typography */}
             <div>

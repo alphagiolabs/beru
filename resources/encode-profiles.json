@@ -1,0 +1,21 @@
+{
+  "profiles": {
+    "fast": {
+      "label": "fast",
+      "allowsHardware": true,
+      "software": { "crf": 26, "preset": "ultrafast" },
+      "hardware": { "hwCq": 28, "nvencPreset": "p1" }
+    },
+    "balanced": {
+      "label": "balanced",
+      "allowsHardware": true,
+      "software": { "crf": 23, "preset": "fast" },
+      "hardware": { "hwCq": 23, "nvencPreset": "p4" }
+    },
+    "quality": {
+      "label": "quality",
+      "allowsHardware": false,
+      "software": { "crf": 18, "preset": "medium" }
+    }
+  }
+}

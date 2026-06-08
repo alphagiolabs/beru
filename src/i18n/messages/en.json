@@ -279,7 +279,7 @@
 
   "batch.excelParseError": "Failed to read Excel: {message}",
   "batch.excelLinked": "Linked {count} Excel records.",
-  "batch.confirmExcelOverwrite": "Some videos have manual operations (blur, crop, etc.) that will be lost when importing Excel. Continue?",
+  "batch.confirmExcelOverwrite": "Importing Excel will replace text in template regions with spreadsheet data. Blur, crop, and other manual operations will be kept. Continue?",
 
   "header.missingDimensions": "{count} video(s) without detected resolution ({names}{more}). Processing may fail. Continue?",
 

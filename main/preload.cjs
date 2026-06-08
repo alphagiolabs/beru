@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld("api", {
   resolveDroppedPaths: (paths) => ipcRenderer.invoke("fs:resolveDroppedPaths", paths),
   getThumbnail: (path) => ipcRenderer.invoke("video:thumbnail", path),
   getThumbnailBatch: (paths) => ipcRenderer.invoke("video:thumbnailBatch", paths),
+  renderPreviewFrame: (payload) => ipcRenderer.invoke("video:renderPreviewFrame", payload),
 
   onProgress: (cb) => {
     const handler = (_e, data) => cb(data);

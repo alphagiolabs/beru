@@ -22,6 +22,12 @@ export const TEXT_STYLE_KEYS = [
   "textShadowColor",
   "textShadowOffsetX",
   "textShadowOffsetY",
+  "autoFit",
+  "lineHeight",
+  "verticalAlign",
+  "textWrap",
+  "safeMargin",
+  "truncate",
 ];
 
 const GLOBAL_KEY_MAP = {
@@ -49,6 +55,12 @@ export const TEXT_STYLE_DEFAULTS = Object.freeze({
   textShadowColor: "black",
   textShadowOffsetX: 2,
   textShadowOffsetY: 2,
+  autoFit: false,
+  lineHeight: 1.2,
+  verticalAlign: "top",
+  textWrap: true,
+  safeMargin: 4,
+  truncate: "none",
 });
 
 export const GLOBAL_TEXT_STYLE_DEFAULTS = Object.freeze({
@@ -72,6 +84,12 @@ export const GLOBAL_TEXT_STYLE_DEFAULTS = Object.freeze({
   textShadowColor: TEXT_STYLE_DEFAULTS.textShadowColor,
   textShadowOffsetX: TEXT_STYLE_DEFAULTS.textShadowOffsetX,
   textShadowOffsetY: TEXT_STYLE_DEFAULTS.textShadowOffsetY,
+  autoFit: TEXT_STYLE_DEFAULTS.autoFit,
+  lineHeight: TEXT_STYLE_DEFAULTS.lineHeight,
+  verticalAlign: TEXT_STYLE_DEFAULTS.verticalAlign,
+  textWrap: TEXT_STYLE_DEFAULTS.textWrap,
+  safeMargin: TEXT_STYLE_DEFAULTS.safeMargin,
+  truncate: TEXT_STYLE_DEFAULTS.truncate,
 });
 
 function clampBool(val, fallback = false) {
@@ -111,6 +129,16 @@ export function normalizeTextStyle(style = {}, defaults = TEXT_STYLE_DEFAULTS) {
     textShadowColor: String(source.textShadowColor ?? defaults.textShadowColor).slice(0, 32),
     textShadowOffsetX: clampNum(source.textShadowOffsetX, -64, 64, defaults.textShadowOffsetX),
     textShadowOffsetY: clampNum(source.textShadowOffsetY, -64, 64, defaults.textShadowOffsetY),
+    autoFit: clampBool(source.autoFit, defaults.autoFit),
+    lineHeight: clampNum(source.lineHeight, 0.8, 3, defaults.lineHeight),
+    verticalAlign: ["top", "center", "bottom"].includes(source.verticalAlign)
+      ? source.verticalAlign
+      : defaults.verticalAlign,
+    textWrap: clampBool(source.textWrap, defaults.textWrap),
+    safeMargin: clampNum(source.safeMargin, 0, 48, defaults.safeMargin),
+    truncate: ["none", "ellipsis", "clip"].includes(source.truncate)
+      ? source.truncate
+      : defaults.truncate,
   };
 }
 
@@ -135,6 +163,12 @@ export function getGlobalTextStyleFromState(s) {
     textShadowColor: s.textShadowColor,
     textShadowOffsetX: s.textShadowOffsetX,
     textShadowOffsetY: s.textShadowOffsetY,
+    autoFit: s.autoFit,
+    lineHeight: s.lineHeight,
+    verticalAlign: s.verticalAlign,
+    textWrap: s.textWrap,
+    safeMargin: s.safeMargin,
+    truncate: s.truncate,
   });
 }
 
@@ -164,6 +198,12 @@ export function textStyleToPythonPayload(style = {}) {
     text_shadow_color: safe.textShadowColor,
     text_shadow_offset_x: safe.textShadowOffsetX,
     text_shadow_offset_y: safe.textShadowOffsetY,
+    auto_fit: safe.autoFit,
+    line_height: safe.lineHeight,
+    vertical_align: safe.verticalAlign,
+    text_wrap: safe.textWrap,
+    safe_margin: safe.safeMargin,
+    truncate: safe.truncate,
   };
 }
 
@@ -194,6 +234,12 @@ export function patchToGlobalState(patch) {
         "textShadowColor",
         "textShadowOffsetX",
         "textShadowOffsetY",
+        "autoFit",
+        "lineHeight",
+        "verticalAlign",
+        "textWrap",
+        "safeMargin",
+        "truncate",
         "textInput",
       ].includes(gk)
     ) {

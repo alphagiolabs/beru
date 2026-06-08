@@ -2,6 +2,7 @@ import { Plus, FileSpreadsheet, Table2, Copy, Trash2, Settings2 } from "lucide-r
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
+import { textOpMatchesRegion } from "../utils/text-style";
 
 const api = window.api;
 
@@ -34,9 +35,17 @@ export default function BatchPanel() {
   const report = get().getMatchReport();
 
   const handleImportExcel = async () => {
-    // Warn if any videos have manual (non-text) operations that will be overwritten
-    const hasManualOps = queue.some((v) => v.operations.some((op) => op.mode !== "text"));
-    if (hasManualOps) {
+    // Warn when Excel will replace text ops linked to template regions (_reapplyExcel preserves non-text ops)
+    const hasLinkedTextToOverwrite = queue.some((v) =>
+      v.operations.some(
+        (op) =>
+          op.mode === "text" &&
+          templateRegions.some(
+            (tr) => tr.region && textOpMatchesRegion(op, tr.region, tr.id),
+          ),
+      ),
+    );
+    if (hasLinkedTextToOverwrite) {
       const ok = await get().requestConfirm({ message: t("batch.confirmExcelOverwrite") });
       if (!ok) return;
     }

@@ -1,7 +1,8 @@
-import { Bold, Italic, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
+import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, ScanEye } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS } from "../utils/types";
+import TextLayoutControls from "./TextLayoutControls";
 
 const NAMED_COLORS = {
   white: "#ffffff",
@@ -60,6 +61,12 @@ export default function StyleEditor() {
     textShadowColor,
     textShadowOffsetX,
     textShadowOffsetY,
+    autoFit,
+    lineHeight,
+    verticalAlign,
+    textWrap,
+    safeMargin,
+    truncate,
   } = useEditorStore(
     (s) => ({
       isBatch: s.sidebarMode === "batch",
@@ -82,6 +89,12 @@ export default function StyleEditor() {
       textShadowColor: s.textShadowColor,
       textShadowOffsetX: s.textShadowOffsetX,
       textShadowOffsetY: s.textShadowOffsetY,
+      autoFit: s.autoFit,
+      lineHeight: s.lineHeight,
+      verticalAlign: s.verticalAlign,
+      textWrap: s.textWrap,
+      safeMargin: s.safeMargin,
+      truncate: s.truncate,
     }),
     shallow,
   );
@@ -117,11 +130,37 @@ export default function StyleEditor() {
       if (stylePatch.textShadowOffsetY != null) {
         getState().setTextShadowOffsetY(stylePatch.textShadowOffsetY);
       }
+      if (stylePatch.autoFit != null) getState().setAutoFit(stylePatch.autoFit);
+      if (stylePatch.lineHeight != null) getState().setLineHeight(stylePatch.lineHeight);
+      if (stylePatch.verticalAlign != null) getState().setVerticalAlign(stylePatch.verticalAlign);
+      if (stylePatch.textWrap != null) getState().setTextWrap(stylePatch.textWrap);
+      if (stylePatch.safeMargin != null) getState().setSafeMargin(stylePatch.safeMargin);
+      if (stylePatch.truncate != null) getState().setTruncate(stylePatch.truncate);
     }
   };
 
   return (
     <div className="space-y-2">
+      <div className="pb-2 mb-1 border-b" style={{ borderColor: "var(--border)" }}>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent("beru:preview:renderFrame"))}
+          className="w-full py-1.5 px-2 rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition-colors hover:opacity-90"
+          style={{
+            background: "var(--bg-elevated)",
+            color: "var(--text-secondary)",
+            border: "1px solid var(--border)",
+          }}
+          title="Genera un frame con FFmpeg drawtext en el tiempo actual del reproductor"
+        >
+          <ScanEye size={12} style={{ color: "var(--accent)" }} />
+          Previsualizar frame renderizado
+        </button>
+        <p className="text-[9px] mt-1 leading-snug" style={{ color: "var(--text-dim)" }}>
+          Compara CSS vs FFmpeg en el reproductor (modos CSS, FFmpeg o lado a lado).
+        </p>
+      </div>
+
       <label>
         <span className="cap-input-label">Fuente</span>
         <select
@@ -218,6 +257,11 @@ export default function StyleEditor() {
           })}
         </div>
       </div>
+
+      <TextLayoutControls
+        values={{ autoFit, lineHeight, verticalAlign, textWrap, safeMargin, truncate }}
+        onPatch={patch}
+      />
 
       <div className="grid grid-cols-2 gap-2">
         <label>

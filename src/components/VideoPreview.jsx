@@ -6,7 +6,7 @@ import { regionToScreen, fmtTime } from "../utils/video-utils";
 import DelogoLivePreview from "./DelogoLivePreview";
 import TextOverlay from "./TextOverlay";
 import { findTextOpForRegion, getGlobalTextStyleFromState } from "../utils/text-style";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Eye, EyeOff } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Eye, EyeOff, ScanEye, X, Loader2 } from "lucide-react";
 
 const opModeColor = {
   text: "#a855f7",
@@ -64,6 +64,8 @@ export default function VideoPreview() {
   const setCurrentRegion = useEditorStore((s) => s.setCurrentRegion);
   const updateOperationRegion = useEditorStore((s) => s.updateOperationRegion);
   const getBatchPreviewPayload = useEditorStore((s) => s.getBatchPreviewPayload);
+  const buildPreviewFrameJob = useEditorStore((s) => s.buildPreviewFrameJob);
+  const showToast = useEditorStore((s) => s.showToast);
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -77,6 +79,10 @@ export default function VideoPreview() {
   const [batchTextDragStart, setBatchTextDragStart] = useState(null);
   const [, setLayoutTick] = useState(0);
   const [videoError, setVideoError] = useState(null);
+  const [ffmpegPreviewUrl, setFfmpegPreviewUrl] = useState(null);
+  const [ffmpegPreviewLoading, setFfmpegPreviewLoading] = useState(false);
+  const [showFfmpegPreview, setShowFfmpegPreview] = useState(false);
+  const [previewCompareMode, setPreviewCompareMode] = useState("ffmpeg");
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
 
   useEffect(() => {
@@ -155,6 +161,9 @@ export default function VideoPreview() {
     setCurrentTime(0);
     setDuration(sel?.duration || 0);
     setVideoError(null);
+    setFfmpegPreviewUrl(null);
+    setShowFfmpegPreview(false);
+    setPreviewCompareMode("ffmpeg");
   }, [sel?.path]);
 
   // Drag handlers for image operations
@@ -298,6 +307,63 @@ export default function VideoPreview() {
     };
   }, [draggingBatchText, handleBatchTextDragMove, handleBatchTextDragEnd]);
 
+  const handleRenderPreviewFrame = useCallback(async () => {
+    const api = window.api;
+    if (!api?.renderPreviewFrame) {
+      showToast?.({ kind: "err", text: "Preview FFmpeg no disponible" });
+      return;
+    }
+    if (selectedIdx < 0 || !sel) return;
+
+    const video = videoRef.current;
+    if (video && !video.paused) video.pause();
+
+    const ts = video?.currentTime ?? currentTime;
+    const job = buildPreviewFrameJob(selectedIdx, ts);
+    if (!job) {
+      showToast?.({ kind: "err", text: "No se pudo construir el preview" });
+      return;
+    }
+
+    setFfmpegPreviewLoading(true);
+    try {
+      const result = await api.renderPreviewFrame(job);
+      if (result?.ok && result.data_url) {
+        setFfmpegPreviewUrl(result.data_url);
+        setPreviewCompareMode("ffmpeg");
+        setShowFfmpegPreview(true);
+      } else {
+        showToast?.({
+          kind: "err",
+          text: result?.error || "No se pudo renderizar el frame",
+        });
+      }
+    } catch (err) {
+      showToast?.({ kind: "err", text: err.message || "Error al renderizar el frame" });
+    } finally {
+      setFfmpegPreviewLoading(false);
+    }
+  }, [selectedIdx, sel, currentTime, buildPreviewFrameJob, showToast]);
+
+  useEffect(() => {
+    const onRenderFrame = () => {
+      handleRenderPreviewFrame();
+    };
+    window.addEventListener("beru:preview:renderFrame", onRenderFrame);
+    return () => window.removeEventListener("beru:preview:renderFrame", onRenderFrame);
+  }, [handleRenderPreviewFrame]);
+
+  const dismissFfmpegPreview = useCallback(() => {
+    setShowFfmpegPreview(false);
+    setFfmpegPreviewUrl(null);
+    setPreviewCompareMode("ffmpeg");
+  }, []);
+
+  const isSplitCompare =
+    showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "split";
+  const showFfmpegOverlay =
+    showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "ffmpeg";
+
   if (!sel) {
     return (
       <div className="flex-1 flex items-center justify-center flex-col gap-3">
@@ -332,9 +398,26 @@ export default function VideoPreview() {
   return (
     <div className="flex-1 flex items-center justify-center p-4 min-h-0 relative">
       <div
-        className="relative inline-block"
-        style={{ maxWidth: "100%", maxHeight: "100%", overflow: "hidden" }}
+        className={
+          isSplitCompare
+            ? "relative flex flex-row gap-2 items-stretch max-w-full"
+            : "relative inline-block"
+        }
+        style={
+          isSplitCompare
+            ? { maxHeight: "calc(100vh - 200px)" }
+            : { maxWidth: "100%", maxHeight: "100%", overflow: "hidden" }
+        }
       >
+        <div className={isSplitCompare ? "relative flex-1 min-w-0 self-center" : "contents"}>
+          {isSplitCompare && (
+            <div
+              className="absolute top-2 left-2 z-[26] px-2 py-1 rounded text-[9px] font-medium pointer-events-none"
+              style={{ background: "rgba(0,0,0,0.75)", color: "var(--text-secondary)" }}
+            >
+              CSS
+            </div>
+          )}
         <video
           ref={videoRef}
           src={sel.src || null}
@@ -357,6 +440,17 @@ export default function VideoPreview() {
             );
           }}
         />
+
+        {showFfmpegOverlay && (
+          <div className="absolute inset-0 z-[25]">
+            <img
+              src={ffmpegPreviewUrl}
+              alt="Preview FFmpeg renderizado"
+              className="w-full h-full object-contain rounded pointer-events-none"
+              draggable={false}
+            />
+          </div>
+        )}
 
         {videoError && (
           <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
@@ -674,6 +768,59 @@ export default function VideoPreview() {
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseUp}
         />
+        </div>
+
+        {isSplitCompare && (
+          <div className="relative flex-1 min-w-0 flex items-center justify-center rounded overflow-hidden">
+            <img
+              src={ffmpegPreviewUrl}
+              alt="Preview FFmpeg renderizado"
+              className="max-h-[calc(100vh-200px)] max-w-full object-contain rounded"
+              draggable={false}
+            />
+            <div
+              className="absolute top-2 left-2 px-2 py-1 rounded text-[9px] font-medium pointer-events-none"
+              style={{ background: "rgba(0,0,0,0.75)", color: "var(--accent)" }}
+            >
+              FFmpeg (drawtext)
+            </div>
+          </div>
+        )}
+
+        {showFfmpegPreview && ffmpegPreviewUrl && (
+          <div
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-[26] flex items-center gap-0.5 px-1 py-1 rounded"
+            style={{ background: "rgba(0,0,0,0.82)", border: "1px solid rgba(255,255,255,0.12)" }}
+          >
+            {[
+              { id: "css", label: "CSS" },
+              { id: "ffmpeg", label: "FFmpeg" },
+              { id: "split", label: "Lado a lado" },
+            ].map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setPreviewCompareMode(id)}
+                className="px-2 py-0.5 rounded text-[9px] font-medium transition-colors"
+                style={{
+                  background: previewCompareMode === id ? "var(--accent)" : "transparent",
+                  color: previewCompareMode === id ? "var(--bg-app)" : "var(--text-secondary)",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={dismissFfmpegPreview}
+              className="p-0.5 ml-0.5 rounded hover:bg-white/10"
+              style={{ color: "var(--text-dim)" }}
+              title="Cerrar comparación"
+            >
+              <X size={12} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Video Player Controls */}
@@ -791,6 +938,21 @@ export default function VideoPreview() {
             title={showTimeline ? "Ocultar marcadores de tiempo" : "Mostrar marcadores de tiempo"}
           >
             {showTimeline ? <Eye size={14} /> : <EyeOff size={14} />}
+          </button>
+          <button
+            onClick={handleRenderPreviewFrame}
+            disabled={ffmpegPreviewLoading}
+            className="p-1 rounded hover:bg-white/10 disabled:opacity-40"
+            style={{
+              color: showFfmpegPreview ? "var(--accent)" : "var(--text-dim)",
+            }}
+            title="Previsualizar frame renderizado (FFmpeg drawtext)"
+          >
+            {ffmpegPreviewLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <ScanEye size={14} />
+            )}
           </button>
           <span className="text-[10px] font-mono ml-1" style={{ color: "var(--text-secondary)" }}>
             {fmtTime(currentTime)} / {fmtTime(duration)}

@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import os from "os";
 import { probeVideo, probeVideoFast } from "../utils/video-cache.js";
 import { extractThumbnail } from "../utils/thumbnail.js";
+import { renderPreviewFrame } from "../utils/preview-frame.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
 
 export function registerVideoHandlers(pathSecurity) {
@@ -55,5 +56,17 @@ export function registerVideoHandlers(pathSecurity) {
       limit,
       (p) => extractThumbnail(p, 80),
     );
+  });
+
+  ipcMain.handle("video:renderPreviewFrame", async (_event, payload) => {
+    if (!payload || typeof payload !== "object") {
+      return { ok: false, error: "Payload de preview inválido" };
+    }
+    const check = pathSecurity.validateReadableFile(payload.input_path, "video");
+    if (!check.ok) return { ok: false, error: check.error };
+    return await renderPreviewFrame({
+      ...payload,
+      input_path: check.resolvedPath,
+    });
   });
 }

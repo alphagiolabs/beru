@@ -279,7 +279,7 @@
 
   "batch.excelParseError": "Error al leer Excel: {message}",
   "batch.excelLinked": "Vinculados {count} registros de Excel.",
-  "batch.confirmExcelOverwrite": "Algunos videos tienen operaciones manuales (blur, crop, etc.) que se perderán al importar Excel. ¿Continuar?",
+  "batch.confirmExcelOverwrite": "Importar Excel reemplazará el texto de las regiones plantilla con los datos de la hoja. Las operaciones manuales (blur, crop, etc.) se conservarán. ¿Continuar?",
 
   "header.missingDimensions": "{count} video(s) sin resolución ({names}{more}). Procesar puede fallar. ¿Continuar?",
 

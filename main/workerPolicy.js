@@ -1,4 +1,9 @@
 import os from "os";
+import {
+  normalizeEncodeProfile,
+  profileAllowsHardware,
+  getEffectiveHwEncoder,
+} from "./encodeProfiles.js";
 
 export const MAX_BATCH_WORKERS = 16;
 export const AUTO_TARGET_WORKERS = 5;
@@ -43,9 +48,8 @@ export function resolveBatchWorkers({
   const m = ENCODER_CAPS[mode] ? mode : "balanced";
   const caps = ENCODER_CAPS[m];
   const cpus = os.cpus()?.length || 4;
-  const profile =
-    encodeProfile === "quality" || encodeProfile === "fast" ? encodeProfile : "balanced";
-  const effectiveHwEncoder = profile === "quality" ? null : hwEncoder;
+  const profile = normalizeEncodeProfile(encodeProfile);
+  const effectiveHwEncoder = getEffectiveHwEncoder(profile, hwEncoder);
   let workers;
 
   if (effectiveHwEncoder) {
@@ -68,7 +72,7 @@ export function resolveBatchWorkers({
     workers = Math.min(workers, 2);
   }
 
-  if (hasVideoFilters && profile === "quality") {
+  if (hasVideoFilters && !profileAllowsHardware(profile)) {
     workers = Math.min(workers, 2);
   } else if (hasVideoFilters && maxSourcePixels >= 1920 * 1080) {
     workers = Math.min(workers, 3);
@@ -78,11 +82,8 @@ export function resolveBatchWorkers({
 }
 
 export function recommendBatchWorkers(opts = {}) {
-  const profile =
-    opts.encodeProfile === "quality" || opts.encodeProfile === "fast"
-      ? opts.encodeProfile
-      : "balanced";
-  const encoder = profile === "quality" ? null : opts.hwEncoder || null;
+  const profile = normalizeEncodeProfile(opts.encodeProfile);
+  const encoder = getEffectiveHwEncoder(profile, opts.hwEncoder || null);
   const workers = resolveBatchWorkers({ ...opts, hwEncoder: encoder, encodeProfile: profile });
   const mode = opts.mode === "conservative" ? "conservative" : "balanced";
   let reason = "cpu";
