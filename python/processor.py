@@ -128,7 +128,7 @@ logger = setup_logging()
 ENCODE_PROFILES = {
     "fast": {"crf": 26, "preset": "ultrafast", "hw_cq": 28, "nvenc_preset": "p1"},
     "balanced": {"crf": 23, "preset": "fast", "hw_cq": 23, "nvenc_preset": "p4"},
-    "quality": {"crf": 18, "preset": "medium", "hw_cq": None, "nvenc_preset": None},
+    "quality": {"crf": 18, "preset": "medium", "hw_cq": 18, "nvenc_preset": "p6"},
 }
 
 # Audio codecs that can be stream-copied into each container (no re-encode).
@@ -415,7 +415,7 @@ def _memory_cap_workers(
     if avail_mb <= 0:
         return desired_workers
     profile = (encode_profile or "balanced").strip().lower()
-    key = "software" if (has_video_filters and profile == "quality") else \
+    key = "software" if (has_video_filters and ENCODE_PROFILES.get(profile, {}).get("hw_cq") is None) else \
           "nvenc" if hw_encoder == "h264_nvenc" else \
           "qsv" if hw_encoder == "h264_qsv" else \
           "amf" if hw_encoder == "h264_amf" else \
@@ -425,7 +425,7 @@ def _memory_cap_workers(
     per_job = _RAM_PER_JOB_MB.get(key, 512)
     if has_video_filters:
         per_job = int(per_job * 1.5)
-    if profile == "quality":
+    if ENCODE_PROFILES.get(profile, {}).get("hw_cq") is None:
         per_job = int(per_job * 1.35)
     # 4K+ needs more RAM per encode.
     if max_source_pixels >= 3840 * 2160:
@@ -464,7 +464,7 @@ def resolve_max_workers(
     profile = (
         encode_profile or os.environ.get("BERU_ENCODE_PROFILE") or "balanced"
     ).strip().lower()
-    effective_hw_encoder = None if profile == "quality" else hw_encoder
+    effective_hw_encoder = hw_encoder if ENCODE_PROFILES.get(profile, {}).get("hw_cq") is not None else None
 
     if effective_hw_encoder:
         cap = caps.get(effective_hw_encoder, caps.get("h264_nvenc", 2))
@@ -488,7 +488,7 @@ def resolve_max_workers(
     if max_source_pixels >= 3840 * 2160:
         workers = min(workers, 2)
 
-    if has_video_filters and profile == "quality":
+    if has_video_filters and ENCODE_PROFILES.get(profile, {}).get("hw_cq") is None:
         workers = min(workers, 2)
     elif has_video_filters and max_source_pixels >= 1920 * 1080:
         workers = min(workers, 3)
@@ -1211,7 +1211,80 @@ def _region_to_pixels(region, video_w, video_h):
     return {"x": px, "y": py, "w": pw, "h": ph}
 
 
-def build_filter_complex(operations, video_w, video_h):
+def _build_watermark_filter(watermark, video_w, video_h):
+    """Build FFmpeg filter for a global watermark (text or image overlay).
+
+    Returns (filter_snippet, needs_image_input, image_path) or (None, False, None).
+    """
+    if not watermark or not watermark.get("enabled"):
+        return None, False, None
+
+    wm_type = watermark.get("type", "text")
+    opacity = float(watermark.get("opacity", 0.5))
+    position = watermark.get("position", "bottom-right")
+
+    # Map position key to FFmpeg overlay coordinates
+    margin = 10
+    pos_map = {
+        "top-left": f"{margin}:{margin}",
+        "top-center": f"(W-w)/2:{margin}",
+        "top-right": f"W-w-{margin}:{margin}",
+        "center-left": f"{margin}:(H-h)/2",
+        "center": "(W-w)/2:(H-h)/2",
+        "center-right": f"W-w-{margin}:(H-h)/2",
+        "bottom-left": f"{margin}:H-h-{margin}",
+        "bottom-center": f"(W-w)/2:H-h-{margin}",
+        "bottom-right": f"W-w-{margin}:H-h-{margin}",
+    }
+    xy = pos_map.get(position, pos_map["bottom-right"])
+
+    if wm_type == "text":
+        text = watermark.get("text", "")
+        if not text.strip():
+            return None, False, None
+        font_size = int(watermark.get("fontSize", 18))
+        font_color = watermark.get("fontColor", "white")
+        font_family = watermark.get("fontFamily", "Arial")
+        # Resolve font
+        font_key, font_val, is_fontfile = _resolve_font(font_family)
+        escaped_text = text.replace("'", "'\\''")
+        escaped_text = escaped_text.replace("%", "%%")
+        escaped_text = escaped_text.replace(":", "\\:")
+        alpha = f"{opacity:.2f}"
+        x_expr, y_expr = xy.split(":")
+        dt_parts = [
+            f"{font_key}='{font_val}'",
+            f"text='{escaped_text}'",
+            f"fontsize={font_size}",
+            f"fontcolor={font_color}@{alpha}",
+            f"x={x_expr}",
+            f"y={y_expr}",
+            "shadowx=1",
+            "shadowy=1",
+            "shadowcolor=black@0.5",
+        ]
+        return f"drawtext={':'.join(dt_parts)}", False, None
+
+    elif wm_type == "image":
+        img_path = watermark.get("imagePath", "")
+        if not img_path or not os.path.exists(img_path):
+            return None, False, None
+        scale_factor = float(watermark.get("scale", 1))
+        # Scale the image; default base height ~80px, adjusted by scale
+        target_h = max(16, int(80 * scale_factor))
+        x_expr, y_expr = xy.split(":")
+        # Return filter parts; caller must add the image as an input
+        return (
+            f"scale=-1:{target_h},format=rgba,"
+            f"colorchannelmixer=aa={opacity:.3f}",
+            f"{x_expr}:{y_expr}",
+            img_path,
+        )
+
+    return None, False, None
+
+
+def build_filter_complex(operations, video_w, video_h, watermark=None):
     """Build ffmpeg -filter_complex argument for all operations.
 
     Returns (filter_str, output_label, extra_image_paths) where extra_image_paths
@@ -1318,6 +1391,28 @@ def build_filter_complex(operations, video_w, video_h):
                 f"{prev}[ov{n}]overlay={overlay_opts}[tmp{n}]"
             )
         n += 1
+
+    # Append global watermark if configured
+    if watermark and watermark.get("enabled"):
+        wm_type = watermark.get("type", "text")
+        if wm_type == "text":
+            wm_result = _build_watermark_filter(watermark, video_w, video_h)
+            if wm_result and wm_result[0]:
+                dt_filter = wm_result[0]
+                prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
+                filters.append(f"{prev}{dt_filter}[tmp{n}]")
+                n += 1
+        elif wm_type == "image":
+            wm_result = _build_watermark_filter(watermark, video_w, video_h)
+            if wm_result and len(wm_result) == 3 and wm_result[2]:
+                scale_filter, overlay_pos, img_path = wm_result
+                idx = img_input_index(img_path)
+                prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
+                filters.append(
+                    f"[{idx}:v]{scale_filter}[wm{n}];"
+                    f"{prev}[wm{n}]overlay={overlay_pos}[tmp{n}]"
+                )
+                n += 1
 
     if n == 0:
         return None, None, []
@@ -1689,7 +1784,8 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         for op in raw_operations
     ]
 
-    filter_complex, output_label, image_paths = build_filter_complex(operations, vw, vh)
+    watermark = job.get("watermark")
+    filter_complex, output_label, image_paths = build_filter_complex(operations, vw, vh, watermark=watermark)
 
     if not filter_complex and operations:
         err = (
@@ -1704,7 +1800,7 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
     # Use the batch-level pre-flight encoder if provided; otherwise detect locally.
-    if encode_profile == "quality":
+    if ENCODE_PROFILES.get(encode_profile, {}).get("hw_cq") is None:
         local_hw_encoder = None
     elif hw_encoder is not None:
         local_hw_encoder = hw_encoder
@@ -1907,7 +2003,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
         "fast" if "fast" in encode_profiles else
         (os.environ.get("BERU_ENCODE_PROFILE") or "balanced")
     )
-    effective_hw = None if encode_profile == "quality" else hw
+    effective_hw = hw if ENCODE_PROFILES.get(encode_profile, {}).get("hw_cq") is not None else None
 
     if max_workers is None:
         max_workers = resolve_max_workers(

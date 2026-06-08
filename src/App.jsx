@@ -21,6 +21,7 @@ const TableEditor = lazy(() => import("./components/TableEditor"));
 const ExcelMappingModal = lazy(() => import("./components/ExcelMappingModal"));
 const UpdateBanner = lazy(() => import("./components/UpdateBanner"));
 const UpdateReadyModal = lazy(() => import("./components/UpdateReadyModal"));
+const WatermarkModal = lazy(() => import("./components/WatermarkModal"));
 
 const api = window.api;
 
@@ -194,6 +195,7 @@ export default function App() {
         <ExcelMappingModal />
         <UpdateBanner />
         <UpdateReadyModal />
+        <WatermarkModal />
       </Suspense>
       <AppToast />
       <ConfirmDialog />

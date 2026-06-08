@@ -296,5 +296,18 @@
   "match.multiple": "Múltiple",
   "match.coincideDesc": "Una fila coincide con el ID de este video.",
   "match.sinMatchDesc": "No se encontró una fila con este ID",
-  "match.multipleDesc": "Varias filas coinciden con este ID"
+  "match.multipleDesc": "Varias filas coinciden con este ID",
+
+  "watermark.title": "Marca de agua",
+  "watermark.enable": "Activar marca de agua",
+  "watermark.text": "Texto",
+  "watermark.image": "Imagen",
+  "watermark.textPlaceholder": "Ej: © Mi Empresa 2025",
+  "watermark.fontSize": "Tamaño",
+  "watermark.fontColor": "Color",
+  "watermark.selectImage": "Elegir",
+  "watermark.scale": "Escala",
+  "watermark.opacity": "Opacidad",
+  "watermark.position": "Posición",
+  "watermark.buttonHint": "Agregar marca de agua a todos los videos"
 }

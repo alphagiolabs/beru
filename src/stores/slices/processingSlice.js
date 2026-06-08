@@ -209,6 +209,7 @@ export function createProcessingSlice(set, get) {
         audio_codec: item.audioCodec || "",
         audio_channels: item.audioChannels || 0,
         encode_profile: encodeProfile,
+        watermark: get().watermark?.enabled ? get().watermark : null,
       };
     },
 

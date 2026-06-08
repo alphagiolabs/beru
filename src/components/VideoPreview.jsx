@@ -44,6 +44,7 @@ export default function VideoPreview() {
     imageDataCache,
     templateRegions,
     selectedTemplateRegionId,
+    watermark,
   } = useEditorStore(
     (s) => ({
       selectedIdx: s.selectedIdx,
@@ -56,6 +57,7 @@ export default function VideoPreview() {
       imageDataCache: s.imageDataCache,
       templateRegions: s.templateRegions,
       selectedTemplateRegionId: s.selectedTemplateRegionId,
+      watermark: s.watermark,
     }),
     shallow,
   );
@@ -589,6 +591,76 @@ export default function VideoPreview() {
               />
             );
           })()}
+
+        {/* Global watermark preview */}
+        {watermark?.enabled && (() => {
+          const video = videoRef.current;
+          if (!video) return null;
+          const vw = video.videoWidth || 1;
+          const vh = video.videoHeight || 1;
+          const rect = video.getBoundingClientRect();
+          const sx = rect.width / vw;
+          const sy = rect.height / vh;
+          const margin = 10;
+          const pos = watermark.position || "bottom-right";
+          const posMap = {
+            "top-left": { left: margin, top: margin },
+            "top-center": { left: "50%", top: margin, transform: "translateX(-50%)" },
+            "top-right": { right: margin, top: margin },
+            "center-left": { left: margin, top: "50%", transform: "translateY(-50%)" },
+            "center": { left: "50%", top: "50%", transform: "translate(-50%, -50%)" },
+            "center-right": { right: margin, top: "50%", transform: "translateY(-50%)" },
+            "bottom-left": { left: margin, bottom: margin + 60 },
+            "bottom-center": { left: "50%", bottom: margin + 60, transform: "translateX(-50%)" },
+            "bottom-right": { right: margin, bottom: margin + 60 },
+          };
+          const posStyle = posMap[pos] || posMap["bottom-right"];
+          if (watermark.type === "text" && watermark.text) {
+            const fontSize = Math.max(8, (watermark.fontSize || 18) * sy);
+            return (
+              <div
+                className="absolute pointer-events-none z-20"
+                style={{
+                  ...posStyle,
+                  opacity: watermark.opacity ?? 0.5,
+                  fontSize: `${fontSize}px`,
+                  fontFamily: `"${watermark.fontFamily || "Arial"}", sans-serif`,
+                  color: watermark.fontColor || "#ffffff",
+                  textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
+                  whiteSpace: "nowrap",
+                  userSelect: "none",
+                }}
+              >
+                {watermark.text}
+              </div>
+            );
+          }
+          if (watermark.type === "image" && watermark.imageDataUrl) {
+            const baseSize = 80 * sy;
+            const scaledSize = baseSize * (watermark.scale || 1);
+            return (
+              <div
+                className="absolute pointer-events-none z-20"
+                style={{
+                  ...posStyle,
+                  opacity: watermark.opacity ?? 0.5,
+                }}
+              >
+                <img
+                  src={watermark.imageDataUrl}
+                  alt=""
+                  style={{
+                    height: `${scaledSize}px`,
+                    width: "auto",
+                    objectFit: "contain",
+                  }}
+                  draggable={false}
+                />
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {/* Live preview of the in-progress delogo effect (under the selection handles) */}
         <DelogoLivePreview videoRef={videoRef} />

@@ -20,6 +20,7 @@ import {
   Moon,
   Languages,
   History,
+  Droplets,
 } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
@@ -685,6 +686,14 @@ export default function Header() {
             </div>
           )}
         </div>
+        <button
+          onClick={() => get().setShowWatermarkModal(true)}
+          className="cap-icon-btn"
+          title="Marca de agua"
+          disabled={isProcessing}
+        >
+          <Droplets size={15} />
+        </button>
         <button
           onClick={() => get().setShowShortcuts(true)}
           className="cap-btn-secondary !p-1.5"

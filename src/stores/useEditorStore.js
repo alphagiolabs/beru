@@ -5,6 +5,7 @@ import { createQueueSlice } from "./slices/queueSlice.js";
 import { createUiSlice } from "./slices/uiSlice.js";
 import { createEditorStyleSlice } from "./slices/editorStyleSlice.js";
 import { createProjectSlice } from "./slices/projectSlice.js";
+import { createWatermarkSlice } from "./slices/watermarkSlice.js";
 
 const useEditorStore = createWithEqualityFn(
   (set, get) => ({
@@ -14,6 +15,7 @@ const useEditorStore = createWithEqualityFn(
     ...createUiSlice(set, get),
     ...createEditorStyleSlice(set, get),
     ...createProjectSlice(set, get),
+    ...createWatermarkSlice(set, get),
   }),
   Object.is,
 );

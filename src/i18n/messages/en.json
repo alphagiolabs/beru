@@ -296,5 +296,18 @@
   "match.multiple": "Multiple",
   "match.coincideDesc": "One row matches this video's ID.",
   "match.sinMatchDesc": "No row was found with this ID",
-  "match.multipleDesc": "Several rows match this ID"
+  "match.multipleDesc": "Several rows match this ID",
+
+  "watermark.title": "Watermark",
+  "watermark.enable": "Enable watermark",
+  "watermark.text": "Text",
+  "watermark.image": "Image",
+  "watermark.textPlaceholder": "E.g.: © My Company 2025",
+  "watermark.fontSize": "Size",
+  "watermark.fontColor": "Color",
+  "watermark.selectImage": "Choose",
+  "watermark.scale": "Scale",
+  "watermark.opacity": "Opacity",
+  "watermark.position": "Position",
+  "watermark.buttonHint": "Add watermark to all videos"
 }
