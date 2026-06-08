@@ -1,6 +1,6 @@
 // Keep in sync with python/encode_profiles.py via resources/encode-profiles.json.
 
-import contract from "../resources/encode-profiles.json";
+import contract from "../resources/encode-profiles.json" with { type: "json" };
 
 const DEFAULT_PROFILE = "balanced";
 const VALID_PROFILES = new Set(["fast", "balanced", "quality"]);

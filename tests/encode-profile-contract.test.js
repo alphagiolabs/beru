@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "child_process";
-import contract from "../resources/encode-profiles.json";
+import contract from "../resources/encode-profiles.json" with { type: "json" };
 import {
   ENCODE_PROFILES,
   getEffectiveHwEncoder,
