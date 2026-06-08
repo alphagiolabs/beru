@@ -43,12 +43,15 @@ export function resolveBatchWorkers({
   const m = ENCODER_CAPS[mode] ? mode : "balanced";
   const caps = ENCODER_CAPS[m];
   const cpus = os.cpus()?.length || 4;
+  const profile =
+    encodeProfile === "quality" || encodeProfile === "fast" ? encodeProfile : "balanced";
+  const effectiveHwEncoder = profile === "quality" ? null : hwEncoder;
   let workers;
 
-  if (hwEncoder) {
-    const cap = caps[hwEncoder] ?? caps.h264_nvenc ?? 2;
+  if (effectiveHwEncoder) {
+    const cap = caps[effectiveHwEncoder] ?? caps.h264_nvenc ?? 2;
     workers = Math.max(1, Math.min(cap, jobs));
-    if (m === "balanced" && hwEncoder !== "h264_mf" && jobs >= AUTO_TARGET_WORKERS) {
+    if (m === "balanced" && effectiveHwEncoder !== "h264_mf" && jobs >= AUTO_TARGET_WORKERS) {
       workers = Math.max(workers, Math.min(AUTO_TARGET_WORKERS, jobs, cap));
     }
   } else if (m === "conservative") {
@@ -65,18 +68,22 @@ export function resolveBatchWorkers({
     workers = Math.min(workers, 2);
   }
 
-  const profile =
-    encodeProfile === "quality" || encodeProfile === "fast" ? encodeProfile : "balanced";
-  if (hasVideoFilters && maxSourcePixels >= 1920 * 1080) {
-    workers = Math.min(workers, profile === "quality" ? 2 : 3);
+  if (hasVideoFilters && profile === "quality") {
+    workers = Math.min(workers, 2);
+  } else if (hasVideoFilters && maxSourcePixels >= 1920 * 1080) {
+    workers = Math.min(workers, 3);
   }
 
   return workers;
 }
 
 export function recommendBatchWorkers(opts = {}) {
-  const workers = resolveBatchWorkers(opts);
-  const encoder = opts.hwEncoder || null;
+  const profile =
+    opts.encodeProfile === "quality" || opts.encodeProfile === "fast"
+      ? opts.encodeProfile
+      : "balanced";
+  const encoder = profile === "quality" ? null : opts.hwEncoder || null;
+  const workers = resolveBatchWorkers({ ...opts, hwEncoder: encoder, encodeProfile: profile });
   const mode = opts.mode === "conservative" ? "conservative" : "balanced";
   let reason = "cpu";
 

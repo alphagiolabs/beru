@@ -1,5 +1,5 @@
 import React, { act } from "react";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import ExcelMappingModal from "../src/components/ExcelMappingModal.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
@@ -33,6 +33,8 @@ const queueItem = (filename) => ({
 });
 
 describe("ExcelMappingModal", () => {
+  let root;
+
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
     useEditorStore.setState({
@@ -64,8 +66,15 @@ describe("ExcelMappingModal", () => {
     });
   });
 
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    root = null;
+  });
+
   it("applies the edited mapping when the apply button is clicked", () => {
-    const root = createRoot(document.getElementById("root"));
+    root = createRoot(document.getElementById("root"));
 
     act(() => {
       root.render(<ExcelMappingModal />);
@@ -99,5 +108,15 @@ describe("ExcelMappingModal", () => {
         ._buildJobFor(useEditorStore.getState().queue[0], 0)
         .operations.map((op) => op.text),
     ).toEqual(["89989989865", "89989989865"]);
+  });
+
+  it("caps the modal width instead of stretching to the overlay", async () => {
+    root = createRoot(document.getElementById("root"));
+
+    await act(async () => {
+      root.render(<ExcelMappingModal />);
+    });
+
+    expect(document.querySelector(".cap-modal-panel")?.className).toContain("max-w-[960px]");
   });
 });

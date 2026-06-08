@@ -70,6 +70,20 @@ describe("workerPolicy", () => {
     ).toBe(2);
   });
 
+  it("quality profile reports CPU policy even when a hardware encoder exists", () => {
+    const r = recommendBatchWorkers({
+      hwEncoder: "h264_nvenc",
+      jobCount: 8,
+      mode: "balanced",
+      hasVideoFilters: true,
+      encodeProfile: "quality",
+    });
+
+    expect(r.encoder).toBeNull();
+    expect(r.reason).toBe("cpu_balanced");
+    expect(r.recommended).toBe(2);
+  });
+
   it("manual worker count still overrides memory-aware automatic caps", () => {
     expect(
       resolveBatchWorkers({

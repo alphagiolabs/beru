@@ -94,12 +94,9 @@ export default function ExcelMappingModal() {
   };
 
   return (
-    <div
-      className="cap-modal-overlay"
-      onClick={() => getState().setShowMappingModal(false)}
-    >
+    <div className="cap-modal-overlay" onClick={() => getState().setShowMappingModal(false)}>
       <div
-        className="cap-modal-panel w-[min(960px,95vw)] max-h-[90vh] flex flex-col"
+        className="cap-modal-panel max-w-[960px] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

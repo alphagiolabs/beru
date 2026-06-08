@@ -303,6 +303,7 @@ import os
 import processor
 os.environ.pop("BERU_WORKERS", None)
 os.environ["BERU_WORKERS_MODE"] = "balanced"
+processor.os.cpu_count = lambda: 16
 print(json.dumps({
     "filtered_quality": processor.resolve_max_workers(
         "h264_nvenc",
@@ -326,7 +327,7 @@ print(json.dumps({
       encoding: "utf8",
     });
     expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout.trim())).toEqual({ filtered_quality: 2, no_filters: 5 });
+    expect(JSON.parse(r.stdout.trim())).toEqual({ filtered_quality: 2, no_filters: 8 });
   });
 
   it("uses BERU_FFPROBE when resolving the runtime ffprobe path", () => {
@@ -587,6 +588,110 @@ print(json.dumps({"threads": args[threads_idx + 1], "args": args}))
     expect(r.status).toBe(0);
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.threads).toBe("4");
+  });
+
+  it("keeps the quality profile on libx264 even when hardware was preflighted", () => {
+    const code = `
+import json
+import processor
+
+processor.os.cpu_count = lambda: 16
+processor._BATCH_ACTIVE_WORKERS = 2
+args = processor.build_encode_args(
+    "ffmpeg",
+    "quality",
+    {},
+    hw_encoder="h264_nvenc",
+)
+print(json.dumps(args))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const args = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(args).toContain("libx264");
+    expect(args).not.toContain("h264_nvenc");
+    expect(args[args.indexOf("-crf") + 1]).toBe("18");
+    expect(args[args.indexOf("-preset") + 1]).toBe("medium");
+  });
+
+  it("builds quality export commands without resize or framerate overrides", () => {
+    const code = `
+import json
+import os
+import tempfile
+import processor
+
+tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+tmp.close()
+calls = []
+
+def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
+    calls.append(cmd)
+    return True, None
+
+processor._run_ffmpeg = fake_run
+processor.job_video_info = lambda job, input_path: {
+    "width": 1920,
+    "height": 1080,
+    "duration": 1.0,
+    "pix_fmt": "yuv420p",
+    "frame_rate": 29.97,
+    "audio_codec": "aac",
+    "audio_channels": 2,
+    "video_codec": "h264",
+}
+job = {
+    "id": 4,
+    "input_path": tmp.name,
+    "output_path": tmp.name + ".out.mp4",
+    "source_width": 1920,
+    "source_height": 1080,
+    "video_duration": 1.0,
+    "pix_fmt": "yuv420p",
+    "frame_rate": 29.97,
+    "audio_codec": "aac",
+    "audio_channels": 2,
+    "encode_profile": "quality",
+    "operations": [{
+        "mode": "text",
+        "text": "Hola",
+        "region": {"x": 20, "y": 30, "w": 300, "h": 80},
+    }],
+}
+try:
+    result = processor._process_one(0, job, "ffmpeg", hw_encoder="h264_nvenc")
+finally:
+    os.unlink(tmp.name)
+
+cmd = calls[0]
+print(json.dumps({
+    "status": result["status"],
+    "uses_libx264": "libx264" in cmd,
+    "uses_hw": "h264_nvenc" in cmd,
+    "has_size_arg": "-s" in cmd or "-vf" in cmd,
+    "has_rate_arg": "-r" in cmd,
+    "pix_fmt": cmd[cmd.index("-pix_fmt") + 1],
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.status).toBe("succeeded");
+    expect(parsed.uses_libx264).toBe(true);
+    expect(parsed.uses_hw).toBe(false);
+    expect(parsed.has_size_arg).toBe(false);
+    expect(parsed.has_rate_arg).toBe(false);
+    expect(parsed.pix_fmt).toBe("yuv420p");
   });
 
   it("uses complete job video metadata without probing again", () => {

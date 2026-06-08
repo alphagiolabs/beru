@@ -68,10 +68,7 @@ export default function ShortcutsModal() {
       className="cap-modal-overlay"
       onClick={() => useEditorStore.getState().setShowShortcuts(false)}
     >
-      <div
-        className="cap-modal-panel w-[400px]"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="cap-modal-panel max-w-[400px]" onClick={(e) => e.stopPropagation()}>
         <div
           className="flex items-center justify-between px-4 py-3 border-b"
           style={{ borderColor: "var(--border)" }}

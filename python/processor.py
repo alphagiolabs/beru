@@ -124,11 +124,11 @@ def setup_logging():
 
 logger = setup_logging()
 
-# Encode profiles: fast (batch throughput), balanced (default), quality (max fidelity)
+# Encode profiles: fast (batch throughput), balanced (default), quality (max fidelity, CPU)
 ENCODE_PROFILES = {
     "fast": {"crf": 26, "preset": "ultrafast", "hw_cq": 28, "nvenc_preset": "p1"},
     "balanced": {"crf": 23, "preset": "fast", "hw_cq": 23, "nvenc_preset": "p4"},
-    "quality": {"crf": 18, "preset": "medium", "hw_cq": 18, "nvenc_preset": "p6"},
+    "quality": {"crf": 18, "preset": "medium", "hw_cq": None, "nvenc_preset": None},
 }
 
 # Audio codecs that can be stream-copied into each container (no re-encode).
@@ -461,13 +461,17 @@ def resolve_max_workers(
 
     caps = _ENCODER_CAPS[mode]
     cpus = os.cpu_count() or 4
+    profile = (
+        encode_profile or os.environ.get("BERU_ENCODE_PROFILE") or "balanced"
+    ).strip().lower()
+    effective_hw_encoder = None if profile == "quality" else hw_encoder
 
-    if hw_encoder:
-        cap = caps.get(hw_encoder, caps.get("h264_nvenc", 2))
+    if effective_hw_encoder:
+        cap = caps.get(effective_hw_encoder, caps.get("h264_nvenc", 2))
         workers = max(1, min(cap, job_count))
         if (
             mode == "balanced"
-            and hw_encoder != "h264_mf"
+            and effective_hw_encoder != "h264_mf"
             and job_count >= AUTO_TARGET_WORKERS
         ):
             workers = max(workers, min(AUTO_TARGET_WORKERS, job_count, cap))
@@ -484,13 +488,14 @@ def resolve_max_workers(
     if max_source_pixels >= 3840 * 2160:
         workers = min(workers, 2)
 
-    profile = (encode_profile or os.environ.get("BERU_ENCODE_PROFILE") or "balanced").strip().lower()
-    if has_video_filters and max_source_pixels >= 1920 * 1080:
-        workers = min(workers, 2 if profile == "quality" else 3)
+    if has_video_filters and profile == "quality":
+        workers = min(workers, 2)
+    elif has_video_filters and max_source_pixels >= 1920 * 1080:
+        workers = min(workers, 3)
 
     if consider_memory:
         workers = _memory_cap_workers(
-            hw_encoder,
+            effective_hw_encoder,
             job_count,
             max_source_pixels,
             workers,
@@ -1699,7 +1704,12 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
     # Use the batch-level pre-flight encoder if provided; otherwise detect locally.
-    local_hw_encoder = hw_encoder if hw_encoder is not None else detect_hw_encoder(ffmpeg_path)
+    if encode_profile == "quality":
+        local_hw_encoder = None
+    elif hw_encoder is not None:
+        local_hw_encoder = hw_encoder
+    else:
+        local_hw_encoder = detect_hw_encoder(ffmpeg_path)
 
     def _build_cmd(force_software=False):
         loglevel = "info" if duration > 0 else "error"
@@ -1864,7 +1874,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
 
     Args:
         hw_encoder: If provided (from batch pre-flight), it is used directly
-            in build_encode_args. If None, each job falls back to libx264.
+            for profiles that allow hardware encoding.
     """
     global _cancel_event, _jobs_file, _BATCH_ACTIVE_WORKERS
     _cancel_event.clear()
@@ -1897,10 +1907,11 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
         "fast" if "fast" in encode_profiles else
         (os.environ.get("BERU_ENCODE_PROFILE") or "balanced")
     )
+    effective_hw = None if encode_profile == "quality" else hw
 
     if max_workers is None:
         max_workers = resolve_max_workers(
-            hw,
+            effective_hw,
             len(jobs),
             max_pixels,
             has_video_filters=has_video_filters,
@@ -1911,10 +1922,16 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
     mode = (os.environ.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
     logger.info(
         "Starting batch: %d jobs, %d workers (mode=%s, encoder=%s, max_px=%d), ffmpeg=%s",
-        total, max_workers, mode, hw or "libx264", max_pixels, ffmpeg_path,
+        total, max_workers, mode, effective_hw or "libx264", max_pixels, ffmpeg_path,
     )
 
-    pass1 = _execute_batch(jobs, ffmpeg_path, max_workers, emit_batch_progress=True, hw_encoder=hw)
+    pass1 = _execute_batch(
+        jobs,
+        ffmpeg_path,
+        max_workers,
+        emit_batch_progress=True,
+        hw_encoder=effective_hw,
+    )
     succeeded = pass1["succeeded"]
     failed = pass1["failed"]
     cancelled = pass1["cancelled"]
@@ -1940,7 +1957,11 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
             len(retry_candidates), reduced_workers, max_workers,
         )
         pass2 = _execute_batch(
-            retry_candidates, ffmpeg_path, reduced_workers, emit_batch_progress=False, hw_encoder=hw,
+            retry_candidates,
+            ffmpeg_path,
+            reduced_workers,
+            emit_batch_progress=False,
+            hw_encoder=effective_hw,
         )
         for job in retry_candidates:
             job_id = job.get("id")
