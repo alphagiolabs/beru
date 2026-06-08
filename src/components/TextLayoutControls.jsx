@@ -1,8 +1,4 @@
-import {
-  AlignStartVertical,
-  AlignCenterVertical,
-  AlignEndVertical,
-} from "lucide-react";
+import { AlignStartVertical, AlignCenterVertical, AlignEndVertical } from "lucide-react";
 import { VERTICAL_ALIGNS, TRUNCATE_MODES } from "../utils/text-layout";
 
 export default function TextLayoutControls({ values = {}, onPatch, disabled = false }) {

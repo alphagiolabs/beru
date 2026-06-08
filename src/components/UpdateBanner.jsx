@@ -1,11 +1,4 @@
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ExternalLink,
-  Minus,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, ExternalLink, Minus, RefreshCw, X } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 

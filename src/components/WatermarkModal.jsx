@@ -25,10 +25,7 @@ export default function WatermarkModal() {
 
   return (
     <div className="cap-modal-overlay" onClick={close}>
-      <div
-        className="cap-modal-panel max-w-[420px] w-full"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="cap-modal-panel max-w-[420px] w-full" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3 border-b"
@@ -135,10 +132,7 @@ export default function WatermarkModal() {
                       onChange={(e) => setWatermark({ fontColor: e.target.value })}
                       className="w-8 h-8 rounded cursor-pointer border-0"
                     />
-                    <span
-                      className="font-mono text-[10px]"
-                      style={{ color: "var(--text-muted)" }}
-                    >
+                    <span className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>
                       {wm.fontColor}
                     </span>
                   </div>
@@ -271,11 +265,9 @@ export default function WatermarkModal() {
                   onClick={() => setWatermark({ position: pos.key })}
                   className="cap-btn-secondary !text-xs !p-2"
                   style={{
-                    background:
-                      wm.position === pos.key ? "var(--accent)" : "var(--bg-elevated)",
+                    background: wm.position === pos.key ? "var(--accent)" : "var(--bg-elevated)",
                     color: wm.position === pos.key ? "var(--bg-app)" : "var(--text-dim)",
-                    borderColor:
-                      wm.position === pos.key ? "var(--accent)" : "var(--border)",
+                    borderColor: wm.position === pos.key ? "var(--accent)" : "var(--border)",
                   }}
                   title={pos.key}
                 >

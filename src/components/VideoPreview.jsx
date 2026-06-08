@@ -6,7 +6,19 @@ import { regionToScreen, fmtTime } from "../utils/video-utils";
 import DelogoLivePreview from "./DelogoLivePreview";
 import TextOverlay from "./TextOverlay";
 import { findTextOpForRegion, getGlobalTextStyleFromState } from "../utils/text-style";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Eye, EyeOff, ScanEye, X, Loader2 } from "lucide-react";
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  Eye,
+  EyeOff,
+  ScanEye,
+  X,
+  Loader2,
+} from "lucide-react";
 
 const opModeColor = {
   text: "#a855f7",
@@ -359,8 +371,7 @@ export default function VideoPreview() {
     setPreviewCompareMode("ffmpeg");
   }, []);
 
-  const isSplitCompare =
-    showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "split";
+  const isSplitCompare = showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "split";
   const showFfmpegOverlay =
     showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "ffmpeg";
 
@@ -418,62 +429,191 @@ export default function VideoPreview() {
               CSS
             </div>
           )}
-        <video
-          ref={videoRef}
-          src={sel.src || null}
-          className="max-h-[calc(100vh-200px)] max-w-full block object-contain rounded"
-          style={{ imageRendering: "auto" }}
-          preload="metadata"
-          playsInline
-          disablePictureInPicture
-          controlsList="nodownload noplaybackrate"
-          onLoadedMetadata={() => {
-            setCurrentRegion(null);
-            setDuration(resolvedDuration(videoRef.current, sel?.duration));
-            setVideoError(null);
-          }}
-          onError={() => {
-            const code = videoRef.current?.error?.code;
-            const message = videoRef.current?.error?.message;
-            setVideoError(
-              message ? `${code ? `code ${code}: ` : ""}${message}` : `code ${code || "?"}`,
-            );
-          }}
-        />
+          <video
+            ref={videoRef}
+            src={sel.src || null}
+            className="max-h-[calc(100vh-200px)] max-w-full block object-contain rounded"
+            style={{ imageRendering: "auto" }}
+            preload="metadata"
+            playsInline
+            disablePictureInPicture
+            controlsList="nodownload noplaybackrate"
+            onLoadedMetadata={() => {
+              setCurrentRegion(null);
+              setDuration(resolvedDuration(videoRef.current, sel?.duration));
+              setVideoError(null);
+            }}
+            onError={() => {
+              const code = videoRef.current?.error?.code;
+              const message = videoRef.current?.error?.message;
+              setVideoError(
+                message ? `${code ? `code ${code}: ` : ""}${message}` : `code ${code || "?"}`,
+              );
+            }}
+          />
 
-        {showFfmpegOverlay && (
-          <div className="absolute inset-0 z-[25]">
-            <img
-              src={ffmpegPreviewUrl}
-              alt="Preview FFmpeg renderizado"
-              className="w-full h-full object-contain rounded pointer-events-none"
-              draggable={false}
-            />
-          </div>
-        )}
-
-        {videoError && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-            <div
-              className="pointer-events-auto max-w-[80%] rounded px-3 py-2 text-[11px] font-medium"
-              style={{ background: "rgba(244, 63, 94, 0.95)", color: "white" }}
-            >
-              No se pudo cargar el video ({videoError}). Si el archivo cambió de ubicación, vuelve a
-              importarlo.
+          {showFfmpegOverlay && (
+            <div className="absolute inset-0 z-[25]">
+              <img
+                src={ffmpegPreviewUrl}
+                alt="Preview FFmpeg renderizado"
+                className="w-full h-full object-contain rounded pointer-events-none"
+                draggable={false}
+              />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Operation overlays */}
-        {sel.operations
-          .filter((op) => isOpActive(op, currentTime))
-          .map((op, opIdx) => {
-            const s = regionToScreen(op.region, videoRef.current);
-            if (!s) return null;
-            if (op.mode === "blur") {
+          {videoError && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+              <div
+                className="pointer-events-auto max-w-[80%] rounded px-3 py-2 text-[11px] font-medium"
+                style={{ background: "rgba(244, 63, 94, 0.95)", color: "white" }}
+              >
+                No se pudo cargar el video ({videoError}). Si el archivo cambió de ubicación, vuelve
+                a importarlo.
+              </div>
+            </div>
+          )}
+
+          {/* Operation overlays */}
+          {sel.operations
+            .filter((op) => isOpActive(op, currentTime))
+            .map((op, opIdx) => {
+              const s = regionToScreen(op.region, videoRef.current);
+              if (!s) return null;
+              if (op.mode === "blur") {
+                return (
+                  <div
+                    key={op.id}
+                    className="absolute pointer-events-none z-10"
+                    style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
+                  >
+                    <div
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        background:
+                          "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
+                        border: "2px solid rgba(0,240,234,0.6)",
+                        borderRadius: "2px",
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        backdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
+                        WebkitBackdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
+                      }}
+                    />
+                  </div>
+                );
+              }
+              if (op.mode === "crop") {
+                return (
+                  <div
+                    key={op.id}
+                    className="absolute pointer-events-none z-10"
+                    style={{
+                      left: s.x,
+                      top: s.y,
+                      width: s.w,
+                      height: s.h,
+                      outline: "2px dashed #fbbf24",
+                      outlineOffset: "-1px",
+                    }}
+                  />
+                );
+              }
+              if (op.mode === "delogo") {
+                const dm = op.delogoMethod || "inpaint";
+                let overlayStyle = { left: s.x, top: s.y, width: s.w, height: s.h };
+                if (dm === "inpaint") {
+                  overlayStyle.background =
+                    "repeating-conic-gradient(rgba(239,68,68,0.15) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px";
+                  overlayStyle.outline = "2px solid rgba(239,68,68,0.7)";
+                } else if (dm === "blur") {
+                  overlayStyle.background =
+                    "repeating-linear-gradient(135deg, rgba(59,130,246,0.10) 0px, rgba(59,130,246,0.10) 2px, transparent 2px, transparent 8px)";
+                  overlayStyle.backdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
+                  overlayStyle.WebkitBackdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
+                  overlayStyle.outline = "2px dashed rgba(59,130,246,0.7)";
+                } else {
+                  overlayStyle.background = `${op.delogoFillColor || "black"}`;
+                  overlayStyle.opacity = op.delogoFillOpacity ?? 1;
+                  overlayStyle.outline = "2px solid rgba(239,68,68,0.6)";
+                }
+                return (
+                  <div
+                    key={op.id}
+                    className="absolute pointer-events-none z-10"
+                    style={overlayStyle}
+                  />
+                );
+              }
+              if (op.mode === "image" && op.imagePath) {
+                const dataUrl = imageDataCache?.[op.imagePath];
+                const isDragging = draggingOp?.opIdx === opIdx;
+                return (
+                  <div
+                    key={op.id}
+                    className={`absolute z-30 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
+                    style={{
+                      left: s.x,
+                      top: s.y,
+                      width: s.w,
+                      height: s.h,
+                      opacity: op.imageOpacity ?? 1,
+                      outline: isDragging
+                        ? "2px solid rgba(16,185,129,1)"
+                        : "1px dashed rgba(16,185,129,0.6)",
+                      pointerEvents: "auto",
+                    }}
+                    onMouseDown={(e) => handleImageDragStart(op, opIdx, e)}
+                  >
+                    {dataUrl ? (
+                      <img
+                        src={dataUrl}
+                        alt=""
+                        className="w-full h-full"
+                        style={{ objectFit: "fill" }}
+                        draggable={false}
+                      />
+                    ) : (
+                      <div
+                        className="w-full h-full flex items-center justify-center text-[10px]"
+                        style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
+                      >
+                        {op.imagePath.split(/[\\/]/).pop()}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              if (op.mode === "text" && op.text && sidebarMode !== "batch") {
+                return (
+                  <TextOverlay
+                    key={op.id}
+                    screen={s}
+                    text={op.text}
+                    style={op}
+                    showOutline={false}
+                  />
+                );
+              }
+              return null;
+            })}
+
+          {/* Live blur preview while configuring */}
+          {sidebarMode === "logo" &&
+            activeTool === "blur" &&
+            currentRegion &&
+            (() => {
+              const s = regionToScreen(currentRegion, videoRef.current);
+              if (!s) return null;
+              const blurPx = Math.max(1, (blurStrength || 20) * (s.sy || 1));
               return (
                 <div
-                  key={op.id}
                   className="absolute pointer-events-none z-10"
                   style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
                 >
@@ -491,283 +631,165 @@ export default function VideoPreview() {
                     style={{
                       position: "absolute",
                       inset: 0,
-                      backdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
-                      WebkitBackdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
+                      backdropFilter: `blur(${blurPx}px)`,
+                      WebkitBackdropFilter: `blur(${blurPx}px)`,
+                      borderRadius: "2px",
                     }}
                   />
                 </div>
               );
-            }
-            if (op.mode === "crop") {
+            })()}
+
+          {/* Live text preview while configuring (logo mode) */}
+          {sidebarMode === "logo" &&
+            activeTool === "text" &&
+            currentRegion &&
+            textInput &&
+            (() => {
+              const s = regionToScreen(currentRegion, videoRef.current);
+              if (!s) return null;
               return (
-                <div
-                  key={op.id}
-                  className="absolute pointer-events-none z-10"
-                  style={{
-                    left: s.x,
-                    top: s.y,
-                    width: s.w,
-                    height: s.h,
-                    outline: "2px dashed #fbbf24",
-                    outlineOffset: "-1px",
-                  }}
+                <TextOverlay
+                  screen={s}
+                  text={textInput}
+                  style={getGlobalTextStyleFromState(useEditorStore.getState())}
+                  showOutline={false}
                 />
               );
-            }
-            if (op.mode === "delogo") {
-              const dm = op.delogoMethod || "inpaint";
-              let overlayStyle = { left: s.x, top: s.y, width: s.w, height: s.h };
-              if (dm === "inpaint") {
-                overlayStyle.background =
-                  "repeating-conic-gradient(rgba(239,68,68,0.15) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px";
-                overlayStyle.outline = "2px solid rgba(239,68,68,0.7)";
-              } else if (dm === "blur") {
-                overlayStyle.background =
-                  "repeating-linear-gradient(135deg, rgba(59,130,246,0.10) 0px, rgba(59,130,246,0.10) 2px, transparent 2px, transparent 8px)";
-                overlayStyle.backdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
-                overlayStyle.WebkitBackdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
-                overlayStyle.outline = "2px dashed rgba(59,130,246,0.7)";
-              } else {
-                overlayStyle.background = `${op.delogoFillColor || "black"}`;
-                overlayStyle.opacity = op.delogoFillOpacity ?? 1;
-                overlayStyle.outline = "2px solid rgba(239,68,68,0.6)";
+            })()}
+
+          {/* Batch: live text preview per template region */}
+          {sidebarMode === "batch" &&
+            selectedIdx >= 0 &&
+            templateRegions.map((tr) => {
+              const payload = getBatchPreviewPayload(selectedIdx, tr.id);
+              if (!payload) return null;
+              const s = regionToScreen(payload.region, videoRef.current);
+              if (!s) return null;
+              const isSelected = selectedTemplateRegionId === tr.id;
+              const isDragging =
+                draggingBatchText?.videoIdx === selectedIdx && draggingBatchText.regionId === tr.id;
+              return (
+                <TextOverlay
+                  key={tr.id}
+                  screen={s}
+                  text={payload.text}
+                  style={payload.style}
+                  isFocused={isSelected}
+                  showOutline
+                  label={tr.label}
+                  interactive
+                  cursor={isDragging ? "grabbing" : "grab"}
+                  zIndex={20}
+                  onMouseDown={(e) => handleBatchTextDragStart(tr, e)}
+                />
+              );
+            })}
+
+          {/* Batch: preview while drawing a new region */}
+          {sidebarMode === "batch" &&
+            currentRegion &&
+            (() => {
+              const s = regionToScreen(currentRegion, videoRef.current);
+              if (!s) return null;
+              return (
+                <TextOverlay
+                  screen={s}
+                  text="Texto de ejemplo"
+                  style={getGlobalTextStyleFromState(useEditorStore.getState())}
+                  isFocused
+                  showOutline
+                />
+              );
+            })()}
+
+          {/* Global watermark preview */}
+          {watermark?.enabled &&
+            (() => {
+              const video = videoRef.current;
+              if (!video) return null;
+              const vw = video.videoWidth || 1;
+              const vh = video.videoHeight || 1;
+              const rect = video.getBoundingClientRect();
+              const sx = rect.width / vw;
+              const sy = rect.height / vh;
+              const margin = 10;
+              const pos = watermark.position || "bottom-right";
+              const posMap = {
+                "top-left": { left: margin, top: margin },
+                "top-center": { left: "50%", top: margin, transform: "translateX(-50%)" },
+                "top-right": { right: margin, top: margin },
+                "center-left": { left: margin, top: "50%", transform: "translateY(-50%)" },
+                center: { left: "50%", top: "50%", transform: "translate(-50%, -50%)" },
+                "center-right": { right: margin, top: "50%", transform: "translateY(-50%)" },
+                "bottom-left": { left: margin, bottom: margin + 60 },
+                "bottom-center": {
+                  left: "50%",
+                  bottom: margin + 60,
+                  transform: "translateX(-50%)",
+                },
+                "bottom-right": { right: margin, bottom: margin + 60 },
+              };
+              const posStyle = posMap[pos] || posMap["bottom-right"];
+              if (watermark.type === "text" && watermark.text) {
+                const fontSize = Math.max(8, (watermark.fontSize || 18) * sy);
+                return (
+                  <div
+                    className="absolute pointer-events-none z-20"
+                    style={{
+                      ...posStyle,
+                      opacity: watermark.opacity ?? 0.5,
+                      fontSize: `${fontSize}px`,
+                      fontFamily: `"${watermark.fontFamily || "Arial"}", sans-serif`,
+                      color: watermark.fontColor || "#ffffff",
+                      textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
+                      whiteSpace: "nowrap",
+                      userSelect: "none",
+                    }}
+                  >
+                    {watermark.text}
+                  </div>
+                );
               }
-              return (
-                <div
-                  key={op.id}
-                  className="absolute pointer-events-none z-10"
-                  style={overlayStyle}
-                />
-              );
-            }
-            if (op.mode === "image" && op.imagePath) {
-              const dataUrl = imageDataCache?.[op.imagePath];
-              const isDragging = draggingOp?.opIdx === opIdx;
-              return (
-                <div
-                  key={op.id}
-                  className={`absolute z-30 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
-                  style={{
-                    left: s.x,
-                    top: s.y,
-                    width: s.w,
-                    height: s.h,
-                    opacity: op.imageOpacity ?? 1,
-                    outline: isDragging
-                      ? "2px solid rgba(16,185,129,1)"
-                      : "1px dashed rgba(16,185,129,0.6)",
-                    pointerEvents: "auto",
-                  }}
-                  onMouseDown={(e) => handleImageDragStart(op, opIdx, e)}
-                >
-                  {dataUrl ? (
+              if (watermark.type === "image" && watermark.imageDataUrl) {
+                const baseSize = 80 * sy;
+                const scaledSize = baseSize * (watermark.scale || 1);
+                return (
+                  <div
+                    className="absolute pointer-events-none z-20"
+                    style={{
+                      ...posStyle,
+                      opacity: watermark.opacity ?? 0.5,
+                    }}
+                  >
                     <img
-                      src={dataUrl}
+                      src={watermark.imageDataUrl}
                       alt=""
-                      className="w-full h-full"
-                      style={{ objectFit: "fill" }}
+                      style={{
+                        height: `${scaledSize}px`,
+                        width: "auto",
+                        objectFit: "contain",
+                      }}
                       draggable={false}
                     />
-                  ) : (
-                    <div
-                      className="w-full h-full flex items-center justify-center text-[10px]"
-                      style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
-                    >
-                      {op.imagePath.split(/[\\/]/).pop()}
-                    </div>
-                  )}
-                </div>
-              );
-            }
-            if (op.mode === "text" && op.text && sidebarMode !== "batch") {
-              return (
-                <TextOverlay key={op.id} screen={s} text={op.text} style={op} showOutline={false} />
-              );
-            }
-            return null;
-          })}
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
-        {/* Live blur preview while configuring */}
-        {sidebarMode === "logo" &&
-          activeTool === "blur" &&
-          currentRegion &&
-          (() => {
-            const s = regionToScreen(currentRegion, videoRef.current);
-            if (!s) return null;
-            const blurPx = Math.max(1, (blurStrength || 20) * (s.sy || 1));
-            return (
-              <div
-                className="absolute pointer-events-none z-10"
-                style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
-              >
-                <div
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    background:
-                      "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
-                    border: "2px solid rgba(0,240,234,0.6)",
-                    borderRadius: "2px",
-                  }}
-                />
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    backdropFilter: `blur(${blurPx}px)`,
-                    WebkitBackdropFilter: `blur(${blurPx}px)`,
-                    borderRadius: "2px",
-                  }}
-                />
-              </div>
-            );
-          })()}
+          {/* Live preview of the in-progress delogo effect (under the selection handles) */}
+          <DelogoLivePreview videoRef={videoRef} />
 
-        {/* Live text preview while configuring (logo mode) */}
-        {sidebarMode === "logo" &&
-          activeTool === "text" &&
-          currentRegion &&
-          textInput &&
-          (() => {
-            const s = regionToScreen(currentRegion, videoRef.current);
-            if (!s) return null;
-            return (
-              <TextOverlay
-                screen={s}
-                text={textInput}
-                style={getGlobalTextStyleFromState(useEditorStore.getState())}
-                showOutline={false}
-              />
-            );
-          })()}
-
-        {/* Batch: live text preview per template region */}
-        {sidebarMode === "batch" &&
-          selectedIdx >= 0 &&
-          templateRegions.map((tr) => {
-            const payload = getBatchPreviewPayload(selectedIdx, tr.id);
-            if (!payload) return null;
-            const s = regionToScreen(payload.region, videoRef.current);
-            if (!s) return null;
-            const isSelected = selectedTemplateRegionId === tr.id;
-            const isDragging =
-              draggingBatchText?.videoIdx === selectedIdx && draggingBatchText.regionId === tr.id;
-            return (
-              <TextOverlay
-                key={tr.id}
-                screen={s}
-                text={payload.text}
-                style={payload.style}
-                isFocused={isSelected}
-                showOutline
-                label={tr.label}
-                interactive
-                cursor={isDragging ? "grabbing" : "grab"}
-                zIndex={20}
-                onMouseDown={(e) => handleBatchTextDragStart(tr, e)}
-              />
-            );
-          })}
-
-        {/* Batch: preview while drawing a new region */}
-        {sidebarMode === "batch" &&
-          currentRegion &&
-          (() => {
-            const s = regionToScreen(currentRegion, videoRef.current);
-            if (!s) return null;
-            return (
-              <TextOverlay
-                screen={s}
-                text="Texto de ejemplo"
-                style={getGlobalTextStyleFromState(useEditorStore.getState())}
-                isFocused
-                showOutline
-              />
-            );
-          })()}
-
-        {/* Global watermark preview */}
-        {watermark?.enabled && (() => {
-          const video = videoRef.current;
-          if (!video) return null;
-          const vw = video.videoWidth || 1;
-          const vh = video.videoHeight || 1;
-          const rect = video.getBoundingClientRect();
-          const sx = rect.width / vw;
-          const sy = rect.height / vh;
-          const margin = 10;
-          const pos = watermark.position || "bottom-right";
-          const posMap = {
-            "top-left": { left: margin, top: margin },
-            "top-center": { left: "50%", top: margin, transform: "translateX(-50%)" },
-            "top-right": { right: margin, top: margin },
-            "center-left": { left: margin, top: "50%", transform: "translateY(-50%)" },
-            "center": { left: "50%", top: "50%", transform: "translate(-50%, -50%)" },
-            "center-right": { right: margin, top: "50%", transform: "translateY(-50%)" },
-            "bottom-left": { left: margin, bottom: margin + 60 },
-            "bottom-center": { left: "50%", bottom: margin + 60, transform: "translateX(-50%)" },
-            "bottom-right": { right: margin, bottom: margin + 60 },
-          };
-          const posStyle = posMap[pos] || posMap["bottom-right"];
-          if (watermark.type === "text" && watermark.text) {
-            const fontSize = Math.max(8, (watermark.fontSize || 18) * sy);
-            return (
-              <div
-                className="absolute pointer-events-none z-20"
-                style={{
-                  ...posStyle,
-                  opacity: watermark.opacity ?? 0.5,
-                  fontSize: `${fontSize}px`,
-                  fontFamily: `"${watermark.fontFamily || "Arial"}", sans-serif`,
-                  color: watermark.fontColor || "#ffffff",
-                  textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
-                  whiteSpace: "nowrap",
-                  userSelect: "none",
-                }}
-              >
-                {watermark.text}
-              </div>
-            );
-          }
-          if (watermark.type === "image" && watermark.imageDataUrl) {
-            const baseSize = 80 * sy;
-            const scaledSize = baseSize * (watermark.scale || 1);
-            return (
-              <div
-                className="absolute pointer-events-none z-20"
-                style={{
-                  ...posStyle,
-                  opacity: watermark.opacity ?? 0.5,
-                }}
-              >
-                <img
-                  src={watermark.imageDataUrl}
-                  alt=""
-                  style={{
-                    height: `${scaledSize}px`,
-                    width: "auto",
-                    objectFit: "contain",
-                  }}
-                  draggable={false}
-                />
-              </div>
-            );
-          }
-          return null;
-        })()}
-
-        {/* Live preview of the in-progress delogo effect (under the selection handles) */}
-        <DelogoLivePreview videoRef={videoRef} />
-
-        {/* Drawing canvas */}
-        <canvas
-          ref={canvasRef}
-          className="absolute top-0 left-0"
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-        />
+          {/* Drawing canvas */}
+          <canvas
+            ref={canvasRef}
+            className="absolute top-0 left-0"
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
+          />
         </div>
 
         {isSplitCompare && (

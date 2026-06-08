@@ -25,13 +25,7 @@ export default function ConfirmDialog() {
 
   if (!dialog) return null;
 
-  const {
-    title,
-    message,
-    confirmLabel,
-    cancelLabel,
-    variant = "default",
-  } = dialog;
+  const { title, message, confirmLabel, cancelLabel, variant = "default" } = dialog;
 
   const isDanger = variant === "danger";
 
@@ -44,10 +38,7 @@ export default function ConfirmDialog() {
       className="cap-modal-overlay"
       onClick={() => resolveConfirm(false)}
     >
-      <div
-        className="cap-modal-panel max-w-[420px]"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="cap-modal-panel max-w-[420px]" onClick={(e) => e.stopPropagation()}>
         <div className="cap-modal-header">
           <div
             className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"

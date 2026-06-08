@@ -37,7 +37,8 @@ export default function TextOverlay({
 
   const baseFontPx = Math.max(1, (style.fontSize || 24) * (screen?.sy || 1));
   const safePx = scaledSafeMargin(style.safeMargin, screen?.sy || 1);
-  const boxPad = style.bgEnabled !== false ? Math.max(2, (style.boxBorderWidth || 4) * (screen?.sy || 1)) : 0;
+  const boxPad =
+    style.bgEnabled !== false ? Math.max(2, (style.boxBorderWidth || 4) * (screen?.sy || 1)) : 0;
 
   useLayoutEffect(() => {
     const el = textRef.current;

@@ -4,9 +4,7 @@ import path from "path";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { buildBatchTextOperationsForPreview } from "../src/utils/preview-frame-job.js";
 
-const PY =
-  process.env.BERU_PYTHON ||
-  (process.platform === "win32" ? "py" : "python3");
+const PY = process.env.BERU_PYTHON || (process.platform === "win32" ? "py" : "python3");
 const PY_ARGS = process.platform === "win32" ? ["-3"] : [];
 const PROCESSOR = path.join(process.cwd(), "python", "processor.py");
 
@@ -54,9 +52,7 @@ describe("preview frame job", () => {
     expect(afterOps).toBe(beforeOps);
     expect(job.timestamp).toBe(1.5);
     expect(job.input_path).toContain("video_0.mp4");
-    expect(job.operations.some((op) => op.mode === "text" && op.text === "Hola FFmpeg")).toBe(
-      true,
-    );
+    expect(job.operations.some((op) => op.mode === "text" && op.text === "Hola FFmpeg")).toBe(true);
   });
 
   it("buildBatchTextOperationsForPreview mirrors materialize logic for one item", () => {

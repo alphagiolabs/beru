@@ -13,9 +13,7 @@ export const TRUNCATE_MODES = [
 ];
 
 export function verticalAlignToFlex(verticalAlign) {
-  return (
-    { top: "flex-start", center: "center", bottom: "flex-end" }[verticalAlign] || "flex-start"
-  );
+  return { top: "flex-start", center: "center", bottom: "flex-end" }[verticalAlign] || "flex-start";
 }
 
 export function scaledSafeMargin(safeMargin, scale = 1) {

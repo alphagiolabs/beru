@@ -318,11 +318,7 @@ export function registerProcessHandlers(pathSecurity) {
 
       const onStdoutData = (data) => {
         if (!isCurrentRun()) return;
-        stdoutBuf = appendBoundedText(
-          stdoutBuf,
-          data.toString(),
-          MAX_PROCESSOR_STDOUT_LINE_CHARS,
-        );
+        stdoutBuf = appendBoundedText(stdoutBuf, data.toString(), MAX_PROCESSOR_STDOUT_LINE_CHARS);
         const lines = stdoutBuf.split("\n");
         stdoutBuf = lines.pop() || "";
         for (const line of lines) dispatchProcessorLine(line);

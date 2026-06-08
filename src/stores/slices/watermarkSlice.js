@@ -18,8 +18,7 @@ export function createWatermarkSlice(set, get) {
 
     setShowWatermarkModal: (val) => set({ showWatermarkModal: !!val }),
 
-    setWatermark: (patch) =>
-      set((s) => ({ watermark: { ...s.watermark, ...patch } })),
+    setWatermark: (patch) => set((s) => ({ watermark: { ...s.watermark, ...patch } })),
 
     resetWatermark: () =>
       set({

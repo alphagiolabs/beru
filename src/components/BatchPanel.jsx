@@ -40,9 +40,7 @@ export default function BatchPanel() {
       v.operations.some(
         (op) =>
           op.mode === "text" &&
-          templateRegions.some(
-            (tr) => tr.region && textOpMatchesRegion(op, tr.region, tr.id),
-          ),
+          templateRegions.some((tr) => tr.region && textOpMatchesRegion(op, tr.region, tr.id)),
       ),
     );
     if (hasLinkedTextToOverwrite) {

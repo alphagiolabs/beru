@@ -33,7 +33,6 @@ export async function renderPreviewFrame(payload) {
   }
 
   return new Promise((resolve) => {
-
     const { command, args: pyArgs } = resolvePythonSpawn();
     const proc = spawn(command, [...pyArgs, pythonScript, "--preview-frame", tmpFile], {
       windowsHide: true,

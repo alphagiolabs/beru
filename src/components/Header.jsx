@@ -722,10 +722,7 @@ export default function Header() {
           className="cap-modal-overlay"
           onClick={() => testResult.status !== "running" && setTestResult(null)}
         >
-          <div
-            className="cap-modal-panel max-w-[420px] p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="cap-modal-panel max-w-[420px] p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                 {testResult.status === "running" && t("modal.testResult.running")}
@@ -799,10 +796,7 @@ export default function Header() {
 
       {savePresetOpen && (
         <div className="cap-modal-overlay" onClick={() => setSavePresetOpen(false)}>
-          <div
-            className="cap-modal-panel max-w-[380px] p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="cap-modal-panel max-w-[380px] p-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                 {t("modal.savePreset.title")}

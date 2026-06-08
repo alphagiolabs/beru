@@ -336,7 +336,8 @@ export default function DelogoLivePreview({ videoRef }) {
       if (method === "mosaic") renderMosaic(ctx, video, region, screen, mosaicSize, ws);
       else if (method === "mirror") renderMirror(ctx, video, region, screen, mirrorSide);
       else if (method === "inpaint") renderInpaint(ctx, video, region, screen, ws);
-      else if (method === "temporal") renderTemporal(ctx, video, region, screen, temporalRadius, ws);
+      else if (method === "temporal")
+        renderTemporal(ctx, video, region, screen, temporalRadius, ws);
 
       const label = labelRef.current;
       if (label) {

@@ -72,14 +72,16 @@ export default function UpdateReadyModal() {
           >
             <Sparkles size={20} />
           </div>
-          <h2 id="update-ready-title" className="text-base font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h2
+            id="update-ready-title"
+            className="text-base font-semibold"
+            style={{ color: "var(--text-primary)" }}
+          >
             {t("updater.modal.title")}
           </h2>
         </div>
 
-        <p className="cap-modal-body">
-          {t("updater.modal.body", { version: update.version })}
-        </p>
+        <p className="cap-modal-body">{t("updater.modal.body", { version: update.version })}</p>
 
         <div
           className="mx-5 mb-3 px-3 py-2 rounded text-[11px]"
@@ -93,10 +95,7 @@ export default function UpdateReadyModal() {
         </div>
 
         <div className="cap-modal-footer">
-          <button
-            onClick={handleLater}
-            className="cap-btn-secondary !text-[12px] !px-4 !py-2"
-          >
+          <button onClick={handleLater} className="cap-btn-secondary !text-[12px] !px-4 !py-2">
             {t("updater.modal.later")}
           </button>
           <button
