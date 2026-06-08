@@ -80,6 +80,7 @@
     ],
     "win": {
       "icon": "brand/icon.ico",
+      "artifactName": "Beru-Setup-${version}.${ext}",
       "target": [
         {
           "target": "nsis",
