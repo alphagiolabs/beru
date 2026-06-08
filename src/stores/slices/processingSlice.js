@@ -10,6 +10,33 @@ function isQueueJobIndex(idx, queueLength) {
   return Number.isInteger(idx) && idx >= 0 && idx < queueLength;
 }
 
+function applyJobProgressMessages(queue, messages) {
+  const latestByIndex = new Map();
+  for (const msg of messages) {
+    const idx = msg?.index;
+    if (isQueueJobIndex(idx, queue.length)) latestByIndex.set(idx, msg);
+  }
+  if (latestByIndex.size === 0) return queue;
+
+  let next = null;
+  for (const [idx, msg] of latestByIndex) {
+    const current = (next || queue)[idx];
+    if (current.status === "done" || current.status === "error") continue;
+
+    const progress = Math.round(msg.percent ?? current.progress ?? 0);
+    if (current.status === "processing" && current.progress === progress) continue;
+
+    if (!next) next = [...queue];
+    next[idx] = {
+      ...current,
+      status: "processing",
+      progress,
+    };
+  }
+
+  return next || queue;
+}
+
 /** Batch encode progress, job building, and FFmpeg processing orchestration. */
 export function createProcessingSlice(set, get) {
   return {
@@ -48,17 +75,12 @@ export function createProcessingSlice(set, get) {
         };
       }),
 
-    updateJobProgress: (msg) =>
+    updateJobProgress: (msg) => get().updateJobProgressBatch([msg]),
+
+    updateJobProgressBatch: (messages) =>
       set((s) => {
-        const idx = msg.index;
-        if (!isQueueJobIndex(idx, s.queue.length)) return {};
-        const updated = [...s.queue];
-        updated[idx] = {
-          ...updated[idx],
-          status: "processing",
-          progress: Math.round(msg.percent ?? updated[idx].progress ?? 0),
-        };
-        return { queue: updated };
+        const queue = applyJobProgressMessages(s.queue, Array.isArray(messages) ? messages : []);
+        return queue === s.queue ? s : { queue };
       }),
 
     markJobDone: (msg) =>

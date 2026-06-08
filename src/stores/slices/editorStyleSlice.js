@@ -98,6 +98,8 @@ export function createEditorStyleSlice(set, get) {
         if (templateRegions.length > 0 && selectedTemplateRegionId == null) {
           get().setSelectedTemplateRegion(templateRegions[0].id);
         }
+        set({ sidebarMode: val, activeTool: "text" });
+        return;
       }
       set({ sidebarMode: val });
     },

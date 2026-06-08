@@ -348,8 +348,12 @@ export default function Header() {
 
   return (
     <header
-      className="flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
-      style={{ background: "var(--bg-elevated)", borderColor: "var(--border)" }}
+      className="cap-titlebar-drag flex items-center justify-between px-4 py-2 border-b flex-shrink-0"
+      style={{
+        background: "var(--bg-elevated)",
+        borderColor: "var(--border)",
+        paddingTop: "max(0.5rem, env(titlebar-area-height, 0px))",
+      }}
     >
       <div className="flex items-center gap-3">
         <svg viewBox="0 0 300 400" width="22" height="28" aria-label="Beru">

@@ -455,6 +455,79 @@ print(json.dumps({"calls": calls, "result": result}))
     expect(parsed.result.failed).toBe(0);
   });
 
+  it("never exceeds the requested active worker limit", () => {
+    const code = `
+import json
+import threading
+import time
+import processor
+
+active = {"n": 0, "max": 0}
+lock = threading.Lock()
+
+def fake_process(idx, job, ffmpeg_path, **kwargs):
+    with lock:
+        active["n"] += 1
+        active["max"] = max(active["max"], active["n"])
+    time.sleep(0.05)
+    with lock:
+        active["n"] -= 1
+    return {"index": job.get("id", idx), "status": "succeeded"}
+
+processor.detect_hw_encoder = lambda _ffmpeg: None
+processor.get_system_fonts = lambda: {}
+processor._process_one = fake_process
+jobs = [{"id": i, "input_path": f"C:/tmp/{i}.mp4"} for i in range(8)]
+result = processor.process_jobs(jobs, "ffmpeg", max_workers=2)
+print(json.dumps({"max_active": active["max"], "result": result}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.max_active).toBeLessThanOrEqual(2);
+    expect(parsed.result.succeeded).toBe(8);
+  });
+
+  it("cancels a silent ffmpeg subprocess without waiting for output", () => {
+    const code = `
+import json
+import sys
+import threading
+import time
+import processor
+
+processor._cancel_event.clear()
+
+def trigger_cancel():
+    time.sleep(0.2)
+    processor._cancel_event.set()
+
+threading.Thread(target=trigger_cancel, daemon=True).start()
+started = time.perf_counter()
+ok, err = processor._run_ffmpeg_with_progress(
+    [sys.executable, "-c", "import time; time.sleep(1.5)"],
+    timeout_sec=5,
+    job_id=4,
+    duration_sec=1.0,
+)
+elapsed = time.perf_counter() - started
+processor._cancel_event.clear()
+print(json.dumps({"ok": ok, "err": err, "elapsed": elapsed}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.ok).toBe(false);
+    expect(parsed.err).toContain("Cancelled");
+    expect(parsed.elapsed).toBeLessThan(1.2);
+  });
+
   it("removes partial outputs and keeps raw memory errors for retry logic", () => {
     const code = `
 import json
@@ -514,6 +587,89 @@ print(json.dumps({"threads": args[threads_idx + 1], "args": args}))
     expect(r.status).toBe(0);
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.threads).toBe("4");
+  });
+
+  it("uses complete job video metadata without probing again", () => {
+    const code = `
+import json
+import processor
+
+def fail_probe(_path):
+    raise AssertionError("ffprobe should not be called")
+
+processor.ffprobe = fail_probe
+info = processor.job_video_info({
+    "width": 1920,
+    "height": 1080,
+    "source_width": 1920,
+    "source_height": 1080,
+    "video_duration": 12.5,
+    "pix_fmt": "yuv420p",
+    "frame_rate": 30,
+    "audio_codec": "aac",
+    "audio_channels": 2,
+    "video_codec": "h264",
+}, "C:/tmp/in.mp4")
+print(json.dumps(info, sort_keys=True))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed).toEqual({
+      audio_channels: 2,
+      audio_codec: "aac",
+      duration: 12.5,
+      frame_rate: 30,
+      height: 1080,
+      pix_fmt: "yuv420p",
+      video_codec: "h264",
+      width: 1920,
+    });
+  });
+
+  it("probes when dimensions exist but timing metadata is missing", () => {
+    const code = `
+import json
+import processor
+
+calls = {"n": 0}
+
+def fake_probe(_path):
+    calls["n"] += 1
+    return {
+        "width": 640,
+        "height": 360,
+        "duration": 8.0,
+        "pix_fmt": "yuv420p",
+        "frame_rate": 24,
+        "audio_codec": "aac",
+        "audio_channels": 2,
+        "video_codec": "h264",
+    }
+
+processor.ffprobe = fake_probe
+info = processor.job_video_info({
+    "width": 1920,
+    "height": 1080,
+    "source_width": 1920,
+    "source_height": 1080,
+}, "C:/tmp/in.mp4")
+print(json.dumps({"calls": calls["n"], "info": info}, sort_keys=True))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.calls).toBe(1);
+    expect(parsed.info.width).toBe(1920);
+    expect(parsed.info.height).toBe(1080);
+    expect(parsed.info.duration).toBe(8);
+    expect(parsed.info.audio_codec).toBe("aac");
   });
 
   it("retries generic hardware filter failures with libx264", () => {

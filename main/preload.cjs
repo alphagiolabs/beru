@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld("api", {
   savePreset: (name, jsonStr) => ipcRenderer.invoke("presets:save", name, jsonStr),
   loadSettings: () => ipcRenderer.invoke("settings:load"),
   saveSettings: (partial) => ipcRenderer.invoke("settings:save", partial),
+  setWindowTheme: (theme) => ipcRenderer.invoke("window:setTheme", theme),
   getBatchCapacity: (opts) => ipcRenderer.invoke("system:getBatchCapacity", opts),
   listRecent: () => ipcRenderer.invoke("recent:list"),
   addRecent: (entry) => ipcRenderer.invoke("recent:add", entry),

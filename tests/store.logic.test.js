@@ -621,4 +621,49 @@ describe("useEditorStore logic regressions", () => {
       }),
     );
   });
+
+  it("addOperation rejects image and empty text ops in logo mode", () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      queue: [queueItem()],
+      selectedIdx: 0,
+      currentRegion: region,
+      textInput: "   ",
+      tempImagePath: "",
+    });
+
+    useEditorStore.getState().addOperation("image");
+    useEditorStore.getState().addOperation("text");
+    expect(useEditorStore.getState().queue[0].operations).toHaveLength(0);
+
+    useEditorStore.setState({ textInput: "Hola", tempImagePath: "C:\\img\\logo.png" });
+    useEditorStore.getState().addOperation("text");
+    useEditorStore.setState({ currentRegion: region });
+    useEditorStore.getState().addOperation("image");
+    const ops = useEditorStore.getState().queue[0].operations;
+    expect(ops).toHaveLength(2);
+    expect(ops[0].mode).toBe("text");
+    expect(ops[0].text).toBe("Hola");
+    expect(ops[1].mode).toBe("image");
+    expect(ops[1].imagePath).toBe("C:\\img\\logo.png");
+  });
+
+  it("addTemplateRegion stores batch text regions from the current selection", () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      activeTool: "text",
+      currentRegion: region,
+      templateRegions: [],
+      nextRegionLabel: 1,
+    });
+
+    useEditorStore.getState().addTemplateRegion();
+    const state = useEditorStore.getState();
+
+    expect(state.templateRegions).toHaveLength(1);
+    expect(state.templateRegions[0].label).toBe("TEXT_1");
+    expect(state.templateRegions[0].region).toEqual(region);
+    expect(state.currentRegion).toBeNull();
+  });
 });

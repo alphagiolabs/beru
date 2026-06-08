@@ -90,6 +90,32 @@ describe("Stability under heavy load", () => {
     expect(state.progressDone).toBe(500);
   });
 
+  it("applies batched job progress with one store update", () => {
+    const items = Array.from({ length: 500 }, (_, i) => queueItem(i));
+    useEditorStore.setState({
+      queue: items,
+      isProcessing: true,
+      progressTotal: 500,
+      progressDone: 0,
+    });
+
+    let updates = 0;
+    const unsubscribe = useEditorStore.subscribe(() => {
+      updates++;
+    });
+    try {
+      const messages = Array.from({ length: 500 }, (_, i) => ({ index: i, percent: 42 }));
+      useEditorStore.getState().updateJobProgressBatch(messages);
+    } finally {
+      unsubscribe();
+    }
+
+    const state = useEditorStore.getState();
+    expect(updates).toBe(1);
+    expect(state.queue.every((q) => q.status === "processing")).toBe(true);
+    expect(state.queue.every((q) => q.progress === 42)).toBe(true);
+  });
+
   it("handles rapid error/done alternation without state corruption", () => {
     const items = Array.from({ length: 100 }, (_, i) => queueItem(i));
     useEditorStore.setState({

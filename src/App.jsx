@@ -144,7 +144,14 @@ export default function App() {
 
   if (queueLength === 0) {
     return (
-      <div ref={dropRef} {...dropHandlers} className="h-full">
+      <div ref={dropRef} {...dropHandlers} className="h-full flex flex-col">
+        <div
+          className="cap-titlebar-drag flex-shrink-0"
+          style={{
+            height: "env(titlebar-area-height, 0px)",
+            background: "var(--bg-app)",
+          }}
+        />
         <TopUpdateBar />
         <Landing />
         <Suspense fallback={null}>

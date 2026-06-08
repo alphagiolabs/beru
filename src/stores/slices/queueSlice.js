@@ -228,7 +228,8 @@ export function createQueueSlice(set, get) {
         const next = s.queue.filter((_, i) => i !== idx);
         let sel = s.selectedIdx;
         if (sel >= next.length) sel = next.length - 1;
-        if (sel === idx) sel = Math.min(idx, next.length - 1);
+        else if (sel === idx) sel = Math.min(idx, next.length - 1);
+        else if (sel > idx) sel = sel - 1;
         // Rebuild excelMatchStatus with re-indexed keys
         const newStatus = {};
         Object.entries(s.excelMatchStatus).forEach(([k, v]) => {
@@ -305,6 +306,8 @@ export function createQueueSlice(set, get) {
     addOperation: (mode) => {
       const { queue, selectedIdx, currentRegion } = get();
       if (selectedIdx < 0 || !currentRegion || !isRegionUsable(currentRegion)) return;
+      if (mode === "image" && !String(get().tempImagePath ?? "").trim()) return;
+      if (mode === "text" && !String(get().textInput ?? "").trim()) return;
       get()._saveUndo();
 
       const op = sanitizeOperation(

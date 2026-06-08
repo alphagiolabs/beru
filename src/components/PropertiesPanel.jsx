@@ -556,21 +556,31 @@ export default function PropertiesPanel() {
           )}
 
           {/* Apply button */}
-          <button
-            onClick={() => get().addOperation(activeTool)}
-            className="cap-btn-primary w-full mb-2"
-          >
-            Aplicar{" "}
-            {activeTool === "blur"
-              ? "Desenfoque"
-              : activeTool === "crop"
-                ? "Recorte"
-                : activeTool === "delogo"
-                  ? "Remover"
-                  : activeTool === "image"
-                    ? "Imagen"
-                    : "Texto"}
-          </button>
+          {sidebarMode === "logo" ? (
+            <button
+              onClick={() => get().addOperation(activeTool)}
+              className="cap-btn-primary w-full mb-2"
+            >
+              Aplicar{" "}
+              {activeTool === "blur"
+                ? "Desenfoque"
+                : activeTool === "crop"
+                  ? "Recorte"
+                  : activeTool === "delogo"
+                    ? "Remover"
+                    : activeTool === "image"
+                      ? "Imagen"
+                      : "Texto"}
+            </button>
+          ) : (
+            <button
+              onClick={() => get().addTemplateRegion()}
+              disabled={!isRegionUsable(currentRegion)}
+              className="cap-btn-primary w-full mb-2 disabled:opacity-50"
+            >
+              Agregar región de texto
+            </button>
+          )}
           <button
             onClick={() => get().setCurrentRegion(null)}
             className="text-[10px] hover:underline block mx-auto mb-3"

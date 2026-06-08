@@ -135,9 +135,6 @@
   "queue.menu.removeVideo": "Eliminar video",
   "queue.copiedName": "Nombre copiado",
   "queue.templateBadge": "Video plantilla",
-  "queue.match.coincide": "Coincide",
-  "queue.match.sinMatch": "Sin match",
-  "queue.match.multiple": "Múltiple",
 
   "landing.title": "Beru",
   "landing.desc": "Editor de video masivo. Aplica texto, blur, recorte y remoción de logos a cientos de videos usando Excel.",

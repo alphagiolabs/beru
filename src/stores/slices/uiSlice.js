@@ -40,6 +40,8 @@ export function createUiSlice(set, get) {
       variant = "default",
     } = {}) =>
       new Promise((resolve) => {
+        const { confirmDialog } = get();
+        if (confirmDialog?.resolve) confirmDialog.resolve(false);
         set({
           confirmDialog: {
             title,
@@ -76,6 +78,11 @@ export function createUiSlice(set, get) {
           settings?.batchWorkersMode === "conservative" ? "conservative" : "balanced";
         const batchRetryFailed = settings?.batchRetryFailed !== false;
         applyThemeToDom(theme);
+        if (api?.setWindowTheme) {
+          try {
+            await api.setWindowTheme(theme);
+          } catch {}
+        }
         set({
           theme,
           language,
@@ -95,6 +102,11 @@ export function createUiSlice(set, get) {
       applyThemeToDom(next);
       set({ theme: next });
       const api = window.api;
+      if (api?.setWindowTheme) {
+        try {
+          await api.setWindowTheme(next);
+        } catch {}
+      }
       if (api?.saveSettings) {
         try {
           await api.saveSettings({ theme: next });

@@ -61,6 +61,20 @@ body {
   user-select: none;
 }
 
+/* Electron window chrome — draggable title bar area */
+.cap-titlebar-drag {
+  -webkit-app-region: drag;
+}
+.cap-titlebar-no-drag,
+button,
+select,
+input,
+textarea,
+a,
+label {
+  -webkit-app-region: no-drag;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -29,5 +29,6 @@ export function mergeProbeIntoQueueItem(item, info = {}) {
     pixFmt: info.pixFmt || item.pixFmt || "yuv420p",
     frameRate: info.frameRate || item.frameRate || 0,
     audioCodec: info.audioCodec || item.audioCodec || "",
+    audioChannels: info.audioChannels || item.audioChannels || 0,
   };
 }

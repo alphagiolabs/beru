@@ -450,7 +450,7 @@ export default function VideoPreview() {
               return (
                 <div
                   key={op.id}
-                  className={`absolute z-10 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
+                  className={`absolute z-30 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
                   style={{
                     left: s.x,
                     top: s.y,
@@ -498,7 +498,7 @@ export default function VideoPreview() {
           (() => {
             const s = regionToScreen(currentRegion, videoRef.current);
             if (!s) return null;
-            const blurPx = Math.max(1, blurStrength || 20);
+            const blurPx = Math.max(1, (blurStrength || 20) * (s.sy || 1));
             return (
               <div
                 className="absolute pointer-events-none z-10"

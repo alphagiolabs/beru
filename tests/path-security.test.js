@@ -74,7 +74,7 @@ describe("pathSecurity", () => {
   });
 
   it("reports missing files before extension validation", () => {
-    const missing = path.join(path.dirname(tmpFile), "ghost.xlsx");
+    const missing = path.join(path.dirname(tmpFile), "ghost.txt");
     security.registerAllowedPath(missing);
     const res = security.validateReadableFile(missing, "excel");
     expect(res.ok).toBe(false);

@@ -39,3 +39,6 @@ src-tauri/bin/ffprobe*
 .commandcode/
 skills-lock.json
 AGENTS.md
+
+# Versioned build output directories (never commit)
+dist-installer-v*/

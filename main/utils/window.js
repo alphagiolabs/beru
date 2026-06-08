@@ -3,6 +3,8 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import { setMainWindow, isDev } from "../shared-state.js";
+import { readSettings } from "./settings.js";
+import { applyWindowTheme, resolveWindowTheme } from "./windowTheme.js";
 import * as updater from "../updater.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +22,9 @@ function loadProductionBuild(win) {
 }
 
 export function createWindow() {
+  const initialTheme = resolveWindowTheme(readSettings().theme);
+  const useOverlay = process.platform === "win32" || process.platform === "darwin";
+
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -27,8 +32,18 @@ export function createWindow() {
     minHeight: 680,
     title: "Beru",
     icon: path.join(__dirname, "..", "..", "brand", "icon.ico"),
-    backgroundColor: "#0a0a0a",
+    backgroundColor: initialTheme.background,
     autoHideMenuBar: true,
+    ...(useOverlay
+      ? {
+          titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+          titleBarOverlay: {
+            color: initialTheme.overlay,
+            symbolColor: initialTheme.symbols,
+            height: 32,
+          },
+        }
+      : {}),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -38,6 +53,7 @@ export function createWindow() {
   });
   win.setMenu(null);
   setMainWindow(win);
+  applyWindowTheme(win, readSettings().theme);
 
   let devFallbackUsed = false;
   if (isDev) {

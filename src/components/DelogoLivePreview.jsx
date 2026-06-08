@@ -304,12 +304,12 @@ export default function DelogoLivePreview({ videoRef }) {
       const video = videoRef.current;
       const region = useEditorStore.getState().currentRegion;
       const method = useEditorStore.getState().delogoMethod;
-      const paused = !video || video.paused || !region || video.readyState < 2;
+      const notReady = !video || !region || video.readyState < 2;
       if (document.hidden) {
         rafId = setTimeout(draw, 1000);
         return;
       }
-      if (paused) {
+      if (notReady) {
         rafId = requestAnimationFrame(draw);
         return;
       }

@@ -274,6 +274,7 @@ export function createQueueItem(overrides = {}) {
     pixFmt: "yuv420p",
     frameRate: 0,
     audioCodec: "",
+    audioChannels: 0,
     operations: [],
     status: "idle",
     progress: 0,

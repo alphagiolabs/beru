@@ -18,6 +18,20 @@ describe("batch-process helpers", () => {
     expect(filterOperationsForExport(ops)[1].text).toBe("Hola");
   });
 
+  it("filters image operations without a path before export", () => {
+    const ops = [
+      { mode: "blur", region: { x: 0, y: 0, w: 0.1, h: 0.1 } },
+      { mode: "image", imagePath: "", region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 } },
+      {
+        mode: "image",
+        imagePath: "C:\\img\\logo.png",
+        region: { x: 0.2, y: 0.2, w: 0.2, h: 0.1 },
+      },
+    ];
+    expect(filterOperationsForExport(ops)).toHaveLength(2);
+    expect(filterOperationsForExport(ops)[1].imagePath).toBe("C:\\img\\logo.png");
+  });
+
   it("detects videos missing batch text", () => {
     const queue = [{ filename: "a.mp4" }, { filename: "b.mp4" }];
     const regions = [{ id: 1, label: "TEXT_1", region: { x: 0, y: 0, w: 0.2, h: 0.1 } }];

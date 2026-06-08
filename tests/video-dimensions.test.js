@@ -22,4 +22,17 @@ describe("video-dimensions", () => {
     expect(merged.sourceHeight).toBe(1080);
     expect(getLockedDimensions(merged)).toEqual({ width: 1920, height: 1080 });
   });
+
+  it("keeps audio channel metadata from probes", () => {
+    const item = { width: 0, height: 0, audioChannels: 0 };
+    const merged = mergeProbeIntoQueueItem(item, {
+      width: 1920,
+      height: 1080,
+      audioCodec: "aac",
+      audioChannels: 6,
+    });
+
+    expect(merged.audioCodec).toBe("aac");
+    expect(merged.audioChannels).toBe(6);
+  });
 });

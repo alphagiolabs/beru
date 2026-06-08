@@ -505,18 +505,24 @@ def job_video_info(job, input_path):
     """Use metadata from the job when Electron already probed the file."""
     jw = int(job.get("source_width") or job.get("width") or 0)
     jh = int(job.get("source_height") or job.get("height") or 0)
-    if jw > 0 and jh > 0:
+    duration = float(job.get("video_duration") or 0)
+    frame_rate = float(job.get("frame_rate") or 0)
+    if jw > 0 and jh > 0 and duration > 0:
         return {
             "width": jw,
             "height": jh,
-            "duration": float(job.get("video_duration") or 0),
+            "duration": duration,
             "pix_fmt": job.get("pix_fmt") or "yuv420p",
-            "frame_rate": float(job.get("frame_rate") or 0),
+            "frame_rate": frame_rate,
             "audio_codec": job.get("audio_codec") or "",
             "audio_channels": int(job.get("audio_channels") or 0),
             "video_codec": job.get("video_codec") or "",
         }
-    return ffprobe(input_path)
+    probed = ffprobe(input_path)
+    if jw > 0 and jh > 0:
+        probed["width"] = jw
+        probed["height"] = jh
+    return probed
 
 
 def find_ffmpeg():
@@ -1323,6 +1329,8 @@ _last_job_progress_emit = {}
 _job_progress_lock = threading.Lock()
 _cancel_event = threading.Event()
 _jobs_file = None
+_FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+\.?\d*)")
+_FFMPEG_SPEED_RE = re.compile(r"speed=\s*([0-9.]+)x")
 
 
 def _safe_print(msg):
@@ -1346,7 +1354,7 @@ def _check_cancelled():
 def _is_transient_error(stderr_text):
     """Heuristic: detect transient FFmpeg errors that warrant a retry."""
     markers = [
-        "i/o error", "no space left", "permission denied",
+        "i/o error",
         "temporary failure", "resource temporarily unavailable",
         "connection reset", "broken pipe",
     ]
@@ -1482,24 +1490,99 @@ def _emit_job_progress(job_id, percent, speed):
     }))
 
 
+def _kill_ffmpeg_process(proc):
+    if proc.poll() is not None:
+        return
+    try:
+        proc.kill()
+    except Exception:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:
+            pass
+
+
+def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
+    """Run FFmpeg with bounded stderr capture, optional progress parsing, and cancel polling."""
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+    stderr_lines = []
+    stderr_lock = threading.Lock()
+    reader_done = threading.Event()
+    progress_state = {"last_pct": -1.0}
+
+    def read_stderr():
+        try:
+            if proc.stderr is None:
+                return
+            for line in proc.stderr:
+                with stderr_lock:
+                    _stderr_buffer_append(stderr_lines, line)
+                if job_id is None or duration_sec <= 0:
+                    continue
+                m = _FFMPEG_TIME_RE.search(line)
+                if not m:
+                    continue
+                h, mi, sec = int(m.group(1)), int(m.group(2)), float(m.group(3))
+                cur = h * 3600 + mi * 60 + sec
+                pct = (cur / duration_sec) * 100.0 if duration_sec > 0 else 0.0
+                sm = _FFMPEG_SPEED_RE.search(line)
+                speed = float(sm.group(1)) if sm else None
+                if pct - progress_state["last_pct"] >= 1.0 or pct >= 99.0:
+                    _emit_job_progress(job_id, pct, speed)
+                    progress_state["last_pct"] = pct
+        finally:
+            reader_done.set()
+
+    threading.Thread(target=read_stderr, daemon=True).start()
+    deadline = time.monotonic() + timeout_sec
+
+    while True:
+        returncode = proc.poll()
+        if returncode is not None:
+            break
+        if _check_cancelled():
+            _kill_ffmpeg_process(proc)
+            reader_done.wait(timeout=1)
+            _cleanup_ffmpeg_partial(cmd)
+            return False, "Cancelled"
+        if time.monotonic() >= deadline:
+            _kill_ffmpeg_process(proc)
+            reader_done.wait(timeout=1)
+            _cleanup_ffmpeg_partial(cmd)
+            return False, f"Timeout after {timeout_sec}s"
+        time.sleep(0.2)
+
+    reader_done.wait(timeout=2)
+    with stderr_lock:
+        stderr = "".join(stderr_lines)
+
+    if returncode == 0:
+        if job_id is not None and duration_sec > 0:
+            _emit_job_progress(job_id, 100.0, None)
+        return True, None
+    return False, _extract_error_line(stderr)
+
+
 def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
     """Run ffmpeg with retry for transient failures."""
-    last_error = None
     for attempt in range(MAX_RETRIES + 1):
         try:
             logger.debug("FFmpeg cmd: %s", " ".join(str(x) for x in cmd)[:500])
             t0 = time.perf_counter()
-            if job_id is not None and duration_sec > 0:
-                ok, err = _run_ffmpeg_with_progress(
-                    cmd, timeout_sec, job_id, duration_sec
-                )
-            else:
-                proc = subprocess.run(cmd, capture_output=True, timeout=timeout_sec)
-                ok = proc.returncode == 0
-                stderr_raw = proc.stderr.decode("utf-8", errors="replace")
-                if len(stderr_raw) > MAX_STDERR_CHARS:
-                    stderr_raw = stderr_raw[-MAX_STDERR_CHARS:]
-                err = None if ok else _extract_error_line(stderr_raw)
+            ok, err = _run_ffmpeg_stream(cmd, timeout_sec, job_id, duration_sec)
             elapsed = time.perf_counter() - t0
             if ok:
                 logger.info("FFmpeg finished in %.1fs (job=%s)", elapsed, job_id)
@@ -1527,52 +1610,11 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
                 time.sleep(RETRY_DELAYS[attempt])
                 continue
             return False, str(e)
-    return False, str(last_error) if last_error else "Unknown error"
 
 
 def _run_ffmpeg_with_progress(cmd, timeout_sec, job_id, duration_sec):
     """Run ffmpeg and parse stderr time= for per-job progress."""
-    time_re = re.compile(r"time=(\d+):(\d+):(\d+\.?\d*)")
-    speed_re = re.compile(r"speed=\s*([0-9.]+)x")
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    stderr_lines = []
-    last_pct = -1.0
-    try:
-        for line in proc.stderr:
-            _stderr_buffer_append(stderr_lines, line)
-            if _check_cancelled():
-                proc.kill()
-                proc.wait(timeout=5)
-                return False, "Cancelled"
-            m = time_re.search(line)
-            if not m:
-                continue
-            h, mi, sec = int(m.group(1)), int(m.group(2)), float(m.group(3))
-            cur = h * 3600 + mi * 60 + sec
-            pct = (cur / duration_sec) * 100.0 if duration_sec > 0 else 0.0
-            sm = speed_re.search(line)
-            speed = float(sm.group(1)) if sm else None
-            if pct - last_pct >= 1.0 or pct >= 99.0:
-                _emit_job_progress(job_id, pct, speed)
-                last_pct = pct
-        proc.wait(timeout=timeout_sec)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=5)
-        _cleanup_ffmpeg_partial(cmd)
-        return False, f"Timeout after {timeout_sec}s"
-    stderr = "".join(stderr_lines)
-    if proc.returncode == 0:
-        _emit_job_progress(job_id, 100.0, None)
-        return True, None
-    return False, _extract_error_line(stderr)
+    return _run_ffmpeg_stream(cmd, timeout_sec, job_id, duration_sec)
 
 
 def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):

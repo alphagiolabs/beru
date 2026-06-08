@@ -42,7 +42,8 @@ export function buildIdTextOutputName(idValue, textValue, exportFormat) {
 export function filterOperationsForExport(operations) {
   if (!Array.isArray(operations)) return [];
   return operations.filter((op) => {
-    if (op?.mode !== "text") return true;
-    return String(op.text ?? "").trim().length > 0;
+    if (op?.mode === "text") return String(op.text ?? "").trim().length > 0;
+    if (op?.mode === "image") return String(op.imagePath ?? "").trim().length > 0;
+    return true;
   });
 }
