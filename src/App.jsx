@@ -60,13 +60,10 @@ export default function App() {
     };
   }, [applyUpdaterEvent]);
 
-  useEffect(() => {
-    if (!api?.checkForUpdates) return;
-    const timer = setTimeout(() => {
-      checkForUpdates();
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [checkForUpdates]);
+  // Auto-updater check is driven by TopUpdateBar (GitHub API check + optional
+  // electron-updater trigger). We do NOT unconditionally call checkForUpdates
+  // here to avoid colliding with TopUpdateBar's own flow and to respect the
+  // 30-minute throttle.
 
   useEffect(() => {
     if (!appToast) return;

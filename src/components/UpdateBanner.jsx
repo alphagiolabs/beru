@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   CheckCircle2,
-  Download,
   ExternalLink,
   Minus,
   RefreshCw,
@@ -168,13 +167,7 @@ export default function UpdateBanner() {
       <div className="flex-1 text-[12px] font-medium truncate">{text}</div>
 
       {status === "available" && (
-        <button
-          onClick={() => getState().downloadUpdate()}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold"
-          style={{ background: styles.fg, color: "#000" }}
-        >
-          <Download size={12} /> {t("updater.download")}
-        </button>
+        <span className="text-[11px] opacity-70">{t("updater.downloading")}</span>
       )}
       {status === "ready" && (
         <button

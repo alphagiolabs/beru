@@ -64,9 +64,11 @@ export default function TopUpdateBar() {
     const fresh = last && Date.now() - last < RETRY_AFTER_MS;
     let timerId = null;
     if (fresh) {
-      fetchLatest();
-    } else {
+      // Checked recently — wait a bit before hitting the API again.
       timerId = setTimeout(fetchLatest, FIRST_CHECK_DELAY_MS);
+    } else {
+      // No recent check — fetch immediately on startup.
+      fetchLatest();
     }
     return () => {
       abortedRef.current = true;
