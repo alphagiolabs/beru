@@ -12,14 +12,13 @@ export default [
       "dist-installer/**",
       "dist-electron/**",
       "node_modules/**",
-      "src-tauri/bin/**",
     ],
   },
   js.configs.recommended,
   {
     files: ["**/*.{js,jsx}"],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: "latest",
       sourceType: "module",
       globals: {
         ...globals.browser,
@@ -57,7 +56,7 @@ export default [
   {
     files: ["scripts/dev.mjs"],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: "latest",
       sourceType: "module",
       globals: {
         ...globals.node,
