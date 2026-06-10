@@ -49,7 +49,7 @@ describe("StatusFooter", () => {
 
     const footer = document.querySelector(".status-footer");
     expect(footer).toBeTruthy();
-    expect(footer.textContent).toMatch(/v1\.6\.17/);
+    expect(footer.textContent).toMatch(/v1\.6\.18/);
     expect(footer.textContent).toMatch(/Listo/i);
   });
 
