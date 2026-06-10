@@ -37,7 +37,6 @@ window.api = {
   onLog: noop,
   onUpdaterEvent: noop,
   checkForUpdates: asyncNoop,
-  checkGitHubRelease: asyncNoop,
   resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
 };
 
