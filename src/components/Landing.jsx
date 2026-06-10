@@ -52,9 +52,6 @@ export default function Landing() {
         <h1 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
           {t("landing.title")}
         </h1>
-        <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-          {t("landing.desc")}
-        </p>
         <div className="flex gap-2 mt-2">
           <button onClick={handleSelect} className="cap-btn-primary text-[12px] px-5 py-2">
             <Upload size={16} /> {t("landing.import")}

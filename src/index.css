@@ -358,8 +358,19 @@ label {
   color: var(--text-dim);
 }
 
+.status-footer-run-block + .status-footer-run-block {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.status-footer-run-header {
+  @apply text-[10px] font-medium mb-1;
+  color: var(--text-secondary);
+}
+
 .status-footer-popover-actions {
-  @apply px-3 py-2 border-t;
+  @apply flex items-center gap-3 px-3 py-2 border-t;
   border-color: var(--border);
 }
 

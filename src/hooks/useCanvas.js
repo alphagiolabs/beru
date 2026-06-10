@@ -235,9 +235,5 @@ export default function useCanvas(videoEl) {
     moveInfo.current = null;
   }, []);
 
-  const onMouseLeave = useCallback(() => {
-    /* Keep move state if mouse leaves briefly; clear on full up only */
-  }, []);
-
-  return { canvasRef, onMouseDown, onMouseMove, onMouseUp, onMouseLeave };
+  return { canvasRef, onMouseDown, onMouseMove, onMouseUp };
 }

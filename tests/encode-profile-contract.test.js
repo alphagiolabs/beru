@@ -44,11 +44,11 @@ describe("encode profile contract (JSON)", () => {
     expect(ENCODE_PROFILES.uquality.preset).toBe(contract.profiles.uquality.software.preset);
   });
 
-  it("U Quality is a CPU-only ultra fidelity profile", () => {
+  it("U Quality is a CPU-only high-fidelity profile optimized for size and speed", () => {
     expect(contract.profiles.uquality.allowsHardware).toBe(false);
-    expect(contract.profiles.uquality.software).toEqual({ crf: 12, preset: "slow" });
+    expect(contract.profiles.uquality.software).toEqual({ crf: 16, preset: "faster" });
     expect(contract.profiles.uquality.hardware).toBeUndefined();
-    expect(contract.profiles.uquality._comment).toContain("CRF 12");
+    expect(contract.profiles.uquality._comment).toContain("CRF 16");
   });
 });
 

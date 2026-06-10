@@ -100,6 +100,36 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
     }
   });
 
+  it("uses an encoder-compatible preset when preflighting Intel Quick Sync", () => {
+    const code = `
+import json
+import processor
+
+captured = []
+
+class Result:
+    returncode = 0
+    stderr = ""
+
+def fake_run(cmd, **kwargs):
+    captured.append(cmd)
+    return Result()
+
+processor.subprocess.run = fake_run
+ok = processor._test_hw_encoder_real("ffmpeg", "h264_qsv")
+print(json.dumps({"ok": ok, "cmd": captured[0]}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.ok).toBe(true);
+    expect(parsed.cmd[parsed.cmd.indexOf("-preset") + 1]).toBe("veryfast");
+    expect(parsed.cmd).not.toContain("p1");
+  });
+
   it("quotes Windows fontfile paths in drawtext filters", () => {
     const code = `
 import processor
@@ -529,7 +559,7 @@ def trigger_cancel():
 
 threading.Thread(target=trigger_cancel, daemon=True).start()
 started = time.perf_counter()
-ok, err = processor._run_ffmpeg_with_progress(
+ok, err = processor._run_ffmpeg_stream(
     [sys.executable, "-c", "import time; time.sleep(1.5)"],
     timeout_sec=5,
     job_id=4,
@@ -673,7 +703,7 @@ print(json.dumps(args))
     expect(args[args.indexOf("-preset") + 1]).toBe("medium");
   });
 
-  it("uses CPU ultra fidelity params for U Quality even when hardware exists", () => {
+  it("uses optimized CPU high-fidelity params for U Quality even when hardware exists", () => {
     const code = `
 import json
 import processor
@@ -696,8 +726,8 @@ print(json.dumps(args))
     const args = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(args).toContain("libx264");
     expect(args).not.toContain("h264_nvenc");
-    expect(args[args.indexOf("-crf") + 1]).toBe("12");
-    expect(args[args.indexOf("-preset") + 1]).toBe("slow");
+    expect(args[args.indexOf("-crf") + 1]).toBe("16");
+    expect(args[args.indexOf("-preset") + 1]).toBe("faster");
   });
 
   it("uses AMF quality mode for the quality profile", () => {

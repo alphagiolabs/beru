@@ -444,31 +444,6 @@ export function createQueueSlice(set, get) {
       set({ queue: updated });
     },
 
-    clearOperations: () => {
-      const { queue, selectedIdx } = get();
-      if (selectedIdx < 0) return;
-      get()._saveUndo();
-      const updated = [...queue];
-      updated[selectedIdx] = {
-        ...updated[selectedIdx],
-        operations: [],
-        status: "idle",
-        progress: 0,
-        error: null,
-      };
-      set({ queue: updated });
-    },
-
-    applyStyleToOperation: (opIdx, style) => {
-      const { queue, selectedIdx } = get();
-      if (selectedIdx < 0) return;
-      const updated = [...queue];
-      const ops = [...updated[selectedIdx].operations];
-      ops[opIdx] = { ...ops[opIdx], ...style };
-      updated[selectedIdx] = { ...updated[selectedIdx], operations: ops };
-      set({ queue: updated });
-    },
-
     updateOperation: (videoIdx, opIdx, patch) => {
       const { queue } = get();
       if (videoIdx < 0 || videoIdx >= queue.length) return;

@@ -35,7 +35,7 @@
   "header.encodeBalanced": "Balanced",
   "header.encodeQuality": "Quality",
   "header.encodeUltraQuality": "U Quality",
-  "header.encodeProfileHint": "Quality uses high-fidelity GPU when available; U Quality prioritizes maximum CPU fidelity with libx264 CRF 12.",
+  "header.encodeProfileHint": "Quality uses high-fidelity GPU when available; U Quality preserves high CPU fidelity with an encode path optimized for time and file size.",
   "header.workersAuto": "Auto ({count})",
   "header.batchWorkersHint": "Parallel videos. Auto (balanced): up to 5 with NVENC/QSV; 1 with Media Foundation.",
   "header.batchRetry": "Retry",
@@ -83,6 +83,16 @@
   "footer.moreChanges": "+ {count} more changes included.",
   "footer.updateDownloading": "Downloading {version}: {percent}%",
   "footer.updateWait": "Download continues in the background.",
+  "footer.historySingle": "Test render",
+  "footer.historyBatch": "Batch · {count} videos",
+  "footer.historyRunDone": "{started} · {kind} · {ok}/{total} ok{failed}",
+  "footer.historyRunFinished": "{started} · {kind} · finished",
+  "footer.historyRunActive": "{started} · {kind} · running",
+  "footer.historyRunNoLogs": "No log lines for this run.",
+  "footer.historyFailed": " · {count} err",
+  "footer.clearHistory": "Clear history",
+  "footer.clearHistoryConfirm": "Delete all execution history? This cannot be undone.",
+  "footer.historyCleared": "History cleared",
 
   "modal.savePreset.title": "Save as preset",
   "modal.savePreset.desc": "It will be saved in the user presets folder. It will include regions, operations, and text style, but not the Excel file.",
@@ -138,7 +148,6 @@
   "queue.templateBadge": "Template video",
 
   "landing.title": "Beru",
-  "landing.desc": "Bulk video editor. Apply text, blur, crop, and logo removal to hundreds of videos using Excel.",
   "landing.import": "Import videos",
   "landing.hint": "Or drag MP4, MOV, AVI, MKV, WebM files here",
 

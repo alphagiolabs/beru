@@ -32,6 +32,7 @@ export default function App() {
   const loadPresetsFromStorage = useEditorStore((s) => s.loadPresetsFromStorage);
   const loadSettings = useEditorStore((s) => s.loadSettings);
   const loadRecents = useEditorStore((s) => s.loadRecents);
+  const loadExecutionHistory = useEditorStore((s) => s.loadExecutionHistory);
   const showToast = useEditorStore((s) => s.showToast);
   const clearAppToast = useEditorStore((s) => s.clearAppToast);
   const appToast = useEditorStore((s) => s.appToast);
@@ -48,7 +49,8 @@ export default function App() {
     loadPresetsFromStorage();
     loadSettings();
     loadRecents();
-  }, [loadPresetsFromStorage, loadSettings, loadRecents]);
+    loadExecutionHistory();
+  }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory]);
 
   useEffect(() => {
     if (!appToast) return;

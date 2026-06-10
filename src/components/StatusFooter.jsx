@@ -6,6 +6,7 @@ import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
 import { useT } from "../i18n/useT";
 import { getBatchProgress } from "../utils/batch-progress";
 import { APP_VERSION, formatFooterClock, parseReleaseNotes } from "../utils/appVersion";
+import { formatHistoryTimestamp } from "../utils/execution-history";
 
 const DISMISS_KEY = "beru.updateReady.dismissedVersion";
 
@@ -53,10 +54,38 @@ function SegmentedProgress({ percent }) {
   );
 }
 
-function ExecutionHistoryPanel({ lines, onExport, onClose, t }) {
+function formatRunTitle(run, t) {
+  const started = formatHistoryTimestamp(run.startedAt);
+  const kind =
+    run.kind === "single"
+      ? t("footer.historySingle")
+      : t("footer.historyBatch", { count: run.jobCount || 0 });
+  if (run.summary) {
+    const failed =
+      run.summary.failed > 0
+        ? t("footer.historyFailed", { count: run.summary.failed })
+        : "";
+    return t("footer.historyRunDone", {
+      started,
+      kind,
+      ok: run.summary.succeeded,
+      total: run.summary.total,
+      failed,
+    });
+  }
+  if (run.finishedAt) {
+    return t("footer.historyRunFinished", { started, kind });
+  }
+  return t("footer.historyRunActive", { started, kind });
+}
+
+function ExecutionHistoryPanel({ history, onExport, onClear, onClose, t }) {
   const panelRef = useRef(null);
   const closeStable = useCallback(() => onClose(), [onClose]);
   useCloseOnOutsideClick(panelRef, true, closeStable);
+
+  const hasRuns = history.length > 0;
+  const hasLines = history.some((run) => run.lines.length > 0);
 
   return (
     <div ref={panelRef} className="status-footer-popover status-footer-popover--history">
@@ -65,22 +94,38 @@ function ExecutionHistoryPanel({ lines, onExport, onClose, t }) {
         <span>{t("footer.historyTitle")}</span>
       </div>
       <div className="status-footer-log-scroll">
-        {lines.length === 0 ? (
+        {!hasRuns ? (
           <p className="status-footer-log-empty">{t("footer.historyEmpty")}</p>
         ) : (
-          lines.map((line, i) => (
-            <div key={`${i}-${line.slice(0, 24)}`} className="status-footer-log-line">
-              {line}
+          history.map((run) => (
+            <div key={run.id} className="status-footer-run-block">
+              <div className="status-footer-run-header">{formatRunTitle(run, t)}</div>
+              {run.lines.length === 0 ? (
+                <p className="status-footer-log-empty">{t("footer.historyRunNoLogs")}</p>
+              ) : (
+                run.lines.map((line, i) => (
+                  <div key={`${run.id}-${i}`} className="status-footer-log-line">
+                    {line}
+                  </div>
+                ))
+              )}
             </div>
           ))
         )}
       </div>
-      {lines.length > 0 && (
+      {(hasLines || hasRuns) && (
         <div className="status-footer-popover-actions">
-          <button type="button" className="status-footer-link-btn" onClick={onExport}>
-            <Download size={12} />
-            {t("footer.exportLogs")}
-          </button>
+          {hasLines && (
+            <button type="button" className="status-footer-link-btn" onClick={onExport}>
+              <Download size={12} />
+              {t("footer.exportLogs")}
+            </button>
+          )}
+          {hasRuns && (
+            <button type="button" className="status-footer-link-btn" onClick={onClear}>
+              {t("footer.clearHistory")}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -169,19 +214,26 @@ export default function StatusFooter() {
   const get = useEditorStore.getState;
   const showToast = useEditorStore((s) => s.showToast);
 
-  const { isProcessing, progressDone, progressTotal, queue, logLines, batchSummary, update } =
-    useEditorStore(
-      (s) => ({
-        isProcessing: s.isProcessing,
-        progressDone: s.progressDone,
-        progressTotal: s.progressTotal,
-        queue: s.queue,
-        logLines: s.logLines,
-        batchSummary: s.batchSummary,
-        update: s.update,
-      }),
-      shallow,
-    );
+  const {
+    isProcessing,
+    progressDone,
+    progressTotal,
+    queue,
+    executionHistory,
+    batchSummary,
+    update,
+  } = useEditorStore(
+    (s) => ({
+      isProcessing: s.isProcessing,
+      progressDone: s.progressDone,
+      progressTotal: s.progressTotal,
+      queue: s.queue,
+      executionHistory: s.executionHistory,
+      batchSummary: s.batchSummary,
+      update: s.update,
+    }),
+    shallow,
+  );
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -231,6 +283,13 @@ export default function StatusFooter() {
   const runClock = runStartedAt != null ? formatFooterClock(Date.now() - runStartedAt) : "00:00";
   const sessionClock = formatFooterClock(Date.now() - sessionStartedAt);
   void clockTick;
+
+  const handleClearHistory = async () => {
+    const ok = await get().requestConfirm({ message: t("footer.clearHistoryConfirm") });
+    if (!ok) return;
+    await get().clearExecutionHistory();
+    showToast({ kind: "ok", text: t("footer.historyCleared") });
+  };
 
   const handleExportLogs = async () => {
     const state = get();
@@ -292,8 +351,9 @@ export default function StatusFooter() {
 
         {historyOpen && (
           <ExecutionHistoryPanel
-            lines={logLines}
+            history={executionHistory}
             onExport={handleExportLogs}
+            onClear={handleClearHistory}
             onClose={() => setHistoryOpen(false)}
             t={t}
           />

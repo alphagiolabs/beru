@@ -82,7 +82,9 @@ export default function useProcessing(api) {
       bind(api.onFinished, () => {
         cancelJobProgressFlush();
         flushJobProgress();
-        useEditorStore.getState().setProcessing(false);
+        const state = useEditorStore.getState();
+        state.finalizeActiveExecution();
+        state.setProcessing(false);
       }),
       bind(api.onError, (msg) => {
         pendingJobProgress.clear();

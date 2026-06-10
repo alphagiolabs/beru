@@ -16,6 +16,7 @@ import { registerProjectHandlers } from "./handlers/project.js";
 import { registerPresetHandlers } from "./handlers/preset.js";
 import { registerSettingsHandlers } from "./handlers/settings.js";
 import { registerRecentHandlers } from "./handlers/recent.js";
+import { registerExecutionHistoryHandlers } from "./handlers/execution-history.js";
 import { registerSystemHandlers } from "./handlers/system.js";
 import { registerUpdaterHandlers } from "./handlers/updater.js";
 
@@ -102,6 +103,13 @@ function registerBeruProtocol() {
 // ── Suppress GPU shader disk cache errors on Windows ────────────────────────
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
+// Windows Task Manager and shell use the packaged exe FileDescription (set at
+// build time from package.json description). Keep app identity consistent in dev.
+app.setName("Beru");
+if (process.platform === "win32") {
+  app.setAppUserModelId("app.beru.desktop");
+}
+
 // ── App lifecycle ─────────────────────────────────────────────────────────
 
 process.on("uncaughtException", onFatalError);
@@ -138,5 +146,6 @@ registerProjectHandlers(pathSecurity);
 registerPresetHandlers();
 registerSettingsHandlers();
 registerRecentHandlers();
+registerExecutionHistoryHandlers();
 registerSystemHandlers();
 registerUpdaterHandlers();

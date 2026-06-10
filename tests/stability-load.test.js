@@ -77,7 +77,7 @@ describe("Stability under heavy load", () => {
 
     // Simulate rapid job_progress messages (1 per video, every few ms)
     for (let i = 0; i < 500; i++) {
-      useEditorStore.getState().updateJobProgress({ index: i, percent: 50 });
+      useEditorStore.getState().updateJobProgressBatch([{ index: i, percent: 50 }]);
     }
     // Simulate all completing
     for (let i = 0; i < 500; i++) {

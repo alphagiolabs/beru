@@ -19,6 +19,7 @@ describe("StatusFooter", () => {
       progressTotal: 0,
       queue: [],
       logLines: [],
+      executionHistory: [],
       batchSummary: null,
       update: {
         status: "idle",
@@ -49,7 +50,7 @@ describe("StatusFooter", () => {
 
     const footer = document.querySelector(".status-footer");
     expect(footer).toBeTruthy();
-    expect(footer.textContent).toMatch(/v1\.6\.18/);
+    expect(footer.textContent).toMatch(/v\d+\.\d+\.\d+/);
     expect(footer.textContent).toMatch(/Listo/i);
   });
 

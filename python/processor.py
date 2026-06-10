@@ -147,11 +147,16 @@ _DRAWTEXT_OPTIONS_CACHE_FOR = None
 def _test_hw_encoder_real(ffmpeg_path, encoder):
     """Smoke-test the encoder with a tiny 1-frame encode to verify it actually works."""
     test_src = "testsrc=duration=0.1:size=320x240:rate=1"
+    preset_args = (
+        ["-preset", "p1"] if encoder == "h264_nvenc"
+        else ["-preset", "veryfast"] if encoder == "h264_qsv"
+        else []
+    )
     try:
         result = subprocess.run(
             [
                 ffmpeg_path, "-hide_banner", "-f", "lavfi", "-i", test_src,
-                "-c:v", encoder, "-preset", "p1", "-frames:v", "1",
+                "-c:v", encoder, *preset_args, "-frames:v", "1",
                 "-f", "null", "-",
             ],
             capture_output=True, text=True, timeout=20,
@@ -1449,7 +1454,7 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
             else:
                 filters.append(f"[tmp{n-1}]{dt}[tmp{n}]")
         elif mode == "blur":
-            strength = op.get("blur_strength", 20)
+            strength = _coerce_int(op.get("blur_strength"), 20, 1, 100)
             luma = max(1, min(100, strength // 3))
             enable_clause = _build_enable_clause(op)
             overlay_opts = f"{x}:{y}"
@@ -1821,13 +1826,6 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
                 continue
             _cleanup_ffmpeg_partial(cmd)
             return False, stderr if stderr else "Unknown error"
-        except subprocess.TimeoutExpired:
-            _cleanup_ffmpeg_partial(cmd)
-            if attempt < MAX_RETRIES:
-                logger.warning("Timeout, retry %d/%d", attempt + 1, MAX_RETRIES)
-                time.sleep(RETRY_DELAYS[attempt])
-                continue
-            return False, f"Timeout after {timeout_sec}s"
         except Exception as e:
             _cleanup_ffmpeg_partial(cmd)
             if attempt < MAX_RETRIES:
@@ -1837,13 +1835,8 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
             return False, str(e)
 
 
-def _run_ffmpeg_with_progress(cmd, timeout_sec, job_id, duration_sec):
-    """Run ffmpeg and parse stderr time= for per-job progress."""
-    return _run_ffmpeg_stream(cmd, timeout_sec, job_id, duration_sec)
-
-
 def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
-    """Process a single job. Thread-safe.""
+    """Process a single job. Thread-safe.
 
     If hw_encoder is provided (from the batch pre-flight), it is used
     directly instead of re-detecting. This avoids per-job detection overhead

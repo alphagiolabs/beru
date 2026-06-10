@@ -455,15 +455,6 @@ export function createBatchSlice(set, get) {
       get()._reapplyExcel();
     },
 
-    clearExcel: () =>
-      set({
-        excelPath: null,
-        excelHeaders: [],
-        excelRows: [],
-        excelMapping: { idColumn: null, columns: {} },
-        excelMatchStatus: {},
-      }),
-
     getMatchReport: () => {
       const { excelMatchStatus, queue } = get();
       const matched = Object.values(excelMatchStatus).filter((s) => s === "matched").length;

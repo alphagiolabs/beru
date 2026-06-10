@@ -240,8 +240,6 @@ export default function Header() {
       showToast({ kind: "err", text: t("errors.noApi") });
       return;
     }
-    get().setBatchSummary(null);
-
     const { templateRegions, sidebarMode } = get();
     if (sidebarMode === "batch" || templateRegions.length > 0) {
       get().materializeBatchTextOps();
@@ -288,6 +286,7 @@ export default function Header() {
       showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
       return;
     }
+    get().startExecutionRun({ kind: "batch", jobCount: jobs.length });
 
     const queueReset = get().queue.map((item) => ({
       ...item,
@@ -364,9 +363,6 @@ export default function Header() {
         </svg>
         <span className="text-sm font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>
           BERU
-        </span>
-        <span className="text-[10px] tracking-wider uppercase" style={{ color: "var(--text-dim)" }}>
-          Editor de Video Masivo
         </span>
       </div>
 

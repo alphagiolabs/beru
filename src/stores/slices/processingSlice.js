@@ -6,6 +6,26 @@ import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-
 import { textStyleToPythonPayload } from "../../utils/text-style";
 import { createJobManifest } from "../../utils/job-manifest";
 import { appendProcessingLog, formatProcessingLogs } from "../../utils/processing-logs";
+import {
+  appendLineToRun,
+  createExecutionRun,
+  finalizeExecutionRun,
+  formatExecutionHistoryExport,
+  normalizeExecutionHistory,
+  prependExecutionRun,
+  summarizeQueue,
+} from "../../utils/execution-history.js";
+
+let persistHistoryTimer = null;
+
+function schedulePersistExecutionHistory(history) {
+  if (typeof window === "undefined" || !window.api?.saveExecutionHistory) return;
+  if (persistHistoryTimer) clearTimeout(persistHistoryTimer);
+  persistHistoryTimer = setTimeout(() => {
+    persistHistoryTimer = null;
+    void window.api.saveExecutionHistory(history);
+  }, 1200);
+}
 
 function isQueueJobIndex(idx, queueLength) {
   return Number.isInteger(idx) && idx >= 0 && idx < queueLength;
@@ -51,20 +71,106 @@ export function createProcessingSlice(set, get) {
     progressDone: 0,
     progressTotal: 0,
     logLines: [],
+    executionHistory: [],
+    activeExecutionId: null,
+
+    loadExecutionHistory: async () => {
+      const api = window.api;
+      if (!api?.listExecutionHistory) return [];
+      try {
+        const res = await api.listExecutionHistory();
+        const history = normalizeExecutionHistory(res?.history || []);
+        set({ executionHistory: history });
+        return history;
+      } catch {
+        return [];
+      }
+    },
+
+    clearExecutionHistory: async () => {
+      const api = window.api;
+      if (api?.clearExecutionHistory) {
+        try {
+          await api.clearExecutionHistory();
+        } catch {}
+      }
+      set({ executionHistory: [], activeExecutionId: null, logLines: [] });
+      return { ok: true };
+    },
+
+    startExecutionRun: ({ kind = "batch", jobCount = 0 } = {}) =>
+      set((s) => {
+        let history = normalizeExecutionHistory(s.executionHistory);
+        if (s.activeExecutionId) {
+          history = finalizeExecutionRun(
+            history,
+            s.activeExecutionId,
+            s.batchSummary || summarizeQueue(s.queue),
+          );
+        }
+        const run = createExecutionRun({ kind, jobCount });
+        history = prependExecutionRun(history, run);
+        schedulePersistExecutionHistory(history);
+        return {
+          executionHistory: history,
+          activeExecutionId: run.id,
+          batchSummary: null,
+          logLines: [],
+        };
+      }),
+
+    finalizeActiveExecution: (summary) =>
+      set((s) => {
+        if (!s.activeExecutionId) return {};
+        const history = finalizeExecutionRun(
+          s.executionHistory,
+          s.activeExecutionId,
+          summary ?? s.batchSummary ?? summarizeQueue(s.queue),
+        );
+        schedulePersistExecutionHistory(history);
+        return {
+          executionHistory: history,
+          activeExecutionId: null,
+        };
+      }),
 
     appendLog: (line) =>
-      set((s) => ({
-        logLines: appendProcessingLog(s.logLines, line),
-      })),
+      set((s) => {
+        let history = s.executionHistory;
+        let activeId = s.activeExecutionId;
+        if (!activeId) {
+          const run = createExecutionRun({ kind: "batch", jobCount: 0 });
+          history = prependExecutionRun(history, run);
+          activeId = run.id;
+        }
+        history = appendLineToRun(history, activeId, line);
+        schedulePersistExecutionHistory(history);
+        return {
+          executionHistory: history,
+          activeExecutionId: activeId,
+          logLines: appendProcessingLog(s.logLines, line),
+        };
+      }),
 
-    exportProcessingLogsText: () =>
-      formatProcessingLogs(get().logLines, {
-        summary: get().batchSummary
-          ? `${get().batchSummary.succeeded || 0}/${get().batchSummary.total || 0} OK, ${
-              get().batchSummary.failed || 0
+    exportProcessingLogsText: () => {
+      const { executionHistory, batchSummary, logLines } = get();
+      if (executionHistory.length > 0) {
+        return formatExecutionHistoryExport(executionHistory, {
+          summary: batchSummary
+            ? `${batchSummary.succeeded || 0}/${batchSummary.total || 0} OK, ${
+                batchSummary.failed || 0
+              } failed`
+            : "",
+        });
+      }
+      return formatProcessingLogs(logLines, {
+        summary: batchSummary
+          ? `${batchSummary.succeeded || 0}/${batchSummary.total || 0} OK, ${
+              batchSummary.failed || 0
             } failed`
           : "",
-      }),
+      });
+    },
 
     updateProcessingProgress: (msg) =>
       set((s) => {
@@ -75,8 +181,6 @@ export function createProcessingSlice(set, get) {
           progressTotal: total != null && total > 0 ? total : s.progressTotal,
         };
       }),
-
-    updateJobProgress: (msg) => get().updateJobProgressBatch([msg]),
 
     updateJobProgressBatch: (messages) =>
       set((s) => {
@@ -107,14 +211,6 @@ export function createProcessingSlice(set, get) {
           progressDone: Math.min(s.progressDone + 1, s.progressTotal),
         };
       }),
-
-    updateQueueItemStatus: (idx, patch) => {
-      set((s) => {
-        const updated = [...s.queue];
-        updated[idx] = { ...updated[idx], ...patch };
-        return { queue: updated };
-      });
-    },
 
     refreshMissingVideoInfo: async (api) => {
       const missing = get().queue.filter((item) => !item.width || !item.height);
@@ -253,6 +349,7 @@ export function createProcessingSlice(set, get) {
       const job = get()._buildJobFor(item, videoIdx);
       if (!job) return { ok: false, error: "No se pudo construir el job" };
 
+      get().startExecutionRun({ kind: "single", jobCount: 1 });
       set({ isProcessing: true, progressTotal: 1, progressDone: 0 });
       const updated = [...queue];
       updated[videoIdx] = { ...updated[videoIdx], status: "processing", progress: 0, error: null };
@@ -271,6 +368,7 @@ export function createProcessingSlice(set, get) {
       } catch (e) {
         return { ok: false, error: e.message };
       } finally {
+        get().finalizeActiveExecution(summarizeQueue(get().queue));
         set({ isProcessing: false });
       }
     },
@@ -278,9 +376,24 @@ export function createProcessingSlice(set, get) {
     setProcessing: (val) =>
       set((s) => {
         const isProcessing = !!val;
+        if (s.isProcessing && !isProcessing) {
+          schedulePersistExecutionHistory(s.executionHistory);
+        }
         return s.isProcessing === isProcessing ? {} : { isProcessing };
       }),
-    setBatchSummary: (val) => set({ batchSummary: val }),
+    setBatchSummary: (val) =>
+      set((s) => {
+        if (!val || !s.activeExecutionId) {
+          return { batchSummary: val };
+        }
+        const history = finalizeExecutionRun(s.executionHistory, s.activeExecutionId, val);
+        schedulePersistExecutionHistory(history);
+        return {
+          batchSummary: val,
+          executionHistory: history,
+          activeExecutionId: null,
+        };
+      }),
 
     setEncodeProfile: async (val) => {
       const profile = val === "fast" || val === "quality" || val === "uquality" ? val : "balanced";

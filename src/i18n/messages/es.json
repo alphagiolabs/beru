@@ -35,7 +35,7 @@
   "header.encodeBalanced": "Balanceado",
   "header.encodeQuality": "Calidad",
   "header.encodeUltraQuality": "U Quality",
-  "header.encodeProfileHint": "Calidad usa GPU de alta fidelidad cuando está disponible; U Quality prioriza máxima fidelidad por CPU con libx264 CRF 12.",
+  "header.encodeProfileHint": "Calidad usa GPU de alta fidelidad cuando está disponible; U Quality conserva alta fidelidad por CPU con un flujo optimizado en tiempo y tamaño.",
   "header.workersAuto": "Auto ({count})",
   "header.batchWorkersHint": "Videos en paralelo. Auto (balanceado): hasta 5 con NVENC/QSV; 1 con Media Foundation.",
   "header.batchRetry": "Reintento",
@@ -83,6 +83,16 @@
   "footer.moreChanges": "+ {count} cambios más incluidos.",
   "footer.updateDownloading": "Descargando {version}: {percent}%",
   "footer.updateWait": "La descarga continúa en segundo plano.",
+  "footer.historySingle": "Render de prueba",
+  "footer.historyBatch": "Lote · {count} videos",
+  "footer.historyRunDone": "{started} · {kind} · {ok}/{total} ok{failed}",
+  "footer.historyRunFinished": "{started} · {kind} · finalizado",
+  "footer.historyRunActive": "{started} · {kind} · en curso",
+  "footer.historyRunNoLogs": "Sin líneas de log en esta ejecución.",
+  "footer.historyFailed": " · {count} err",
+  "footer.clearHistory": "Limpiar historial",
+  "footer.clearHistoryConfirm": "¿Borrar todo el historial de ejecuciones? Esta acción no se puede deshacer.",
+  "footer.historyCleared": "Historial borrado",
 
   "modal.savePreset.title": "Guardar como preset",
   "modal.savePreset.desc": "Se guardará en la carpeta de presets del usuario. Incluirá regiones, operaciones y estilo de texto, pero no el archivo Excel.",
@@ -138,7 +148,6 @@
   "queue.templateBadge": "Video plantilla",
 
   "landing.title": "Beru",
-  "landing.desc": "Editor de video masivo. Aplica texto, blur, recorte y remoción de logos a cientos de videos usando Excel.",
   "landing.import": "Importar videos",
   "landing.hint": "O arrastra archivos MP4, MOV, AVI, MKV, WebM aquí",
 

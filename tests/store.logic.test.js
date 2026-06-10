@@ -736,4 +736,25 @@ describe("useEditorStore logic regressions", () => {
     expect(state.templateRegions[0].region).toEqual(region);
     expect(state.currentRegion).toBeNull();
   });
+
+  it("preserves prior execution runs when starting a new batch", () => {
+    useEditorStore.setState({
+      executionHistory: [],
+      activeExecutionId: null,
+      logLines: [],
+    });
+
+    useEditorStore.getState().startExecutionRun({ kind: "batch", jobCount: 2 });
+    useEditorStore.getState().appendLog("first-run");
+    useEditorStore.getState().setBatchSummary({ total: 2, succeeded: 2, failed: 0 });
+
+    useEditorStore.getState().startExecutionRun({ kind: "batch", jobCount: 1 });
+    useEditorStore.getState().appendLog("second-run");
+
+    const { executionHistory } = useEditorStore.getState();
+    expect(executionHistory).toHaveLength(2);
+    expect(executionHistory[1].lines).toEqual(["first-run"]);
+    expect(executionHistory[1].summary).toEqual({ total: 2, succeeded: 2, failed: 0 });
+    expect(executionHistory[0].lines).toEqual(["second-run"]);
+  });
 });
