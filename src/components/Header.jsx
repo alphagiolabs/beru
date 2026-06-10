@@ -21,7 +21,6 @@ import {
   Languages,
   History,
   Droplets,
-  Download,
 } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
@@ -35,7 +34,6 @@ const api = window.api;
 export default function Header() {
   const {
     isProcessing,
-    batchSummary,
     exportFormat,
     encodeProfile,
     batchWorkers,
@@ -48,11 +46,9 @@ export default function Header() {
     theme,
     language,
     recent,
-    update,
   } = useEditorStore(
     (s) => ({
       isProcessing: s.isProcessing,
-      batchSummary: s.batchSummary,
       exportFormat: s.exportFormat,
       encodeProfile: s.encodeProfile,
       batchWorkers: s.batchWorkers,
@@ -65,7 +61,6 @@ export default function Header() {
       theme: s.theme,
       language: s.language,
       recent: s.recent,
-      update: s.update,
     }),
     shallow,
   );
@@ -240,23 +235,6 @@ export default function Header() {
     }
   };
 
-  const updateStatus = update?.status || "idle";
-  const hasHeaderUpdateButton = updateStatus === "available" || updateStatus === "downloading";
-  const updatePercent = Math.max(0, Math.min(100, Math.round(update?.percent || 0)));
-  const updateVersion = update?.version || "?";
-  const updateButtonLabel =
-    updateStatus === "downloading"
-      ? t("header.updateDownloading", { percent: updatePercent, version: updateVersion })
-      : t("header.updateDownload", { version: updateVersion });
-
-  const handleHeaderDownloadUpdate = async () => {
-    if (updateStatus !== "available") return;
-    const res = await get().downloadUpdate();
-    if (res?.ok === false) {
-      flashToast("err", res.error || t("header.updateDownloadFailed"));
-    }
-  };
-
   const handleProcessAll = async () => {
     if (!api?.startProcessing) {
       showToast({ kind: "err", text: t("errors.noApi") });
@@ -400,37 +378,6 @@ export default function Header() {
         >
           <Upload size={14} /> Importar
         </button>
-
-        {hasHeaderUpdateButton && (
-          <button
-            type="button"
-            onClick={handleHeaderDownloadUpdate}
-            disabled={updateStatus === "downloading"}
-            className="relative inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-all duration-150 hover:brightness-110 active:scale-95 disabled:cursor-default disabled:opacity-100"
-            style={{
-              background: "var(--rose)",
-              boxShadow: "0 0 0 1px color-mix(in srgb, var(--rose) 35%, transparent)",
-            }}
-            title={updateButtonLabel}
-            aria-label={updateButtonLabel}
-          >
-            <span
-              className="absolute inset-0 rounded-full"
-              style={
-                updateStatus === "downloading"
-                  ? {
-                      background: `conic-gradient(#ffffff ${updatePercent * 3.6}deg, rgba(255,255,255,0.22) 0deg)`,
-                      mask: "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0)",
-                      WebkitMask:
-                        "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0)",
-                    }
-                  : undefined
-              }
-              aria-hidden="true"
-            />
-            <Download size={14} strokeWidth={2.4} />
-          </button>
-        )}
 
         <button
           onClick={handleSelectOutput}
@@ -753,20 +700,6 @@ export default function Header() {
         >
           <Keyboard size={14} />
         </button>
-
-        {batchSummary && (
-          <span
-            className="text-[11px] ml-2 inline-flex items-center gap-1 whitespace-nowrap flex-shrink-0"
-            style={{ color: "var(--text-secondary)" }}
-          >
-            <span>
-              {batchSummary.succeeded}/{batchSummary.total} ok
-            </span>
-            {batchSummary.failed > 0 && (
-              <span style={{ color: "var(--rose)" }}>· {batchSummary.failed} err</span>
-            )}
-          </span>
-        )}
       </div>
 
       {testResult && (

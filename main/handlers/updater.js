@@ -15,6 +15,10 @@ export function registerUpdaterHandlers() {
     return { ok: true };
   });
 
+  ipcMain.handle("updater:getSnapshot", () => {
+    return updater.getSnapshot();
+  });
+
   ipcMain.handle("shell:openExternal", async (_event, url) => {
     if (typeof url !== "string" || !/^https?:\/\//i.test(url)) {
       return { success: false, error: "URL inválida" };

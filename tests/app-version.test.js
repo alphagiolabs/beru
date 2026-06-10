@@ -1,0 +1,21 @@
+import { describe, it, expect } from "vitest";
+import { APP_VERSION, formatFooterClock, parseReleaseNotes } from "../src/utils/appVersion.js";
+
+describe("appVersion utils", () => {
+  it("exposes the package version", () => {
+    expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it("parses release notes into bullet lines", () => {
+    expect(parseReleaseNotes("<p>Fix #123</p>\n- Better queue\n* Footer")).toEqual([
+      "Fix #123",
+      "Better queue",
+      "Footer",
+    ]);
+  });
+
+  it("formats elapsed time for footer clocks", () => {
+    expect(formatFooterClock(125000)).toBe("02:05");
+    expect(formatFooterClock(3725000)).toBe("1:02:05");
+  });
+});

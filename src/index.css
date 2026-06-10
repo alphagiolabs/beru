@@ -193,6 +193,239 @@ label {
   }
 }
 
+/* Hermes-style status footer */
+.status-footer {
+  @apply flex items-center justify-between gap-3 px-3 flex-shrink-0 relative;
+  height: 28px;
+  font-size: 11px;
+  line-height: 1;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-app) 88%, #000);
+  color: var(--text-dim);
+  z-index: 60;
+}
+
+.status-footer-left,
+.status-footer-center,
+.status-footer-right {
+  @apply flex items-center gap-2 min-w-0;
+}
+
+.status-footer-center {
+  @apply flex-1 justify-center;
+}
+
+.status-footer-right {
+  @apply flex-shrink-0;
+}
+
+.status-footer-icon-btn {
+  @apply inline-flex items-center justify-center rounded transition-opacity;
+  width: 22px;
+  height: 22px;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.status-footer-icon-btn:hover,
+.status-footer-icon-btn--active {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
+}
+
+.status-footer-chip {
+  @apply inline-flex items-center gap-1.5 rounded px-2 py-0.5;
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.status-footer-chip--active {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.status-footer-running {
+  color: var(--text-primary);
+}
+
+.status-footer-spin {
+  animation: spin 1s linear infinite;
+}
+
+.status-footer-dim {
+  color: var(--text-dim);
+}
+
+.status-footer-err {
+  color: var(--rose);
+}
+
+.status-footer-progress {
+  @apply inline-flex gap-px;
+  height: 10px;
+}
+
+.status-footer-progress-seg {
+  width: 3px;
+  height: 100%;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--text-dim) 18%, transparent);
+}
+
+.status-footer-progress-seg--on {
+  background: color-mix(in srgb, var(--accent) 75%, var(--text-dim));
+}
+
+.status-footer-percent {
+  @apply tabular-nums;
+  min-width: 2rem;
+  color: var(--text-secondary);
+}
+
+.status-footer-version-wrap {
+  @apply relative;
+}
+
+.status-footer-version {
+  @apply inline-flex items-center gap-1.5 rounded px-2 py-0.5 transition-colors;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.status-footer-version:hover,
+.status-footer-version--open {
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  border-color: color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.status-footer-version--badge {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+.status-footer-version-new {
+  color: var(--accent);
+}
+
+.status-footer-version-dl {
+  color: var(--accent);
+  margin-left: 2px;
+}
+
+.status-footer-popover {
+  @apply absolute bottom-full mb-2 rounded-lg shadow-2xl overflow-hidden;
+  width: min(320px, calc(100vw - 24px));
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  z-index: 90;
+}
+
+.status-footer-popover--history {
+  left: 0;
+}
+
+.status-footer-popover--update {
+  right: 0;
+}
+
+.status-footer-popover-header {
+  @apply flex items-center gap-2 px-3 py-2 text-[11px] font-medium border-b;
+  color: var(--text-primary);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+}
+
+.status-footer-log-scroll {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 8px 10px;
+}
+
+.status-footer-log-line {
+  @apply text-[10px] leading-relaxed font-mono break-all;
+  color: var(--text-dim);
+  padding: 2px 0;
+}
+
+.status-footer-log-empty {
+  @apply text-[11px] px-1 py-2;
+  color: var(--text-dim);
+}
+
+.status-footer-popover-actions {
+  @apply px-3 py-2 border-t;
+  border-color: var(--border);
+}
+
+.status-footer-notes {
+  @apply px-3 py-2 text-[11px] leading-relaxed list-disc pl-5 space-y-1;
+  color: var(--text-secondary);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.status-footer-update-body,
+.status-footer-update-note {
+  @apply px-3 text-[11px] leading-relaxed;
+  color: var(--text-secondary);
+}
+
+.status-footer-update-note {
+  color: var(--rose);
+  padding-bottom: 8px;
+}
+
+.status-footer-update-meta {
+  @apply px-3 pb-2 text-[10px];
+  color: var(--text-dim);
+}
+
+.status-footer-primary-btn {
+  @apply mx-3 mb-2 w-[calc(100%-1.5rem)] rounded py-2 text-[12px] font-semibold transition-opacity;
+  background: color-mix(in srgb, var(--text-primary) 92%, transparent);
+  color: var(--bg-app);
+}
+
+.status-footer-primary-btn:hover {
+  opacity: 0.9;
+}
+
+.status-footer-secondary-btn {
+  @apply mx-3 mb-2 w-[calc(100%-1.5rem)] py-1.5 text-[11px] transition-opacity;
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.status-footer-secondary-btn:hover {
+  color: var(--text-secondary);
+}
+
+.status-footer-link-btn {
+  @apply inline-flex items-center gap-1.5 px-3 pb-3 text-[10px] transition-opacity;
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.status-footer-link-btn:hover {
+  color: var(--accent);
+}
+
+.status-footer-download-bar {
+  @apply mx-3 mt-2 mb-1 h-1 rounded-full overflow-hidden;
+  background: color-mix(in srgb, var(--bg-app) 80%, transparent);
+}
+
+.status-footer-download-fill {
+  @apply h-full rounded-full transition-all duration-300;
+  background: var(--accent);
+}
+
 .update-bottom-indicator {
   height: 4px;
   animation: update-bottom-blink 1.1s ease-in-out infinite;

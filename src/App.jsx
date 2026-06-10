@@ -2,16 +2,16 @@ import { useEffect, useRef, lazy, Suspense } from "react";
 import useEditorStore from "./stores/useEditorStore";
 import useKeyboard from "./hooks/useKeyboard";
 import useProcessing from "./hooks/useProcessing";
+import useUpdater from "./hooks/useUpdater";
 import Header from "./components/Header";
 import QueueSidebar from "./components/QueueSidebar";
 import VideoPreview from "./components/VideoPreview";
 import ToolBar from "./components/ToolBar";
 import PropertiesPanel from "./components/PropertiesPanel";
 import LayerList from "./components/LayerList";
-import BatchProgressBar from "./components/BatchProgressBar";
+import StatusFooter from "./components/StatusFooter";
 import DragOverlay from "./components/DragOverlay";
 import Landing from "./components/Landing";
-import UpdateBottomIndicator from "./components/UpdateBottomIndicator";
 import AppToast from "./components/AppToast";
 import ConfirmDialog from "./components/ConfirmDialog";
 import { useT } from "./i18n/useT";
@@ -19,11 +19,9 @@ import { useT } from "./i18n/useT";
 const ShortcutsModal = lazy(() => import("./components/ShortcutsModal"));
 const TableEditor = lazy(() => import("./components/TableEditor"));
 const ExcelMappingModal = lazy(() => import("./components/ExcelMappingModal"));
-const UpdateReadyModal = lazy(() => import("./components/UpdateReadyModal"));
 const WatermarkModal = lazy(() => import("./components/WatermarkModal"));
 
 const api = window.api;
-const UPDATE_CHECK_DELAY_MS = 2500;
 
 export default function App() {
   const queueLength = useEditorStore((s) => s.queue.length);
@@ -34,56 +32,23 @@ export default function App() {
   const loadPresetsFromStorage = useEditorStore((s) => s.loadPresetsFromStorage);
   const loadSettings = useEditorStore((s) => s.loadSettings);
   const loadRecents = useEditorStore((s) => s.loadRecents);
-  const applyUpdaterEvent = useEditorStore((s) => s.applyUpdaterEvent);
-  const checkForUpdates = useEditorStore((s) => s.checkForUpdates);
-  const downloadUpdate = useEditorStore((s) => s.downloadUpdate);
-  const updateStatus = useEditorStore((s) => s.update?.status);
-  const updateVersion = useEditorStore((s) => s.update?.version);
   const showToast = useEditorStore((s) => s.showToast);
   const clearAppToast = useEditorStore((s) => s.clearAppToast);
   const appToast = useEditorStore((s) => s.appToast);
   const t = useT();
   const dropRef = useRef(null);
   const dragDepthRef = useRef(0);
-  const autoDownloadVersionRef = useRef(null);
   const DRAG_DEPTH_MAX = 32;
 
   useKeyboard();
   useProcessing(api);
+  useUpdater(api);
 
   useEffect(() => {
     loadPresetsFromStorage();
     loadSettings();
     loadRecents();
   }, [loadPresetsFromStorage, loadSettings, loadRecents]);
-
-  useEffect(() => {
-    if (!api?.onUpdaterEvent) return;
-    const unsub = api.onUpdaterEvent((payload) => applyUpdaterEvent(payload));
-    return () => {
-      if (typeof unsub === "function") unsub();
-    };
-  }, [applyUpdaterEvent]);
-
-  useEffect(() => {
-    if (!api?.checkForUpdates) return undefined;
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      if (cancelled) return;
-      await checkForUpdates();
-    }, UPDATE_CHECK_DELAY_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [checkForUpdates]);
-
-  useEffect(() => {
-    if (updateStatus !== "available" || !updateVersion || !api?.downloadUpdate) return;
-    if (autoDownloadVersionRef.current === updateVersion) return;
-    autoDownloadVersionRef.current = updateVersion;
-    downloadUpdate();
-  }, [updateStatus, updateVersion, downloadUpdate]);
 
   useEffect(() => {
     if (!appToast) return;
@@ -170,10 +135,7 @@ export default function App() {
           }}
         />
         <Landing />
-        <UpdateBottomIndicator />
-        <Suspense fallback={null}>
-          <UpdateReadyModal />
-        </Suspense>
+        <StatusFooter />
         <AppToast />
         <ConfirmDialog />
       </div>
@@ -188,7 +150,6 @@ export default function App() {
       style={{ background: "var(--bg-app)", color: "var(--text-primary)" }}
     >
       <Header />
-      <BatchProgressBar />
       <div className="flex-1 flex overflow-hidden min-h-0">
         <QueueSidebar />
         <div className="flex-1 flex flex-col min-w-0">
@@ -205,13 +166,12 @@ export default function App() {
           </aside>
         )}
       </div>
+      <StatusFooter />
       <DragOverlay />
-      <UpdateBottomIndicator />
       <Suspense fallback={null}>
         <ShortcutsModal />
         <TableEditor />
         <ExcelMappingModal />
-        <UpdateReadyModal />
         <WatermarkModal />
       </Suspense>
       <AppToast />

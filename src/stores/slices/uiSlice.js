@@ -1,3 +1,5 @@
+import { canStartDownload, reduceUpdaterEvent } from "../../utils/updateState.js";
+
 function applyThemeToDom(theme) {
   if (typeof document === "undefined") return;
   if (theme === "light") {
@@ -196,100 +198,9 @@ export function createUiSlice(set, get) {
     },
 
     applyUpdaterEvent: (payload) => {
-      if (!payload || typeof payload !== "object") return;
-      const type = payload.type;
-      if (type === "checking") {
-        set({
-          update: {
-            status: "checking",
-            version: null,
-            percent: 0,
-            error: null,
-            transferred: 0,
-            total: 0,
-            releaseNotes: "",
-            releaseUrl: null,
-          },
-        });
-      } else if (type === "available") {
-        set({
-          update: {
-            status: "available",
-            version: payload.version,
-            percent: 0,
-            error: null,
-            transferred: 0,
-            total: 0,
-            releaseNotes: payload.releaseNotes || "",
-            releaseUrl: payload.releaseUrl || null,
-          },
-        });
-      } else if (type === "not-available") {
-        set({
-          update: {
-            status: "idle",
-            version: null,
-            percent: 0,
-            error: null,
-            transferred: 0,
-            total: 0,
-            releaseNotes: "",
-            releaseUrl: null,
-          },
-        });
-      } else if (type === "downloading") {
-        set((s) => ({
-          update: {
-            status: "downloading",
-            version: payload.version || s.update?.version || null,
-            percent: payload.percent || 0,
-            error: null,
-            transferred: payload.transferred || 0,
-            total: payload.total || 0,
-            releaseNotes: s.update?.releaseNotes || "",
-            releaseUrl: payload.releaseUrl || s.update?.releaseUrl || null,
-          },
-        }));
-      } else if (type === "ready") {
-        set((s) => ({
-          update: {
-            status: "ready",
-            version: payload.version || s.update?.version || null,
-            percent: 100,
-            error: null,
-            transferred: s.update?.total || s.update?.transferred || 0,
-            total: s.update?.total || 0,
-            releaseNotes: s.update?.releaseNotes || "",
-            releaseUrl: payload.releaseUrl || s.update?.releaseUrl || null,
-          },
-        }));
-      } else if (type === "error") {
-        set({
-          update: {
-            status: "idle",
-            version: null,
-            percent: 0,
-            error: null,
-            transferred: 0,
-            total: 0,
-            releaseNotes: "",
-            releaseUrl: null,
-          },
-        });
-      } else if (type === "disabled") {
-        set({
-          update: {
-            status: "disabled",
-            version: null,
-            percent: 0,
-            error: null,
-            transferred: 0,
-            total: 0,
-            releaseNotes: "",
-            releaseUrl: null,
-          },
-        });
-      }
+      set((s) => ({
+        update: reduceUpdaterEvent(s.update, payload),
+      }));
     },
 
     checkForUpdates: async () => {
@@ -301,7 +212,40 @@ export function createUiSlice(set, get) {
     downloadUpdate: async () => {
       const api = window.api;
       if (!api?.downloadUpdate) return { ok: false, reason: "no-api" };
-      return await api.downloadUpdate();
+
+      const { update } = get();
+      if (update?.status === "downloading" || update?.status === "ready") {
+        return { ok: true, reason: "already-in-progress" };
+      }
+      if (!canStartDownload(update)) {
+        return { ok: false, reason: "not-available" };
+      }
+
+      set((s) => ({
+        update: reduceUpdaterEvent(s.update, {
+          type: "downloading",
+          version: s.update.version,
+          percent: 0,
+          transferred: 0,
+          total: 0,
+        }),
+      }));
+
+      const res = await api.downloadUpdate();
+      if (res?.ok === false) {
+        const current = get().update;
+        if (current?.status === "downloading" && (current.percent || 0) === 0) {
+          set((s) => ({
+            update: reduceUpdaterEvent(s.update, {
+              type: "available",
+              version: s.update.version,
+              releaseNotes: s.update.releaseNotes,
+              releaseUrl: s.update.releaseUrl,
+            }),
+          }));
+        }
+      }
+      return res;
     },
 
     installUpdate: () => {

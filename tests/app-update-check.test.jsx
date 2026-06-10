@@ -45,6 +45,7 @@ describe("App update check", () => {
       onError: noop,
       onLog: noop,
       onUpdaterEvent: noop,
+      getUpdaterSnapshot: async () => null,
       checkForUpdates,
       resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
     };
@@ -83,6 +84,7 @@ describe("App update check", () => {
         updaterHandler = handler;
         return noop();
       }),
+      getUpdaterSnapshot: async () => null,
       checkForUpdates: vi.fn(async () => ({ ok: false, error: "This operation was aborted" })),
       resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
     };

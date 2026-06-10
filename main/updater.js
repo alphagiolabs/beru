@@ -15,6 +15,10 @@ const requireCJS = createRequire(import.meta.url);
 let autoUpdater = null;
 let initialized = false;
 let mainWindow = null;
+let lastSnapshot = null;
+let pendingVersion = null;
+let checkInProgress = false;
+let downloadInProgress = false;
 
 const tryLoad = () => {
   if (autoUpdater) return autoUpdater;
@@ -29,6 +33,7 @@ const tryLoad = () => {
 };
 
 const send = (payload) => {
+  lastSnapshot = payload;
   if (mainWindow && !mainWindow.isDestroyed()) {
     try {
       mainWindow.webContents.send("updater:event", payload);
@@ -59,53 +64,83 @@ const init = (win) => {
   au.logger = null;
 
   au.on("checking-for-update", () => send({ type: "checking" }));
-  au.on("update-available", (info) =>
+  au.on("update-available", (info) => {
+    pendingVersion = info?.version || null;
     send({
       type: "available",
       version: info?.version,
       releaseDate: info?.releaseDate,
       releaseNotes: info?.releaseNotes || "",
       releaseUrl: releaseUrlFor(info?.version),
-    }),
-  );
-  au.on("update-not-available", (info) => send({ type: "not-available", version: info?.version }));
+    });
+  });
+  au.on("update-not-available", (info) => {
+    pendingVersion = null;
+    send({ type: "not-available", version: info?.version });
+  });
   au.on("download-progress", (p) =>
     send({
       type: "downloading",
+      version: pendingVersion,
       percent: p?.percent ?? 0,
       transferred: p?.transferred,
       total: p?.total,
     }),
   );
-  au.on("update-downloaded", (info) => send({ type: "ready", version: info?.version }));
-  au.on("error", (err) => send({ type: "error", message: err?.message || String(err) }));
+  au.on("update-downloaded", (info) => {
+    downloadInProgress = false;
+    pendingVersion = info?.version || pendingVersion;
+    send({ type: "ready", version: info?.version || pendingVersion });
+  });
+  au.on("error", (err) => {
+    checkInProgress = false;
+    if (downloadInProgress) downloadInProgress = false;
+    send({ type: "error", message: err?.message || String(err) });
+  });
 };
 
 const checkForUpdates = async () => {
   if (isDev) return { ok: false, reason: "dev-build" };
+  if (checkInProgress) return { ok: false, reason: "check-in-progress" };
+  if (downloadInProgress) return { ok: false, reason: "download-in-progress" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
+  checkInProgress = true;
   try {
     const result = await au.checkForUpdates();
     return { ok: true, version: result?.updateInfo?.version };
   } catch (e) {
     send({ type: "error", message: e?.message || String(e) });
     return { ok: false, error: e?.message };
+  } finally {
+    checkInProgress = false;
   }
 };
 
 const startDownload = async () => {
   if (isDev) return { ok: false, reason: "dev-build" };
+  if (downloadInProgress) return { ok: true, reason: "already-downloading" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
+  downloadInProgress = true;
+  send({
+    type: "downloading",
+    version: pendingVersion,
+    percent: 0,
+    transferred: 0,
+    total: 0,
+  });
   try {
     await au.downloadUpdate();
     return { ok: true };
   } catch (e) {
+    downloadInProgress = false;
     send({ type: "error", message: e?.message || String(e) });
     return { ok: false, error: e?.message };
   }
 };
+
+const getSnapshot = () => lastSnapshot;
 
 const install = () => {
   if (isDev) return;
@@ -116,4 +151,4 @@ const install = () => {
   } catch {}
 };
 
-export { init, checkForUpdates, startDownload, install, isDev };
+export { init, checkForUpdates, startDownload, install, getSnapshot, isDev };

@@ -76,5 +76,7 @@ export function createWindow() {
     loadProductionBuild(win);
   }
 
-  updater.init(win);
+  win.webContents.once("did-finish-load", () => {
+    updater.init(win);
+  });
 }

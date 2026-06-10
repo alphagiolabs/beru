@@ -668,6 +668,30 @@ describe("useEditorStore logic regressions", () => {
     );
   });
 
+  it("does not start duplicate downloads while one is already active", async () => {
+    window.api = {
+      downloadUpdate: vi.fn(async () => ({ ok: true })),
+    };
+
+    useEditorStore.setState({
+      update: {
+        status: "downloading",
+        version: "1.6.0",
+        percent: 40,
+        error: null,
+        transferred: 4000,
+        total: 10000,
+        releaseNotes: "",
+        releaseUrl: null,
+      },
+    });
+
+    const res = await useEditorStore.getState().downloadUpdate();
+
+    expect(res).toEqual({ ok: true, reason: "already-in-progress" });
+    expect(window.api.downloadUpdate).not.toHaveBeenCalled();
+  });
+
   it("addOperation rejects image and empty text ops in logo mode", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     useEditorStore.setState({

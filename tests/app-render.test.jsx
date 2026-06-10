@@ -87,7 +87,7 @@ describe("App render", () => {
     expect(document.body.textContent).toMatch(/Importar videos/i);
   });
 
-  it("does not interrupt the landing view with the old update download screen", async () => {
+  it("does not interrupt the landing view with a blocking update screen", async () => {
     useEditorStore.setState({
       update: {
         status: "downloading",
@@ -110,7 +110,8 @@ describe("App render", () => {
     expect(document.body.textContent).toMatch(/Importar videos/i);
     expect(document.body.textContent).not.toMatch(/Descargando actualización/i);
     expect(document.body.textContent).not.toMatch(/Beru v1\.6\.0 se está descargando/i);
-    expect(document.querySelector(".update-bottom-indicator")).toBeTruthy();
+    expect(document.querySelector(".status-footer")).toBeTruthy();
+    expect(document.querySelector(".status-footer-version-dl")).toBeTruthy();
   });
 
   it("mounts batch preview with template regions without throwing", async () => {
