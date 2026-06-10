@@ -34,7 +34,7 @@
   "header.encodeFast": "Fast",
   "header.encodeBalanced": "Balanced",
   "header.encodeQuality": "Quality",
-  "header.encodeProfileHint": "Fast uses GPU when available. Quality uses CPU (libx264, highest fidelity).",
+  "header.encodeProfileHint": "Quality uses high-fidelity GPU when available; otherwise, libx264 (CRF 18).",
   "header.workersAuto": "Auto ({count})",
   "header.batchWorkersHint": "Parallel videos. Auto (balanced): up to 5 with NVENC/QSV; 1 with Media Foundation.",
   "header.batchRetry": "Retry",

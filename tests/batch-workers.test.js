@@ -57,7 +57,7 @@ describe("workerPolicy", () => {
     ).toBe(2);
   });
 
-  it("1080p quality batches with filters cap automatic workers at 2", () => {
+  it("1080p quality batches with filters use balanced GPU caps", () => {
     expect(
       resolveBatchWorkers({
         hwEncoder: "h264_nvenc",
@@ -67,12 +67,26 @@ describe("workerPolicy", () => {
         hasVideoFilters: true,
         encodeProfile: "quality",
       }),
-    ).toBe(2);
+    ).toBe(3);
   });
 
-  it("quality profile reports CPU policy even when a hardware encoder exists", () => {
+  it("quality profile reports GPU policy when a hardware encoder exists", () => {
     const r = recommendBatchWorkers({
       hwEncoder: "h264_nvenc",
+      jobCount: 8,
+      mode: "balanced",
+      hasVideoFilters: true,
+      encodeProfile: "quality",
+    });
+
+    expect(r.encoder).toBe("h264_nvenc");
+    expect(r.reason).toBe("gpu_balanced");
+    expect(r.recommended).toBe(AUTO_TARGET_WORKERS);
+  });
+
+  it("quality profile keeps the CPU filter cap when no hardware encoder exists", () => {
+    const r = recommendBatchWorkers({
+      hwEncoder: null,
       jobCount: 8,
       mode: "balanced",
       hasVideoFilters: true,

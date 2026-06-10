@@ -24,27 +24,33 @@ const describeIfPython = hasPython ? describe : describe.skip;
 const PY_CODE_PREFIX = "import sys; sys.path.insert(0, 'python'); ";
 
 describe("encode profile contract (JSON)", () => {
-  it("quality disallows hardware and has no hardware block", () => {
-    expect(contract.profiles.quality.allowsHardware).toBe(false);
-    expect(contract.profiles.quality.hardware).toBeUndefined();
+  it("quality allows high-fidelity hardware encoding", () => {
+    expect(contract.profiles.quality.allowsHardware).toBe(true);
+    expect(contract.profiles.quality.hardware).toEqual({ hwCq: 18, nvencPreset: "p6" });
+    expect(contract.profiles.quality._comment).toContain("CQ 18");
+    expect(contract.profiles.quality._comment).toContain("CRF 18");
     expect(contract.profiles.fast.allowsHardware).toBe(true);
     expect(contract.profiles.balanced.allowsHardware).toBe(true);
   });
 
   it("software encode params live only in the JSON", () => {
     expect(ENCODE_PROFILES.quality.crf).toBe(contract.profiles.quality.software.crf);
+    expect(ENCODE_PROFILES.quality.hwCq).toBe(contract.profiles.quality.hardware.hwCq);
+    expect(ENCODE_PROFILES.quality.nvencPreset).toBe(
+      contract.profiles.quality.hardware.nvencPreset,
+    );
     expect(ENCODE_PROFILES.balanced.hwCq).toBe(contract.profiles.balanced.hardware.hwCq);
   });
 });
 
 describe("encode profile contract (JS helpers)", () => {
-  it("getEffectiveHwEncoder nulls hardware for quality", () => {
-    expect(getEffectiveHwEncoder("quality", "h264_nvenc")).toBeNull();
+  it("getEffectiveHwEncoder allows hardware for quality", () => {
+    expect(getEffectiveHwEncoder("quality", "h264_nvenc")).toBe("h264_nvenc");
     expect(getEffectiveHwEncoder("balanced", "h264_nvenc")).toBe("h264_nvenc");
   });
 
   it("profileAllowsHardware matches contract flags", () => {
-    expect(profileAllowsHardware("quality")).toBe(false);
+    expect(profileAllowsHardware("quality")).toBe(true);
     expect(profileAllowsHardware("balanced")).toBe(true);
     expect(profileAllowsHardware("fast")).toBe(true);
   });
@@ -54,7 +60,7 @@ describe("encode profile contract (JS helpers)", () => {
     expect(normalizeEncodeProfile("quality")).toBe("quality");
   });
 
-  it("resolveBatchWorkers caps quality + filters at 2 workers", () => {
+  it("resolveBatchWorkers applies balanced GPU caps to quality + filters", () => {
     expect(
       resolveBatchWorkers({
         hwEncoder: "h264_nvenc",
@@ -64,7 +70,7 @@ describe("encode profile contract (JS helpers)", () => {
         hasVideoFilters: true,
         encodeProfile: "quality",
       }),
-    ).toBe(2);
+    ).toBe(3);
   });
 });
 
@@ -87,10 +93,48 @@ print(json.dumps({
     }
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout.trim())).toEqual({
-      quality_allows_hw: false,
+      quality_allows_hw: true,
       balanced_allows_hw: true,
-      quality_effective_hw: null,
+      quality_effective_hw: "h264_nvenc",
       balanced_effective_hw: "h264_nvenc",
+    });
+  });
+
+  it("normalizes the JSON contract the same way in JS and Python", () => {
+    const code = `
+import json
+import encode_profiles as ep
+print(json.dumps(ep.ENCODE_PROFILES, sort_keys=True))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const pythonProfiles = JSON.parse(r.stdout.trim());
+    expect(pythonProfiles).toEqual({
+      fast: {
+        crf: ENCODE_PROFILES.fast.crf,
+        preset: ENCODE_PROFILES.fast.preset,
+        allows_hardware: ENCODE_PROFILES.fast.allowsHardware,
+        hw_cq: ENCODE_PROFILES.fast.hwCq,
+        nvenc_preset: ENCODE_PROFILES.fast.nvencPreset,
+      },
+      balanced: {
+        crf: ENCODE_PROFILES.balanced.crf,
+        preset: ENCODE_PROFILES.balanced.preset,
+        allows_hardware: ENCODE_PROFILES.balanced.allowsHardware,
+        hw_cq: ENCODE_PROFILES.balanced.hwCq,
+        nvenc_preset: ENCODE_PROFILES.balanced.nvencPreset,
+      },
+      quality: {
+        crf: ENCODE_PROFILES.quality.crf,
+        preset: ENCODE_PROFILES.quality.preset,
+        allows_hardware: ENCODE_PROFILES.quality.allowsHardware,
+        hw_cq: ENCODE_PROFILES.quality.hwCq,
+        nvenc_preset: ENCODE_PROFILES.quality.nvencPreset,
+      },
     });
   });
 });

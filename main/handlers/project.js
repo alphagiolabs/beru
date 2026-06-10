@@ -33,6 +33,9 @@ export function registerProjectHandlers(pathSecurity) {
     try {
       const raw = fs.readFileSync(check.resolvedPath, "utf8");
       const data = JSON.parse(raw);
+      if (!data || typeof data !== "object" || (!Array.isArray(data) && !data.queue)) {
+        return { success: false, error: "Archivo de proyecto con formato inválido" };
+      }
       return { success: true, filePath: check.resolvedPath, data };
     } catch (e) {
       return { success: false, error: e.message };
@@ -48,6 +51,9 @@ export function registerProjectHandlers(pathSecurity) {
       }
       const raw = fs.readFileSync(check.resolvedPath, "utf8");
       const data = JSON.parse(raw);
+      if (!data || typeof data !== "object" || (!Array.isArray(data) && !data.queue)) {
+        return { success: false, error: "Archivo de proyecto con formato inválido" };
+      }
       pathSecurity.registerAllowedPath(check.resolvedPath);
       return { success: true, filePath: check.resolvedPath, data };
     } catch (e) {

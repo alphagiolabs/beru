@@ -309,7 +309,8 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_e
     without re-detecting.  This avoids re-probing and allows the batch-level
     pre-flight test to skip a broken GPU path entirely.
     """
-    profile = ENCODE_PROFILES.get(profile_name, ENCODE_PROFILES["balanced"])
+    profile_key = (profile_name or "balanced").strip().lower()
+    profile = ENCODE_PROFILES.get(profile_key, ENCODE_PROFILES["balanced"])
     use_hw = not force_software and profile_allows_hardware(profile_name)
     if hw_encoder is not None and use_hw:
         hw = hw_encoder
@@ -333,7 +334,11 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_e
         return ["-c:v", "h264_mf", "-rate_control", "quality", "-quality", str(gq)]
 
     if hw == "h264_amf":
-        quality = "speed" if profile_name == "fast" else "balanced"
+        quality = (
+            "speed" if profile_key == "fast"
+            else "quality" if profile_key == "quality"
+            else "balanced"
+        )
         return ["-c:v", "h264_amf", "-quality", quality]
 
     if hw == "h264_videotoolbox":
@@ -424,7 +429,9 @@ def _memory_cap_workers(
     per_job = _RAM_PER_JOB_MB.get(key, 512)
     if has_video_filters:
         per_job = int(per_job * 1.5)
-    if not profile_allows_hardware(profile):
+    if not profile_allows_hardware(profile) or (
+        profile == "quality" and not hw_encoder
+    ):
         per_job = int(per_job * 1.35)
     # 4K+ needs more RAM per encode.
     if max_source_pixels >= 3840 * 2160:
@@ -487,7 +494,8 @@ def resolve_max_workers(
     if max_source_pixels >= 3840 * 2160:
         workers = min(workers, 2)
 
-    if has_video_filters and not profile_allows_hardware(profile):
+    quality_software_filters = profile == "quality" and not effective_hw_encoder
+    if has_video_filters and (not profile_allows_hardware(profile) or quality_software_filters):
         workers = min(workers, 2)
     elif has_video_filters and max_source_pixels >= 1920 * 1080:
         workers = min(workers, 3)

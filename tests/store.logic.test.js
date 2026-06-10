@@ -327,6 +327,38 @@ describe("useEditorStore logic regressions", () => {
     );
   });
 
+  it("loadPreset applies advanced text style fields", () => {
+    useEditorStore.setState({
+      sidebarMode: "logo",
+      fontWeight: 400,
+      letterSpacing: 0,
+      textAlign: "left",
+      textOpacity: 1,
+    });
+
+    useEditorStore.getState().loadPreset({
+      fontSize: 42,
+      fontColor: "#abcdef",
+      fontFamily: "Arial Black",
+      fontWeight: 900,
+      letterSpacing: 3,
+      textAlign: "center",
+      textOpacity: 0.6,
+    });
+
+    expect(useEditorStore.getState()).toEqual(
+      expect.objectContaining({
+        textFontSize: 42,
+        textFontColor: "#abcdef",
+        fontFamily: "Arial Black",
+        fontWeight: 900,
+        letterSpacing: 3,
+        textAlign: "center",
+        textOpacity: 0.6,
+      }),
+    );
+  });
+
   it("getBatchPreviewPayload returns Excel text without a text operation", () => {
     useEditorStore.setState({
       queue: [queueItem()],

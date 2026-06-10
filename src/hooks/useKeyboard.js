@@ -20,13 +20,10 @@ const isTypingTarget = (target) => {
 export default function useKeyboard() {
   useEffect(() => {
     const handler = (e) => {
-      if (isTypingTarget(e.target)) return;
-
       const store = useEditorStore.getState();
       const { key, ctrlKey, metaKey, shiftKey, altKey } = e;
       const cmd = ctrlKey || metaKey;
 
-      // Modals
       if (key === "Escape") {
         if (store.showShortcuts) {
           store.setShowShortcuts(false);
@@ -40,10 +37,20 @@ export default function useKeyboard() {
           store.setShowMappingModal(false);
           return;
         }
+      }
+
+      if (isTypingTarget(e.target)) return;
+
+      // Modals
+      if (key === "Escape") {
         if (store.currentRegion) {
           store.setCurrentRegion(null);
           return;
         }
+        return;
+      }
+
+      if (store.showShortcuts || store.showTableEditor || store.showMappingModal) {
         return;
       }
 

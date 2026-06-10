@@ -26,7 +26,6 @@ let _processingRunId = null;
 export const getIsProcessing = () => _isProcessing;
 export const setIsProcessing = (val) => {
   _isProcessing = !!val;
-  if (!_isProcessing) _processingRunId = null;
 };
 
 export const getProcessingRunId = () => _processingRunId;

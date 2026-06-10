@@ -47,6 +47,7 @@ export default function TableEditor() {
   const [seeking, setSeeking] = useState(false);
   const [, setLayoutTick] = useState(0);
   const focusedVideoDuration = queue[focused.videoIdx]?.duration;
+  const firstRegionId = templateRegions[0]?.id ?? null;
 
   useEffect(() => {
     const v = videoRef.current;
@@ -58,11 +59,12 @@ export default function TableEditor() {
 
   useEffect(() => {
     if (showTableEditor) {
-      setFocused({ videoIdx: 0, regionId: templateRegions[0]?.id ?? null });
+      setFocused({ videoIdx: 0, regionId: firstRegionId });
       setEditingCell(null);
       setPlaying(false);
+      tableRef.current?.focus();
     }
-  }, [showTableEditor, templateRegions.length]);
+  }, [showTableEditor, firstRegionId, templateRegions.length]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -103,12 +105,12 @@ export default function TableEditor() {
     [duration, focusedVideoDuration],
   );
 
-  const startInlineEdit = (videoIdx, regionId, currentText) => {
+  const startInlineEdit = useCallback((videoIdx, regionId, currentText) => {
     setEditingCell({ videoIdx, regionId });
     setEditValue(currentText || "");
-  };
+  }, []);
 
-  const commitInlineEdit = () => {
+  const commitInlineEdit = useCallback(() => {
     if (!editingCell) return;
     const { videoIdx, regionId } = editingCell;
     const video = queue[videoIdx];
@@ -127,73 +129,98 @@ export default function TableEditor() {
       get().syncTextToExcel(videoIdx, regionId, "");
     }
     setEditingCell(null);
-  };
+  }, [editingCell, editValue, get, queue, templateRegions]);
 
-  const cancelInlineEdit = () => setEditingCell(null);
+  const cancelInlineEdit = useCallback(() => setEditingCell(null), []);
 
-  const moveFocus = (deltaRow, deltaCol) => {
-    if (queue.length === 0 || templateRegions.length === 0) return;
-    setFocused((f) => {
-      const vCount = queue.length;
-      const cCount = templateRegions.length;
-      const curCol =
-        f.regionId == null
-          ? 0
-          : Math.max(
-              0,
-              templateRegions.findIndex((r) => r.id === f.regionId),
-            );
-      const newCol = Math.max(0, Math.min(cCount - 1, curCol + deltaCol));
-      const newRow = Math.max(0, Math.min(vCount - 1, f.videoIdx + deltaRow));
-      return { videoIdx: newRow, regionId: templateRegions[newCol]?.id ?? null };
-    });
-  };
+  const moveFocus = useCallback(
+    (deltaRow, deltaCol) => {
+      if (queue.length === 0 || templateRegions.length === 0) return;
+      setFocused((f) => {
+        const vCount = queue.length;
+        const cCount = templateRegions.length;
+        const curCol =
+          f.regionId == null
+            ? 0
+            : Math.max(
+                0,
+                templateRegions.findIndex((r) => r.id === f.regionId),
+              );
+        const newCol = Math.max(0, Math.min(cCount - 1, curCol + deltaCol));
+        const newRow = Math.max(0, Math.min(vCount - 1, f.videoIdx + deltaRow));
+        return { videoIdx: newRow, regionId: templateRegions[newCol]?.id ?? null };
+      });
+    },
+    [queue.length, templateRegions],
+  );
 
-  const handleTableKey = (e) => {
-    if (editingCell) {
-      if (e.key === "Enter") {
+  const handleTableKey = useCallback(
+    (e) => {
+      if (editingCell) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.stopPropagation();
+          commitInlineEdit();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          cancelInlineEdit();
+        }
+        return;
+      }
+      if (e.key === "ArrowDown") {
         e.preventDefault();
-        commitInlineEdit();
+        e.stopPropagation();
+        moveFocus(1, 0);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        moveFocus(-1, 0);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopPropagation();
+        moveFocus(0, 1);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        e.stopPropagation();
+        moveFocus(0, -1);
+      } else if (e.key === "Enter" || e.key === "F2") {
+        e.preventDefault();
+        e.stopPropagation();
+        const region = templateRegions.find((r) => r.id === focused.regionId);
+        const video = queue[focused.videoIdx];
+        if (!region || !video) return;
+        startInlineEdit(
+          focused.videoIdx,
+          focused.regionId,
+          get().getCellTextForRegion(focused.videoIdx, focused.regionId),
+        );
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        e.stopPropagation();
+        const region = templateRegions.find((r) => r.id === focused.regionId);
+        const video = queue[focused.videoIdx];
+        if (!region || !video) return;
+        const { opIdx } = findTextOpForRegion(video.operations, region.region, focused.regionId);
+        if (opIdx >= 0) get().removeOperationAt(focused.videoIdx, opIdx);
       } else if (e.key === "Escape") {
         e.preventDefault();
-        cancelInlineEdit();
+        e.stopPropagation();
+        get().setShowTableEditor(false);
       }
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      moveFocus(1, 0);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      moveFocus(-1, 0);
-    } else if (e.key === "ArrowRight") {
-      e.preventDefault();
-      moveFocus(0, 1);
-    } else if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      moveFocus(0, -1);
-    } else if (e.key === "Enter" || e.key === "F2") {
-      e.preventDefault();
-      const region = templateRegions.find((r) => r.id === focused.regionId);
-      const video = queue[focused.videoIdx];
-      if (!region || !video) return;
-      startInlineEdit(
-        focused.videoIdx,
-        focused.regionId,
-        get().getCellTextForRegion(focused.videoIdx, focused.regionId),
-      );
-    } else if (e.key === "Delete" || e.key === "Backspace") {
-      e.preventDefault();
-      const region = templateRegions.find((r) => r.id === focused.regionId);
-      const video = queue[focused.videoIdx];
-      if (!region || !video) return;
-      const { opIdx } = findTextOpForRegion(video.operations, region.region, focused.regionId);
-      if (opIdx >= 0) get().removeOperationAt(focused.videoIdx, opIdx);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      get().setShowTableEditor(false);
-    }
-  };
+    },
+    [
+      editingCell,
+      focused,
+      templateRegions,
+      queue,
+      commitInlineEdit,
+      cancelInlineEdit,
+      moveFocus,
+      startInlineEdit,
+      get,
+    ],
+  );
 
   if (!showTableEditor || queue.length === 0) return null;
 

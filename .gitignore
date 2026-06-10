@@ -42,3 +42,4 @@ AGENTS.md
 
 # Versioned build output directories (never commit)
 dist-installer-v*/
+dist-build/

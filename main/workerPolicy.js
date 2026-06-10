@@ -72,7 +72,8 @@ export function resolveBatchWorkers({
     workers = Math.min(workers, 2);
   }
 
-  if (hasVideoFilters && !profileAllowsHardware(profile)) {
+  const qualitySoftwareFilters = profile === "quality" && !effectiveHwEncoder;
+  if (hasVideoFilters && (!profileAllowsHardware(profile) || qualitySoftwareFilters)) {
     workers = Math.min(workers, 2);
   } else if (hasVideoFilters && maxSourcePixels >= 1920 * 1080) {
     workers = Math.min(workers, 3);

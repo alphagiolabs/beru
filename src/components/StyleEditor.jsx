@@ -1,7 +1,8 @@
-import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, ScanEye } from "lucide-react";
+import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, ScanEye, Ban } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
-import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS } from "../utils/types";
+import { pickTextStyle } from "../utils/text-style";
+import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS, TEXT_STYLE_PRESETS } from "../utils/types";
 import TextLayoutControls from "./TextLayoutControls";
 
 const NAMED_COLORS = {
@@ -37,6 +38,43 @@ function normalizeColor(c) {
     return t;
   }
   return NAMED_COLORS[t] || null;
+}
+
+function samePresetValue(a, b) {
+  if (typeof a === "string" || typeof b === "string") {
+    return String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
+  }
+  return a === b;
+}
+
+function presetMatches(preset, currentStyle) {
+  const style = pickTextStyle(preset);
+  return Object.entries(style).every(([key, value]) => samePresetValue(currentStyle[key], value));
+}
+
+function presetTextShadow(preset) {
+  if (!preset.textShadowEnabled) return "none";
+  const x = Math.max(-4, Math.min(4, Number(preset.textShadowOffsetX ?? 2)));
+  const y = Math.max(-4, Math.min(4, Number(preset.textShadowOffsetY ?? 2)));
+  return `${x}px ${y}px 0 ${preset.textShadowColor || "black"}`;
+}
+
+function presetPreviewTextStyle(preset) {
+  const strokeWidth = Math.min(2, Number(preset.borderWidth ?? 0));
+  return {
+    color: preset.fontColor || "white",
+    fontFamily: `"${preset.fontFamily || "Arial"}", sans-serif`,
+    fontSize: "18px",
+    fontStyle: preset.italic ? "italic" : "normal",
+    fontWeight: preset.fontWeight ?? (preset.bold ? 700 : 400),
+    letterSpacing: `${Math.min(1.5, Number(preset.letterSpacing ?? 0))}px`,
+    lineHeight: 1,
+    padding: preset.bgEnabled ? "2px 3px" : 0,
+    borderRadius: "3px",
+    background: preset.bgEnabled ? preset.bgColor : "transparent",
+    textShadow: presetTextShadow(preset),
+    WebkitTextStroke: strokeWidth > 0 ? `${strokeWidth}px ${preset.borderColor || "black"}` : "0",
+  };
 }
 
 export default function StyleEditor() {
@@ -139,6 +177,26 @@ export default function StyleEditor() {
     }
   };
 
+  const currentTextStyle = {
+    fontFamily,
+    fontColor: textFontColor,
+    fontWeight,
+    letterSpacing,
+    textOpacity,
+    bold,
+    italic,
+    bgEnabled,
+    bgColor,
+    bgOpacity,
+    boxBorderWidth,
+    borderWidth,
+    borderColor,
+    textShadowEnabled,
+    textShadowColor,
+    textShadowOffsetX,
+    textShadowOffsetY,
+  };
+
   return (
     <div className="space-y-2">
       <div className="pb-2 mb-1 border-b" style={{ borderColor: "var(--border)" }}>
@@ -159,6 +217,38 @@ export default function StyleEditor() {
         <p className="text-[9px] mt-1 leading-snug" style={{ color: "var(--text-dim)" }}>
           Compara CSS vs FFmpeg en el reproductor (modos CSS, FFmpeg o lado a lado).
         </p>
+      </div>
+
+      <div className="pb-2 mb-1 border-b" style={{ borderColor: "var(--border)" }}>
+        <span className="cap-input-label">Estilo preestablecido</span>
+        <div className="grid grid-cols-7 gap-1">
+          {TEXT_STYLE_PRESETS.map((preset) => {
+            const active = presetMatches(preset, currentTextStyle);
+            return (
+              <button
+                key={preset.id || preset.name}
+                type="button"
+                onClick={() => patch(pickTextStyle(preset))}
+                className="h-8 min-w-0 rounded flex items-center justify-center transition-colors"
+                style={{
+                  background: preset.previewBg || "var(--bg-elevated)",
+                  border: active ? "1px solid var(--accent)" : "1px solid var(--border)",
+                  boxShadow: active ? "0 0 0 1px var(--accent)" : "none",
+                }}
+                aria-label={`Aplicar estilo: ${preset.name}`}
+                title={preset.name}
+                data-text-style-preset
+                data-preset-id={preset.id}
+              >
+                {preset.id === "plain" ? (
+                  <Ban size={18} style={{ color: "var(--text-dim)" }} />
+                ) : (
+                  <span style={presetPreviewTextStyle(preset)}>Aa</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <label>

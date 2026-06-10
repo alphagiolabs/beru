@@ -14,8 +14,10 @@
     },
     "quality": {
       "label": "quality",
-      "allowsHardware": false,
-      "software": { "crf": 18, "preset": "medium" }
+      "_comment": "NVENC CQ 18 approximates x264 CRF 18 for overlay-heavy content.",
+      "allowsHardware": true,
+      "software": { "crf": 18, "preset": "medium" },
+      "hardware": { "hwCq": 18, "nvencPreset": "p6" }
     }
   }
 }

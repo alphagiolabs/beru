@@ -296,7 +296,7 @@ print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8, consider_memory=
     expect(JSON.parse(r.stdout.trim())).toBe(5);
   });
 
-  it("caps automatic workers for 1080p quality batches with video filters", () => {
+  it("applies balanced GPU worker caps for 1080p quality batches with video filters", () => {
     const code = `
 import json
 import os
@@ -321,13 +321,25 @@ print(json.dumps({
         has_video_filters=False,
         encode_profile="quality",
     ),
+    "software_filtered_quality": processor.resolve_max_workers(
+        None,
+        8,
+        1920 * 1080,
+        consider_memory=False,
+        has_video_filters=True,
+        encode_profile="quality",
+    ),
 }))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
       encoding: "utf8",
     });
     expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout.trim())).toEqual({ filtered_quality: 2, no_filters: 8 });
+    expect(JSON.parse(r.stdout.trim())).toEqual({
+      filtered_quality: 3,
+      no_filters: 5,
+      software_filtered_quality: 2,
+    });
   });
 
   it("uses BERU_FFPROBE when resolving the runtime ffprobe path", () => {
@@ -579,7 +591,12 @@ processor.os.cpu_count = lambda: 16
 processor._BATCH_ACTIVE_WORKERS = 4
 args = processor.build_encode_args("ffmpeg", "quality", {}, force_software=True)
 threads_idx = args.index("-threads")
-print(json.dumps({"threads": args[threads_idx + 1], "args": args}))
+print(json.dumps({
+    "threads": args[threads_idx + 1],
+    "codec": args[args.index("-c:v") + 1],
+    "crf": args[args.index("-crf") + 1],
+    "args": args,
+}))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
       encoding: "utf8",
@@ -588,9 +605,11 @@ print(json.dumps({"threads": args[threads_idx + 1], "args": args}))
     expect(r.status).toBe(0);
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.threads).toBe("4");
+    expect(parsed.codec).toBe("libx264");
+    expect(parsed.crf).toBe("18");
   });
 
-  it("keeps the quality profile on libx264 even when hardware was preflighted", () => {
+  it("uses high-fidelity NVENC params for quality when hardware was preflighted", () => {
     const code = `
 import json
 import processor
@@ -611,10 +630,61 @@ print(json.dumps(args))
     });
     expect(r.status).toBe(0);
     const args = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(args).toContain("h264_nvenc");
+    expect(args).not.toContain("libx264");
+    expect(args[args.indexOf("-cq") + 1]).toBe("18");
+    expect(args[args.indexOf("-preset") + 1]).toBe("p6");
+  });
+
+  it("keeps forced-software quality fallback on libx264 CRF 18", () => {
+    const code = `
+import json
+import processor
+
+processor.os.cpu_count = lambda: 16
+processor._BATCH_ACTIVE_WORKERS = 2
+args = processor.build_encode_args(
+    "ffmpeg",
+    "quality",
+    {},
+    force_software=True,
+    hw_encoder="h264_nvenc",
+)
+print(json.dumps(args))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const args = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(args).toContain("libx264");
     expect(args).not.toContain("h264_nvenc");
     expect(args[args.indexOf("-crf") + 1]).toBe("18");
     expect(args[args.indexOf("-preset") + 1]).toBe("medium");
+  });
+
+  it("uses AMF quality mode for the quality profile", () => {
+    const code = `
+import json
+import processor
+
+args = processor.build_encode_args(
+    "ffmpeg",
+    "quality",
+    {},
+    hw_encoder="h264_amf",
+)
+print(json.dumps(args))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const args = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(args).toContain("h264_amf");
+    expect(args[args.indexOf("-quality") + 1]).toBe("quality");
   });
 
   it("builds quality export commands without resize or framerate overrides", () => {
@@ -671,6 +741,8 @@ print(json.dumps({
     "status": result["status"],
     "uses_libx264": "libx264" in cmd,
     "uses_hw": "h264_nvenc" in cmd,
+    "cq": cmd[cmd.index("-cq") + 1] if "-cq" in cmd else None,
+    "preset": cmd[cmd.index("-preset") + 1] if "-preset" in cmd else None,
     "has_size_arg": "-s" in cmd or "-vf" in cmd,
     "has_rate_arg": "-r" in cmd,
     "pix_fmt": cmd[cmd.index("-pix_fmt") + 1],
@@ -687,8 +759,10 @@ print(json.dumps({
     expect(r.status).toBe(0);
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.status).toBe("succeeded");
-    expect(parsed.uses_libx264).toBe(true);
-    expect(parsed.uses_hw).toBe(false);
+    expect(parsed.uses_libx264).toBe(false);
+    expect(parsed.uses_hw).toBe(true);
+    expect(parsed.cq).toBe("18");
+    expect(parsed.preset).toBe("p6");
     expect(parsed.has_size_arg).toBe(false);
     expect(parsed.has_rate_arg).toBe(false);
     expect(parsed.pix_fmt).toBe("yuv420p");
@@ -811,6 +885,7 @@ job = {
     "id": 2,
     "input_path": tmp.name,
     "output_path": tmp.name + ".out.mp4",
+    "encode_profile": "quality",
     "width": 320,
     "height": 180,
     "source_width": 320,
