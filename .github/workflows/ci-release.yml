@@ -1,23 +1,23 @@
-name: Release
+name: CI + Release
 
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build & Release (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest]
-
+  # Quality gate: runs on every push (main, PRs, and tags).
+  # When a tag is pushed, this job must pass before release starts.
+  test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -31,8 +31,34 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
       - name: Run tests
         run: npm test
+
+  # Build & publish: only runs on tag pushes.
+  # `needs: test` ensures tests pass (in Ubuntu) before building on Windows.
+  release:
+    name: Build & Release (Windows)
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build renderer
         run: npx vite build
