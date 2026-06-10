@@ -266,10 +266,10 @@ export function createUiSlice(set, get) {
       } else if (type === "error") {
         set({
           update: {
-            status: "error",
+            status: "idle",
             version: null,
             percent: 0,
-            error: payload.message || "Error desconocido",
+            error: null,
             transferred: 0,
             total: 0,
             releaseNotes: "",

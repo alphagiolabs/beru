@@ -67,4 +67,41 @@ describe("App update check", () => {
     expect(document.body.textContent).not.toMatch(/Preparando actualización/i);
     expect(document.body.textContent).not.toMatch(/Actualizar/i);
   });
+
+  it("does not render updater check failures as a visible red banner", async () => {
+    let updaterHandler = null;
+    window.api = {
+      onProgress: noop,
+      onJobProgress: noop,
+      onComplete: noop,
+      onSummary: noop,
+      onJobError: noop,
+      onFinished: noop,
+      onError: noop,
+      onLog: noop,
+      onUpdaterEvent: vi.fn((handler) => {
+        updaterHandler = handler;
+        return noop();
+      }),
+      checkForUpdates: vi.fn(async () => ({ ok: false, error: "This operation was aborted" })),
+      resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
+    };
+
+    const { default: App } = await import("../src/App.jsx");
+
+    await act(async () => {
+      root.render(<App />);
+    });
+
+    expect(typeof updaterHandler).toBe("function");
+
+    await act(async () => {
+      updaterHandler({ type: "error", message: "This operation was aborted" });
+    });
+
+    expect(document.body.textContent).toMatch(/Importar videos/i);
+    expect(document.body.textContent).not.toMatch(/No se pudo verificar actualizaciones/i);
+    expect(document.body.textContent).not.toMatch(/This operation was aborted/i);
+    expect(document.body.textContent).not.toMatch(/Reintentar/i);
+  });
 });

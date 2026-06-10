@@ -654,6 +654,20 @@ describe("useEditorStore logic regressions", () => {
     );
   });
 
+  it("keeps updater check failures silent instead of entering an error state", () => {
+    useEditorStore.getState().applyUpdaterEvent({
+      type: "error",
+      message: "This operation was aborted",
+    });
+
+    expect(useEditorStore.getState().update).toEqual(
+      expect.objectContaining({
+        status: "idle",
+        error: null,
+      }),
+    );
+  });
+
   it("addOperation rejects image and empty text ops in logo mode", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     useEditorStore.setState({

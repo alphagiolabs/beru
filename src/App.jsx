@@ -11,6 +11,7 @@ import LayerList from "./components/LayerList";
 import BatchProgressBar from "./components/BatchProgressBar";
 import DragOverlay from "./components/DragOverlay";
 import Landing from "./components/Landing";
+import UpdateBottomIndicator from "./components/UpdateBottomIndicator";
 import AppToast from "./components/AppToast";
 import ConfirmDialog from "./components/ConfirmDialog";
 import { useT } from "./i18n/useT";
@@ -35,12 +36,16 @@ export default function App() {
   const loadRecents = useEditorStore((s) => s.loadRecents);
   const applyUpdaterEvent = useEditorStore((s) => s.applyUpdaterEvent);
   const checkForUpdates = useEditorStore((s) => s.checkForUpdates);
+  const downloadUpdate = useEditorStore((s) => s.downloadUpdate);
+  const updateStatus = useEditorStore((s) => s.update?.status);
+  const updateVersion = useEditorStore((s) => s.update?.version);
   const showToast = useEditorStore((s) => s.showToast);
   const clearAppToast = useEditorStore((s) => s.clearAppToast);
   const appToast = useEditorStore((s) => s.appToast);
   const t = useT();
   const dropRef = useRef(null);
   const dragDepthRef = useRef(0);
+  const autoDownloadVersionRef = useRef(null);
   const DRAG_DEPTH_MAX = 32;
 
   useKeyboard();
@@ -72,6 +77,13 @@ export default function App() {
       clearTimeout(timer);
     };
   }, [checkForUpdates]);
+
+  useEffect(() => {
+    if (updateStatus !== "available" || !updateVersion || !api?.downloadUpdate) return;
+    if (autoDownloadVersionRef.current === updateVersion) return;
+    autoDownloadVersionRef.current = updateVersion;
+    downloadUpdate();
+  }, [updateStatus, updateVersion, downloadUpdate]);
 
   useEffect(() => {
     if (!appToast) return;
@@ -158,6 +170,7 @@ export default function App() {
           }}
         />
         <Landing />
+        <UpdateBottomIndicator />
         <Suspense fallback={null}>
           <UpdateReadyModal />
         </Suspense>
@@ -193,6 +206,7 @@ export default function App() {
         )}
       </div>
       <DragOverlay />
+      <UpdateBottomIndicator />
       <Suspense fallback={null}>
         <ShortcutsModal />
         <TableEditor />

@@ -59,6 +59,7 @@
   "header.updateDownload": "Descargar actualización {version}",
   "header.updateDownloading": "Descargando actualización {version}: {percent}%",
   "header.updateDownloadFailed": "No se pudo iniciar la descarga de la actualización",
+  "updater.bottomActive": "Actualizando Beru",
   "updater.modal.title": "Nueva versión disponible",
   "updater.modal.body": "Beru {version} ya está descargada. Reiniciá la app para instalarla y aplicar los cambios.",
   "updater.modal.note": "El video que estés renderizando se perderá si reiniciás ahora.",

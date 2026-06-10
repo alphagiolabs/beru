@@ -110,6 +110,7 @@ describe("App render", () => {
     expect(document.body.textContent).toMatch(/Importar videos/i);
     expect(document.body.textContent).not.toMatch(/Descargando actualización/i);
     expect(document.body.textContent).not.toMatch(/Beru v1\.6\.0 se está descargando/i);
+    expect(document.querySelector(".update-bottom-indicator")).toBeTruthy();
   });
 
   it("mounts batch preview with template regions without throwing", async () => {
