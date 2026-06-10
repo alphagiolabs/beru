@@ -11,7 +11,6 @@ import LayerList from "./components/LayerList";
 import BatchProgressBar from "./components/BatchProgressBar";
 import DragOverlay from "./components/DragOverlay";
 import Landing from "./components/Landing";
-import TopUpdateBar from "./components/TopUpdateBar";
 import AppToast from "./components/AppToast";
 import ConfirmDialog from "./components/ConfirmDialog";
 import { useT } from "./i18n/useT";
@@ -19,11 +18,11 @@ import { useT } from "./i18n/useT";
 const ShortcutsModal = lazy(() => import("./components/ShortcutsModal"));
 const TableEditor = lazy(() => import("./components/TableEditor"));
 const ExcelMappingModal = lazy(() => import("./components/ExcelMappingModal"));
-const UpdateBanner = lazy(() => import("./components/UpdateBanner"));
 const UpdateReadyModal = lazy(() => import("./components/UpdateReadyModal"));
 const WatermarkModal = lazy(() => import("./components/WatermarkModal"));
 
 const api = window.api;
+const UPDATE_CHECK_DELAY_MS = 2500;
 
 export default function App() {
   const queueLength = useEditorStore((s) => s.queue.length);
@@ -61,10 +60,18 @@ export default function App() {
     };
   }, [applyUpdaterEvent]);
 
-  // Auto-updater check is driven by TopUpdateBar (GitHub API check + optional
-  // electron-updater trigger). We do NOT unconditionally call checkForUpdates
-  // here to avoid colliding with TopUpdateBar's own flow and to respect the
-  // 30-minute throttle.
+  useEffect(() => {
+    if (!api?.checkForUpdates) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (cancelled) return;
+      await checkForUpdates();
+    }, UPDATE_CHECK_DELAY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [checkForUpdates]);
 
   useEffect(() => {
     if (!appToast) return;
@@ -150,10 +157,8 @@ export default function App() {
             background: "var(--bg-app)",
           }}
         />
-        <TopUpdateBar />
         <Landing />
         <Suspense fallback={null}>
-          <UpdateBanner />
           <UpdateReadyModal />
         </Suspense>
         <AppToast />
@@ -169,7 +174,6 @@ export default function App() {
       className="h-screen flex flex-col overflow-hidden"
       style={{ background: "var(--bg-app)", color: "var(--text-primary)" }}
     >
-      <TopUpdateBar />
       <Header />
       <BatchProgressBar />
       <div className="flex-1 flex overflow-hidden min-h-0">
@@ -193,7 +197,6 @@ export default function App() {
         <ShortcutsModal />
         <TableEditor />
         <ExcelMappingModal />
-        <UpdateBanner />
         <UpdateReadyModal />
         <WatermarkModal />
       </Suspense>

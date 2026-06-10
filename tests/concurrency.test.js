@@ -24,17 +24,13 @@ describe("runWithConcurrency", () => {
   it("respects concurrency limit when limit is smaller than items", async () => {
     let active = 0,
       maxActive = 0;
-    const results = await runWithConcurrency(
-      [1, 2, 3, 4, 5],
-      2,
-      async (item) => {
-        active++;
-        maxActive = Math.max(maxActive, active);
-        await new Promise((r) => setTimeout(r, 10));
-        active--;
-        return item * 2;
-      },
-    );
+    const results = await runWithConcurrency([1, 2, 3, 4, 5], 2, async (item) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((r) => setTimeout(r, 10));
+      active--;
+      return item * 2;
+    });
     expect(results).toEqual([2, 4, 6, 8, 10]);
     expect(maxActive).toBeLessThanOrEqual(2);
   });

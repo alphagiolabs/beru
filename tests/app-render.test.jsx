@@ -88,7 +88,7 @@ describe("App render", () => {
     expect(document.body.textContent).toMatch(/Importar videos/i);
   });
 
-  it("shows the update download screen on the landing view", async () => {
+  it("does not interrupt the landing view with the old update download screen", async () => {
     useEditorStore.setState({
       update: {
         status: "downloading",
@@ -108,11 +108,9 @@ describe("App render", () => {
       await new Promise((r) => setTimeout(r, 10));
     });
 
-    await vi.waitFor(() => {
-      expect(document.body.textContent).toMatch(/Descargando actualización/i);
-      expect(document.body.textContent).toMatch(/Beru v1\.6\.0 se está descargando/i);
-      expect(document.body.textContent).toMatch(/25%/);
-    });
+    expect(document.body.textContent).toMatch(/Importar videos/i);
+    expect(document.body.textContent).not.toMatch(/Descargando actualización/i);
+    expect(document.body.textContent).not.toMatch(/Beru v1\.6\.0 se está descargando/i);
   });
 
   it("mounts batch preview with template regions without throwing", async () => {

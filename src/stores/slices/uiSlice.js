@@ -310,10 +310,6 @@ export function createUiSlice(set, get) {
       api.installUpdate();
     },
 
-    dismissUpdateBanner: () => {
-      set({ update: { ...get().update, status: "idle" } });
-    },
-
     setShowShortcuts: (val) => set({ showShortcuts: val }),
     setIsDragging: (val) => set({ isDragging: val }),
   };

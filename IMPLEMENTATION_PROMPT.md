@@ -6,7 +6,7 @@ Este prompt está optimizado para que el agente de IA entienda el contexto compl
 
 ## Prompt
 
-```
+````
 Eres un ingeniero senior trabajando en Beru, un editor de video masivo con overlays de texto en Electron + React 19 + Zustand + Python (FFmpeg).
 
 CONTEXTO:
@@ -109,15 +109,17 @@ TAREAS (en este orden, una por una):
 npm test
 npm run lint
 npm run lint:fix
-```
+````
 
 ### CRITERIOS DE ÉXITO
+
 - Los 180 tests siguen pasando
 - ESLint no reporta errores nuevos
 - Ningún archivo fuera de la lista fue modificado
 - El comportamiento observable de la app no cambió
 
 ### ARCHIVOS A MODIFICAR:
+
 - main/shared-state.js
 - main/utils/video-cache.js
 - main/handlers/process.js
@@ -126,6 +128,7 @@ npm run lint:fix
 - src/App.jsx
 - main/utils/preview-frame.js
 - main/handlers/project.js
+
 ```
 
 ---
@@ -137,3 +140,4 @@ npm run lint:fix
 3. **Scope mínimo**: Cada fix toca solo el archivo y la función necesarios, sin refactors colaterales.
 4. **No invasivo**: Ningún fix cambia la API pública, el schema de datos, o el comportamiento observable.
 5. **Test-friendly**: Todos los fixes son verificables por los tests existentes sin necesidad de agregar tests nuevos.
+```

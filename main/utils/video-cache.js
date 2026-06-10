@@ -56,14 +56,16 @@ export async function probeVideoFast(filePath) {
     ffmpegPath: getFfmpegPath(),
     timeoutMs: 2500,
     allowFfmpegFallback: false,
-  }).then((info) => {
-    setCachedVideoInfo(filePath, mtime, info);
-    pendingProbes.delete(probeKey);
-    return info;
-  }).catch((err) => {
-    pendingProbes.delete(probeKey);
-    throw err;
-  });
+  })
+    .then((info) => {
+      setCachedVideoInfo(filePath, mtime, info);
+      pendingProbes.delete(probeKey);
+      return info;
+    })
+    .catch((err) => {
+      pendingProbes.delete(probeKey);
+      throw err;
+    });
 
   pendingProbes.set(probeKey, probe);
   return probe;
@@ -83,14 +85,16 @@ export async function probeVideo(filePath) {
     ffmpegPath: getFfmpegPath(),
     timeoutMs: 5000,
     allowFfmpegFallback: true,
-  }).then((info) => {
-    setCachedVideoInfo(filePath, mtime, info);
-    pendingProbes.delete(probeKey);
-    return info;
-  }).catch((err) => {
-    pendingProbes.delete(probeKey);
-    throw err;
-  });
+  })
+    .then((info) => {
+      setCachedVideoInfo(filePath, mtime, info);
+      pendingProbes.delete(probeKey);
+      return info;
+    })
+    .catch((err) => {
+      pendingProbes.delete(probeKey);
+      throw err;
+    });
 
   pendingProbes.set(probeKey, probe);
   return probe;

@@ -7,12 +7,7 @@ import eslintConfigPrettier from "eslint-config-prettier";
 
 export default [
   {
-    ignores: [
-      "build/**",
-      "dist-installer/**",
-      "dist-electron/**",
-      "node_modules/**",
-    ],
+    ignores: ["build/**", "dist-installer/**", "dist-electron/**", "node_modules/**"],
   },
   js.configs.recommended,
   {

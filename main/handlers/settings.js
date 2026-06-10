@@ -12,18 +12,18 @@ export function registerSettingsHandlers() {
     try {
       if (!partial || typeof partial !== "object")
         return { success: false, error: "Payload inválido" };
-      
+
       const sanitized = {};
       for (const key of ALLOWED_SETTINGS_KEYS) {
         if (key in partial) {
           sanitized[key] = partial[key];
         }
       }
-      
+
       if (Object.keys(sanitized).length === 0) {
         return { success: false, error: "No hay claves válidas para guardar" };
       }
-      
+
       const current = readSettings();
       const next = { ...current, ...sanitized };
       writeSettings(next);

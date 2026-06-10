@@ -13,6 +13,7 @@ El código de Beru es sólido y bien estructurado, pero se identificaron **bugs 
 ## 🔴 Bugs Críticos (Corregir Inmediatamente)
 
 ### 1. **Race Condition en Processing State**
+
 **Archivo:** `main/shared-state.js`  
 **Línea:** 45-52 (`setIsProcessing`, `beginProcessingRun`)  
 **Problema:** Si `setIsProcessing(false)` se llama antes de `clearProcessingRun()`, el `runId` se pierde antes de validación, permitiendo múltiples procesos simultáneos.
@@ -35,6 +36,7 @@ export const clearProcessingRun = (runId) => {
 ---
 
 ### 2. **Memory Leak en Video Cache**
+
 **Archivo:** `main/utils/video-cache.js`  
 **Línea:** 21-27 (`trimVideoInfoCache`)  
 **Problema:** El recorte de cache usa `Map.keys()` sin llamar `.next()`, eliminando claves incorrectas.
@@ -56,6 +58,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 3. **Fuga de Memoria en Listener de Procesamiento**
+
 **Archivo:** `main/handlers/process.js`  
 **Línea:** 124-135 (stdout/stderr handlers)  
 **Problema:** Los listeners no se limpian en errores, acumulándose en múltiples ejecuciones.
@@ -66,6 +69,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 4. **Inconsistencia en Validación de Path Security**
+
 **Archivo:** `main/pathSecurity.js`  
 **Línea:** 120-125  
 **Problema:** `validateReadableFile` valida path relativo a trusted roots, pero `registerAllowedPath` registra paths absolutos resueltos. Si el symlink cambia, el path registrado ya no es válido pero sigue en el set.
@@ -78,6 +82,7 @@ function trimVideoInfoCache() {
 ## 🟡 Bugs Moderados (Corregir en Próximo Release)
 
 ### 5. **Falta Timeout en Operaciones de Excel**
+
 **Archivo:** `src/stores/slices/batchSlice.js`  
 **Línea:** 120-145 (`importExcel`)  
 **Problema:** Si Excel tiene 10,000+ filas, el parsing bloquea el hilo principal sin timeout.
@@ -88,6 +93,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 6. **Falta Validación de Dimensiones de Video**
+
 **Archivo:** `python/processor.py`  
 **Línea:** 450-465  
 **Problema:** Si ffprobe falla silenciosamente, `job_video_info` retorna dimensiones 0x0, causando crash en FFmpeg.
@@ -98,6 +104,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 7. **Race Condition en Drag & Drop**
+
 **Archivo:** `src/App.jsx`  
 **Línea:** 85-105 (`onDrop`)  
 **Problema:** Si el usuario suelta archivos mientras se procesa un drop anterior, ambos corren en paralelo.
@@ -108,6 +115,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 8. **Falta Limpieza de Temporales en Preview Frame**
+
 **Archivo:** `main/utils/preview-frame.js`  
 **Línea:** 60-70  
 **Problema:** Si `proc.kill()` falla en timeout, el archivo temporal queda huérfano en `%TEMP%`.
@@ -118,6 +126,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 9. **Error Silencioso en Font Resolution**
+
 **Archivo:** `python/processor.py`  
 **Línea:** 85-95 (`_resolve_font`)  
 **Problema:** Si la fuente no existe, retorna un fallback genérico sin advertir que FFmpeg usará una fuente por defecto.
@@ -128,6 +137,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 10. **Falta Validación de JSON en Project Load**
+
 **Archivo:** `main/handlers/project.js`  
 **Línea:** 55-65  
 **Problema:** Si el archivo `.beru.json` está corrupto o tiene schema inválido, `JSON.parse` lanza excepción genérica.
@@ -140,6 +150,7 @@ function trimVideoInfoCache() {
 ## 🟢 Deficiencias de Robustez (Mejorar en Sprint Futuro)
 
 ### 11. **Falta Rate Limiting en API Calls**
+
 **Archivo:** `src/hooks/useProcessing.js`  
 **Problema:** `onJobProgress` puede emitir 100+ mensajes/segundo, sobrecargando React.
 
@@ -149,6 +160,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 12. **Falta Manejo de Perm Denials en Windows**
+
 **Archivo:** `main/pathSecurity.js`  
 **Problema:** `fs.realpathSync` lanza `EPERM` en directorios protegidos, pero se captura como error genérico.
 
@@ -158,6 +170,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 13. **Falta Validación de FFmpeg Version**
+
 **Archivo:** `python/processor.py`  
 **Problema:** No se valida que FFmpeg sea >=4.0 antes de usar filters avanzados.
 
@@ -167,6 +180,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 14. **Falta Compresión de Logs**
+
 **Archivo:** `main/utils/processing-logs.js`  
 **Problema:** Con 100+ videos, logs pueden alcanzar 50+ MB en memoria.
 
@@ -176,6 +190,7 @@ function trimVideoInfoCache() {
 ---
 
 ### 15. **Falta Retry en Download de FFmpeg**
+
 **Archivo:** `scripts/fetch-ffmpeg.mjs`  
 **Problema:** Si GitHub CDN falla, el script falla sin retry automático.
 
@@ -186,32 +201,35 @@ function trimVideoInfoCache() {
 
 ## 📊 Métricas de Calidad
 
-| Categoría | Puntuación |
-|-----------|------------|
-| **Arquitectura** | 9/10 ⭐ |
-| **Seguridad** | 8/10 ⭐ |
-| **Robustez** | 6/10 ⚠️ |
-| **Performance** | 7/10 ⚠️ |
-| **Mantenibilidad** | 9/10 ⭐ |
-| **Tests** | 8/10 ⭐ |
+| Categoría          | Puntuación |
+| ------------------ | ---------- |
+| **Arquitectura**   | 9/10 ⭐    |
+| **Seguridad**      | 8/10 ⭐    |
+| **Robustez**       | 6/10 ⚠️    |
+| **Performance**    | 7/10 ⚠️    |
+| **Mantenibilidad** | 9/10 ⭐    |
+| **Tests**          | 8/10 ⭐    |
 
 ---
 
 ## ✅ Acciones Recomendadas
 
 ### Prioridad 1 (Esta Semana)
+
 1. **Corregir race condition en processing state** (Bug #1)
 2. **Corregir memory leak en video cache** (Bug #2)
 3. **Corregir limpeza de listeners** (Bug #3)
 4. **Validar dimensiones de video** (Bug #6)
 
 ### Prioridad 2 (Próxima Semana)
+
 5. **Agregar timeouts en Excel** (Bug #5)
 6. **Corregir drag & drop race** (Bug #7)
 7. **Limpiar temporales de preview** (Bug #8)
 8. **Validar JSON de proyectos** (Bug #10)
 
 ### Prioridad 3 (Sprint Futuro)
+
 9. Validar versión de FFmpeg (Bug #13)
 10. Comprimir logs (Bug #14)
 11. Retry en descarga de FFmpeg (Bug #15)
