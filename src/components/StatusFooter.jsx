@@ -1,14 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { shallow } from "zustand/shallow";
-import {
-  Command,
-  Loader2,
-  Zap,
-  Terminal,
-  Download,
-  History,
-  CheckCircle2,
-} from "lucide-react";
+import { Command, Loader2, Zap, Terminal, Download, History, CheckCircle2 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
 import { useT } from "../i18n/useT";
@@ -95,15 +87,7 @@ function ExecutionHistoryPanel({ lines, onExport, onClose, t }) {
   );
 }
 
-function UpdatePopover({
-  update,
-  onUpdateNow,
-  onLater,
-  onInstall,
-  onReleaseNotes,
-  onClose,
-  t,
-}) {
+function UpdatePopover({ update, onUpdateNow, onLater, onInstall, onReleaseNotes, onClose, t }) {
   const panelRef = useRef(null);
   const closeStable = useCallback(() => onClose(), [onClose]);
   useCloseOnOutsideClick(panelRef, true, closeStable);
@@ -185,26 +169,19 @@ export default function StatusFooter() {
   const get = useEditorStore.getState;
   const showToast = useEditorStore((s) => s.showToast);
 
-  const {
-    isProcessing,
-    progressDone,
-    progressTotal,
-    queue,
-    logLines,
-    batchSummary,
-    update,
-  } = useEditorStore(
-    (s) => ({
-      isProcessing: s.isProcessing,
-      progressDone: s.progressDone,
-      progressTotal: s.progressTotal,
-      queue: s.queue,
-      logLines: s.logLines,
-      batchSummary: s.batchSummary,
-      update: s.update,
-    }),
-    shallow,
-  );
+  const { isProcessing, progressDone, progressTotal, queue, logLines, batchSummary, update } =
+    useEditorStore(
+      (s) => ({
+        isProcessing: s.isProcessing,
+        progressDone: s.progressDone,
+        progressTotal: s.progressTotal,
+        queue: s.queue,
+        logLines: s.logLines,
+        batchSummary: s.batchSummary,
+        update: s.update,
+      }),
+      shallow,
+    );
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
@@ -242,13 +219,16 @@ export default function StatusFooter() {
   }, [isProcessing, updateStatus]);
 
   useEffect(() => {
-    if (updateStatus === "ready" && update?.version && safeStorage.get(DISMISS_KEY) !== update.version) {
+    if (
+      updateStatus === "ready" &&
+      update?.version &&
+      safeStorage.get(DISMISS_KEY) !== update.version
+    ) {
       setUpdateOpen(true);
     }
   }, [updateStatus, update?.version]);
 
-  const runClock =
-    runStartedAt != null ? formatFooterClock(Date.now() - runStartedAt) : "00:00";
+  const runClock = runStartedAt != null ? formatFooterClock(Date.now() - runStartedAt) : "00:00";
   const sessionClock = formatFooterClock(Date.now() - sessionStartedAt);
   void clockTick;
 
@@ -351,8 +331,8 @@ export default function StatusFooter() {
         {showProgress && (
           <>
             <FooterChip className="status-footer-progress-label">
-              {isProcessing ? t("batchProgress.processing") : t("batchProgress.done")}{" "}
-              {completed}/{total}
+              {isProcessing ? t("batchProgress.processing") : t("batchProgress.done")} {completed}/
+              {total}
             </FooterChip>
             <SegmentedProgress percent={percent} />
             <span className="status-footer-percent">{Math.round(percent)}%</span>
@@ -395,9 +375,7 @@ export default function StatusFooter() {
               )}
             </span>
             {updateStatus === "downloading" && (
-              <span className="status-footer-version-dl">
-                {Math.round(update?.percent || 0)}%
-              </span>
+              <span className="status-footer-version-dl">{Math.round(update?.percent || 0)}%</span>
             )}
           </button>
 
