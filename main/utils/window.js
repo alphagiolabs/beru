@@ -38,7 +38,7 @@ export function createWindow() {
       ? {
           titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
           titleBarOverlay: {
-            color: initialTheme.overlay,
+            color: initialTheme.background,
             symbolColor: initialTheme.symbols,
             height: 32,
           },

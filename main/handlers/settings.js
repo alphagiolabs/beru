@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import { getMainWindow } from "../shared-state.js";
 import { readSettings, writeSettings, ALLOWED_SETTINGS_KEYS } from "../utils/settings.js";
-import { applyWindowTheme } from "../utils/windowTheme.js";
+import { applyWindowTheme, setTitleBarChrome } from "../utils/windowTheme.js";
 
 export function registerSettingsHandlers() {
   ipcMain.handle("settings:load", async () => {
@@ -38,6 +38,14 @@ export function registerSettingsHandlers() {
 
   ipcMain.handle("window:setTheme", async (_event, theme) => {
     applyWindowTheme(getMainWindow(), theme);
+    return { success: true };
+  });
+
+  ipcMain.handle("window:setTitleBarChrome", async (_event, chrome) => {
+    const win = getMainWindow();
+    if (!win || win.isDestroyed()) return { success: false };
+    setTitleBarChrome(chrome);
+    applyWindowTheme(win, readSettings().theme, chrome);
     return { success: true };
   });
 }

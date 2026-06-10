@@ -53,6 +53,10 @@ export default function App() {
   }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory]);
 
   useEffect(() => {
+    api?.setTitleBarChrome?.(queueLength > 0 ? "elevated" : "app");
+  }, [queueLength]);
+
+  useEffect(() => {
     if (!appToast) return;
     const timer = setTimeout(() => clearAppToast(), 3500);
     return () => clearTimeout(timer);
