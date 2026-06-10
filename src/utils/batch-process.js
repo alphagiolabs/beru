@@ -21,11 +21,15 @@ export function listVideosMissingBatchText(queue, templateRegions, getCellTextFo
     .map(({ item }) => item.customOutputName || item.filename);
 }
 
+const UNSAFE_FILENAME_RE = new RegExp(
+  `[<>:"/\\\\|?*${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`,
+  "g",
+);
+
 export function sanitizeFilenamePart(value) {
   return String(value ?? "")
     .trim()
-    .replace(/[<>:"/\\|?*]/g, " ")
-    .replace(/./g, (char) => (char.charCodeAt(0) < 32 ? " " : char))
+    .replace(UNSAFE_FILENAME_RE, " ")
     .replace(/\s+/g, " ")
     .replace(/[. ]+$/g, "");
 }

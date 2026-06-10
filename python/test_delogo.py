@@ -18,7 +18,7 @@ sys.path.insert(0, str(HERE))
 
 from processor import build_filter_complex  # noqa: E402
 
-FFMPEG = HERE.parent / "src-tauri" / "bin" / "ffmpeg.exe"
+FFMPEG = HERE.parent / "bin" / "ffmpeg.exe"
 
 
 def base_region():

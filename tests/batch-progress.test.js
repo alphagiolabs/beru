@@ -53,4 +53,44 @@ describe("getBatchProgress", () => {
       }).percent,
     ).toBe(100);
   });
+
+  it("returns zeros when queue is empty and total is 0", () => {
+    expect(
+      getBatchProgress({
+        queue: [],
+        progressDone: 0,
+        progressTotal: 0,
+      }),
+    ).toEqual({ completed: 0, total: 0, percent: 0 });
+  });
+
+  it("uses queue.length as total when progressTotal is not provided", () => {
+    expect(
+      getBatchProgress({
+        queue: [item("done"), item("idle")],
+        progressDone: 0,
+        progressTotal: 0,
+      }),
+    ).toEqual({ completed: 1, total: 2, percent: 50 });
+  });
+
+  it("ignores non-finite progress values from processing items", () => {
+    expect(
+      getBatchProgress({
+        queue: [item("processing", NaN), item("processing", -5), item("idle")],
+        progressDone: 0,
+        progressTotal: 3,
+      }),
+    ).toEqual({ completed: 0, total: 3, percent: 0 });
+  });
+
+  it("reports 100% when all jobs are done", () => {
+    expect(
+      getBatchProgress({
+        queue: [item("done"), item("done"), item("error")],
+        progressDone: 3,
+        progressTotal: 3,
+      }),
+    ).toEqual({ completed: 3, total: 3, percent: 100 });
+  });
 });

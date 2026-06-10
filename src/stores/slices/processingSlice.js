@@ -283,7 +283,7 @@ export function createProcessingSlice(set, get) {
     setBatchSummary: (val) => set({ batchSummary: val }),
 
     setEncodeProfile: async (val) => {
-      const profile = val === "fast" || val === "quality" ? val : "balanced";
+      const profile = val === "fast" || val === "quality" || val === "uquality" ? val : "balanced";
       set({ encodeProfile: profile });
       const api = window.api;
       if (api?.saveSettings) {

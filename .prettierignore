@@ -3,5 +3,4 @@ dist-installer
 dist-electron
 node_modules
 .pytest_cache
-src-tauri/bin
 package-lock.json

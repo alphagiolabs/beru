@@ -21,12 +21,11 @@ def resolve_ffmpeg():
     candidates = [
         os.environ.get("BERU_FFMPEG"),
         HERE.parent / "bin" / "ffmpeg.exe",
-        HERE.parent / "src-tauri" / "bin" / "ffmpeg.exe",
     ]
     for candidate in candidates:
         if candidate and Path(candidate).exists():
             return Path(candidate)
-    raise FileNotFoundError("ffmpeg.exe not found in bin/ or src-tauri/bin/")
+    raise FileNotFoundError("ffmpeg.exe not found in bin/")
 
 
 FFMPEG = resolve_ffmpeg()

@@ -5,6 +5,15 @@ import { spawnSync } from "child_process";
 import { getFfmpegPath } from "./paths.js";
 import { pickHwEncoderFromEncodersText } from "../workerPolicy.js";
 
+export const ALLOWED_SETTINGS_KEYS = new Set([
+  "theme",
+  "language",
+  "encodeProfile",
+  "batchWorkers",
+  "batchWorkersMode",
+  "batchRetryFailed",
+]);
+
 export const SETTINGS_DEFAULTS = {
   theme: "dark",
   language: "es",

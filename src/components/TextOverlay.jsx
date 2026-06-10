@@ -29,27 +29,40 @@ export default function TextOverlay({
   zIndex,
   showOverflowWarning = true,
 }) {
-  const textRef = useRef(null);
+  const measureRef = useRef(null);
   const [hasOverflow, setHasOverflow] = useState(false);
   const [resolvedFontPx, setResolvedFontPx] = useState(null);
 
   const displayText = text != null && String(text).length > 0 ? String(text) : null;
 
-  const baseFontPx = Math.max(1, (style.fontSize || 24) * (screen?.sy || 1));
-  const safePx = scaledSafeMargin(style.safeMargin, screen?.sy || 1);
-  const boxPad =
-    style.bgEnabled !== false ? Math.max(2, (style.boxBorderWidth || 4) * (screen?.sy || 1)) : 0;
+  const scaleX = screen?.sx || screen?.sy || 1;
+  const scaleY = screen?.sy || screen?.sx || 1;
+  const baseFontPx = Math.max(1, (style.fontSize || 24) * scaleY);
+  const safeX = scaledSafeMargin(style.safeMargin, scaleX);
+  const safeY = scaledSafeMargin(style.safeMargin, scaleY);
+  const bgOn = style.bgEnabled !== false;
+  const boxPadX = bgOn ? Math.max(2, (style.boxBorderWidth || 4) * scaleX) : 0;
+  const boxPadY = bgOn ? Math.max(2, (style.boxBorderWidth || 4) * scaleY) : 0;
+  const measureWidth = Math.max(0, (screen?.w || 0) - safeX * 2);
+  const measureHeight = Math.max(0, (screen?.h || 0) - safeY * 2);
 
   useLayoutEffect(() => {
-    const el = textRef.current;
+    const el = measureRef.current;
     if (!el || !displayText || !screen) {
       setHasOverflow(false);
       setResolvedFontPx(null);
       return;
     }
 
-    const minPx = Math.max(6, 8 * screen.sy);
+    if (measureWidth <= 0 || measureHeight <= 0) {
+      setHasOverflow(true);
+      setResolvedFontPx(baseFontPx);
+      return;
+    }
+
+    const minPx = Math.max(6, 8 * scaleY);
     const maxPx = baseFontPx;
+    const measureBounds = { width: measureWidth, height: measureHeight };
 
     const applyFont = (px) => {
       el.style.fontSize = `${px}px`;
@@ -59,7 +72,7 @@ export default function TextOverlay({
       const fitted = binarySearchAutoFitFontSize(
         (px) => {
           applyFont(px);
-          return !elementOverflows(el);
+          return !elementOverflows(el, 1, measureBounds);
         },
         { minPx, maxPx },
       );
@@ -71,7 +84,7 @@ export default function TextOverlay({
 
     applyFont(maxPx);
     setResolvedFontPx(maxPx);
-    setHasOverflow(elementOverflows(el));
+    setHasOverflow(elementOverflows(el, 1, measureBounds));
   }, [
     displayText,
     style.autoFit,
@@ -89,21 +102,23 @@ export default function TextOverlay({
     style.bgEnabled,
     screen?.w,
     screen?.h,
+    screen?.sx,
     screen?.sy,
     baseFontPx,
+    measureWidth,
+    measureHeight,
   ]);
 
   if (!screen) return null;
   if (!displayText && !label) return null;
 
   const fontSize = resolvedFontPx ?? baseFontPx;
-  const bgOn = style.bgEnabled !== false;
   const baseWeight = style.fontWeight ?? (style.bold ? 700 : 400);
-  const letterSpacing = letterSpacingToPx(style.letterSpacing) * screen.sy;
+  const letterSpacing = letterSpacingToPx(style.letterSpacing) * scaleX;
   const textOpacity = style.textOpacity ?? 1;
   const align = style.textAlign || "left";
-  const shadowX = Number(style.textShadowOffsetX ?? 2) * screen.sy;
-  const shadowY = Number(style.textShadowOffsetY ?? 2) * screen.sy;
+  const shadowX = Number(style.textShadowOffsetX ?? 2) * scaleX;
+  const shadowY = Number(style.textShadowOffsetY ?? 2) * scaleY;
   const textShadow = style.textShadowEnabled
     ? `${shadowX}px ${shadowY}px 0 ${style.textShadowColor || "black"}`
     : "none";
@@ -154,6 +169,37 @@ export default function TextOverlay({
         </div>
       )}
 
+      {displayText && (
+        <div
+          ref={measureRef}
+          data-overflow-measurer="true"
+          aria-hidden="true"
+          style={{
+            ...getTextLayoutCss(style),
+            position: "absolute",
+            left: 0,
+            top: 0,
+            width: `${measureWidth}px`,
+            maxWidth: `${measureWidth}px`,
+            maxHeight: `${measureHeight}px`,
+            padding: 0,
+            visibility: "hidden",
+            pointerEvents: "none",
+            color: "transparent",
+            fontSize: `${fontSize}px`,
+            fontFamily: `"${style.fontFamily || "Arial"}", sans-serif`,
+            fontWeight: baseWeight,
+            fontStyle: style.italic ? "italic" : "normal",
+            letterSpacing: `${letterSpacing}px`,
+            textAlign: align,
+            textShadow: "none",
+            WebkitTextStroke: "none",
+          }}
+        >
+          {displayText}
+        </div>
+      )}
+
       {showOverflowWarning && overflowActive && (
         <div
           style={{
@@ -197,13 +243,12 @@ export default function TextOverlay({
             display: "flex",
             flexDirection: "column",
             justifyContent: verticalAlignToFlex(style.verticalAlign || "top"),
-            padding: `${safePx}px`,
+            padding: `${safeY}px ${safeX}px`,
             boxSizing: "border-box",
             overflow: "hidden",
           }}
         >
           <div
-            ref={textRef}
             style={{
               ...getTextLayoutCss(style),
               color: style.fontColor || "white",
@@ -214,11 +259,11 @@ export default function TextOverlay({
               fontStyle: style.italic ? "italic" : "normal",
               letterSpacing: `${letterSpacing}px`,
               textAlign: align,
-              padding: `${boxPad}px`,
+              padding: `${boxPadY}px ${boxPadX}px`,
               textShadow,
               WebkitTextStroke:
                 style.borderWidth > 0
-                  ? `${style.borderWidth * screen.sy}px ${style.borderColor || "black"}`
+                  ? `${style.borderWidth * scaleY}px ${style.borderColor || "black"}`
                   : "none",
             }}
           >

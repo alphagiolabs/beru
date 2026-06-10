@@ -329,6 +329,14 @@ print(json.dumps({
         has_video_filters=True,
         encode_profile="quality",
     ),
+    "filtered_uquality": processor.resolve_max_workers(
+        "h264_nvenc",
+        8,
+        1920 * 1080,
+        consider_memory=False,
+        has_video_filters=True,
+        encode_profile="uquality",
+    ),
 }))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
@@ -339,6 +347,7 @@ print(json.dumps({
       filtered_quality: 3,
       no_filters: 5,
       software_filtered_quality: 2,
+      filtered_uquality: 2,
     });
   });
 
@@ -662,6 +671,33 @@ print(json.dumps(args))
     expect(args).not.toContain("h264_nvenc");
     expect(args[args.indexOf("-crf") + 1]).toBe("18");
     expect(args[args.indexOf("-preset") + 1]).toBe("medium");
+  });
+
+  it("uses CPU ultra fidelity params for U Quality even when hardware exists", () => {
+    const code = `
+import json
+import processor
+
+processor.os.cpu_count = lambda: 16
+processor._BATCH_ACTIVE_WORKERS = 2
+args = processor.build_encode_args(
+    "ffmpeg",
+    "uquality",
+    {},
+    hw_encoder="h264_nvenc",
+)
+print(json.dumps(args))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    const args = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(args).toContain("libx264");
+    expect(args).not.toContain("h264_nvenc");
+    expect(args[args.indexOf("-crf") + 1]).toBe("12");
+    expect(args[args.indexOf("-preset") + 1]).toBe("slow");
   });
 
   it("uses AMF quality mode for the quality profile", () => {

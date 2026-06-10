@@ -5,6 +5,8 @@ import { getFfprobePath, getFfmpegPath } from "./paths.js";
 const videoInfoCache = new Map();
 const VIDEO_INFO_CACHE_MAX = 500;
 
+const pendingProbes = new Map();
+
 function hasVideoDimensions(info) {
   return Number(info?.width || 0) > 0 && Number(info?.height || 0) > 0;
 }
@@ -44,26 +46,52 @@ export async function probeVideoFast(filePath) {
   const mtime = getVideoMtimeMs(filePath);
   const cached = getCachedVideoInfo(filePath, mtime);
   if (cached) return cached;
-  const info = await probeVideoFile(filePath, {
+
+  const probeKey = `fast:${filePath}:${mtime}`;
+  const pending = pendingProbes.get(probeKey);
+  if (pending) return pending;
+
+  const probe = probeVideoFile(filePath, {
     ffprobePath: getFfprobePath(),
     ffmpegPath: getFfmpegPath(),
     timeoutMs: 2500,
     allowFfmpegFallback: false,
+  }).then((info) => {
+    setCachedVideoInfo(filePath, mtime, info);
+    pendingProbes.delete(probeKey);
+    return info;
+  }).catch((err) => {
+    pendingProbes.delete(probeKey);
+    throw err;
   });
-  setCachedVideoInfo(filePath, mtime, info);
-  return info;
+
+  pendingProbes.set(probeKey, probe);
+  return probe;
 }
 
 export async function probeVideo(filePath) {
   const mtime = getVideoMtimeMs(filePath);
   const cached = getCachedVideoInfo(filePath, mtime);
   if (cached) return cached;
-  const info = await probeVideoFile(filePath, {
+
+  const probeKey = `full:${filePath}:${mtime}`;
+  const pending = pendingProbes.get(probeKey);
+  if (pending) return pending;
+
+  const probe = probeVideoFile(filePath, {
     ffprobePath: getFfprobePath(),
     ffmpegPath: getFfmpegPath(),
     timeoutMs: 5000,
     allowFfmpegFallback: true,
+  }).then((info) => {
+    setCachedVideoInfo(filePath, mtime, info);
+    pendingProbes.delete(probeKey);
+    return info;
+  }).catch((err) => {
+    pendingProbes.delete(probeKey);
+    throw err;
   });
-  setCachedVideoInfo(filePath, mtime, info);
-  return info;
+
+  pendingProbes.set(probeKey, probe);
+  return probe;
 }

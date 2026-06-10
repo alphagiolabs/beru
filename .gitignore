@@ -31,8 +31,6 @@ bin/ffmpeg.exe
 bin/ffprobe.exe
 bin/ffmpeg.exe.LICENSE
 bin/ffprobe.exe.LICENSE
-src-tauri/bin/ffmpeg*
-src-tauri/bin/ffprobe*
 
 # Local AI tooling / agent config (not part of the project)
 .agents/

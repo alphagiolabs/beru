@@ -549,7 +549,6 @@ def find_ffmpeg():
     _exe = ".exe" if platform.system() == "Windows" else ""
 
     candidates = [
-        project_root / "src-tauri" / "bin" / f"ffmpeg{_exe}",   # dev: beru/src-tauri/bin
         project_root / "bin" / f"ffmpeg{_exe}",                  # dev: beru/bin/  OR  packaged: resources/bin/
     ]
     for c in candidates:
@@ -575,7 +574,6 @@ def find_ffprobe(ffmpeg_bin):
     candidates = [
         Path(ffmpeg_bin).with_name(f"ffprobe{_exe}"),
         Path(ffmpeg_bin).parent / f"ffprobe{_exe}",
-        project_root / "src-tauri" / "bin" / f"ffprobe{_exe}",
         project_root / "bin" / f"ffprobe{_exe}",
     ]
     for candidate in candidates:
@@ -2125,6 +2123,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
             encode_profiles.add(profile)
 
     encode_profile = (
+        "uquality" if "uquality" in encode_profiles else
         "quality" if "quality" in encode_profiles else
         "balanced" if "balanced" in encode_profiles else
         "fast" if "fast" in encode_profiles else

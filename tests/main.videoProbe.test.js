@@ -52,7 +52,7 @@ At least one output file must be specified
   });
 });
 
-const bundledFfmpeg = path.resolve("src-tauri", "bin", "ffmpeg.exe");
+const bundledFfmpeg = path.resolve("bin", "ffmpeg.exe");
 const describeIfBundledFfmpeg = existsSync(bundledFfmpeg) ? describe : describe.skip;
 
 describeIfBundledFfmpeg("main/videoProbe fallback", () => {

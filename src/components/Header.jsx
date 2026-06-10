@@ -21,6 +21,7 @@ import {
   Languages,
   History,
   Droplets,
+  Download,
 } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
@@ -47,6 +48,7 @@ export default function Header() {
     theme,
     language,
     recent,
+    update,
   } = useEditorStore(
     (s) => ({
       isProcessing: s.isProcessing,
@@ -63,6 +65,7 @@ export default function Header() {
       theme: s.theme,
       language: s.language,
       recent: s.recent,
+      update: s.update,
     }),
     shallow,
   );
@@ -237,6 +240,23 @@ export default function Header() {
     }
   };
 
+  const updateStatus = update?.status || "idle";
+  const hasHeaderUpdateButton = updateStatus === "available" || updateStatus === "downloading";
+  const updatePercent = Math.max(0, Math.min(100, Math.round(update?.percent || 0)));
+  const updateVersion = update?.version || "?";
+  const updateButtonLabel =
+    updateStatus === "downloading"
+      ? t("header.updateDownloading", { percent: updatePercent, version: updateVersion })
+      : t("header.updateDownload", { version: updateVersion });
+
+  const handleHeaderDownloadUpdate = async () => {
+    if (updateStatus !== "available") return;
+    const res = await get().downloadUpdate();
+    if (res?.ok === false) {
+      flashToast("err", res.error || t("header.updateDownloadFailed"));
+    }
+  };
+
   const handleProcessAll = async () => {
     if (!api?.startProcessing) {
       showToast({ kind: "err", text: t("errors.noApi") });
@@ -381,6 +401,37 @@ export default function Header() {
           <Upload size={14} /> Importar
         </button>
 
+        {hasHeaderUpdateButton && (
+          <button
+            type="button"
+            onClick={handleHeaderDownloadUpdate}
+            disabled={updateStatus === "downloading"}
+            className="relative inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-white shadow-sm transition-all duration-150 hover:brightness-110 active:scale-95 disabled:cursor-default disabled:opacity-100"
+            style={{
+              background: "var(--rose)",
+              boxShadow: "0 0 0 1px color-mix(in srgb, var(--rose) 35%, transparent)",
+            }}
+            title={updateButtonLabel}
+            aria-label={updateButtonLabel}
+          >
+            <span
+              className="absolute inset-0 rounded-full"
+              style={
+                updateStatus === "downloading"
+                  ? {
+                      background: `conic-gradient(#ffffff ${updatePercent * 3.6}deg, rgba(255,255,255,0.22) 0deg)`,
+                      mask: "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0)",
+                      WebkitMask:
+                        "radial-gradient(farthest-side, transparent calc(100% - 3px), #000 0)",
+                    }
+                  : undefined
+              }
+              aria-hidden="true"
+            />
+            <Download size={14} strokeWidth={2.4} />
+          </button>
+        )}
+
         <button
           onClick={handleSelectOutput}
           disabled={isProcessing}
@@ -404,13 +455,14 @@ export default function Header() {
         <select
           value={encodeProfile}
           onChange={(e) => get().setEncodeProfile(e.target.value)}
-          className="cap-input w-[108px] !py-1 text-[11px]"
+          className="cap-input w-[116px] !py-1 text-[11px]"
           disabled={isProcessing}
           title={t("header.encodeProfileHint")}
         >
           <option value="fast">{t("header.encodeFast")}</option>
           <option value="balanced">{t("header.encodeBalanced")}</option>
           <option value="quality">{t("header.encodeQuality")}</option>
+          <option value="uquality">{t("header.encodeUltraQuality")}</option>
         </select>
 
         <select

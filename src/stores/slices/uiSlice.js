@@ -68,7 +68,9 @@ export function createUiSlice(set, get) {
         const theme = settings?.theme === "light" ? "light" : "dark";
         const language = settings?.language === "en" ? "en" : "es";
         const encodeProfile =
-          settings?.encodeProfile === "fast" || settings?.encodeProfile === "quality"
+          settings?.encodeProfile === "fast" ||
+          settings?.encodeProfile === "quality" ||
+          settings?.encodeProfile === "uquality"
             ? settings.encodeProfile
             : "balanced";
         const batchWorkers = Number.isFinite(Number(settings?.batchWorkers))

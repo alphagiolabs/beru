@@ -3,7 +3,7 @@
 import contract from "../resources/encode-profiles.json" with { type: "json" };
 
 const DEFAULT_PROFILE = "balanced";
-const VALID_PROFILES = new Set(["fast", "balanced", "quality"]);
+const VALID_PROFILES = new Set(["fast", "balanced", "quality", "uquality"]);
 
 function normalizeProfiles(raw) {
   const profiles = {};

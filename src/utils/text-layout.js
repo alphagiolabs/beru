@@ -52,11 +52,13 @@ export function getTextLayoutCss(style = {}) {
   };
 }
 
-export function elementOverflows(el, tolerance = 1) {
+export function elementOverflows(el, tolerance = 1, bounds = null) {
   if (!el) return false;
-  return (
-    el.scrollHeight > el.clientHeight + tolerance || el.scrollWidth > el.clientWidth + tolerance
-  );
+  const maxWidth =
+    bounds && Number.isFinite(bounds.width) ? Math.max(0, bounds.width) : el.clientWidth;
+  const maxHeight =
+    bounds && Number.isFinite(bounds.height) ? Math.max(0, bounds.height) : el.clientHeight;
+  return el.scrollHeight > maxHeight + tolerance || el.scrollWidth > maxWidth + tolerance;
 }
 
 /** Largest font size (px) that fits inside the measured element. */

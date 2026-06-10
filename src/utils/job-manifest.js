@@ -12,9 +12,8 @@ export function createJobManifest(jobs, meta = {}) {
 }
 
 export function isJobManifest(payload) {
+  if (!payload || typeof payload !== "object") return false;
   return (
-    payload &&
-    typeof payload === "object" &&
     payload.type === JOB_MANIFEST_TYPE &&
     payload.version === JOB_MANIFEST_VERSION &&
     Array.isArray(payload.jobs)

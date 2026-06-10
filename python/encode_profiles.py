@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 _DEFAULT_PROFILE = "balanced"
-_VALID_PROFILES = frozenset({"fast", "balanced", "quality"})
+_VALID_PROFILES = frozenset({"fast", "balanced", "quality", "uquality"})
 
 
 def _encode_profiles_json_path() -> Path:

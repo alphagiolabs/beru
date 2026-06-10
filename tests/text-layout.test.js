@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   binarySearchAutoFitFontSize,
+  elementOverflows,
   getTextLayoutCss,
   verticalAlignToFlex,
   wrapTextToWidth,
@@ -36,6 +37,18 @@ describe("text-layout utilities", () => {
   it("wrapTextToWidth breaks long lines for export estimates", () => {
     const wrapped = wrapTextToWidth("one two three four five six", 80, 32);
     expect(wrapped.split("\n").length).toBeGreaterThan(1);
+  });
+
+  it("can measure overflow against explicit usable bounds", () => {
+    const el = {
+      scrollWidth: 118,
+      scrollHeight: 28,
+      clientWidth: 100,
+      clientHeight: 24,
+    };
+
+    expect(elementOverflows(el)).toBe(true);
+    expect(elementOverflows(el, 1, { width: 120, height: 32 })).toBe(false);
   });
 });
 

@@ -40,6 +40,15 @@ describe("encode profile contract (JSON)", () => {
       contract.profiles.quality.hardware.nvencPreset,
     );
     expect(ENCODE_PROFILES.balanced.hwCq).toBe(contract.profiles.balanced.hardware.hwCq);
+    expect(ENCODE_PROFILES.uquality.crf).toBe(contract.profiles.uquality.software.crf);
+    expect(ENCODE_PROFILES.uquality.preset).toBe(contract.profiles.uquality.software.preset);
+  });
+
+  it("U Quality is a CPU-only ultra fidelity profile", () => {
+    expect(contract.profiles.uquality.allowsHardware).toBe(false);
+    expect(contract.profiles.uquality.software).toEqual({ crf: 12, preset: "slow" });
+    expect(contract.profiles.uquality.hardware).toBeUndefined();
+    expect(contract.profiles.uquality._comment).toContain("CRF 12");
   });
 });
 
@@ -53,11 +62,17 @@ describe("encode profile contract (JS helpers)", () => {
     expect(profileAllowsHardware("quality")).toBe(true);
     expect(profileAllowsHardware("balanced")).toBe(true);
     expect(profileAllowsHardware("fast")).toBe(true);
+    expect(profileAllowsHardware("uquality")).toBe(false);
   });
 
   it("normalizeEncodeProfile falls back unknown names to balanced", () => {
     expect(normalizeEncodeProfile("ultra")).toBe("balanced");
     expect(normalizeEncodeProfile("quality")).toBe("quality");
+    expect(normalizeEncodeProfile("uquality")).toBe("uquality");
+  });
+
+  it("getEffectiveHwEncoder disables hardware for U Quality", () => {
+    expect(getEffectiveHwEncoder("uquality", "h264_nvenc")).toBeNull();
   });
 
   it("resolveBatchWorkers applies balanced GPU caps to quality + filters", () => {
@@ -82,8 +97,10 @@ import encode_profiles as ep
 print(json.dumps({
   "quality_allows_hw": ep.profile_allows_hardware("quality"),
   "balanced_allows_hw": ep.profile_allows_hardware("balanced"),
+  "uquality_allows_hw": ep.profile_allows_hardware("uquality"),
   "quality_effective_hw": ep.effective_hw_encoder("quality", "h264_nvenc"),
   "balanced_effective_hw": ep.effective_hw_encoder("balanced", "h264_nvenc"),
+  "uquality_effective_hw": ep.effective_hw_encoder("uquality", "h264_nvenc"),
 }))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
@@ -95,8 +112,10 @@ print(json.dumps({
     expect(JSON.parse(r.stdout.trim())).toEqual({
       quality_allows_hw: true,
       balanced_allows_hw: true,
+      uquality_allows_hw: false,
       quality_effective_hw: "h264_nvenc",
       balanced_effective_hw: "h264_nvenc",
+      uquality_effective_hw: null,
     });
   });
 
@@ -134,6 +153,11 @@ print(json.dumps(ep.ENCODE_PROFILES, sort_keys=True))
         allows_hardware: ENCODE_PROFILES.quality.allowsHardware,
         hw_cq: ENCODE_PROFILES.quality.hwCq,
         nvenc_preset: ENCODE_PROFILES.quality.nvencPreset,
+      },
+      uquality: {
+        crf: ENCODE_PROFILES.uquality.crf,
+        preset: ENCODE_PROFILES.uquality.preset,
+        allows_hardware: ENCODE_PROFILES.uquality.allowsHardware,
       },
     });
   });

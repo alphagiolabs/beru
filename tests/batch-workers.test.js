@@ -98,6 +98,20 @@ describe("workerPolicy", () => {
     expect(r.recommended).toBe(2);
   });
 
+  it("U Quality stays on the CPU path even when a hardware encoder exists", () => {
+    const r = recommendBatchWorkers({
+      hwEncoder: "h264_nvenc",
+      jobCount: 8,
+      mode: "balanced",
+      hasVideoFilters: true,
+      encodeProfile: "uquality",
+    });
+
+    expect(r.encoder).toBeNull();
+    expect(r.reason).toBe("cpu_balanced");
+    expect(r.recommended).toBe(2);
+  });
+
   it("manual worker count still overrides memory-aware automatic caps", () => {
     expect(
       resolveBatchWorkers({

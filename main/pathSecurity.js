@@ -36,9 +36,14 @@ export function createPathSecurity(app) {
   }
 
   let _cachedTrustedRoots = null;
+  let _trustedRootsCacheTime = 0;
+  const TRUSTED_ROOTS_TTL_MS = 30_000;
 
   const trustedRoots = () => {
-    if (_cachedTrustedRoots) return _cachedTrustedRoots;
+    const now = Date.now();
+    if (_cachedTrustedRoots && now - _trustedRootsCacheTime < TRUSTED_ROOTS_TTL_MS) {
+      return _cachedTrustedRoots;
+    }
     const roots = [
       app.getPath("userData"),
       app.getPath("temp"),
@@ -56,6 +61,7 @@ export function createPathSecurity(app) {
       roots.push(app.getAppPath());
     }
     _cachedTrustedRoots = roots.filter(Boolean).map((r) => normalizeKey(path.resolve(r)));
+    _trustedRootsCacheTime = now;
     return _cachedTrustedRoots;
   };
 

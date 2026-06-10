@@ -29,8 +29,10 @@ export const setIsProcessing = (val) => {
 };
 
 export const getProcessingRunId = () => _processingRunId;
+let _processingLock = false;
 export const beginProcessingRun = (runId) => {
-  if (_isProcessing) return false;
+  if (_isProcessing || _processingLock) return false;
+  _processingLock = true;
   _isProcessing = true;
   _processingRunId = runId;
   return true;
@@ -39,6 +41,7 @@ export const clearProcessingRun = (runId) => {
   if (runId && _processingRunId !== runId) return false;
   _isProcessing = false;
   _processingRunId = null;
+  _processingLock = false;
   return true;
 };
 

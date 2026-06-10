@@ -117,13 +117,27 @@ export function createQueueSlice(set, get) {
       });
     },
 
+    _thumbnailAbortController: null,
+
+    _cancelPendingThumbnails: () => {
+      const ctrl = get()._thumbnailAbortController;
+      if (ctrl) {
+        ctrl.abort();
+        set({ _thumbnailAbortController: null });
+      }
+    },
+
     _scheduleThumbnailLoads: (api, toAdd, startIdx) => {
       if (!api?.getThumbnailBatch || toAdd.length === 0) return;
 
       const THUMB_CHUNK = 12;
       const MAX_THUMB_BATCHES_IN_FLIGHT = 2;
 
+      const abortController = new AbortController();
+      set({ _thumbnailAbortController: abortController });
+
       const applyThumbResults = (paths, results, offset) => {
+        if (abortController.signal.aborted) return;
         if (!Array.isArray(results) || results.length === 0) return;
         set((s) => {
           const next = s.queue.slice();
@@ -138,6 +152,7 @@ export function createQueueSlice(set, get) {
       };
 
       const loadChunk = (paths, offset) => {
+        if (abortController.signal.aborted) return;
         api
           .getThumbnailBatch(paths)
           .then((results) => applyThumbResults(paths, results, offset))
@@ -155,6 +170,7 @@ export function createQueueSlice(set, get) {
         let inFlight = 0;
 
         const pump = () => {
+          if (abortController.signal.aborted) return;
           while (inFlight < MAX_THUMB_BATCHES_IN_FLIGHT && nextOff < rest.length) {
             const off = nextOff;
             nextOff += THUMB_CHUNK;
