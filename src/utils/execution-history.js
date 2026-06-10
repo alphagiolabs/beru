@@ -96,8 +96,7 @@ export function flattenExecutionHistory(history) {
 export function formatRunHeader(run) {
   const started = formatHistoryTimestamp(run.startedAt);
   const kindLabel = run.kind === "single" ? "Prueba" : "Lote";
-  const jobs =
-    run.jobCount > 0 ? `${run.jobCount} job${run.jobCount === 1 ? "" : "s"}` : kindLabel;
+  const jobs = run.jobCount > 0 ? `${run.jobCount} job${run.jobCount === 1 ? "" : "s"}` : kindLabel;
   if (run.summary) {
     return `── ${started} · ${jobs} · ${run.summary.succeeded}/${run.summary.total} ok${
       run.summary.failed > 0 ? ` · ${run.summary.failed} err` : ""

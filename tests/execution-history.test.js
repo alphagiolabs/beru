@@ -53,14 +53,16 @@ describe("execution history", () => {
   });
 
   it("normalizes invalid persisted payloads", () => {
-    expect(normalizeExecutionHistory([{ id: "x", startedAt: "2026-01-01T00:00:00.000Z" }])).toEqual([
-      expect.objectContaining({
-        id: "x",
-        lines: [],
-        summary: null,
-        kind: "batch",
-      }),
-    ]);
+    expect(normalizeExecutionHistory([{ id: "x", startedAt: "2026-01-01T00:00:00.000Z" }])).toEqual(
+      [
+        expect.objectContaining({
+          id: "x",
+          lines: [],
+          summary: null,
+          kind: "batch",
+        }),
+      ],
+    );
   });
 
   it("summarizes terminal queue items", () => {

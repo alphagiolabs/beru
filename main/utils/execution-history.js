@@ -26,9 +26,7 @@ export function readExecutionHistory() {
 export function writeExecutionHistory(runs) {
   const file = historyFilePath();
   const safe = Array.isArray(runs)
-    ? runs
-        .filter((run) => run && typeof run.id === "string")
-        .slice(0, HISTORY_MAX)
+    ? runs.filter((run) => run && typeof run.id === "string").slice(0, HISTORY_MAX)
     : [];
   fs.writeFileSync(file, JSON.stringify(safe, null, 2), "utf8");
 }

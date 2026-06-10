@@ -62,9 +62,7 @@ function formatRunTitle(run, t) {
       : t("footer.historyBatch", { count: run.jobCount || 0 });
   if (run.summary) {
     const failed =
-      run.summary.failed > 0
-        ? t("footer.historyFailed", { count: run.summary.failed })
-        : "";
+      run.summary.failed > 0 ? t("footer.historyFailed", { count: run.summary.failed }) : "";
     return t("footer.historyRunDone", {
       started,
       kind,
