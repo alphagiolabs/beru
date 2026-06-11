@@ -19,6 +19,7 @@ let lastSnapshot = null;
 let pendingVersion = null;
 let checkInProgress = false;
 let downloadInProgress = false;
+let quittingForUpdate = false;
 
 const tryLoad = () => {
   if (autoUpdater) return autoUpdater;
@@ -91,6 +92,8 @@ const init = (win) => {
     downloadInProgress = false;
     pendingVersion = info?.version || pendingVersion;
     send({ type: "ready", version: info?.version || pendingVersion });
+    // autoDownload is off — downloads only start after explicit user consent.
+    scheduleInstall(au);
   });
   au.on("error", (err) => {
     checkInProgress = false;
@@ -156,13 +159,34 @@ const startDownload = async () => {
 
 const getSnapshot = () => lastSnapshot;
 
+const scheduleInstall = (au) => {
+  if (isDev || !au) return;
+  quittingForUpdate = true;
+  setImmediate(() => {
+    try {
+      au.quitAndInstall(false, true);
+    } catch (e) {
+      quittingForUpdate = false;
+      send({ type: "error", message: e?.message || String(e) });
+    }
+  });
+};
+
 const install = () => {
   if (isDev) return;
   const au = tryLoad();
   if (!au) return;
-  try {
-    au.quitAndInstall(false, true);
-  } catch {}
+  scheduleInstall(au);
 };
 
-export { init, checkForUpdates, startDownload, install, getSnapshot, isDev };
+const isQuittingForUpdate = () => quittingForUpdate;
+
+export {
+  init,
+  checkForUpdates,
+  startDownload,
+  install,
+  getSnapshot,
+  isQuittingForUpdate,
+  isDev,
+};

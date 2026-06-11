@@ -125,6 +125,62 @@ describe("StatusFooter", () => {
     expect(window.api.downloadUpdate).toHaveBeenCalledTimes(1);
   });
 
+  it("auto-installs after the user authorizes a download and it finishes", async () => {
+    window.api = {
+      downloadUpdate: vi.fn(async () => ({ ok: true })),
+      installUpdate: vi.fn(),
+    };
+
+    useEditorStore.setState({
+      update: {
+        status: "available",
+        version: "9.9.9",
+        percent: 0,
+        error: null,
+        transferred: 0,
+        total: 0,
+        releaseNotes: "- fix: footer polish",
+        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
+      },
+    });
+
+    await act(async () => {
+      root.render(<StatusFooter />);
+    });
+
+    const versionBtn = document.querySelector(".status-footer-version--badge");
+    await act(async () => {
+      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const updateNow = Array.from(document.querySelectorAll("button")).find((btn) =>
+      btn.textContent.includes("Actualizar ahora"),
+    );
+    await act(async () => {
+      updateNow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(window.api.downloadUpdate).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      useEditorStore.setState({
+        update: {
+          status: "ready",
+          version: "9.9.9",
+          percent: 100,
+          error: null,
+          transferred: 1000,
+          total: 1000,
+          releaseNotes: "- fix: footer polish",
+          releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
+        },
+      });
+    });
+
+    expect(window.api.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
   it("auto-opens the install modal when an update finishes downloading", async () => {
     window.api = {
       installUpdate: vi.fn(),

@@ -86,6 +86,7 @@
   "footer.moreChanges": "+ {count} cambios más incluidos.",
   "footer.updateDownloading": "Descargando {version}: {percent}%",
   "footer.updateWait": "La descarga continúa en segundo plano.",
+  "footer.updateAutoInstall": "Beru se reiniciará e instalará la actualización automáticamente al terminar.",
   "footer.upToDateTitle": "Todo está al día",
   "footer.upToDateBody": "Estás usando la versión más reciente.",
   "footer.historySingle": "Render de prueba",

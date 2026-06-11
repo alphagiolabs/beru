@@ -238,6 +238,7 @@ function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
         ) : status === "downloading" ? (
           <>
             <p className="status-footer-update-subtitle">{t("footer.updateWait")}</p>
+            <p className="status-footer-update-warning">{t("footer.updateAutoInstall")}</p>
             <div className="status-footer-update-progress">
               <div
                 className="status-footer-update-progress-fill"
@@ -349,6 +350,7 @@ export default function StatusFooter() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [upToDateOpen, setUpToDateOpen] = useState(false);
+  const updateAuthorizedRef = useRef(false);
   const closeUpToDate = useCallback(() => setUpToDateOpen(false), []);
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [sessionStartedAt] = useState(() => Date.now());
@@ -382,6 +384,12 @@ export default function StatusFooter() {
     const id = setInterval(() => setClockTick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [isProcessing, updateStatus]);
+
+  useEffect(() => {
+    if (updateStatus !== "ready" || !updateAuthorizedRef.current) return;
+    updateAuthorizedRef.current = false;
+    get().installUpdate();
+  }, [updateStatus, update?.version, get]);
 
   useEffect(() => {
     if (
@@ -429,8 +437,10 @@ export default function StatusFooter() {
   };
 
   const handleUpdateNow = async () => {
+    updateAuthorizedRef.current = true;
     const res = await get().downloadUpdate();
     if (res?.ok === false) {
+      updateAuthorizedRef.current = false;
       showToast({ kind: "err", text: t("header.updateDownloadFailed") });
     }
   };

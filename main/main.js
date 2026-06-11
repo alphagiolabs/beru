@@ -20,6 +20,7 @@ import { registerRecentHandlers } from "./handlers/recent.js";
 import { registerExecutionHistoryHandlers } from "./handlers/execution-history.js";
 import { registerSystemHandlers } from "./handlers/system.js";
 import { registerUpdaterHandlers } from "./handlers/updater.js";
+import { isQuittingForUpdate } from "./updater.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -59,6 +60,7 @@ function onFatalError(err) {
 }
 
 app.on("will-quit", (event) => {
+  if (isQuittingForUpdate()) return;
   if (quitCleanupStarted) return;
   event.preventDefault();
   quitCleanupStarted = true;
@@ -128,6 +130,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
+  if (isQuittingForUpdate()) return;
   if (quitCleanupStarted || !getPythonProcess()) return;
   event.preventDefault();
   quitCleanupStarted = true;
