@@ -125,10 +125,10 @@ describe("StatusFooter", () => {
     expect(window.api.downloadUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it("auto-installs after the user authorizes a download and it finishes", async () => {
+  it("shows the install step after the user authorizes a download and it finishes", async () => {
     window.api = {
       downloadUpdate: vi.fn(async () => ({ ok: true })),
-      installUpdate: vi.fn(),
+      installUpdate: vi.fn(async () => ({ ok: true })),
     };
 
     useEditorStore.setState({
@@ -178,12 +178,13 @@ describe("StatusFooter", () => {
       });
     });
 
-    expect(window.api.installUpdate).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toMatch(/Reiniciar e instalar/i);
+    expect(window.api.installUpdate).not.toHaveBeenCalled();
   });
 
   it("auto-opens the install modal when an update finishes downloading", async () => {
     window.api = {
-      installUpdate: vi.fn(),
+      installUpdate: vi.fn(async () => ({ ok: true })),
     };
 
     useEditorStore.setState({

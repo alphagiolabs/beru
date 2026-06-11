@@ -11,8 +11,7 @@ export function registerUpdaterHandlers() {
   });
 
   ipcMain.handle("updater:install", () => {
-    updater.install();
-    return { ok: true };
+    return updater.install();
   });
 
   ipcMain.handle("updater:getSnapshot", () => {

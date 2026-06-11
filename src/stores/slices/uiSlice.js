@@ -251,10 +251,10 @@ export function createUiSlice(set, get) {
       return res;
     },
 
-    installUpdate: () => {
+    installUpdate: async () => {
       const api = window.api;
-      if (!api?.installUpdate) return;
-      api.installUpdate();
+      if (!api?.installUpdate) return { ok: false, reason: "no-api" };
+      return await api.installUpdate();
     },
 
     setShowShortcuts: (val) => set({ showShortcuts: val }),

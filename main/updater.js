@@ -20,6 +20,8 @@ let pendingVersion = null;
 let checkInProgress = false;
 let downloadInProgress = false;
 let quittingForUpdate = false;
+let updateDownloaded = false;
+let userInitiatedDownload = false;
 
 const tryLoad = () => {
   if (autoUpdater) return autoUpdater;
@@ -66,6 +68,7 @@ const init = (win) => {
 
   au.on("checking-for-update", () => send({ type: "checking" }));
   au.on("update-available", (info) => {
+    updateDownloaded = false;
     pendingVersion = info?.version || null;
     send({
       type: "available",
@@ -77,6 +80,7 @@ const init = (win) => {
   });
   au.on("update-not-available", (info) => {
     pendingVersion = null;
+    updateDownloaded = false;
     send({ type: "not-available", version: info?.version });
   });
   au.on("download-progress", (p) =>
@@ -90,14 +94,18 @@ const init = (win) => {
   );
   au.on("update-downloaded", (info) => {
     downloadInProgress = false;
+    updateDownloaded = true;
     pendingVersion = info?.version || pendingVersion;
     send({ type: "ready", version: info?.version || pendingVersion });
-    // autoDownload is off — downloads only start after explicit user consent.
-    scheduleInstall(au);
+    if (userInitiatedDownload) {
+      userInitiatedDownload = false;
+      scheduleInstall(au);
+    }
   });
   au.on("error", (err) => {
     checkInProgress = false;
     if (downloadInProgress) downloadInProgress = false;
+    userInitiatedDownload = false;
     send({ type: "error", message: err?.message || String(err) });
   });
 };
@@ -126,17 +134,30 @@ const startDownload = async () => {
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
 
+  userInitiatedDownload = true;
+
   if (!pendingVersion) {
     try {
       const result = await au.checkForUpdates();
       pendingVersion = result?.updateInfo?.version || null;
       if (!pendingVersion) {
+        userInitiatedDownload = false;
         return { ok: false, error: "no-update-available" };
       }
     } catch (e) {
+      userInitiatedDownload = false;
       send({ type: "error", message: e?.message || String(e) });
       return { ok: false, error: e?.message };
     }
+  }
+
+  if (updateDownloaded) {
+    send({ type: "ready", version: pendingVersion });
+    if (userInitiatedDownload) {
+      userInitiatedDownload = false;
+      scheduleInstall(au);
+    }
+    return { ok: true, reason: "already-downloaded" };
   }
 
   downloadInProgress = true;
@@ -152,6 +173,7 @@ const startDownload = async () => {
     return { ok: true };
   } catch (e) {
     downloadInProgress = false;
+    userInitiatedDownload = false;
     // electron-updater emits "error" for download failures; avoid duplicate IPC.
     return { ok: false, error: e?.message };
   }
@@ -160,7 +182,7 @@ const startDownload = async () => {
 const getSnapshot = () => lastSnapshot;
 
 const scheduleInstall = (au) => {
-  if (isDev || !au) return;
+  if (isDev || !au || quittingForUpdate) return;
   quittingForUpdate = true;
   setImmediate(() => {
     try {
@@ -173,10 +195,13 @@ const scheduleInstall = (au) => {
 };
 
 const install = () => {
-  if (isDev) return;
+  if (isDev) return { ok: false, reason: "dev-build" };
+  if (quittingForUpdate) return { ok: false, reason: "install-in-progress" };
+  if (!updateDownloaded) return { ok: false, error: "update-not-downloaded" };
   const au = tryLoad();
-  if (!au) return;
+  if (!au) return { ok: false, reason: "missing-module" };
   scheduleInstall(au);
+  return { ok: true };
 };
 
 const isQuittingForUpdate = () => quittingForUpdate;
