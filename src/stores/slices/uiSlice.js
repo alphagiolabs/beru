@@ -222,13 +222,16 @@ export function createUiSlice(set, get) {
       }
 
       set((s) => ({
-        update: reduceUpdaterEvent(s.update, {
-          type: "downloading",
-          version: s.update.version,
-          percent: 0,
-          transferred: 0,
-          total: 0,
-        }),
+        update: {
+          ...reduceUpdaterEvent(s.update, {
+            type: "downloading",
+            version: s.update.version,
+            percent: 0,
+            transferred: 0,
+            total: 0,
+          }),
+          error: null,
+        },
       }));
 
       const res = await api.downloadUpdate();

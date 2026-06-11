@@ -23,7 +23,8 @@ const hasPython = (() => {
 const describeIfPython = hasPython ? describe : describe.skip;
 
 describeIfPython("python/processor.py ffmpeg path resolution", () => {
-  const PY_CODE_PREFIX = "import sys; sys.path.insert(0, 'python'); ";
+  const PY_CODE_PREFIX =
+    "import sys; sys.stdout.reconfigure(encoding='utf-8'); sys.path.insert(0, 'python'); ";
 
   it("respects BERU_FFMPEG env var (overrides the 'ffmpeg' default)", () => {
     const probe = path.join(os.tmpdir(), `beru-test-ffmpeg-${Date.now()}.bin`);
@@ -180,6 +181,38 @@ print(graph is not None and "drawtext" in graph and "Hola" in graph)
     expect(r.stdout.trim()).toBe("True");
   });
 
+  it("fills the full text region with drawbox when bg is enabled (matches CSS preview)", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+graph, last, imgs = processor.build_filter_complex([
+    {
+        "mode": "text",
+        "text": "OT  89898990",
+        "font_family": "Arial",
+        "bg_enabled": True,
+        "bg_color": "black",
+        "bg_opacity": 0.65,
+        "box_border_width": 4,
+        "safe_margin": 4,
+        "region": {"x": 192, "y": 842, "w": 1536, "h": 130},
+    },
+], 1920, 1080)
+print(graph)
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const graph = r.stdout.trim();
+    expect(graph).toContain("drawbox=x=192:y=842:w=1536:h=130");
+    expect(graph).toContain("color=black@0.650:t=fill");
+    expect(graph).toContain("text='OT  89898990'");
+    expect(graph).not.toContain("box=1");
+  });
+
   it("uses pixel coordinates for normalized text regions in filter graphs", () => {
     const code = `
 import processor
@@ -226,6 +259,34 @@ print(processor.build_drawtext({
     expect(filter).not.toContain("text='A B C'");
   });
 
+  it("falls back to typographic spacing when drawtext has no spacing option", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+processor._DRAWTEXT_OPTIONS_CACHE = set()
+processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
+print(processor.build_drawtext({
+    "mode": "text",
+    "text": "ABC",
+    "font_family": "Arial",
+    "font_size": 48,
+    "letter_spacing": 8,
+    "region": {"x": 10, "y": 20, "w": 200, "h": 50},
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const filter = r.stdout.trim();
+    expect(filter).not.toContain("spacing=");
+    expect(filter).toContain("text='A\u200a\u200aB\u200a\u200aC'");
+  });
+
   it("emits drawtext shadow options for text shadow styles", () => {
     const code = `
 import processor
@@ -255,7 +316,7 @@ print(processor.build_drawtext({
     expect(filter).toContain("shadowy=4");
   });
 
-  it("omits unsupported drawtext style options", () => {
+  it("omits unsupported drawtext options while preserving letter spacing", () => {
     const code = `
 import processor
 processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
@@ -280,10 +341,40 @@ print(processor.build_drawtext({
     }
     expect(r.status).toBe(0);
     const filter = r.stdout.trim();
-    expect(filter).toContain("text='ABC'");
+    expect(filter).toContain("text='A\u200a\u200a\u200aB\u200a\u200a\u200aC'");
     expect(filter).not.toContain("fontweight=");
     expect(filter).not.toContain("fontstyle=");
     expect(filter).not.toContain("spacing=");
+  });
+
+  it("uses the matching font file when weight and italic options are unsupported", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {
+    "arial": (r"C:\\Windows\\Fonts\\arial.ttf", "arial"),
+    "arial bold": (r"C:\\Windows\\Fonts\\arialbd.ttf", "arialbd"),
+    "arial italic": (r"C:\\Windows\\Fonts\\ariali.ttf", "ariali"),
+    "arial bold italic": (r"C:\\Windows\\Fonts\\arialbi.ttf", "arialbi"),
+}
+processor._DRAWTEXT_OPTIONS_CACHE = set()
+processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
+print(processor.build_drawtext({
+    "mode": "text",
+    "text": "Styled",
+    "font_family": "Arial",
+    "font_size": 48,
+    "font_weight": 700,
+    "italic": True,
+    "region": {"x": 10, "y": 20, "w": 300, "h": 80},
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toContain("fontfile='C\\:/Windows/Fonts/arialbi.ttf'");
   });
 
   it("conservative auto caps GPU at 2 and MF at 1", () => {

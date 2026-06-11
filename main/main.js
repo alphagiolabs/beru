@@ -12,6 +12,7 @@ import { registerVideoHandlers } from "./handlers/video.js";
 import { registerDropHandlers } from "./handlers/drop.js";
 import { registerFileHandlers } from "./handlers/file.js";
 import { cancelActiveProcessing, registerProcessHandlers } from "./handlers/process.js";
+import { disposePreviewFrameWorker } from "./utils/preview-frame.js";
 import { registerProjectHandlers } from "./handlers/project.js";
 import { registerPresetHandlers } from "./handlers/preset.js";
 import { registerSettingsHandlers } from "./handlers/settings.js";
@@ -46,6 +47,7 @@ function onFatalError(err) {
   console.error("[beru] FATAL:", err);
   try {
     cleanupTempFiles();
+    disposePreviewFrameWorker();
     const proc = getPythonProcess();
     if (proc?.pid) {
       try {
@@ -61,6 +63,7 @@ app.on("will-quit", (event) => {
   event.preventDefault();
   quitCleanupStarted = true;
   cleanupTempFiles();
+  disposePreviewFrameWorker();
   cancelActiveProcessing().finally(() => {
     app.quit();
   });
@@ -128,6 +131,7 @@ app.on("before-quit", (event) => {
   if (quitCleanupStarted || !getPythonProcess()) return;
   event.preventDefault();
   quitCleanupStarted = true;
+  disposePreviewFrameWorker();
   cancelActiveProcessing().finally(() => app.quit());
 });
 

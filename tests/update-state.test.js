@@ -63,8 +63,20 @@ describe("reduceUpdaterEvent", () => {
         percent: 0,
         transferred: 0,
         total: 0,
+        error: "network",
       }),
     );
+  });
+
+  it("keeps an available update visible when a duplicate error arrives", () => {
+    const available = {
+      ...IDLE_UPDATE,
+      status: "available",
+      version: "1.6.0",
+      releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v1.6.0",
+    };
+
+    expect(reduceUpdaterEvent(available, { type: "error", message: "network" })).toBe(available);
   });
 
   it("keeps silent failures for background checks", () => {

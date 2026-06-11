@@ -12,6 +12,7 @@ Outputs progress as JSON lines to stdout.
 import base64
 import json
 import re
+import unicodedata
 import platform
 import logging
 import logging.handlers
@@ -70,6 +71,50 @@ _init_font_dirs()
 _SYSTEM_FONTS_CACHE = None
 
 
+def _windows_registry_fonts():
+    """Return Windows font display names mapped to their installed files."""
+    if platform.system() != "Windows":
+        return {}
+    try:
+        import winreg
+    except ImportError:
+        return {}
+
+    fonts = {}
+    registry_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
+    for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+        try:
+            key = winreg.OpenKey(hive, registry_path)
+        except OSError:
+            continue
+        try:
+            value_count = winreg.QueryInfoKey(key)[1]
+            for index in range(value_count):
+                try:
+                    display_name, raw_path, _kind = winreg.EnumValue(key, index)
+                except OSError:
+                    continue
+                if not isinstance(display_name, str) or not isinstance(raw_path, str):
+                    continue
+                filename = raw_path.split(",", 1)[0].strip()
+                font_path = Path(filename)
+                if not font_path.is_absolute():
+                    font_path = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / filename
+                if not font_path.exists():
+                    continue
+
+                clean_name = re.sub(r"\s+\([^)]*\)\s*$", "", display_name).strip()
+                aliases = [clean_name]
+                if " & " in clean_name:
+                    aliases.extend(part.strip() for part in clean_name.split(" & "))
+                for alias in aliases:
+                    if alias:
+                        fonts[alias.lower()] = (str(font_path), font_path.stem)
+        finally:
+            winreg.CloseKey(key)
+    return fonts
+
+
 def get_system_fonts():
     """Return a dict mapping lowercase font stem -> (full_path, stem).
     Cached globally for performance."""
@@ -85,21 +130,64 @@ def get_system_fonts():
             for f in font_dir.rglob(pattern):
                 stem = f.stem
                 fonts[stem.lower()] = (str(f), stem)
+    fonts.update(_windows_registry_fonts())
     _SYSTEM_FONTS_CACHE = fonts
     return fonts
 
 
-def _resolve_font(font_family):
+def _font_name_key(value):
+    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
+
+
+def _font_style_candidates(font_family, font_weight=None, italic=False, bold=False):
+    try:
+        weight = int(font_weight)
+    except (TypeError, ValueError):
+        weight = 700 if bold else 400
+
+    if weight <= 200:
+        weights = ["thin", "light"]
+    elif weight <= 350:
+        weights = ["light"]
+    elif weight <= 450:
+        weights = []
+    elif weight <= 550:
+        weights = ["medium", "semibold"]
+    elif weight <= 650:
+        weights = ["semibold", "bold", "medium"]
+    elif weight <= 800:
+        weights = ["bold", "semibold"]
+    else:
+        weights = ["black", "bold"]
+
+    candidates = []
+    if italic:
+        candidates.extend(f"{font_family} {label} italic" for label in weights)
+        candidates.extend(f"{font_family} {label} oblique" for label in weights)
+        candidates.extend([f"{font_family} italic", f"{font_family} oblique"])
+    else:
+        candidates.extend(f"{font_family} {label}" for label in weights)
+    candidates.append(font_family)
+    return candidates
+
+
+def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
     """Resolve a font family name to a fontfile path or fallback name.
     Returns (option_key, value, is_fontfile) where option_key is 'fontfile' or 'font'."""
     fonts = get_system_fonts()
-    key = font_family.lower()
-    if key in fonts:
-        full_path, _stem = fonts[key]
-        return "fontfile", full_path.replace("\\", "/").replace(":", "\\:"), True
+    normalized_fonts = {_font_name_key(name): value for name, value in fonts.items()}
+
+    for candidate in _font_style_candidates(font_family, font_weight, italic, bold):
+        match = fonts.get(candidate.lower()) or normalized_fonts.get(_font_name_key(candidate))
+        if match:
+            full_path, _stem = match
+            return "fontfile", full_path.replace("\\", "/").replace(":", "\\:"), True
+
     # Try partial match
+    key = _font_name_key(font_family)
     for fkey, (fpath, fstem) in fonts.items():
-        if key in fkey or fkey in key:
+        normalized_key = _font_name_key(fkey)
+        if key in normalized_key or normalized_key in key:
             return "fontfile", fpath.replace("\\", "/").replace(":", "\\:"), True
     # Fallback: let FFmpeg try fontconfig / system lookup
     return "font", font_family, False
@@ -757,29 +845,32 @@ def _estimate_char_width(font_size):
 
 
 def _wrap_text_to_width(text, max_width_px, font_size):
+    """Word-wrap using the same heuristic as src/utils/text-layout.js."""
     raw = str(text or "")
     if not raw or max_width_px <= 0:
         return raw
     max_chars = max(1, int(max_width_px / _estimate_char_width(font_size)))
+    longest_line = max((len(line) for line in raw.split("\n")), default=0)
+    if longest_line <= max_chars:
+        return raw
     lines = []
     for paragraph in raw.split("\n"):
-        if paragraph == "":
-            lines.append("")
-            continue
-        words = paragraph.split()
-        current = ""
-        for word in words:
-            test = f"{current} {word}".strip() if current else word
-            if len(test) <= max_chars:
-                current = test
+        tokens = re.split(r"(\s+)", paragraph)
+        line = ""
+        for token in tokens:
+            if not token:
+                continue
+            next_line = line + token
+            if len(next_line) <= max_chars or not line:
+                line = next_line
             else:
-                if current:
-                    lines.append(current)
-                while len(word) > max_chars:
-                    lines.append(word[:max_chars])
-                    word = word[max_chars:]
-                current = word
-        lines.append(current)
+                if line.strip():
+                    lines.append(line.rstrip())
+                line = token.lstrip()
+        if line.strip() or paragraph == "":
+            lines.append(line.rstrip() if line.strip() else "")
+        elif line:
+            lines.append(line.rstrip())
     return "\n".join(lines)
 
 
@@ -825,6 +916,121 @@ def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_s
     return min_size
 
 
+def _text_clusters(text):
+    """Group combining marks and joined emoji so spacing is only added between glyphs."""
+    clusters = []
+    join_next = False
+    for char in text:
+        codepoint = ord(char)
+        is_variation_selector = (
+            0xFE00 <= codepoint <= 0xFE0F or 0xE0100 <= codepoint <= 0xE01EF
+        )
+        if clusters and (join_next or unicodedata.combining(char) or is_variation_selector):
+            clusters[-1] += char
+            join_next = char == "\u200d"
+        elif char == "\u200d" and clusters:
+            clusters[-1] += char
+            join_next = True
+        else:
+            clusters.append(char)
+            join_next = False
+    return clusters
+
+
+def _apply_letter_spacing_fallback(text, spacing_px, font_size):
+    """Approximate CSS letter-spacing when drawtext lacks a native spacing option."""
+    try:
+        spacing_px = max(0.0, float(spacing_px))
+        font_size = max(1.0, float(font_size))
+    except (TypeError, ValueError):
+        return text
+    if spacing_px <= 0:
+        return text
+
+    # U+200A is roughly 1/12 em in FreeType. Distributing it cumulatively keeps
+    # the total requested width accurate even when one spacer is wider than 1 px.
+    spacer = "\u200a"
+    spacer_width = max(1.0, font_size / 12.0)
+    spaced_lines = []
+    for line in str(text).split("\n"):
+        clusters = _text_clusters(line)
+        if len(clusters) < 2:
+            spaced_lines.append(line)
+            continue
+        parts = []
+        target_width = 0.0
+        emitted_spacers = 0
+        for index, cluster in enumerate(clusters):
+            parts.append(cluster)
+            if index == len(clusters) - 1:
+                continue
+            target_width += spacing_px
+            total_spacers = int(round(target_width / spacer_width))
+            spacer_count = max(0, total_spacers - emitted_spacers)
+            if spacer_count:
+                parts.append(spacer * spacer_count)
+                emitted_spacers += spacer_count
+        spaced_lines.append("".join(parts))
+    return "\n".join(spaced_lines)
+
+
+def _text_bg_enabled(op):
+    bg = op.get("bg_enabled", True)
+    if isinstance(bg, str):
+        return bg.lower() not in ("0", "false", "no")
+    return bool(bg)
+
+
+def _text_box_pad(op):
+    """Inner text padding when the region background is enabled (matches CSS preview)."""
+    if not _text_bg_enabled(op):
+        return 0
+    try:
+        box_pad = int(op.get("box_border_width", 4))
+    except (TypeError, ValueError):
+        box_pad = 4
+    return max(0, box_pad)
+
+
+def _text_layout_bounds(region, safe_margin, box_pad):
+    """Usable text area inside a region (safe margin + optional box padding)."""
+    rx = int(region.get("x", 0))
+    ry = int(region.get("y", 0))
+    rw = int(region.get("w", 0))
+    rh = int(region.get("h", 0))
+    inset = max(0, safe_margin) + max(0, box_pad)
+    return {
+        "x": rx + inset,
+        "y": ry + inset,
+        "w": max(0, rw - (2 * inset)),
+        "h": max(0, rh - (2 * inset)),
+    }
+
+
+def _build_region_bg_drawbox(region, bg_color, bg_opacity, enable_clause=""):
+    """Fill the full text region — CSS preview paints inset:0, not a glyph box."""
+    x = int(region.get("x", 0))
+    y = int(region.get("y", 0))
+    w = max(1, int(region.get("w", 0)))
+    h = max(1, int(region.get("h", 0)))
+    try:
+        bg_opacity = float(bg_opacity)
+    except (TypeError, ValueError):
+        bg_opacity = 0.65
+    bg_opacity = max(0.0, min(1.0, bg_opacity))
+    parts = [
+        f"x={x}",
+        f"y={y}",
+        f"w={w}",
+        f"h={h}",
+        f"color={bg_color}@{bg_opacity:.3f}",
+        "t=fill",
+    ]
+    if enable_clause:
+        parts.append(enable_clause)
+    return "drawbox=" + ":".join(parts)
+
+
 def build_drawtext(op):
     """Build ffmpeg drawtext filter string from operation."""
     text = (op.get("text") or "").strip()
@@ -838,10 +1044,11 @@ def build_drawtext(op):
         safe_margin = 0
     safe_margin = max(0, safe_margin)
 
-    x = int(region.get("x", 0)) + safe_margin
-    y = int(region.get("y", 0)) + safe_margin
-    region_w = max(0, int(region.get("w", 0)) - (2 * safe_margin))
-    region_h = max(0, int(region.get("h", 0)) - (2 * safe_margin))
+    layout = _text_layout_bounds(region, safe_margin, _text_box_pad(op))
+    x = layout["x"]
+    y = layout["y"]
+    region_w = layout["w"]
+    region_h = layout["h"]
 
     font_size = op.get("font_size", 32)
     try:
@@ -867,6 +1074,15 @@ def build_drawtext(op):
     if not auto_fit:
         text = _truncate_text(text, region_w, font_size, truncate)
 
+    letter_spacing = op.get("letter_spacing", 0)
+    try:
+        spacing_px = int(round(float(letter_spacing)))
+    except (TypeError, ValueError):
+        spacing_px = 0
+    native_letter_spacing = spacing_px > 0 and _drawtext_supports("spacing")
+    if spacing_px > 0 and not native_letter_spacing:
+        text = _apply_letter_spacing_fallback(text, spacing_px, font_size)
+
     # Escape the text for FFmpeg drawtext syntax
     text = (text
             .replace("\\", "\\\\")
@@ -885,6 +1101,9 @@ def build_drawtext(op):
     font_family = op.get("font_family", "Arial")
     bold = 1 if op.get("bold") else 0
     italic = 1 if op.get("italic") else 0
+    font_weight = op.get("font_weight")
+    if font_weight is None and bold:
+        font_weight = 700
     
     # Dynamic text alignment using FFmpeg's native text_w variable
     text_align = op.get("text_align", "left")
@@ -904,7 +1123,12 @@ def build_drawtext(op):
     else:
         y_expr = str(y)
 
-    font_key, font_val, is_fontfile = _resolve_font(font_family)
+    font_key, font_val, is_fontfile = _resolve_font(
+        font_family,
+        font_weight=font_weight,
+        italic=bool(italic),
+        bold=bool(bold),
+    )
     if is_fontfile:
         font_val = f"'{font_val}'"
 
@@ -928,9 +1152,6 @@ def build_drawtext(op):
     ]
 
     # Numeric font weight (100-900). "bold" is a convenience alias.
-    font_weight = op.get("font_weight")
-    if font_weight is None and bold:
-        font_weight = 700
     if font_weight is not None and _drawtext_supports("fontweight"):
         try:
             fw = int(font_weight)
@@ -943,28 +1164,15 @@ def build_drawtext(op):
         parts.append("fontstyle=italic")
 
     # Letter spacing (drawtext spacing= pixels between glyphs; matches CSS preview)
-    letter_spacing = op.get("letter_spacing", 0)
-    try:
-        spacing_px = int(round(float(letter_spacing)))
-    except (TypeError, ValueError):
-        spacing_px = 0
-    if spacing_px > 0 and _drawtext_supports("spacing"):
+    if native_letter_spacing:
         parts.append(f"spacing={spacing_px}")
 
     line_spacing_px = int(round(float(font_size) * max(0.0, line_height - 1.0)))
     if line_spacing_px > 0 and _drawtext_supports("line_spacing"):
         parts.append(f"line_spacing={line_spacing_px}")
 
-    # Background box
-    if op.get("bg_enabled", True):
-        bg_color = op.get("bg_color", "black")
-        bg_opacity = op.get("bg_opacity", 0.65)
-        try:
-            box_pad = int(op.get("box_border_width", 4))
-        except (TypeError, ValueError):
-            box_pad = 4
-        box_pad = max(0, box_pad)
-        parts.append(f"box=1:boxcolor={bg_color}@{bg_opacity}:boxborderw={box_pad}")
+    # Region background is rendered via drawbox in build_filter_complex (full region).
+    # drawtext only paints glyphs so export matches the CSS preview overlay.
 
     # Border/stroke
     border_w = op.get("border_width", 0)
@@ -1334,10 +1542,10 @@ def _region_to_pixels(region, video_w, video_h):
         pw = max(1, min(video_w - px, int(round(w * video_w))))
         ph = max(1, min(video_h - py, int(round(h * video_h))))
         return {"x": px, "y": py, "w": pw, "h": ph}
-    px = max(0, int(x))
-    py = max(0, int(y))
-    pw = max(1, min(video_w - px, int(w))) if video_w > 0 else max(1, int(w))
-    ph = max(1, min(video_h - py, int(h))) if video_h > 0 else max(1, int(h))
+    px = max(0, int(round(x)))
+    py = max(0, int(round(y)))
+    pw = max(1, min(video_w - px, int(round(w)))) if video_w > 0 else max(1, int(round(w)))
+    ph = max(1, min(video_h - py, int(round(h)))) if video_h > 0 else max(1, int(round(h)))
     return {"x": px, "y": py, "w": pw, "h": ph}
 
 
@@ -1446,13 +1654,24 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
         if mode == "text":
             if not (op.get("text") or "").strip():
                 continue
+            enable_clause = _build_enable_clause(op)
+            segments = []
+            if _text_bg_enabled(op):
+                bg_color = op.get("bg_color", "black")
+                bg_opacity = op.get("bg_opacity", 0.65)
+                segments.append(
+                    _build_region_bg_drawbox(region, bg_color, bg_opacity, enable_clause)
+                )
             dt = build_drawtext({**op, "region": region})
-            if not dt:
+            if dt:
+                segments.append(dt)
+            if not segments:
                 continue
+            chain = ",".join(segments)
             if n == 0:
-                filters.append(f"[0:v]{dt}[tmp{n}]")
+                filters.append(f"[0:v]{chain}[tmp{n}]")
             else:
-                filters.append(f"[tmp{n-1}]{dt}[tmp{n}]")
+                filters.append(f"[tmp{n-1}]{chain}[tmp{n}]")
         elif mode == "blur":
             strength = _coerce_int(op.get("blur_strength"), 20, 1, 100)
             luma = max(1, min(100, strength // 3))
@@ -2298,8 +2517,36 @@ def preview_frame_main(json_path):
     sys.exit(0 if result.get("ok") else 1)
 
 
+def preview_frame_worker_main():
+    """Serve preview requests as newline-delimited JSON over stdin/stdout."""
+    if not _init_ffmpeg_globals():
+        print(json.dumps({"type": "ready", "ok": False, "error": "ffmpeg not found"}), flush=True)
+        return
+
+    get_system_fonts()
+    print(json.dumps({"type": "ready", "ok": True}), flush=True)
+
+    for line in sys.stdin:
+        request_id = None
+        try:
+            request = json.loads(line)
+            request_id = request.get("id")
+            payload = request.get("payload")
+            if not isinstance(request_id, int) or not isinstance(payload, dict):
+                raise ValueError("Invalid preview request")
+            result = render_preview_frame(payload)
+        except Exception as exc:
+            result = {"ok": False, "error": str(exc)}
+
+        print(json.dumps({"id": request_id, **result}), flush=True)
+
+
 def main():
     global FFMPEG, FFPROBE, _jobs_file
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "--preview-frame-worker":
+        preview_frame_worker_main()
+        return
 
     if len(sys.argv) >= 3 and sys.argv[1] == "--preview-frame":
         preview_frame_main(sys.argv[2])

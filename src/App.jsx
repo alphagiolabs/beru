@@ -53,10 +53,6 @@ export default function App() {
   }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory]);
 
   useEffect(() => {
-    api?.setTitleBarChrome?.(queueLength > 0 ? "elevated" : "app");
-  }, [queueLength]);
-
-  useEffect(() => {
     if (!appToast) return;
     const timer = setTimeout(() => clearAppToast(), 3500);
     return () => clearTimeout(timer);
@@ -164,7 +160,7 @@ export default function App() {
         </div>
         {hasSelection && (
           <aside
-            className="w-[280px] flex-shrink-0 overflow-y-auto border-l"
+            className="w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l"
             style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
           >
             <PropertiesPanel />

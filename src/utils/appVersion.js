@@ -17,7 +17,8 @@ function normalizeReleaseNoteLines(notes) {
 const WHATS_NEW_HEADER = /^(what'?s?\s*new|novedades|features?|added|mejoras?)\b/i;
 const FIXED_HEADER = /^(fixed?|fixes|corregid[oa]s?|bugs?)\b/i;
 const FIX_PREFIX = /^(fix(\([^)]+\))?:|bug:|hotfix:)/i;
-const FEAT_PREFIX = /^(feat(\([^)]+\))?:|add:|new:|ui\+tests:|refactor(\([^)]+\))?:|chore(\([^)]+\))?:)/i;
+const FEAT_PREFIX =
+  /^(feat(\([^)]+\))?:|add:|new:|ui\+tests:|refactor(\([^)]+\))?:|chore(\([^)]+\))?:)/i;
 
 function classifyReleaseNoteLine(line, activeSection) {
   if (WHATS_NEW_HEADER.test(line)) return { kind: "header", section: "whatsNew" };

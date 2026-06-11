@@ -17,10 +17,10 @@ export function denormalizeRegion(region, videoWidth, videoHeight) {
   if (!region) return null;
   if (!videoWidth || !videoHeight) return null;
   return {
-    x: region.x * videoWidth,
-    y: region.y * videoHeight,
-    w: region.w * videoWidth,
-    h: region.h * videoHeight,
+    x: Math.round(region.x * videoWidth),
+    y: Math.round(region.y * videoHeight),
+    w: Math.round(region.w * videoWidth),
+    h: Math.round(region.h * videoHeight),
   };
 }
 
@@ -174,6 +174,28 @@ export const TEXT_STYLE_PRESETS = [
     borderColor: "#6b6b6b",
     textShadowEnabled: true,
     textShadowColor: "#2b2b2b",
+    textShadowOffsetX: 1,
+    textShadowOffsetY: 1,
+  },
+  {
+    id: "soft-gray",
+    name: "Gris suave",
+    previewBg: "#5b5960",
+    fontFamily: "Arial",
+    fontColor: "#d2d0d4",
+    fontWeight: 300,
+    letterSpacing: 1,
+    textOpacity: 0.92,
+    bold: false,
+    italic: false,
+    bgEnabled: false,
+    bgColor: "black",
+    bgOpacity: 0,
+    boxBorderWidth: 4,
+    borderWidth: 0,
+    borderColor: "black",
+    textShadowEnabled: true,
+    textShadowColor: "#4b4850",
     textShadowOffsetX: 1,
     textShadowOffsetY: 1,
   },

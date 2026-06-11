@@ -114,6 +114,32 @@ describe("StyleEditor text style presets", () => {
     );
   });
 
+  it("applies the soft gray preset without a background or outline", () => {
+    renderEditor();
+
+    act(() => {
+      document
+        .querySelector('[data-preset-id="soft-gray"]')
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(useEditorStore.getState()).toEqual(
+      expect.objectContaining({
+        textFontColor: "#d2d0d4",
+        fontFamily: "Arial",
+        fontWeight: 300,
+        letterSpacing: 1,
+        textOpacity: 0.92,
+        bgEnabled: false,
+        borderWidth: 0,
+        textShadowEnabled: true,
+        textShadowColor: "#4b4850",
+        textShadowOffsetX: 1,
+        textShadowOffsetY: 1,
+      }),
+    );
+  });
+
   it("applies a preset to the selected batch template region and matching queue ops", () => {
     const region = { x: 0.1, y: 0.2, w: 0.4, h: 0.12 };
     useEditorStore.setState({

@@ -6,11 +6,7 @@ import useEditorStore from "../stores/useEditorStore";
 import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
 import { useT } from "../i18n/useT";
 import { getBatchProgress } from "../utils/batch-progress";
-import {
-  APP_VERSION,
-  formatFooterClock,
-  parseReleaseNotesSections,
-} from "../utils/appVersion";
+import { APP_VERSION, formatFooterClock, parseReleaseNotesSections } from "../utils/appVersion";
 import { formatHistoryTimestamp } from "../utils/execution-history";
 
 const DISMISS_KEY = "beru.updateReady.dismissedVersion";
@@ -230,9 +226,7 @@ function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
 
         {status === "ready" ? (
           <>
-            <p className="status-footer-update-subtitle">
-              {t("updater.modal.body", { version })}
-            </p>
+            <p className="status-footer-update-subtitle">{t("updater.modal.body", { version })}</p>
             <p className="status-footer-update-warning">{t("updater.modal.note")}</p>
             <button type="button" className="status-footer-update-primary" onClick={onInstall}>
               {t("updater.modal.install")}
@@ -245,7 +239,10 @@ function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
           <>
             <p className="status-footer-update-subtitle">{t("footer.updateWait")}</p>
             <div className="status-footer-update-progress">
-              <div className="status-footer-update-progress-fill" style={{ width: `${percent}%` }} />
+              <div
+                className="status-footer-update-progress-fill"
+                style={{ width: `${percent}%` }}
+              />
             </div>
             <p className="status-footer-update-progress-label">{percent}%</p>
           </>
@@ -567,7 +564,6 @@ export default function StatusFooter() {
               <span className="status-footer-version-dl">{Math.round(update?.percent || 0)}%</span>
             )}
           </button>
-
         </div>
       </div>
 

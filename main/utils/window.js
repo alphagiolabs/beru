@@ -4,7 +4,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import { setMainWindow, isDev } from "../shared-state.js";
 import { readSettings } from "./settings.js";
-import { applyWindowTheme, resolveWindowTheme } from "./windowTheme.js";
+import { applyWindowTheme, resolveWindowTheme, TITLEBAR_OVERLAY_COLOR } from "./windowTheme.js";
 import * as updater from "../updater.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,7 +38,7 @@ export function createWindow() {
       ? {
           titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
           titleBarOverlay: {
-            color: initialTheme.background,
+            color: TITLEBAR_OVERLAY_COLOR,
             symbolColor: initialTheme.symbols,
             height: 32,
           },
@@ -77,6 +77,7 @@ export function createWindow() {
   }
 
   win.webContents.once("did-finish-load", () => {
+    applyWindowTheme(win, readSettings().theme);
     updater.init(win);
   });
 }

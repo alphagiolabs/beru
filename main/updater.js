@@ -122,6 +122,20 @@ const startDownload = async () => {
   if (downloadInProgress) return { ok: true, reason: "already-downloading" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
+
+  if (!pendingVersion) {
+    try {
+      const result = await au.checkForUpdates();
+      pendingVersion = result?.updateInfo?.version || null;
+      if (!pendingVersion) {
+        return { ok: false, error: "no-update-available" };
+      }
+    } catch (e) {
+      send({ type: "error", message: e?.message || String(e) });
+      return { ok: false, error: e?.message };
+    }
+  }
+
   downloadInProgress = true;
   send({
     type: "downloading",
@@ -135,7 +149,7 @@ const startDownload = async () => {
     return { ok: true };
   } catch (e) {
     downloadInProgress = false;
-    send({ type: "error", message: e?.message || String(e) });
+    // electron-updater emits "error" for download failures; avoid duplicate IPC.
     return { ok: false, error: e?.message };
   }
 };
