@@ -21,6 +21,7 @@ describe("StatusFooter", () => {
       logLines: [],
       executionHistory: [],
       batchSummary: null,
+      language: "es",
       update: {
         status: "idle",
         version: null,
@@ -75,7 +76,7 @@ describe("StatusFooter", () => {
     expect(document.querySelector(".status-footer-progress")).toBeTruthy();
   });
 
-  it("opens update popover from version badge when an update is available", async () => {
+  it("opens centered update modal from version badge when an update is available", async () => {
     window.api = {
       downloadUpdate: vi.fn(async () => ({ ok: true })),
     };
@@ -88,7 +89,8 @@ describe("StatusFooter", () => {
         error: null,
         transferred: 0,
         total: 0,
-        releaseNotes: "- Fix batch queue\n- Improve footer",
+        releaseNotes:
+          "What's new\n- feat: batch queue overhaul\n- Improve footer\nFixed\n- fix: batch queue",
         releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
       },
     });
@@ -104,7 +106,12 @@ describe("StatusFooter", () => {
       versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(document.querySelector(".status-footer-popover--update")).toBeTruthy();
+    const dialog = document.querySelector(".status-footer-update-panel");
+    expect(dialog).toBeTruthy();
+    expect(dialog.getAttribute("role")).toBe("dialog");
+    expect(document.body.textContent).toMatch(/Nueva actualización disponible/i);
+    expect(document.body.textContent).toMatch(/Novedades/i);
+    expect(document.body.textContent).toMatch(/Corregido/i);
     expect(document.body.textContent).toMatch(/Actualizar ahora/i);
 
     const updateNow = Array.from(document.querySelectorAll("button")).find((btn) =>
@@ -116,5 +123,66 @@ describe("StatusFooter", () => {
     });
 
     expect(window.api.downloadUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("auto-opens the install modal when an update finishes downloading", async () => {
+    window.api = {
+      installUpdate: vi.fn(),
+    };
+
+    useEditorStore.setState({
+      update: {
+        status: "ready",
+        version: "9.9.9",
+        percent: 100,
+        error: null,
+        transferred: 1000,
+        total: 1000,
+        releaseNotes: "- fix: footer polish",
+        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
+      },
+    });
+
+    await act(async () => {
+      root.render(<StatusFooter />);
+    });
+
+    const dialog = document.querySelector(".status-footer-update-panel");
+    expect(dialog).toBeTruthy();
+    expect(document.body.textContent).toMatch(/Reiniciar e instalar/i);
+
+    const installBtn = Array.from(document.querySelectorAll("button")).find((btn) =>
+      btn.textContent.includes("Reiniciar e instalar"),
+    );
+    await act(async () => {
+      installBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(window.api.installUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a centered confirmation when the current version is up to date", async () => {
+    await act(async () => {
+      root.render(<StatusFooter />);
+    });
+
+    const versionBtn = document.querySelector(".status-footer-version");
+    await act(async () => {
+      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const dialog = document.querySelector(".status-footer-up-to-date-panel");
+    expect(dialog).toBeTruthy();
+    expect(dialog.getAttribute("role")).toBe("dialog");
+    expect(dialog.textContent).toMatch(/Todo está al día/i);
+    expect(dialog.textContent).toMatch(/versión más reciente/i);
+
+    await act(async () => {
+      dialog
+        .querySelector('button[aria-label="Cerrar"]')
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(document.querySelector(".status-footer-up-to-date-panel")).toBeNull();
   });
 });

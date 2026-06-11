@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { shallow } from "zustand/shallow";
-import { Command, Loader2, Zap, Terminal, Download, History, CheckCircle2 } from "lucide-react";
+import { Command, Loader2, Zap, Terminal, Download, History, CheckCircle2, X } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
 import { useT } from "../i18n/useT";
 import { getBatchProgress } from "../utils/batch-progress";
-import { APP_VERSION, formatFooterClock, parseReleaseNotes } from "../utils/appVersion";
+import {
+  APP_VERSION,
+  formatFooterClock,
+  parseReleaseNotesSections,
+} from "../utils/appVersion";
 import { formatHistoryTimestamp } from "../utils/execution-history";
 
 const DISMISS_KEY = "beru.updateReady.dismissedVersion";
@@ -130,80 +135,191 @@ function ExecutionHistoryPanel({ history, onExport, onClear, onClose, t }) {
   );
 }
 
-function UpdatePopover({ update, onUpdateNow, onLater, onInstall, onReleaseNotes, onClose, t }) {
-  const panelRef = useRef(null);
-  const closeStable = useCallback(() => onClose(), [onClose]);
-  useCloseOnOutsideClick(panelRef, true, closeStable);
-
-  const status = update?.status || "idle";
-  const notes = parseReleaseNotes(update?.releaseNotes);
-  const hiddenCount = Math.max(
-    0,
-    parseReleaseNotes(update?.releaseNotes, 999).length - notes.length,
+function BeruMark({ size = 44 }) {
+  return (
+    <svg viewBox="0 0 300 400" width={size} height={Math.round(size * 1.33)} aria-hidden="true">
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M0 0L140 0C260 0 260 195 140 195L165 195C295 195 295 400 165 400L0 400ZM60 50L120 50C195 50 195 145 120 145L60 145ZM60 240L140 240C225 240 225 350 140 350L60 350ZM100 168L195 195L100 222Z"
+      />
+    </svg>
   );
-  const percent = Math.max(0, Math.min(100, Math.round(update?.percent || 0)));
+}
+
+function UpdateChangelog({ sections, t }) {
+  const blocks = [
+    { key: "whatsNew", title: t("updater.sections.whatsNew"), items: sections.whatsNew },
+    { key: "fixed", title: t("updater.sections.fixed"), items: sections.fixed },
+  ].filter((block) => block.items.length > 0);
+
+  if (blocks.length === 0) return null;
 
   return (
-    <div ref={panelRef} className="status-footer-popover status-footer-popover--update">
-      <div className="status-footer-popover-header">
-        <Terminal size={13} />
-        <span>
-          {status === "ready"
-            ? t("updater.modal.title")
-            : status === "downloading"
-              ? t("footer.updateDownloading", { percent, version: update?.version || "?" })
-              : t("footer.updateAvailable")}
-        </span>
-      </div>
-
-      {status === "ready" ? (
-        <>
-          <p className="status-footer-update-body">
-            {t("updater.modal.body", { version: update?.version || "?" })}
-          </p>
-          <p className="status-footer-update-note">{t("updater.modal.note")}</p>
-          <button type="button" className="status-footer-primary-btn" onClick={onInstall}>
-            {t("updater.modal.install")}
-          </button>
-          <button type="button" className="status-footer-secondary-btn" onClick={onLater}>
-            {t("updater.modal.later")}
-          </button>
-        </>
-      ) : status === "downloading" ? (
-        <>
-          <div className="status-footer-download-bar">
-            <div className="status-footer-download-fill" style={{ width: `${percent}%` }} />
-          </div>
-          <p className="status-footer-update-meta">{t("footer.updateWait")}</p>
-        </>
-      ) : (
-        <>
-          {notes.length > 0 && (
-            <ul className="status-footer-notes">
-              {notes.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          )}
-          {hiddenCount > 0 && (
-            <p className="status-footer-update-meta">
-              {t("footer.moreChanges", { count: hiddenCount })}
-            </p>
-          )}
-          <button type="button" className="status-footer-primary-btn" onClick={onUpdateNow}>
-            {t("footer.updateNow")}
-          </button>
-          <button type="button" className="status-footer-secondary-btn" onClick={onLater}>
-            {t("footer.maybeLater")}
-          </button>
-          {update?.releaseUrl && (
-            <button type="button" className="status-footer-link-btn" onClick={onReleaseNotes}>
-              {t("footer.checkReleaseNotes")}
-            </button>
-          )}
-        </>
-      )}
+    <div className="status-footer-update-changelog">
+      {blocks.map((block) => (
+        <div key={block.key} className="status-footer-update-changelog-section">
+          <p className="status-footer-update-changelog-heading">{block.title}</p>
+          <ul className="status-footer-update-changelog-list">
+            {block.items.map((line) => (
+              <li key={`${block.key}-${line}`}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
+  );
+}
+
+function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
+  const closeBtnRef = useRef(null);
+  const status = update?.status || "idle";
+  const sections = parseReleaseNotesSections(update?.releaseNotes);
+  const percent = Math.max(0, Math.min(100, Math.round(update?.percent || 0)));
+  const version = update?.version || "?";
+
+  useEffect(() => {
+    closeBtnRef.current?.focus();
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+
+  const title =
+    status === "ready"
+      ? t("updater.modal.title")
+      : status === "downloading"
+        ? t("footer.updateDownloading", { percent, version })
+        : t("updater.modal.title");
+
+  return createPortal(
+    <div className="cap-modal-overlay status-footer-update-overlay" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="update-modal-title"
+        className="status-footer-update-panel"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          ref={closeBtnRef}
+          type="button"
+          className="status-footer-update-close"
+          onClick={onClose}
+          aria-label={t("common.close")}
+        >
+          <X size={16} />
+        </button>
+
+        <div className="status-footer-update-brand">
+          <BeruMark />
+        </div>
+
+        <h2 id="update-modal-title" className="status-footer-update-title">
+          {title}
+        </h2>
+
+        {status === "ready" ? (
+          <>
+            <p className="status-footer-update-subtitle">
+              {t("updater.modal.body", { version })}
+            </p>
+            <p className="status-footer-update-warning">{t("updater.modal.note")}</p>
+            <button type="button" className="status-footer-update-primary" onClick={onInstall}>
+              {t("updater.modal.install")}
+            </button>
+            <button type="button" className="status-footer-update-secondary" onClick={onLater}>
+              {t("updater.modal.later")}
+            </button>
+          </>
+        ) : status === "downloading" ? (
+          <>
+            <p className="status-footer-update-subtitle">{t("footer.updateWait")}</p>
+            <div className="status-footer-update-progress">
+              <div className="status-footer-update-progress-fill" style={{ width: `${percent}%` }} />
+            </div>
+            <p className="status-footer-update-progress-label">{percent}%</p>
+          </>
+        ) : (
+          <>
+            <p className="status-footer-update-subtitle">{t("updater.modal.subtitle")}</p>
+            <UpdateChangelog sections={sections} t={t} />
+            {sections.hiddenCount > 0 && (
+              <p className="status-footer-update-more">
+                {t("footer.moreChanges", { count: sections.hiddenCount })}
+              </p>
+            )}
+            <button type="button" className="status-footer-update-primary" onClick={onUpdateNow}>
+              {t("footer.updateNow")}
+            </button>
+            <button type="button" className="status-footer-update-secondary" onClick={onLater}>
+              {t("footer.maybeLater")}
+            </button>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function UpToDateDialog({ onClose, t }) {
+  const closeBtnRef = useRef(null);
+
+  useEffect(() => {
+    closeBtnRef.current?.focus();
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div className="cap-modal-overlay status-footer-up-to-date-overlay" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="up-to-date-title"
+        aria-describedby="up-to-date-description"
+        className="status-footer-up-to-date-panel"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          ref={closeBtnRef}
+          type="button"
+          className="status-footer-up-to-date-close"
+          onClick={onClose}
+          aria-label={t("common.close")}
+        >
+          <X size={16} />
+        </button>
+        <CheckCircle2 className="status-footer-up-to-date-icon" size={25} strokeWidth={2.25} />
+        <h2 id="up-to-date-title" className="status-footer-up-to-date-title">
+          {t("footer.upToDateTitle")}
+        </h2>
+        <p id="up-to-date-description" className="status-footer-up-to-date-description">
+          {t("footer.upToDateBody")}
+        </p>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -235,6 +351,8 @@ export default function StatusFooter() {
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [upToDateOpen, setUpToDateOpen] = useState(false);
+  const closeUpToDate = useCallback(() => setUpToDateOpen(false), []);
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [sessionStartedAt] = useState(() => Date.now());
   const [clockTick, setClockTick] = useState(0);
@@ -278,6 +396,20 @@ export default function StatusFooter() {
     }
   }, [updateStatus, update?.version]);
 
+  useEffect(() => {
+    if (updateStatus !== "idle" && updateStatus !== "disabled") {
+      setUpToDateOpen(false);
+    }
+  }, [updateStatus]);
+
+  useEffect(() => {
+    if (updateStatus !== "available" || !update?.error) return;
+    showToast({ kind: "err", text: t("header.updateDownloadFailed") });
+    useEditorStore.setState((s) => ({
+      update: { ...s.update, error: null },
+    }));
+  }, [updateStatus, update?.error, showToast, t]);
+
   const runClock = runStartedAt != null ? formatFooterClock(Date.now() - runStartedAt) : "00:00";
   const sessionClock = formatFooterClock(Date.now() - sessionStartedAt);
   void clockTick;
@@ -320,13 +452,6 @@ export default function StatusFooter() {
     get().installUpdate();
   };
 
-  const handleReleaseNotes = () => {
-    if (update?.releaseUrl) {
-      window.api?.openExternal?.(update.releaseUrl);
-    }
-    setUpdateOpen(false);
-  };
-
   const versionLabel = `v${APP_VERSION}`;
   const updateVersionLabel = update?.version ? `v${update.version}` : null;
 
@@ -339,6 +464,7 @@ export default function StatusFooter() {
           onClick={() => {
             setHistoryOpen((v) => !v);
             setUpdateOpen(false);
+            setUpToDateOpen(false);
           }}
           title={t("footer.historyTitle")}
           aria-label={t("footer.historyTitle")}
@@ -411,10 +537,15 @@ export default function StatusFooter() {
         <div className="status-footer-version-wrap">
           <button
             type="button"
-            className={`status-footer-version${hasUpdateBadge ? " status-footer-version--badge" : ""}${updateOpen ? " status-footer-version--open" : ""}`}
+            className={`status-footer-version${hasUpdateBadge ? " status-footer-version--badge" : ""}${updateOpen || upToDateOpen ? " status-footer-version--open" : ""}`}
             onClick={() => {
-              if (!hasUpdateBadge && updateStatus !== "checking") return;
-              setUpdateOpen((v) => !v);
+              if (hasUpdateBadge || updateStatus === "checking") {
+                setUpdateOpen((v) => !v);
+                setUpToDateOpen(false);
+              } else {
+                setUpToDateOpen(true);
+                setUpdateOpen(false);
+              }
               setHistoryOpen(false);
             }}
             title={
@@ -423,7 +554,7 @@ export default function StatusFooter() {
                 : t("footer.version", { version: versionLabel })
             }
             aria-label={t("footer.version", { version: versionLabel })}
-            aria-expanded={updateOpen}
+            aria-expanded={updateOpen || upToDateOpen}
           >
             <Terminal size={11} />
             <span>
@@ -437,19 +568,21 @@ export default function StatusFooter() {
             )}
           </button>
 
-          {updateOpen && hasUpdateBadge && (
-            <UpdatePopover
-              update={update}
-              onUpdateNow={handleUpdateNow}
-              onLater={handleUpdateLater}
-              onInstall={handleInstall}
-              onReleaseNotes={handleReleaseNotes}
-              onClose={() => setUpdateOpen(false)}
-              t={t}
-            />
-          )}
         </div>
       </div>
+
+      {updateOpen && hasUpdateBadge && (
+        <UpdateModal
+          update={update}
+          onUpdateNow={handleUpdateNow}
+          onLater={handleUpdateLater}
+          onInstall={handleInstall}
+          onClose={() => setUpdateOpen(false)}
+          t={t}
+        />
+      )}
+
+      {upToDateOpen && <UpToDateDialog onClose={closeUpToDate} t={t} />}
     </footer>
   );
 }

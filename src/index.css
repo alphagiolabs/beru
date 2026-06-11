@@ -144,8 +144,9 @@ label {
 }
 
 .cap-section {
-  @apply p-4 border-b;
+  @apply p-4 border-b min-w-0;
   border-color: var(--border);
+  overflow-x: hidden;
 }
 .cap-section-title {
   @apply text-[10px] font-semibold tracking-widest uppercase mb-3;
@@ -195,12 +196,13 @@ label {
 
 /* Hermes-style status footer */
 .status-footer {
-  @apply flex items-center justify-between gap-3 px-3 flex-shrink-0 relative;
+  @apply flex items-center justify-between gap-3 px-3 flex-shrink-0 relative min-w-0;
   height: 28px;
+  overflow-x: hidden;
   font-size: 11px;
   line-height: 1;
-  border-top: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg-app) 88%, #000);
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: var(--bg-app);
   color: var(--text-dim);
   z-index: 60;
 }
@@ -224,19 +226,19 @@ label {
   width: 22px;
   height: 22px;
   color: var(--text-dim);
-  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  background: transparent;
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
 }
 
 .status-footer-icon-btn:hover,
 .status-footer-icon-btn--active {
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-elevated) 95%, transparent);
+  background: color-mix(in srgb, var(--border) 18%, transparent);
 }
 
 .status-footer-chip {
   @apply inline-flex items-center gap-1.5 rounded px-2 py-0.5;
-  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  background: transparent;
   border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
   color: var(--text-secondary);
   white-space: nowrap;
@@ -300,7 +302,7 @@ label {
 .status-footer-version:hover,
 .status-footer-version--open {
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  background: color-mix(in srgb, var(--border) 18%, transparent);
   border-color: color-mix(in srgb, var(--border) 65%, transparent);
 }
 
@@ -328,10 +330,6 @@ label {
 
 .status-footer-popover--history {
   left: 0;
-}
-
-.status-footer-popover--update {
-  right: 0;
 }
 
 .status-footer-popover-header {
@@ -435,6 +433,183 @@ label {
 .status-footer-download-fill {
   @apply h-full rounded-full transition-all duration-300;
   background: var(--accent);
+}
+
+.status-footer-up-to-date-overlay {
+  background: color-mix(in srgb, var(--overlay) 76%, transparent);
+}
+
+.status-footer-up-to-date-panel {
+  @apply relative w-full text-center;
+  max-width: 384px;
+  padding: 34px 32px 27px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg-app));
+  border: 1px solid color-mix(in srgb, var(--border) 90%, var(--text-dim));
+  box-shadow: var(--modal-shadow);
+}
+
+.status-footer-up-to-date-close {
+  @apply absolute inline-flex items-center justify-center rounded transition-colors;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  color: var(--text-dim);
+}
+
+.status-footer-up-to-date-close:hover,
+.status-footer-up-to-date-close:focus-visible {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--border) 28%, transparent);
+  outline: none;
+}
+
+.status-footer-up-to-date-icon {
+  margin: 0 auto;
+  color: #18d6a3;
+}
+
+.status-footer-up-to-date-title {
+  margin-top: 18px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.status-footer-up-to-date-description {
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.status-footer-update-overlay {
+  z-index: 80;
+  background: color-mix(in srgb, var(--overlay) 82%, transparent);
+}
+
+.status-footer-update-panel {
+  @apply relative w-full text-center;
+  max-width: 420px;
+  padding: 28px 28px 22px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg-app));
+  border: 1px solid color-mix(in srgb, var(--border) 90%, var(--text-dim));
+  box-shadow: var(--modal-shadow);
+}
+
+.status-footer-update-close {
+  @apply absolute inline-flex items-center justify-center rounded transition-colors;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  color: var(--text-dim);
+}
+
+.status-footer-update-close:hover,
+.status-footer-update-close:focus-visible {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--border) 28%, transparent);
+  outline: none;
+}
+
+.status-footer-update-brand {
+  @apply mx-auto flex items-center justify-center rounded-md;
+  width: 56px;
+  height: 56px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-app) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.status-footer-update-title {
+  margin-top: 16px;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.status-footer-update-subtitle {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+.status-footer-update-warning {
+  margin-top: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--rose);
+}
+
+.status-footer-update-changelog {
+  @apply mt-4 mb-3 text-left rounded-md overflow-hidden;
+  max-height: 220px;
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--bg-app) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+.status-footer-update-changelog-section + .status-footer-update-changelog-section {
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.status-footer-update-changelog-heading {
+  @apply px-3 pt-3 pb-1 text-[10px] font-semibold tracking-[0.14em] uppercase;
+  color: var(--text-dim);
+}
+
+.status-footer-update-changelog-list {
+  @apply px-3 pb-3 text-[12px] leading-relaxed list-disc pl-5 space-y-1.5;
+  color: var(--text-secondary);
+}
+
+.status-footer-update-more {
+  margin-bottom: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.status-footer-update-primary {
+  @apply w-full rounded-md py-2.5 text-[13px] font-semibold transition-opacity;
+  background: color-mix(in srgb, var(--text-primary) 92%, transparent);
+  color: var(--bg-app);
+}
+
+.status-footer-update-primary:hover {
+  opacity: 0.9;
+}
+
+.status-footer-update-secondary {
+  @apply w-full mt-1 py-2 text-[12px] transition-colors;
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.status-footer-update-secondary:hover {
+  color: var(--text-secondary);
+}
+
+.status-footer-update-progress {
+  @apply mx-auto mt-4 h-1.5 rounded-full overflow-hidden;
+  width: min(100%, 280px);
+  background: color-mix(in srgb, var(--bg-app) 80%, transparent);
+}
+
+.status-footer-update-progress-fill {
+  @apply h-full rounded-full transition-all duration-300;
+  background: var(--accent);
+}
+
+.status-footer-update-progress-label {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-dim);
 }
 
 .update-bottom-indicator {
