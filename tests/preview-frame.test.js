@@ -11,6 +11,17 @@ vi.mock("electron", () => ({ app: { isPackaged: false } }));
 const PY = process.env.BERU_PYTHON || (process.platform === "win32" ? "py" : "python3");
 const PY_ARGS = process.platform === "win32" ? ["-3"] : [];
 const PROCESSOR = path.join(process.cwd(), "python", "processor.py");
+const FFMPEG_BIN = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+
+const hasFfmpeg = (() => {
+  try {
+    return spawnSync(FFMPEG_BIN, ["-version"], { encoding: "utf8" }).status === 0;
+  } catch {
+    return false;
+  }
+})();
+
+const describeIfFfmpeg = hasFfmpeg ? describe : describe.skip;
 
 function createJsonLineReader(stream) {
   const lines = [];
@@ -130,7 +141,14 @@ print(json.dumps(processor.render_preview_frame({"input_path": "__missing__.mp4"
     expect(parsed.ok).toBe(false);
     expect(parsed.error).toMatch(/not found/i);
   });
+});
 
+// The two worker tests below need the Python preview worker to actually start,
+// which requires ffmpeg/ffprobe on PATH. preview_frame_worker_main() bails with
+// {type:"ready", ok:false, error:"ffmpeg not found"} otherwise, so we skip the
+// whole block when ffmpeg is missing. The CI workflow installs ffmpeg via
+// apt-get so these run there; developer machines without ffmpeg will skip.
+describeIfFfmpeg("preview frame worker (requires ffmpeg)", () => {
   it("keeps the preview worker alive across requests and malformed input", async () => {
     const proc = spawn(PY, [...PY_ARGS, PROCESSOR, "--preview-frame-worker"], {
       cwd: process.cwd(),

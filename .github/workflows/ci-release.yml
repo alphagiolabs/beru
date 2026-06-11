@@ -31,6 +31,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install ffmpeg
+        # The new persistent preview-worker tests in tests/preview-frame.test.js
+        # spawn python processor.py --preview-frame-worker, which bails out with
+        # {type:"ready", ok:false, error:"ffmpeg not found"} when ffmpeg is
+        # missing from PATH. ubuntu-latest has no ffmpeg by default, so the
+        # worker tests would otherwise be skipped/green only on developer
+        # machines. We install ffmpeg here to actually exercise the worker
+        # code path in CI.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Lint
         run: npm run lint
 
