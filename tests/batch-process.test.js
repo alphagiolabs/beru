@@ -76,9 +76,9 @@ describe("batch-process helpers", () => {
   });
 
   describe("sanitizeFilenamePart / buildIdTextOutputName", () => {
-    it("builds ID_TEXT-1 output names with safe filename parts", () => {
+    it("builds ID_TEXT output names with safe filename parts", () => {
       expect(buildIdTextOutputName("promo", "Oferta: 50% / hoy", "mp4")).toBe(
-        "promo_Oferta 50% hoy-1.mp4",
+        "promo_Oferta 50% hoy.mp4",
       );
       expect(sanitizeFilenamePart("  a/b:c*  ")).toBe("a b c");
       expect(buildIdTextOutputName("", "Texto", "mp4")).toBe("");

@@ -39,7 +39,7 @@ export function buildIdTextOutputName(idValue, textValue, exportFormat) {
   const text = sanitizeFilenamePart(textValue);
   const ext = sanitizeFilenamePart(exportFormat || "mp4") || "mp4";
   if (!id || !text) return "";
-  return `${id}_${text}-1.${ext.replace(/^\.+/, "") || "mp4"}`;
+  return `${id}_${text}.${ext.replace(/^\.+/, "") || "mp4"}`;
 }
 
 /** Filter operations sent to FFmpeg — drop blank drawtext ops. */

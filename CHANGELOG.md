@@ -5,6 +5,12 @@ All notable changes to Beru will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.22] - 2026-06-11
+
+### Fixed
+
+- **Batch text output filename** — removed the trailing `-1` from `buildIdTextOutputName`, so Excel-driven outputs are now `<ID>_<TEXT>.mp4` (e.g. `promo_Oferta 50% hoy.mp4`) instead of `promo_Oferta 50% hoy-1.mp4`. The `-1` was a leftover index suffix that didn't match the user-facing naming convention and was always `1` for batch text jobs. Both unit tests (`batch-process`, `store.logic`) updated to reflect the new format.
+
 ## [1.6.3] - 2026-06-04
 
 ### Added

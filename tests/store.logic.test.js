@@ -138,7 +138,7 @@ describe("useEditorStore logic regressions", () => {
     expect(manifest.jobs[0].id).toBe(1);
   });
 
-  it("uses ID_TEXT-1 as the output name for batch text jobs", () => {
+  it("uses ID_TEXT as the output name for batch text jobs", () => {
     useEditorStore.setState({
       queue: [queueItem({ path: "C:\\videos\\promo.mp4", filename: "promo.mp4" })],
       outputDir: "C:\\output",
@@ -152,7 +152,7 @@ describe("useEditorStore logic regressions", () => {
     useEditorStore.getState()._reapplyExcel();
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
 
-    expect(job.output_path).toBe("C:\\output\\promo_Oferta 50% hoy-1.mp4");
+    expect(job.output_path).toBe("C:\\output\\promo_Oferta 50% hoy.mp4");
   });
 
   it("uses the first non-empty batch text when TEXT_1 is empty", () => {
@@ -170,7 +170,7 @@ describe("useEditorStore logic regressions", () => {
     useEditorStore.getState()._reapplyExcel();
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
 
-    expect(job.output_path).toBe("C:\\output\\promo_Subtitulo-1.mp4");
+    expect(job.output_path).toBe("C:\\output\\promo_Subtitulo.mp4");
   });
 
   it("refreshes missing video dimensions before building jobs", async () => {
