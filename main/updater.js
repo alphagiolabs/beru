@@ -181,12 +181,4 @@ const install = () => {
 
 const isQuittingForUpdate = () => quittingForUpdate;
 
-export {
-  init,
-  checkForUpdates,
-  startDownload,
-  install,
-  getSnapshot,
-  isQuittingForUpdate,
-  isDev,
-};
+export { init, checkForUpdates, startDownload, install, getSnapshot, isQuittingForUpdate, isDev };
