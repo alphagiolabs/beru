@@ -287,6 +287,7 @@ export function createProcessingSlice(set, get) {
             delogo_method: safe.delogoMethod,
             delogo_fill_color: safe.delogoFillColor,
             delogo_fill_opacity: safe.delogoFillOpacity,
+            delogo_image_path: safe.delogoImagePath,
             temporal_radius: safe.temporalRadius,
             mosaic_size: safe.mosaicSize,
             mirror_side: safe.mirrorSide,

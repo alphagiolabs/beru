@@ -37,15 +37,20 @@ def show(name, graph, label):
     print(f"--- end ---")
 
 
-def run_ffmpeg_parse(graph, out_label):
+def run_ffmpeg_parse(graph, out_label, images=None):
     """Feed the graph to ffmpeg's -filter_complex with a fakesrc, decode 1 frame
     to /dev/null. If the graph is invalid, ffmpeg errors out."""
     if not FFMPEG.exists():
         print(f"  (skip ffmpeg parse — ffmpeg not at {FFMPEG})")
         return True
-    cmd = [
-        str(FFMPEG), "-y",
-        "-f", "lavfi", "-i", "color=c=black:s=640x360:d=1:r=30",
+    images = images or []
+    cmd = [str(FFMPEG), "-y"]
+    # Main video input (filter graph references it as [0:v])
+    cmd += ["-f", "lavfi", "-i", "color=c=black:s=640x360:d=1:r=30"]
+    # Cover/overlay images referenced by [1:v], [2:v], etc.
+    for img in images:
+        cmd += ["-loop", "1", "-i", str(img)]
+    cmd += [
         "-filter_complex", graph,
         "-map", out_label,
         "-frames:v", "1",
@@ -65,6 +70,20 @@ def run_ffmpeg_parse(graph, out_label):
     for l in err_lines[-5:]:
         print(f"    {l}")
     return False
+
+
+def create_test_image(path):
+    """Create a small PNG using ffmpeg lavfi so the cover method can load it."""
+    if not FFMPEG.exists():
+        return False
+    cmd = [
+        str(FFMPEG), "-y",
+        "-f", "lavfi", "-i", "color=c=blue:s=320x240:d=1:r=1",
+        "-frames:v", "1",
+        str(path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    return proc.returncode == 0
 
 
 CASES = [
@@ -99,34 +118,50 @@ CASES = [
     ("edge region bottom-right", [make_op("mirror", region={"x": 540, "y": 300, "w": 100, "h": 60})], 0),
 ]
 
+
 def main():
-    passed = 0
-    failed = 0
-    for name, ops, _ in CASES:
-        fc, label, _images = build_filter_complex(ops, 640, 360)
-        # Some degenerate cases (zero-size region) intentionally return None.
-        expect_none = (name == "zero-size region")
-        if expect_none:
+    temp_img = None
+    try:
+        # Create a temporary image for the cover method test.
+        temp_img = Path(tempfile.gettempdir()) / "beru_test_cover.png"
+        if create_test_image(temp_img):
+            CASES.append(("cover with image", [make_op("cover", delogo_image_path=str(temp_img))], 0))
+        else:
+            print("  (skip cover case — ffmpeg not available to create test image)")
+
+        passed = 0
+        failed = 0
+        for name, ops, _ in CASES:
+            fc, label, _images = build_filter_complex(ops, 640, 360)
+            # Some degenerate cases (zero-size region) intentionally return None.
+            expect_none = (name == "zero-size region")
+            if expect_none:
+                if fc is None:
+                    print(f"\n=== {name} ===\n  [OK] correctly skipped degenerate region")
+                    passed += 1
+                else:
+                    print(f"\n=== {name} ===\n  [FAIL] expected None, got filter graph")
+                    failed += 1
+                continue
             if fc is None:
-                print(f"\n=== {name} ===\n  [OK] correctly skipped degenerate region")
+                print(f"\n=== {name} ===\n  [FAIL] returned None (no output)")
+                failed += 1
+                continue
+            show(name, fc, label)
+            ok = run_ffmpeg_parse(fc, label, _images)
+            if ok:
                 passed += 1
             else:
-                print(f"\n=== {name} ===\n  [FAIL] expected None, got filter graph")
                 failed += 1
-            continue
-        if fc is None:
-            print(f"\n=== {name} ===\n  [FAIL] returned None (no output)")
-            failed += 1
-            continue
-        show(name, fc, label)
-        ok = run_ffmpeg_parse(fc, label)
-        if ok:
-            passed += 1
-        else:
-            failed += 1
 
-    print(f"\n========\nPassed: {passed}\nFailed: {failed}\n========")
-    return 0 if failed == 0 else 1
+        print(f"\n========\nPassed: {passed}\nFailed: {failed}\n========")
+        return 0 if failed == 0 else 1
+    finally:
+        if temp_img and temp_img.exists():
+            try:
+                temp_img.unlink()
+            except Exception:
+                pass
 
 
 def test_delogo_filter_graphs():

@@ -123,6 +123,11 @@ export const DELOGO_METHODS = [
     label: "Relleno",
     description: "Cubre con un color sólido. Solo para casos muy específicos.",
   },
+  {
+    id: "cover",
+    label: "Cubierta",
+    description: "Superpone una imagen del usuario limitada al rectángulo del logo.",
+  },
 ];
 
 export const MIRROR_SIDES = [
@@ -510,6 +515,7 @@ export function createOperation(overrides = {}) {
     delogoMethod: "temporal",
     delogoFillColor: "black",
     delogoFillOpacity: 1,
+    delogoImagePath: "",
     startTime: null,
     endTime: null,
     text: "",
