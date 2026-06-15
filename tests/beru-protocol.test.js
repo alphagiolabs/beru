@@ -24,6 +24,11 @@ describe("beru protocol path parsing", () => {
     expect(filePathFromBeruUrl("beru://remote/%2Fhome%2Fuser%2Fclip.mp4")).toBeNull();
   });
 
+  it("rejects uppercase beru hosts to prevent case bypass", () => {
+    expect(filePathFromBeruUrl("beru://LOCAL/%2Fhome%2Fuser%2Fclip.mp4")).toBeNull();
+    expect(filePathFromBeruUrl("beru://Local/%2Fhome%2Fuser%2Fclip.mp4")).toBeNull();
+  });
+
   it("validates resolved protocol paths through pathSecurity", () => {
     const calls = [];
     const pathSecurity = {

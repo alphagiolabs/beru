@@ -1226,7 +1226,7 @@ def _build_enable_clause(op):
 
 
 VALID_DELOGO_METHODS = frozenset({
-    "temporal", "mirror", "mosaic", "inpaint", "blur", "fill",
+    "temporal", "mirror", "mosaic", "inpaint", "blur", "fill", "cover",
 })
 
 
@@ -1262,6 +1262,7 @@ def _normalize_operation(op):
         ("blur_strength", "blurStrength"),
         ("delogo_fill_color", "delogoFillColor"),
         ("delogo_fill_opacity", "delogoFillOpacity"),
+        ("delogo_image_path", "delogoImagePath"),
         ("start_time", "startTime"),
         ("end_time", "endTime"),
     )
@@ -1441,12 +1442,13 @@ def _overlay_opts(x, y, enable_clause):
     return opts
 
 
-def _build_delogo_chain(op, prev_label, idx, video_w, video_h):
+def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=None):
     """Build delogo filter chain (split → clean → overlay).
 
     - temporal / mosaic / blur / fill: clean the (optionally padded) crop.
     - inpaint: FFmpeg delogo on full frame (interpolates from edges).
     - mirror: reflect adjacent pixels into the logo box (uniform backgrounds).
+    - cover: overlay a user image scaled/padded to the logo box.
     """
     region = op.get("region") or {}
     x = int(region.get("x", 0))
@@ -1504,6 +1506,23 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h):
             f"{mirror_chain};"
             f"[clean{s}]boxblur={feather_blur}[soft{s}];"
             f"[full{s}][soft{s}]overlay={_overlay_opts(x, y, enable_clause)}[tmp{idx}]"
+        )
+
+    # ── Cover: user image scaled and padded to the logo box, overlaid at logo coords ──
+    if method == "cover":
+        img_path = op.get("delogo_image_path")
+        if not img_path or not os.path.exists(img_path):
+            logger.warning("Cover delogo skipped: file not found: %s", img_path)
+            return None
+        if img_input_index is None:
+            logger.warning("Cover delogo skipped: img_input_index not available")
+            return None
+        input_idx = img_input_index(img_path)
+        overlay_opts = _overlay_opts(x, y, enable_clause)
+        return (
+            f"[{input_idx}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,format=rgba[cover{s}];"
+            f"{src}[cover{s}]overlay={overlay_opts}[tmp{idx}]"
         )
 
     # ── Patch methods: crop → clean → (feather) → overlay ──
@@ -1716,7 +1735,9 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
                     filters.append(f"[tmp{n-1}]crop={w}:{h}:{x}:{y}[tmp{n}]")
         elif mode == "delogo":
             prev = f"tmp{n-1}" if n > 0 else None
-            chain = _build_delogo_chain({**op, "region": region}, prev, n, video_w, video_h)
+            chain = _build_delogo_chain(
+                {**op, "region": region}, prev, n, video_w, video_h, img_input_index
+            )
             if chain:
                 filters.append(chain)
             else:

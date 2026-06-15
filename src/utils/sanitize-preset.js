@@ -92,11 +92,13 @@ export function sanitizeTextStyle(textStyle = {}) {
 export function sanitizeDefaults(defaults = {}) {
   return {
     blurStrength: clampNum(defaults.blurStrength, 1, 100, 20),
+    simpleDelogo: !!defaults.simpleDelogo,
     delogoMethod: VALID_DELOGO_METHODS.has(defaults.delogoMethod)
       ? defaults.delogoMethod
       : "temporal",
     delogoFillColor: String(defaults.delogoFillColor ?? "black").slice(0, 32),
     delogoFillOpacity: clampNum(defaults.delogoFillOpacity, 0, 1, 1),
+    delogoImagePath: typeof defaults.delogoImagePath === "string" ? defaults.delogoImagePath : "",
     temporalRadius: clampNum(defaults.temporalRadius, 1, 30, 5),
     mosaicSize: clampNum(defaults.mosaicSize, 2, 64, 8),
     mirrorSide: ["left", "right", "top", "bottom"].includes(defaults.mirrorSide)

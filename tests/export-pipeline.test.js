@@ -204,6 +204,87 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[0].blur_strength).toBe(1);
   });
 
+  it("simpleDelogo forces blur and discards method-specific params", () => {
+    const region = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 };
+    useEditorStore.setState({
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-5",
+              mode: "delogo",
+              region,
+              simpleDelogo: true,
+              delogoMethod: "inpaint", // should be overridden to blur
+              blurStrength: 2, // should clamp to 5
+              temporalRadius: 999,
+              mosaicSize: 200,
+              edgeFeather: 100,
+              mirrorSide: "left",
+              delogoFillColor: "red",
+              delogoFillOpacity: 0.5,
+            },
+          ],
+        }),
+      ],
+    });
+
+    const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
+    expect(job.operations[0].delogo_method).toBe("blur");
+    expect(job.operations[0].blur_strength).toBe(5);
+    expect(job.operations[0].temporal_radius).toBeUndefined();
+    expect(job.operations[0].mosaic_size).toBeUndefined();
+    expect(job.operations[0].edge_feather).toBeUndefined();
+    expect(job.operations[0].mirror_side).toBeUndefined();
+    expect(job.operations[0].delogo_fill_color).toBeUndefined();
+    expect(job.operations[0].delogo_fill_opacity).toBeUndefined();
+  });
+
+  it("builds valid delogo job for cover method", () => {
+    const region = { x: 0.2, y: 0.2, w: 0.1, h: 0.1 };
+    useEditorStore.setState({
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-6",
+              mode: "delogo",
+              region,
+              delogoMethod: "cover",
+              delogoImagePath: "C:\\\\img\\\\patch.png",
+            },
+          ],
+        }),
+      ],
+    });
+
+    const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
+    expect(job.operations[0].delogo_method).toBe("cover");
+    expect(job.operations[0].delogo_image_path).toBe("C:\\\\img\\\\patch.png");
+  });
+
+  it("cover method falls back to temporal when image path is missing", () => {
+    const region = { x: 0.2, y: 0.2, w: 0.1, h: 0.1 };
+    useEditorStore.setState({
+      queue: [
+        queueItem(0, {
+          operations: [
+            {
+              id: "delogo-7",
+              mode: "delogo",
+              region,
+              delogoMethod: "cover",
+              delogoImagePath: "",
+            },
+          ],
+        }),
+      ],
+    });
+
+    const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
+    expect(job.operations[0].delogo_method).toBe("temporal");
+  });
+
   it("mixes delogo + blur + text operations in a single job", () => {
     useEditorStore.setState({
       queue: [
