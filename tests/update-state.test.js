@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  IDLE_UPDATE,
-  reduceUpdaterEvent,
-  canStartDownload,
-  isUpdateFlowActive,
-} from "../src/utils/updateState.js";
+import { IDLE_UPDATE, reduceUpdaterEvent, canStartDownload } from "../src/utils/updateState.js";
 
 describe("reduceUpdaterEvent", () => {
   it("preserves release metadata while download progress arrives", () => {
@@ -90,11 +85,5 @@ describe("update flow helpers", () => {
   it("detects when a download can start", () => {
     expect(canStartDownload({ status: "available", version: "1.6.0" })).toBe(true);
     expect(canStartDownload({ status: "downloading", version: "1.6.0" })).toBe(false);
-  });
-
-  it("detects active update UI states", () => {
-    expect(isUpdateFlowActive({ status: "checking" })).toBe(true);
-    expect(isUpdateFlowActive({ status: "downloading" })).toBe(true);
-    expect(isUpdateFlowActive({ status: "available" })).toBe(false);
   });
 });

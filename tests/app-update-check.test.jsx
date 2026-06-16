@@ -106,4 +106,40 @@ describe("App update check", () => {
     expect(document.body.textContent).not.toMatch(/This operation was aborted/i);
     expect(document.body.textContent).not.toMatch(/Reintentar/i);
   });
+
+  it("hydrates from a ready snapshot so the install modal appears on restart", async () => {
+    window.api = {
+      onProgress: noop,
+      onJobProgress: noop,
+      onComplete: noop,
+      onSummary: noop,
+      onJobError: noop,
+      onFinished: noop,
+      onError: noop,
+      onLog: noop,
+      onUpdaterEvent: noop,
+      getUpdaterSnapshot: async () => ({
+        type: "ready",
+        version: "1.6.99",
+        releaseNotes: "- fix: restart hydration",
+      }),
+      checkForUpdates: vi.fn(async () => ({ ok: true })),
+    };
+
+    const { default: App } = await import("../src/App.jsx");
+
+    await act(async () => {
+      root.render(<App />);
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const { update } = await import("../src/stores/useEditorStore").then((m) =>
+      m.default.getState(),
+    );
+    expect(update.status).toBe("ready");
+    expect(update.version).toBe("1.6.99");
+  });
 });

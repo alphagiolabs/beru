@@ -21,7 +21,6 @@ let checkInProgress = false;
 let downloadInProgress = false;
 let quittingForUpdate = false;
 let updateDownloaded = false;
-let userInitiatedDownload = false;
 
 const tryLoad = () => {
   if (autoUpdater) return autoUpdater;
@@ -96,18 +95,22 @@ const init = (win) => {
     downloadInProgress = false;
     updateDownloaded = true;
     pendingVersion = info?.version || pendingVersion;
+    // Intentionally do NOT auto-install. Surface the "ready" snapshot to the
+    // renderer so the user can confirm the install via the modal. The renderer
+    // is the single source of truth for whether the user wants to restart now.
     send({ type: "ready", version: info?.version || pendingVersion });
-    if (userInitiatedDownload) {
-      userInitiatedDownload = false;
-      scheduleInstall(au);
-    }
   });
   au.on("error", (err) => {
     checkInProgress = false;
     if (downloadInProgress) downloadInProgress = false;
-    userInitiatedDownload = false;
     send({ type: "error", message: err?.message || String(err) });
   });
+
+  // Kick a background check so that electron-updater re-emits events for any
+  // update already cached from a previous session (e.g. user downloaded but
+  // didn't install before quitting).  Errors are silently swallowed — this is
+  // best-effort.
+  checkForUpdates().catch(() => {});
 };
 
 const checkForUpdates = async () => {
@@ -134,29 +137,23 @@ const startDownload = async () => {
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
 
-  userInitiatedDownload = true;
-
   if (!pendingVersion) {
     try {
       const result = await au.checkForUpdates();
       pendingVersion = result?.updateInfo?.version || null;
       if (!pendingVersion) {
-        userInitiatedDownload = false;
         return { ok: false, error: "no-update-available" };
       }
     } catch (e) {
-      userInitiatedDownload = false;
       send({ type: "error", message: e?.message || String(e) });
       return { ok: false, error: e?.message };
     }
   }
 
   if (updateDownloaded) {
+    // Already downloaded this version: surface the "ready" snapshot and let
+    // the renderer prompt the user. Do NOT trigger quitAndInstall from here.
     send({ type: "ready", version: pendingVersion });
-    if (userInitiatedDownload) {
-      userInitiatedDownload = false;
-      scheduleInstall(au);
-    }
     return { ok: true, reason: "already-downloaded" };
   }
 
@@ -173,7 +170,6 @@ const startDownload = async () => {
     return { ok: true };
   } catch (e) {
     downloadInProgress = false;
-    userInitiatedDownload = false;
     // electron-updater emits "error" for download failures; avoid duplicate IPC.
     return { ok: false, error: e?.message };
   }
