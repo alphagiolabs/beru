@@ -153,15 +153,7 @@ function UpdateChangelog({ sections, t }) {
   );
 }
 
-function UpdateModal({
-  update,
-  onUpdateNow,
-  onLater,
-  onInstall,
-  onClose,
-  onOpenReleaseNotes,
-  t,
-}) {
+function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, onOpenReleaseNotes, t }) {
   const closeBtnRef = useRef(null);
   const status = update?.status || "idle";
   const sections = parseReleaseNotesSections(update?.releaseNotes);
@@ -605,11 +597,7 @@ export default function StatusFooter() {
       )}
 
       {upToDateOpen && (
-        <UpToDateDialog
-          onClose={closeUpToDate}
-          onCheckForUpdates={handleManualCheck}
-          t={t}
-        />
+        <UpToDateDialog onClose={closeUpToDate} onCheckForUpdates={handleManualCheck} t={t} />
       )}
     </footer>
   );
