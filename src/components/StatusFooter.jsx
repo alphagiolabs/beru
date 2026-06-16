@@ -8,23 +8,9 @@ import { useT } from "../i18n/useT";
 import { getBatchProgress } from "../utils/batch-progress";
 import { APP_VERSION, formatFooterClock, parseReleaseNotesSections } from "../utils/appVersion";
 import { formatHistoryTimestamp } from "../utils/execution-history";
+import { safeStorage } from "../utils/safeStorage";
 
 const DISMISS_KEY = "beru.updateReady.dismissedVersion";
-
-const safeStorage = {
-  get(k) {
-    try {
-      return typeof localStorage !== "undefined" ? localStorage.getItem(k) : null;
-    } catch {
-      return null;
-    }
-  },
-  set(k, v) {
-    try {
-      if (typeof localStorage !== "undefined") localStorage.setItem(k, v);
-    } catch {}
-  },
-};
 
 function FooterChip({ children, className = "", title, onClick, active }) {
   const Tag = onClick ? "button" : "div";
@@ -167,7 +153,15 @@ function UpdateChangelog({ sections, t }) {
   );
 }
 
-function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
+function UpdateModal({
+  update,
+  onUpdateNow,
+  onLater,
+  onInstall,
+  onClose,
+  onOpenReleaseNotes,
+  t,
+}) {
   const closeBtnRef = useRef(null);
   const status = update?.status || "idle";
   const sections = parseReleaseNotesSections(update?.releaseNotes);
@@ -256,6 +250,15 @@ function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
                 {t("footer.moreChanges", { count: sections.hiddenCount })}
               </p>
             )}
+            {update?.releaseUrl && onOpenReleaseNotes && (
+              <button
+                type="button"
+                className="status-footer-update-release-link"
+                onClick={() => onOpenReleaseNotes(update.releaseUrl)}
+              >
+                {t("footer.checkReleaseNotes")}
+              </button>
+            )}
             <button type="button" className="status-footer-update-primary" onClick={onUpdateNow}>
               {t("footer.updateNow")}
             </button>
@@ -270,7 +273,7 @@ function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
   );
 }
 
-function UpToDateDialog({ onClose, t }) {
+function UpToDateDialog({ onClose, onCheckForUpdates, t }) {
   const closeBtnRef = useRef(null);
 
   useEffect(() => {
@@ -315,6 +318,15 @@ function UpToDateDialog({ onClose, t }) {
         <p id="up-to-date-description" className="status-footer-up-to-date-description">
           {t("footer.upToDateBody")}
         </p>
+        {onCheckForUpdates && (
+          <button
+            type="button"
+            className="status-footer-up-to-date-check"
+            onClick={onCheckForUpdates}
+          >
+            {t("footer.checkForUpdates")}
+          </button>
+        )}
       </div>
     </div>,
     document.body,
@@ -453,6 +465,15 @@ export default function StatusFooter() {
     }
   };
 
+  const handleOpenReleaseNotes = (url) => {
+    window.api?.openExternal?.(url);
+  };
+
+  const handleManualCheck = async () => {
+    setUpToDateOpen(false);
+    await get().checkForUpdates();
+  };
+
   const versionLabel = `v${APP_VERSION}`;
   const updateVersionLabel = update?.version ? `v${update.version}` : null;
 
@@ -578,11 +599,18 @@ export default function StatusFooter() {
           onLater={handleUpdateLater}
           onInstall={handleInstall}
           onClose={() => setUpdateOpen(false)}
+          onOpenReleaseNotes={handleOpenReleaseNotes}
           t={t}
         />
       )}
 
-      {upToDateOpen && <UpToDateDialog onClose={closeUpToDate} t={t} />}
+      {upToDateOpen && (
+        <UpToDateDialog
+          onClose={closeUpToDate}
+          onCheckForUpdates={handleManualCheck}
+          t={t}
+        />
+      )}
     </footer>
   );
 }

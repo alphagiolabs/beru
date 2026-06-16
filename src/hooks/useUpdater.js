@@ -1,24 +1,10 @@
 import { useEffect } from "react";
 import useEditorStore from "../stores/useEditorStore";
+import { safeStorage } from "../utils/safeStorage";
 
 const UPDATE_CHECK_DELAY_MS = 2500;
 const UPDATE_CHECK_THROTTLE_MS = 30 * 60 * 1000;
 const LAST_CHECK_KEY = "beru.updater.lastCheck";
-
-const safeStorage = {
-  get(key) {
-    try {
-      return typeof localStorage !== "undefined" ? localStorage.getItem(key) : null;
-    } catch {
-      return null;
-    }
-  },
-  set(key, value) {
-    try {
-      if (typeof localStorage !== "undefined") localStorage.setItem(key, value);
-    } catch {}
-  },
-};
 
 function shouldHydrateSnapshot(update) {
   const status = update?.status || "idle";

@@ -182,18 +182,6 @@ label {
   background: var(--bg-surface);
 }
 
-@keyframes update-bottom-blink {
-  0%,
-  100% {
-    opacity: 0.12;
-    background-color: var(--rose);
-  }
-  50% {
-    opacity: 1;
-    background-color: var(--rose);
-  }
-}
-
 /* Hermes-style status footer */
 .status-footer {
   @apply flex items-center justify-between gap-3 px-3 flex-shrink-0 relative min-w-0;
@@ -485,6 +473,20 @@ label {
   color: var(--text-dim);
 }
 
+.status-footer-up-to-date-check {
+  @apply w-full text-center text-xs mt-3 py-2 rounded cursor-pointer transition-colors;
+  color: var(--accent);
+  border: none;
+  background: transparent;
+  font-weight: 500;
+}
+
+.status-footer-up-to-date-check:hover,
+.status-footer-up-to-date-check:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: none;
+}
+
 .status-footer-update-overlay {
   z-index: 80;
   background: color-mix(in srgb, var(--overlay) 82%, transparent);
@@ -612,7 +614,17 @@ label {
   color: var(--text-dim);
 }
 
-.update-bottom-indicator {
-  height: 4px;
-  animation: update-bottom-blink 1.1s ease-in-out infinite;
+.status-footer-update-release-link {
+  @apply w-full text-center text-xs mt-1 mb-0 py-1.5 rounded cursor-pointer transition-colors;
+  color: var(--text-dim);
+  border: none;
+  background: transparent;
+  font-weight: 500;
+}
+
+.status-footer-update-release-link:hover,
+.status-footer-update-release-link:focus-visible {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--border) 20%, transparent);
+  outline: none;
 }

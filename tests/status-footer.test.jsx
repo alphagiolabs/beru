@@ -242,4 +242,71 @@ describe("StatusFooter", () => {
 
     expect(document.querySelector(".status-footer-up-to-date-panel")).toBeNull();
   });
+
+  it("shows a release notes link when releaseUrl is present", async () => {
+    window.api = {
+      openExternal: vi.fn(async () => ({})),
+    };
+
+    useEditorStore.setState({
+      update: {
+        status: "available",
+        version: "9.9.9",
+        percent: 0,
+        error: null,
+        transferred: 0,
+        total: 0,
+        releaseNotes: "Fixed\n- fix: batch queue",
+        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
+      },
+    });
+
+    await act(async () => {
+      root.render(<StatusFooter />);
+    });
+
+    const versionBtn = document.querySelector(".status-footer-version--badge");
+    await act(async () => {
+      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const releaseLink = document.querySelector(".status-footer-update-release-link");
+    expect(releaseLink).toBeTruthy();
+    expect(releaseLink.textContent).toMatch(/Ver notas/i);
+
+    await act(async () => {
+      releaseLink.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(window.api.openExternal).toHaveBeenCalledWith(
+      "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
+    );
+  });
+
+  it("shows a check-for-updates button in the up-to-date dialog", async () => {
+    const checkForUpdates = vi.fn(async () => ({ ok: true }));
+    window.api = {
+      checkForUpdates,
+    };
+
+    await act(async () => {
+      root.render(<StatusFooter />);
+    });
+
+    const versionBtn = document.querySelector(".status-footer-version");
+    await act(async () => {
+      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    const checkBtn = document.querySelector(".status-footer-up-to-date-check");
+    expect(checkBtn).toBeTruthy();
+    expect(checkBtn.textContent).toMatch(/Buscar actualizaciones/i);
+
+    await act(async () => {
+      checkBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(checkForUpdates).toHaveBeenCalled();
+    expect(document.querySelector(".status-footer-up-to-date-panel")).toBeNull();
+  });
 });

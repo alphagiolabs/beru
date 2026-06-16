@@ -99,8 +99,3 @@ export function reduceUpdaterEvent(current, payload) {
 export function canStartDownload(update) {
   return update?.status === "available" && !!update?.version;
 }
-
-export function isUpdateFlowActive(update) {
-  const status = update?.status || "idle";
-  return status === "checking" || status === "downloading";
-}
