@@ -1,6 +1,6 @@
 {
   "name": "beru",
-  "version": "1.6.27",
+  "version": "1.6.28",
   "description": "Beru",
   "main": "main/main.js",
   "type": "module",
