@@ -6,7 +6,7 @@
 /* global console */
 
 import { existsSync, mkdirSync, copyFileSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
@@ -21,11 +21,11 @@ const ffmpegSource = requireCJS("ffmpeg-static");
 const ffprobeModule = requireCJS("ffprobe-static");
 const ffprobeSource = ffprobeModule?.path || ffprobeModule;
 
-const ffmpegTarget = resolve(binDir, "ffmpeg.exe");
-const ffprobeTarget = resolve(binDir, "ffprobe.exe");
+const ffmpegTarget = resolve(binDir, basename(ffmpegSource));
+const ffprobeTarget = resolve(binDir, basename(ffprobeSource));
 
-const ffmpegLicTarget = resolve(binDir, "ffmpeg.exe.LICENSE");
-const ffprobeLicTarget = resolve(binDir, "ffprobe.exe.LICENSE");
+const ffmpegLicTarget = resolve(binDir, `${basename(ffmpegSource)}.LICENSE`);
+const ffprobeLicTarget = resolve(binDir, `${basename(ffprobeSource)}.LICENSE`);
 
 if (!existsSync(binDir)) mkdirSync(binDir, { recursive: true });
 
@@ -58,12 +58,12 @@ if (needsCopy(ffprobeSource, ffprobeTarget)) {
   skipped += 1;
 }
 
-const ffmpegLicSrc = resolve(dirname(ffmpegSource), "ffmpeg.exe.LICENSE");
+const ffmpegLicSrc = resolve(dirname(ffmpegSource), `${basename(ffmpegSource)}.LICENSE`);
 if (existsSync(ffmpegLicSrc) && needsCopy(ffmpegLicSrc, ffmpegLicTarget)) {
   copyFileSync(ffmpegLicSrc, ffmpegLicTarget);
 }
 
-const ffprobeLicSrc = resolve(dirname(ffprobeSource), "ffprobe.exe.LICENSE");
+const ffprobeLicSrc = resolve(dirname(ffprobeSource), `${basename(ffprobeSource)}.LICENSE`);
 if (existsSync(ffprobeLicSrc) && needsCopy(ffprobeLicSrc, ffprobeLicTarget)) {
   copyFileSync(ffprobeLicSrc, ffprobeLicTarget);
 }

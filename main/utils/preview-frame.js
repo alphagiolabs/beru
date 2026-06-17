@@ -1,6 +1,9 @@
 import { spawn } from "child_process";
-import fs from "fs";
-import { getPythonPath } from "./paths.js";
+import {
+  resolveProcessorSpawn,
+  buildProcessorChildEnv,
+  validateProcessorAvailable,
+} from "./processor-spawn.js";
 
 const STARTUP_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -10,16 +13,6 @@ let workerStartPromise = null;
 let workerReady = false;
 let nextRequestId = 1;
 const pending = new Map();
-
-function resolvePythonSpawn() {
-  if (process.env.BERU_PYTHON && fs.existsSync(process.env.BERU_PYTHON)) {
-    return { command: process.env.BERU_PYTHON, args: [] };
-  }
-  if (process.platform === "win32") {
-    return { command: "py", args: ["-3"] };
-  }
-  return { command: "python3", args: [] };
-}
 
 function settleRequest(id, result) {
   const request = pending.get(id);
@@ -48,15 +41,25 @@ function parseWorkerLine(line) {
   }
 }
 
-function startWorker(pythonScript) {
+function startWorker() {
   if (worker && workerReady && !worker.killed) return Promise.resolve(worker);
   if (workerStartPromise) return workerStartPromise;
 
   workerStartPromise = new Promise((resolve, reject) => {
-    const { command, args: pyArgs } = resolvePythonSpawn();
-    const proc = spawn(command, [...pyArgs, pythonScript, "--preview-frame-worker"], {
+    const spawnSpec = resolveProcessorSpawn(["--preview-frame-worker"]);
+    if (!spawnSpec) {
+      workerStartPromise = null;
+      reject(
+        new Error(
+          "No se pudo iniciar el procesador de preview. " +
+            "En desarrollo instale Python 3; en la app instalada, reinstale Beru.",
+        ),
+      );
+      return;
+    }
+    const proc = spawn(spawnSpec.command, spawnSpec.args, {
       windowsHide: true,
-      env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
+      env: buildProcessorChildEnv(process.env),
     });
 
     worker = proc;
@@ -139,14 +142,14 @@ function startWorker(pythonScript) {
 }
 
 export async function renderPreviewFrame(payload) {
-  const pythonScript = getPythonPath();
-  if (!pythonScript || !fs.existsSync(pythonScript)) {
-    return { ok: false, error: "Procesador Python no encontrado" };
+  const processorCheck = validateProcessorAvailable();
+  if (!processorCheck.ok) {
+    return { ok: false, error: processorCheck.error };
   }
 
   let proc;
   try {
-    proc = await startWorker(pythonScript);
+    proc = await startWorker();
   } catch (err) {
     return { ok: false, error: err.message };
   }
