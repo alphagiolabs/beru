@@ -49,8 +49,13 @@ def _init_font_dirs():
     global FONT_DIRS
     system = platform.system()
     if system == "Windows":
+        # Use WINDIR / SystemRoot env vars so non-default Windows installs
+        # (e.g. Windows on D:\) resolve the correct Fonts folder.
+        windir = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or "C:/Windows"
         FONT_DIRS = [
-            Path("C:/Windows/Fonts"),
+            Path(windir) / "Fonts",
+            # Windows 10+ per-user font directory
+            Path.home() / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts",
         ]
     elif system == "Darwin":
         FONT_DIRS = [
@@ -99,7 +104,8 @@ def _windows_registry_fonts():
                 filename = raw_path.split(",", 1)[0].strip()
                 font_path = Path(filename)
                 if not font_path.is_absolute():
-                    font_path = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts" / filename
+                    windir = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or "C:/Windows"
+                    font_path = Path(windir) / "Fonts" / filename
                 if not font_path.exists():
                     continue
 
@@ -177,18 +183,30 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
     fonts = get_system_fonts()
     normalized_fonts = {_font_name_key(name): value for name, value in fonts.items()}
 
+    def _format_fontfile(full_path):
+        """Escape a font path for use in an FFmpeg drawtext filter option."""
+        return full_path.replace("\\", "/").replace(":", "\\:")
+
     for candidate in _font_style_candidates(font_family, font_weight, italic, bold):
         match = fonts.get(candidate.lower()) or normalized_fonts.get(_font_name_key(candidate))
         if match:
             full_path, _stem = match
-            return "fontfile", full_path.replace("\\", "/").replace(":", "\\:"), True
+            # Validate the font file actually exists on this machine — the font
+            # registry may reference a file that was removed or lives on a
+            # different drive.  Without this check FFmpeg raises ENOENT.
+            if os.path.isfile(full_path):
+                return "fontfile", _format_fontfile(full_path), True
+            logger.debug("Font file missing, skipping: %s", full_path)
 
-    # Try partial match
+    # Try partial match — same existence check.
     key = _font_name_key(font_family)
     for fkey, (fpath, fstem) in fonts.items():
         normalized_key = _font_name_key(fkey)
         if key in normalized_key or normalized_key in key:
-            return "fontfile", fpath.replace("\\", "/").replace(":", "\\:"), True
+            if os.path.isfile(fpath):
+                return "fontfile", _format_fontfile(fpath), True
+            logger.debug("Font file missing (partial), skipping: %s", fpath)
+
     # Fallback: let FFmpeg try fontconfig / system lookup
     return "font", font_family, False
 
