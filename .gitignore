@@ -39,11 +39,22 @@ build/pyinstaller/
 python/build/
 python/dist/
 
+# Log files
+*.log
+
+# Debug / diagnostic artifacts (never commit)
+npx_vitest*.txt
+p01_verify.txt
+version.txt
+wmic_procs.txt
+
 # Local AI tooling / agent config (not part of the project)
 .agents/
 .commandcode/
 skills-lock.json
 AGENTS.md
+CLAUDE.md
+GEMINI.md
 
 # Versioned build output directories (never commit)
 dist-installer-v*/
