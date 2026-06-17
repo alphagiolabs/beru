@@ -115,6 +115,9 @@ export default function useCanvas(videoEl) {
     (e) => {
       const video = videoEl?.current;
       if (!video) return;
+      /* Only the primary button draws/resizes regions; middle button is
+       * reserved for zoom-pan (see VideoPreview). */
+      if (e.button !== 0) return;
       if (!video.paused) video.pause();
 
       /* Priority: handle > region interior > empty space */

@@ -18,7 +18,13 @@ import {
   ScanEye,
   X,
   Loader2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 4;
+const ZOOM_STEP = 0.25;
 
 const opModeColor = {
   text: "#a855f7",
@@ -95,7 +101,139 @@ export default function VideoPreview() {
   const [ffmpegPreviewLoading, setFfmpegPreviewLoading] = useState(false);
   const [showFfmpegPreview, setShowFfmpegPreview] = useState(false);
   const [previewCompareMode, setPreviewCompareMode] = useState("ffmpeg");
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
+
+  /* Zoom & pan refs (avoid stale closures in native event handlers) */
+  const outerRef = useRef(null);
+  const wrapperRef = useRef(null);
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const panDragRef = useRef(null);
+  const isSplitCompareRef = useRef(false);
+
+  const setZoomBoth = useCallback((z) => {
+    zoomRef.current = z;
+    setZoom(z);
+  }, []);
+  const setPanBoth = useCallback((p) => {
+    panRef.current = p;
+    setPan(p);
+  }, []);
+
+  const clampPan = useCallback((px, py, z) => {
+    const v = videoRef.current;
+    const outer = outerRef.current;
+    if (!v || !outer || z <= 1) return { x: 0, y: 0 };
+    const baseW = v.offsetWidth || 1;
+    const baseH = v.offsetHeight || 1;
+    const maxPanX = Math.max(0, (baseW * z - outer.clientWidth) / 2);
+    const maxPanY = Math.max(0, (baseH * z - outer.clientHeight) / 2);
+    return {
+      x: Math.max(-maxPanX, Math.min(maxPanX, px)),
+      y: Math.max(-maxPanY, Math.min(maxPanY, py)),
+    };
+  }, []);
+
+  /* Zoom while keeping the given screen point (or the wrapper center) stable. */
+  const applyZoom = useCallback(
+    (nextZ, screenPoint) => {
+      if (isSplitCompareRef.current) return;
+      const v = videoRef.current;
+      const w = wrapperRef.current;
+      const outer = outerRef.current;
+      if (!v || !w || !outer) return;
+      const z0 = zoomRef.current;
+      const z1 = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nextZ));
+      if (z1 === z0) return;
+      const baseW = v.offsetWidth || w.offsetWidth || 1;
+      const baseH = v.offsetHeight || w.offsetHeight || 1;
+      const wr = w.getBoundingClientRect(); // includes current pan
+      const sx = screenPoint ? screenPoint.x : wr.left + baseW / 2;
+      const sy = screenPoint ? screenPoint.y : wr.top + baseH / 2;
+      const relX = sx - wr.left;
+      const relY = sy - wr.top;
+      const panX = panRef.current.x + relX * (1 - z1 / z0);
+      const panY = panRef.current.y + relY * (1 - z1 / z0);
+      const clamped = clampPan(panX, panY, z1);
+      setZoomBoth(z1);
+      setPanBoth(clamped);
+    },
+    [clampPan, setZoomBoth, setPanBoth],
+  );
+
+  const zoomIn = useCallback(() => applyZoom(zoomRef.current + ZOOM_STEP), [applyZoom]);
+  const zoomOut = useCallback(() => applyZoom(zoomRef.current - ZOOM_STEP), [applyZoom]);
+  const zoomReset = useCallback(() => {
+    setZoomBoth(1);
+    setPanBoth({ x: 0, y: 0 });
+  }, [setZoomBoth, setPanBoth]);
+
+  /* Pan with middle-mouse drag (never conflicts with left-click region drawing). */
+  const onPanMouseDown = useCallback((e) => {
+    if (e.button !== 1) return;
+    if (zoomRef.current <= 1) return;
+    e.preventDefault();
+    setIsPanning(true);
+    panDragRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      panX: panRef.current.x,
+      panY: panRef.current.y,
+    };
+  }, []);
+
+  const onPanMouseMove = useCallback(
+    (e) => {
+      const d = panDragRef.current;
+      if (!d) return;
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      const clamped = clampPan(d.panX + dx, d.panY + dy, zoomRef.current);
+      setPanBoth(clamped);
+    },
+    [clampPan, setPanBoth],
+  );
+
+  const onPanMouseUp = useCallback(() => {
+    if (panDragRef.current) {
+      panDragRef.current = null;
+      setIsPanning(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", onPanMouseMove);
+    window.addEventListener("mouseup", onPanMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onPanMouseMove);
+      window.removeEventListener("mouseup", onPanMouseUp);
+    };
+  }, [onPanMouseMove, onPanMouseUp]);
+
+  /* Ctrl + wheel zooms toward the cursor. */
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const handler = (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      applyZoom(zoomRef.current * factor, { x: e.clientX, y: e.clientY });
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, [applyZoom]);
+
+  /* Zoom is disabled in split-compare mode (reset to fit). */
+  useEffect(() => {
+    if (showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "split") {
+      setZoomBoth(1);
+      setPanBoth({ x: 0, y: 0 });
+    }
+  }, [showFfmpegPreview, ffmpegPreviewUrl, previewCompareMode, setZoomBoth, setPanBoth]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -176,7 +314,9 @@ export default function VideoPreview() {
     setFfmpegPreviewUrl(null);
     setShowFfmpegPreview(false);
     setPreviewCompareMode("ffmpeg");
-  }, [sel?.path]);
+    setZoomBoth(1);
+    setPanBoth({ x: 0, y: 0 });
+  }, [sel?.path, setZoomBoth, setPanBoth]);
 
   // Drag handlers for image operations
   const handleImageDragStart = (op, opIdx, e) => {
@@ -372,6 +512,7 @@ export default function VideoPreview() {
   }, []);
 
   const isSplitCompare = showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "split";
+  isSplitCompareRef.current = isSplitCompare;
   const showFfmpegOverlay =
     showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "ffmpeg";
 
@@ -407,8 +548,14 @@ export default function VideoPreview() {
   const seekFrac = duration > 0 ? currentTime / duration : 0;
 
   return (
-    <div className="flex-1 flex items-center justify-center p-4 min-h-0 relative">
+    <div
+      ref={outerRef}
+      onMouseDown={onPanMouseDown}
+      className="flex-1 flex items-center justify-center p-4 min-h-0 relative overflow-hidden"
+      style={{ cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default" }}
+    >
       <div
+        ref={wrapperRef}
         className={
           isSplitCompare
             ? "relative flex flex-row gap-2 items-stretch max-w-full"
@@ -416,8 +563,13 @@ export default function VideoPreview() {
         }
         style={
           isSplitCompare
-            ? { maxHeight: "calc(100vh - 200px)" }
-            : { maxWidth: "100%", maxHeight: "100%", overflow: "hidden" }
+            ? { maxHeight: "calc(100vh-200px)" }
+            : {
+                maxWidth: "100%",
+                maxHeight: "100%",
+                overflow: zoom > 1 ? "visible" : "hidden",
+                transform: `translate(${pan.x}px, ${pan.y}px)`,
+              }
         }
       >
         <div className={isSplitCompare ? "relative flex-1 min-w-0 self-center" : "contents"}>
@@ -433,7 +585,7 @@ export default function VideoPreview() {
             ref={videoRef}
             src={sel.src || null}
             className="max-h-[calc(100vh-200px)] max-w-full block object-contain rounded"
-            style={{ imageRendering: "auto" }}
+            style={{ imageRendering: "auto", transform: `scale(${zoom})`, transformOrigin: "0 0" }}
             preload="metadata"
             playsInline
             disablePictureInPicture
@@ -453,7 +605,10 @@ export default function VideoPreview() {
           />
 
           {showFfmpegOverlay && (
-            <div className="absolute inset-0 z-[25]">
+            <div
+              className="absolute inset-0 z-[25]"
+              style={{ transform: `scale(${zoom})`, transformOrigin: "0 0" }}
+            >
               <img
                 src={ffmpegPreviewUrl}
                 alt="Preview FFmpeg renderizado"
@@ -731,23 +886,37 @@ export default function VideoPreview() {
                 "bottom-right": { right: margin, bottom: margin + 60 },
               };
               const posStyle = posMap[pos] || posMap["bottom-right"];
+              /* Wrapper sized to the video's rendered (post-zoom) box so that
+               * right/bottom-anchored positions stay aligned with the visible
+               * video area at any zoom level. */
+              const boxStyle = {
+                position: "absolute",
+                left: 0,
+                top: 0,
+                width: rect.width,
+                height: rect.height,
+                pointerEvents: "none",
+                zIndex: 20,
+              };
               if (watermark.type === "text" && watermark.text) {
                 const fontSize = Math.max(8, (watermark.fontSize || 18) * sy);
                 return (
-                  <div
-                    className="absolute pointer-events-none z-20"
-                    style={{
-                      ...posStyle,
-                      opacity: watermark.opacity ?? 0.5,
-                      fontSize: `${fontSize}px`,
-                      fontFamily: `"${watermark.fontFamily || "Arial"}", sans-serif`,
-                      color: watermark.fontColor || "#ffffff",
-                      textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
-                      whiteSpace: "nowrap",
-                      userSelect: "none",
-                    }}
-                  >
-                    {watermark.text}
+                  <div className="absolute pointer-events-none z-20" style={boxStyle}>
+                    <div
+                      className="absolute"
+                      style={{
+                        ...posStyle,
+                        opacity: watermark.opacity ?? 0.5,
+                        fontSize: `${fontSize}px`,
+                        fontFamily: `"${watermark.fontFamily || "Arial"}", sans-serif`,
+                        color: watermark.fontColor || "#ffffff",
+                        textShadow: "1px 1px 3px rgba(0,0,0,0.7)",
+                        whiteSpace: "nowrap",
+                        userSelect: "none",
+                      }}
+                    >
+                      {watermark.text}
+                    </div>
                   </div>
                 );
               }
@@ -755,23 +924,22 @@ export default function VideoPreview() {
                 const baseSize = 80 * sy;
                 const scaledSize = baseSize * (watermark.scale || 1);
                 return (
-                  <div
-                    className="absolute pointer-events-none z-20"
-                    style={{
-                      ...posStyle,
-                      opacity: watermark.opacity ?? 0.5,
-                    }}
-                  >
-                    <img
-                      src={watermark.imageDataUrl}
-                      alt=""
-                      style={{
-                        height: `${scaledSize}px`,
-                        width: "auto",
-                        objectFit: "contain",
-                      }}
-                      draggable={false}
-                    />
+                  <div className="absolute pointer-events-none z-20" style={boxStyle}>
+                    <div
+                      className="absolute"
+                      style={{ ...posStyle, opacity: watermark.opacity ?? 0.5 }}
+                    >
+                      <img
+                        src={watermark.imageDataUrl}
+                        alt=""
+                        style={{
+                          height: `${scaledSize}px`,
+                          width: "auto",
+                          objectFit: "contain",
+                        }}
+                        draggable={false}
+                      />
+                    </div>
                   </div>
                 );
               }
@@ -980,6 +1148,42 @@ export default function VideoPreview() {
             {fmtTime(currentTime)} / {fmtTime(duration)}
           </span>
           <div className="flex-1" />
+          {!isSplitCompare && (
+            <div
+              className="flex items-center gap-0.5 px-1 py-0.5 rounded"
+              style={{ background: "rgba(0,0,0,0.4)" }}
+            >
+              <button
+                type="button"
+                onClick={zoomOut}
+                disabled={zoom <= MIN_ZOOM}
+                className="p-0.5 rounded hover:bg-white/10 disabled:opacity-30"
+                style={{ color: "var(--text-dim)" }}
+                title="Alejar (Ctrl + rueda)"
+              >
+                <ZoomOut size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={zoomReset}
+                className="px-1.5 py-0.5 rounded text-[9px] font-mono hover:bg-white/10 min-w-[40px] text-center"
+                style={{ color: zoom > 1 ? "var(--accent)" : "var(--text-dim)" }}
+                title="Restablecer zoom (1:1)"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={zoomIn}
+                disabled={zoom >= MAX_ZOOM}
+                className="p-0.5 rounded hover:bg-white/10 disabled:opacity-30"
+                style={{ color: "var(--text-dim)" }}
+                title="Acercar (Ctrl + rueda)"
+              >
+                <ZoomIn size={13} />
+              </button>
+            </div>
+          )}
           <span className="text-[9px] font-mono" style={{ color: "var(--text-dim)" }}>
             {sel.width}×{sel.height}
           </span>
