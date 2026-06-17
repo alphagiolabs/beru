@@ -98,4 +98,19 @@ def format_processing_error(raw_error, *, max_workers=None):
             "El encoder de hardware falló. Beru intentará usar CPU; si persiste, cambia a modo "
             "Conservador o actualiza los drivers de video."
         )
+    # Font / resource ENOENT: FFmpeg drawtext can't find the font file referenced
+    # in the filter graph.  This typically means the font specified in the overlay
+    # is not installed on this machine.
+    if "enoent" in lower or "no such file" in lower:
+        if "fontfile" in lower or "font" in lower or "drawtext" in lower:
+            return (
+                "No se encontró una fuente tipográfica necesaria para el texto. "
+                "Instala la fuente indicada en el overlay o cambia a una fuente del sistema "
+                "(Arial, Times New Roman, etc.) y vuelve a intentar."
+            )
+        return (
+            "No se encontró un archivo necesario durante el procesamiento. "
+            "Verifica que los archivos de entrada estén disponibles localmente "
+            "(no en la nube) y vuelve a intentar."
+        )
     return raw[-400:]
