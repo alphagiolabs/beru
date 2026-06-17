@@ -107,7 +107,7 @@
         "publisherName": "Beru"
       }
     },
-    "beforeBuild": "node scripts/build-processor.mjs",
+    "beforeBuild": "scripts/build-processor.hook.cjs",
     "nsis": {
       "oneClick": false,
       "perMachine": false,
