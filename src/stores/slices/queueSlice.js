@@ -386,10 +386,11 @@ export function createQueueSlice(set, get) {
     },
 
     removeOperationAt: (videoIdx, opIdx) => {
-      const { queue } = get();
+      const { queue, selectedIdx } = get();
       if (videoIdx < 0 || videoIdx >= queue.length) return;
       const ops = queue[videoIdx].operations;
       if (opIdx < 0 || opIdx >= ops.length) return;
+      if (videoIdx === selectedIdx) get()._saveUndo();
       const op = ops[opIdx];
       const regionId = get().findTemplateRegionIdForOp(op);
       const updated = [...queue];
@@ -517,6 +518,7 @@ export function createQueueSlice(set, get) {
         textShadowOffsetX,
         textShadowOffsetY,
       });
+      if (videoIdx === get().selectedIdx) get()._saveUndo();
       const updated = [...queue];
       updated[videoIdx] = {
         ...updated[videoIdx],
