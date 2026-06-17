@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 
 _DEFAULT_PROFILE = "balanced"
@@ -10,6 +12,19 @@ _VALID_PROFILES = frozenset({"fast", "balanced", "quality", "uquality"})
 
 
 def _encode_profiles_json_path() -> Path:
+    env_path = os.environ.get("BERU_ENCODE_PROFILES")
+    if env_path:
+        candidate = Path(env_path)
+        if candidate.is_file():
+            return candidate
+
+    if getattr(sys, "frozen", False):
+        meipass = Path(getattr(sys, "_MEIPASS", ""))
+        for rel in ("resources/encode-profiles.json", "encode-profiles.json"):
+            candidate = meipass / rel
+            if candidate.is_file():
+                return candidate
+
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
     candidates = (

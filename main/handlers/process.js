@@ -18,12 +18,21 @@ import {
   getLastProcessingError,
   setLastProcessingError,
 } from "../shared-state.js";
-import { getPythonPath, getFfmpegPath, getFfprobePath } from "../utils/paths.js";
+import { validateMediaBinaries } from "../utils/paths.js";
+import {
+  validateProcessorAvailable,
+  resolveProcessorSpawn,
+  buildProcessorChildEnv,
+} from "../utils/processor-spawn.js";
 import { probeVideo } from "../utils/video-cache.js";
 import { readSettings } from "../utils/settings.js";
 import { sendToRenderer } from "../utils/renderer.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
 import { createProcessorManifest, unwrapJobManifest } from "../utils/jobManifest.js";
+import {
+  findUnreadableInputs,
+  translateProcessorErrorMessage,
+} from "../utils/process-input-validation.js";
 
 const MAX_PROCESSOR_STDERR_CHARS = 48_000;
 const MAX_PROCESSOR_STDOUT_LINE_CHARS = 256_000;
@@ -31,16 +40,6 @@ const MAX_PROCESSOR_STDOUT_LINE_CHARS = 256_000;
 function appendBoundedText(current, chunk, maxChars) {
   const next = `${current || ""}${chunk || ""}`;
   return next.length > maxChars ? next.slice(-maxChars) : next;
-}
-
-function resolvePythonSpawn() {
-  if (process.env.BERU_PYTHON && fs.existsSync(process.env.BERU_PYTHON)) {
-    return { command: process.env.BERU_PYTHON, args: [] };
-  }
-  if (process.platform === "win32") {
-    return { command: "py", args: ["-3"] };
-  }
-  return { command: "python3", args: [] };
 }
 
 function dispatchProcessorLine(line) {
@@ -57,8 +56,9 @@ function dispatchProcessorLine(line) {
       if (Number.isInteger(idx) && idx >= 0) {
         sendToRenderer("process:jobError", msg);
       } else {
-        setLastProcessingError(errText);
-        sendToRenderer("process:error", errText);
+        const translated = translateProcessorErrorMessage(errText);
+        setLastProcessingError(translated);
+        sendToRenderer("process:error", translated);
       }
     } else if (msg.type === "summary") sendToRenderer("process:summary", msg);
     else sendToRenderer("process:log", trimmed);
@@ -211,9 +211,27 @@ export function registerProcessHandlers(pathSecurity) {
       return { success: false, error: "No hay videos para procesar" };
     }
 
-    const scriptPath = getPythonPath();
-    if (!fs.existsSync(scriptPath)) {
-      return { success: false, error: "processor.py not found" };
+    const processorCheck = validateProcessorAvailable();
+    if (!processorCheck.ok) {
+      return { success: false, error: processorCheck.error };
+    }
+
+    const mediaCheck = validateMediaBinaries();
+    if (!mediaCheck.ok) {
+      return { success: false, error: mediaCheck.error };
+    }
+
+    const unreadable = findUnreadableInputs(jobs);
+    if (unreadable.length > 0) {
+      const first = unreadable[0];
+      return {
+        success: false,
+        error: first.message,
+        unreadableInputs: unreadable.map((u) => ({
+          path: u.inputPath,
+          code: u.code,
+        })),
+      };
     }
 
     const runId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
@@ -254,19 +272,24 @@ export function registerProcessHandlers(pathSecurity) {
         workerCount = String(Math.min(16, Math.floor(Number(settings.batchWorkers))));
       }
 
-      const py = resolvePythonSpawn();
-      const ffmpegPath = getFfmpegPath();
-      const ffprobePath = getFfprobePath();
-      const childEnv = {
-        ...process.env,
-        BERU_WORKERS: workerCount,
-        BERU_WORKERS_MODE: batchWorkersMode,
-        BERU_RETRY_FAILED: settings.batchRetryFailed === false ? "0" : "1",
-        BERU_ENCODE_PROFILE: firstProfile,
-      };
-      if (ffmpegPath) childEnv.BERU_FFMPEG = ffmpegPath;
-      if (ffprobePath) childEnv.BERU_FFPROBE = ffprobePath;
-      const proc = spawn(py.command, [...py.args, scriptPath, tmpFile], {
+      const spawnSpec = resolveProcessorSpawn([tmpFile]);
+      if (!spawnSpec) {
+        throw new Error("No se pudo iniciar el procesador de video");
+      }
+
+      const ffmpegPath = mediaCheck.ffmpegPath;
+      const ffprobePath = mediaCheck.ffprobePath;
+      const childEnv = buildProcessorChildEnv(
+        {
+          ...process.env,
+          BERU_WORKERS: workerCount,
+          BERU_WORKERS_MODE: batchWorkersMode,
+          BERU_RETRY_FAILED: settings.batchRetryFailed === false ? "0" : "1",
+          BERU_ENCODE_PROFILE: firstProfile,
+        },
+        { ffmpegPath, ffprobePath },
+      );
+      const proc = spawn(spawnSpec.command, spawnSpec.args, {
         windowsHide: true,
         env: childEnv,
       });
@@ -353,6 +376,7 @@ export function registerProcessHandlers(pathSecurity) {
           } else {
             errMsg = errMsg || `Process exited with code ${code}`;
           }
+          errMsg = translateProcessorErrorMessage(errMsg);
         }
         return settleRun({
           success: !failed,
@@ -363,8 +387,10 @@ export function registerProcessHandlers(pathSecurity) {
 
       const onError = (err) => {
         if (isCurrentRun()) {
-          setLastProcessingError(err.message);
-          sendToRenderer("process:error", err.message);
+          const translated = translateProcessorErrorMessage(err.message);
+          setLastProcessingError(translated);
+          sendToRenderer("process:error", translated);
+          return settleRun({ success: false, code: 1, error: translated });
         }
         return settleRun({ success: false, code: 1, error: err.message });
       };
