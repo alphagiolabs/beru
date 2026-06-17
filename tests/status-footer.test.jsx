@@ -125,7 +125,13 @@ describe("StatusFooter", () => {
     expect(window.api.downloadUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the install step after the user authorizes a download and it finishes", async () => {
+  it("surfaces the ready modal after the user authorizes a download; auto-install lives in main", async () => {
+    // The downloading modal promises "Beru se reiniciará e instalará la
+    // actualización automáticamente al terminar" — that auto-install runs in
+    // the main process via quitAndInstall once the "update-downloaded" IPC
+    // event fires. The renderer's job here is just to show the "ready" modal
+    // and NOT call window.api.installUpdate (that path is for cached updates
+    // where the user has to opt in). This test pins the renderer-side contract.
     window.api = {
       downloadUpdate: vi.fn(async () => ({ ok: true })),
       installUpdate: vi.fn(async () => ({ ok: true })),
@@ -179,6 +185,8 @@ describe("StatusFooter", () => {
     });
 
     expect(document.body.textContent).toMatch(/Reiniciar e instalar/i);
+    // The renderer must never auto-call installUpdate — auto-install is
+    // owned by the main process (see main/updater.js scheduleInstall).
     expect(window.api.installUpdate).not.toHaveBeenCalled();
   });
 

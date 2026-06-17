@@ -21,6 +21,7 @@ let checkInProgress = false;
 let downloadInProgress = false;
 let quittingForUpdate = false;
 let updateDownloaded = false;
+let userInitiatedDownload = false;
 
 const tryLoad = () => {
   if (autoUpdater) return autoUpdater;
@@ -67,19 +68,31 @@ const init = (win) => {
 
   au.on("checking-for-update", () => send({ type: "checking" }));
   au.on("update-available", (info) => {
+    const version = info?.version || null;
+    // If this exact version is already downloaded, keep the "ready" state
+    // instead of flipping back to "available" — otherwise a background
+    // re-check would wipe updateDownloaded and force a re-download loop.
+    if (updateDownloaded && pendingVersion && version === pendingVersion) {
+      send({ type: "ready", version: pendingVersion });
+      return;
+    }
+    // New version announced — any prior user-initiation flag was for the
+    // previous version and must not survive the transition.
+    userInitiatedDownload = false;
     updateDownloaded = false;
-    pendingVersion = info?.version || null;
+    pendingVersion = version;
     send({
       type: "available",
-      version: info?.version,
+      version,
       releaseDate: info?.releaseDate,
       releaseNotes: info?.releaseNotes || "",
-      releaseUrl: releaseUrlFor(info?.version),
+      releaseUrl: releaseUrlFor(version),
     });
   });
   au.on("update-not-available", (info) => {
     pendingVersion = null;
     updateDownloaded = false;
+    userInitiatedDownload = false;
     send({ type: "not-available", version: info?.version });
   });
   au.on("download-progress", (p) =>
@@ -95,14 +108,22 @@ const init = (win) => {
     downloadInProgress = false;
     updateDownloaded = true;
     pendingVersion = info?.version || pendingVersion;
-    // Intentionally do NOT auto-install. Surface the "ready" snapshot to the
-    // renderer so the user can confirm the install via the modal. The renderer
-    // is the single source of truth for whether the user wants to restart now.
     send({ type: "ready", version: info?.version || pendingVersion });
+    // Honor the downloading-modal copy: "Beru se reiniciará e instalará la
+    // actualización automáticamente al terminar." When the user explicitly
+    // clicked "Actualizar ahora" in this session, trigger quitAndInstall so
+    // the app actually restarts. For cached updates from a previous session
+    // (no userInitiatedDownload flag) the renderer keeps showing the "ready"
+    // modal so the user can confirm the restart themselves.
+    if (userInitiatedDownload) {
+      userInitiatedDownload = false;
+      scheduleInstall(au);
+    }
   });
   au.on("error", (err) => {
     checkInProgress = false;
     if (downloadInProgress) downloadInProgress = false;
+    userInitiatedDownload = false;
     send({ type: "error", message: err?.message || String(err) });
   });
 
@@ -115,6 +136,9 @@ const init = (win) => {
 
 const checkForUpdates = async () => {
   if (isDev) return { ok: false, reason: "dev-build" };
+  // Don't run a check that would wipe an already-downloaded update — it would
+  // reset updateDownloaded and re-emit "available", forcing a re-download.
+  if (updateDownloaded) return { ok: false, reason: "already-ready" };
   if (checkInProgress) return { ok: false, reason: "check-in-progress" };
   if (downloadInProgress) return { ok: false, reason: "download-in-progress" };
   const au = tryLoad();
@@ -137,14 +161,21 @@ const startDownload = async () => {
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
 
+  // Mark this as a user-initiated download so the "update-downloaded" handler
+  // can auto-install and honor the modal copy. Cleared on every error/cancel
+  // path below.
+  userInitiatedDownload = true;
+
   if (!pendingVersion) {
     try {
       const result = await au.checkForUpdates();
       pendingVersion = result?.updateInfo?.version || null;
       if (!pendingVersion) {
+        userInitiatedDownload = false;
         return { ok: false, error: "no-update-available" };
       }
     } catch (e) {
+      userInitiatedDownload = false;
       send({ type: "error", message: e?.message || String(e) });
       return { ok: false, error: e?.message };
     }
@@ -170,6 +201,7 @@ const startDownload = async () => {
     return { ok: true };
   } catch (e) {
     downloadInProgress = false;
+    userInitiatedDownload = false;
     // electron-updater emits "error" for download failures; avoid duplicate IPC.
     return { ok: false, error: e?.message };
   }
@@ -177,17 +209,46 @@ const startDownload = async () => {
 
 const getSnapshot = () => lastSnapshot;
 
+const INSTALL_GRACE_MS = 10000;
+
 const scheduleInstall = (au) => {
   if (isDev || !au || quittingForUpdate) return;
   quittingForUpdate = true;
+  // Silent + force-run is the standard for NSIS auto-updates. A non-silent
+  // assisted update (oneClick: false) can surface a wizard or fail to apply
+  // silently; the app then quits, --force-run relaunches the OLD version, and
+  // the same update reappears on the next launch → update loop.
   setImmediate(() => {
     try {
-      au.quitAndInstall(false, true);
+      const result = au.quitAndInstall(true, true);
+      // electron-updater's install is fire-and-forget for NSIS, but newer
+      // builds may return a promise — handle both so a rejection never leaves
+      // us stuck in the "install-in-progress" state.
+      if (result && typeof result.catch === "function") {
+        result.catch((e) => {
+          quittingForUpdate = false;
+          send({ type: "error", message: e?.message || String(e) });
+        });
+      }
     } catch (e) {
       quittingForUpdate = false;
       send({ type: "error", message: e?.message || String(e) });
     }
   });
+  // Safety net: NSIS install is fire-and-forget, so quitAndInstall() does NOT
+  // reject when the installer spawn fails — it just quits. If we are still
+  // alive after the grace period, the quit was blocked or the spawn failed;
+  // reset quittingForUpdate so the user can retry the install instead of being
+  // locked out with "install-in-progress".
+  setTimeout(() => {
+    if (quittingForUpdate) {
+      quittingForUpdate = false;
+      send({
+        type: "error",
+        message: "No se pudo reiniciar para instalar la actualización. Inténtalo de nuevo.",
+      });
+    }
+  }, INSTALL_GRACE_MS);
 };
 
 const install = () => {

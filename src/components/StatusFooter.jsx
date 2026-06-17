@@ -8,9 +8,6 @@ import { useT } from "../i18n/useT";
 import { getBatchProgress } from "../utils/batch-progress";
 import { APP_VERSION, formatFooterClock, parseReleaseNotesSections } from "../utils/appVersion";
 import { formatHistoryTimestamp } from "../utils/execution-history";
-import { safeStorage } from "../utils/safeStorage";
-
-const DISMISS_KEY = "beru.updateReady.dismissedVersion";
 
 function FooterChip({ children, className = "", title, onClick, active }) {
   const Tag = onClick ? "button" : "div";
@@ -367,12 +364,11 @@ export default function StatusFooter() {
   const showProgress = isProcessing || completed > 0 || percent > 0;
 
   const updateStatus = update?.status || "idle";
+  // The update badge stays visible for every active state. There is no
+  // permanent dismiss — the notification must persist until the app is fully
+  // up to date, so the user is always reminded that an update is waiting.
   const hasUpdateBadge =
-    updateStatus === "available" ||
-    updateStatus === "downloading" ||
-    (updateStatus === "ready" &&
-      update?.version &&
-      safeStorage.get(DISMISS_KEY) !== update.version);
+    updateStatus === "available" || updateStatus === "downloading" || updateStatus === "ready";
 
   useEffect(() => {
     if (isProcessing) {
@@ -389,11 +385,9 @@ export default function StatusFooter() {
   }, [isProcessing, updateStatus]);
 
   useEffect(() => {
-    if (
-      updateStatus === "ready" &&
-      update?.version &&
-      safeStorage.get(DISMISS_KEY) !== update.version
-    ) {
+    // Auto-open the install modal whenever an update is ready to install, on
+    // every launch, so the prompt is persistent until the update is applied.
+    if (updateStatus === "ready" && update?.version) {
       setUpdateOpen(true);
     }
   }, [updateStatus, update?.version]);
@@ -441,12 +435,9 @@ export default function StatusFooter() {
   };
 
   const handleUpdateLater = () => {
-    if (updateStatus === "ready" && update?.version) {
-      safeStorage.set(DISMISS_KEY, update.version);
-      useEditorStore.setState((s) => ({
-        update: { ...s.update, status: "idle" },
-      }));
-    }
+    // Session-only deferral: just close the modal. The badge stays visible and
+    // the modal re-opens on the next launch, so the update remains persistent
+    // until it is actually installed (no permanent dismiss).
     setUpdateOpen(false);
   };
 
