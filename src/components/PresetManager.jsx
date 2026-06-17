@@ -6,6 +6,7 @@ export default function PresetManager() {
   const presets = useEditorStore((s) => s.presets);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deletingFilename, setDeletingFilename] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const getState = useEditorStore.getState;
 
@@ -21,6 +22,25 @@ export default function PresetManager() {
       setFeedback({ kind: "ok", text: `Guardado: ${res.fileName}` });
     } else {
       setFeedback({ kind: "err", text: res?.error || "No se pudo guardar el preset" });
+    }
+    setTimeout(() => setFeedback(null), 2500);
+  };
+
+  const handleDelete = async (preset) => {
+    if (preset.source === "bundled") {
+      setFeedback({ kind: "err", text: "Los presets incluidos no se pueden eliminar" });
+      setTimeout(() => setFeedback(null), 2500);
+      return;
+    }
+    if (deletingFilename) return;
+    setDeletingFilename(preset.filename);
+    setFeedback(null);
+    const res = await getState().deletePreset(preset);
+    setDeletingFilename(null);
+    if (res?.ok) {
+      setFeedback({ kind: "ok", text: `Eliminado: ${preset.name}` });
+    } else {
+      setFeedback({ kind: "err", text: res?.error || "No se pudo eliminar el preset" });
     }
     setTimeout(() => setFeedback(null), 2500);
   };
@@ -58,22 +78,34 @@ export default function PresetManager() {
       <div className="flex flex-wrap gap-1 max-h-[100px] overflow-y-auto">
         {presets.map((p) => (
           <div
-            key={p.id}
+            key={`${p.source}-${p.filename}`}
             className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] cursor-pointer"
             style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
             onClick={() => getState().loadPreset(p)}
           >
             <span style={{ color: "var(--text-secondary)" }}>{p.name}</span>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                getState().deletePreset(p.id);
-              }}
-              style={{ color: "var(--text-dim)" }}
-              className="hover:text-red-400"
-            >
-              <Trash2 size={10} />
-            </button>
+            {p.source === "bundled" ? (
+              <span
+                style={{ color: "var(--text-dim)" }}
+                className="opacity-60"
+                title="Preset incluido (no se puede eliminar)"
+              >
+                <Trash2 size={10} />
+              </span>
+            ) : (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete(p);
+                }}
+                disabled={deletingFilename === p.filename}
+                style={{ color: "var(--text-dim)" }}
+                className="hover:text-red-400 disabled:opacity-50"
+                title="Eliminar preset"
+              >
+                <Trash2 size={10} />
+              </button>
+            )}
           </div>
         ))}
       </div>

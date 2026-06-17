@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld("api", {
   loadProjectFromPath: (path) => ipcRenderer.invoke("project:loadFromPath", path),
   listPresets: () => ipcRenderer.invoke("presets:list"),
   savePreset: (name, jsonStr) => ipcRenderer.invoke("presets:save", name, jsonStr),
+  deletePreset: (filename) => ipcRenderer.invoke("presets:delete", filename),
   loadSettings: () => ipcRenderer.invoke("settings:load"),
   saveSettings: (partial) => ipcRenderer.invoke("settings:save", partial),
   setWindowTheme: (theme) => ipcRenderer.invoke("window:setTheme", theme),

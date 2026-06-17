@@ -63,4 +63,37 @@ export function registerPresetHandlers() {
       return { success: false, error: e.message };
     }
   });
+
+  ipcMain.handle("presets:delete", async (_event, filename) => {
+    try {
+      if (typeof filename !== "string" || !filename.trim()) {
+        return { success: false, error: "Nombre de archivo inválido" };
+      }
+      // Only allow deleting files inside the user presets directory and only
+      // preset files (.beru.json / .json). Bundled presets are read-only.
+      const base = path.basename(filename);
+      if (!base.toLowerCase().endsWith(".beru.json") && !base.toLowerCase().endsWith(".json")) {
+        return { success: false, error: "Tipo de archivo no permitido" };
+      }
+      const userDir = path.join(app.getPath("userData"), "presets");
+      const filePath = path.join(userDir, base);
+      try {
+        fs.mkdirSync(userDir, { recursive: true });
+      } catch {}
+      if (!fs.existsSync(filePath)) {
+        return { success: false, error: "El preset no existe" };
+      }
+      // Defense-in-depth: resolve symlinks and confirm the target stays
+      // inside the user presets directory.
+      const real = fs.realpathSync(filePath).toLowerCase();
+      const dirReal = fs.realpathSync(userDir).toLowerCase();
+      if (!real.startsWith(dirReal + path.sep) && real !== dirReal) {
+        return { success: false, error: "Ruta fuera del directorio de presets" };
+      }
+      fs.unlinkSync(filePath);
+      return { success: true, fileName: base, filePath };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
 }

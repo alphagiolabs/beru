@@ -12,16 +12,30 @@ export function createProjectSlice(set, get) {
     presets: [],
     presetsUserDir: null,
 
-    deletePreset: (id) => {
-      set((s) => {
-        const next = s.presets.filter((p) => p.id !== id);
+    deletePreset: async (preset) => {
+      const api = window.api;
+      if (!api?.deletePreset) return { ok: false, error: "API no disponible" };
+      const p = preset || {};
+      // Bundled presets are read-only and cannot be deleted.
+      if (p.source === "bundled") {
+        return { ok: false, error: "Los presets incluidos no se pueden eliminar" };
+      }
+      const filename = p.filename;
+      if (typeof filename !== "string" || !filename.trim()) {
+        return { ok: false, error: "Preset sin nombre de archivo" };
+      }
+      const res = await api.deletePreset(filename);
+      if (!res.success) return { ok: false, error: res.error };
+      // Refresh from disk so the list reflects the real state.
+      if (api.listPresets) {
         try {
-          localStorage.setItem("beru-presets", JSON.stringify(next));
-        } catch (e) {
-          console.error("[beru] Failed to persist presets during delete:", e.message);
-        }
-        return { presets: next };
-      });
+          const r = await api.listPresets();
+          if (r?.success) set({ presets: r.presets, presetsUserDir: r.userDir });
+        } catch {}
+      } else {
+        set((s) => ({ presets: s.presets.filter((x) => x.filename !== filename) }));
+      }
+      return { ok: true, fileName: res.fileName };
     },
 
     loadPresetsFromStorage: () => {
