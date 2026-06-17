@@ -135,6 +135,8 @@ print(json.dumps({"ok": ok, "cmd": captured[0]}))
     const code = `
 import processor
 processor.get_system_fonts = lambda: {"arial": (r"C:\\Windows\\Fonts\\arial.ttf", "arial")}
+_real_isfile = processor.os.path.isfile
+processor.os.path.isfile = lambda p: True if "C:\\\\Windows\\\\Fonts" in p.replace("/", "\\\\") else _real_isfile(p)
 print(processor.build_drawtext({
     "mode": "text",
     "text": "Hola",
@@ -356,6 +358,8 @@ processor.get_system_fonts = lambda: {
     "arial italic": (r"C:\\Windows\\Fonts\\ariali.ttf", "ariali"),
     "arial bold italic": (r"C:\\Windows\\Fonts\\arialbi.ttf", "arialbi"),
 }
+_real_isfile = processor.os.path.isfile
+processor.os.path.isfile = lambda p: True if "C:\\\\Windows\\\\Fonts" in p.replace("/", "\\\\") else _real_isfile(p)
 processor._DRAWTEXT_OPTIONS_CACHE = set()
 processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
 print(processor.build_drawtext({
