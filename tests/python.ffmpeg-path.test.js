@@ -135,6 +135,10 @@ print(json.dumps({"ok": ok, "cmd": captured[0]}))
     const code = `
 import processor
 processor.get_system_fonts = lambda: {"arial": (r"C:\\Windows\\Fonts\\arial.ttf", "arial")}
+# The fontfile existence check (os.path.isfile) is platform-dependent: the
+# mocked Windows font paths do not exist on the Ubuntu CI runner, so stub it
+# out to test the drawtext formatting logic independently of the filesystem.
+processor.os.path.isfile = lambda p: True
 print(processor.build_drawtext({
     "mode": "text",
     "text": "Hola",
@@ -356,6 +360,9 @@ processor.get_system_fonts = lambda: {
     "arial italic": (r"C:\\Windows\\Fonts\\ariali.ttf", "ariali"),
     "arial bold italic": (r"C:\\Windows\\Fonts\\arialbi.ttf", "arialbi"),
 }
+# Stub the existence check so the mocked Windows font paths resolve on any
+# platform (the CI runner is Ubuntu and has no C:\\Windows\\Fonts).
+processor.os.path.isfile = lambda p: True
 processor._DRAWTEXT_OPTIONS_CACHE = set()
 processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
 print(processor.build_drawtext({
