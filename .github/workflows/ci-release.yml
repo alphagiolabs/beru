@@ -70,6 +70,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build bundled processor & fetch ffmpeg
+        run: |
+          npm run build:processor
+          npm run fetch:ffmpeg
+
       - name: Build renderer
         run: npx vite build
 
