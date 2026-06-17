@@ -47,11 +47,10 @@ function resolveBuildPython() {
 }
 
 function ensurePyInstaller(python) {
-  const check = spawnSync(
-    python.command,
-    [...python.args, "-m", "PyInstaller", "--version"],
-    { encoding: "utf-8", stdio: "pipe" },
-  );
+  const check = spawnSync(python.command, [...python.args, "-m", "PyInstaller", "--version"], {
+    encoding: "utf-8",
+    stdio: "pipe",
+  });
   if (check.status === 0) return;
 
   console.log("[build:processor] Installing PyInstaller…");
