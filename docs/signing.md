@@ -64,13 +64,15 @@ npm run build
 
 ## CI / GitHub Actions
 
-Store the certificate and password as GitHub secrets (`WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD`) and pass them to the build step:
+Store the certificate and password as GitHub secrets (`WINDOWS_CERTIFICATE_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD`) and pass them to the build step. These names match the `release` job in `.github/workflows/ci-release.yml`:
 
 ```yaml
 env:
-  CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
-  CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+  CSC_LINK: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+  CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
 ```
+
+If the secrets are not configured, leave them unset — `ci-release.yml` only sets the env vars when the secrets are present, so the build still works (just produces an unsigned installer).
 
 ## Verification
 
