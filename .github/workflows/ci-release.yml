@@ -18,6 +18,7 @@ jobs:
   test:
     name: Lint & Test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -31,15 +32,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install ffmpeg
-        # The new persistent preview-worker tests in tests/preview-frame.test.js
-        # spawn python processor.py --preview-frame-worker, which bails out with
-        # {type:"ready", ok:false, error:"ffmpeg not found"} when ffmpeg is
-        # missing from PATH. ubuntu-latest has no ffmpeg by default, so the
-        # worker tests would otherwise be skipped/green only on developer
-        # machines. We install ffmpeg here to actually exercise the worker
-        # code path in CI.
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Prepare ffmpeg
+        # npm ci runs postinstall, but this is idempotent and keeps the CI
+        # dependency local to the repo instead of waiting on apt mirrors.
+        timeout-minutes: 2
+        run: npm run fetch:ffmpeg
 
       - name: Lint
         run: npm run lint
@@ -57,6 +54,7 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
     needs: test
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v6
