@@ -51,20 +51,24 @@ function _whichOnPath(binName) {
 
 const _exe = process.platform === "win32" ? ".exe" : "";
 
-export function getFfprobePath() {
-  const devBin = path.join(__dirname, "..", "..", "bin", `ffprobe${_exe}`);
+/**
+ * Resolve a bundled binary (ffmpeg/ffprobe): dev bin → packaged bin → PATH.
+ * Single source of truth for the resolution policy used by both binaries.
+ */
+function resolveBinary(name) {
+  const devBin = path.join(__dirname, "..", "..", "bin", `${name}${_exe}`);
   if (fs.existsSync(devBin)) return devBin;
-  const packaged = path.join(process.resourcesPath, "bin", `ffprobe${_exe}`);
+  const packaged = path.join(process.resourcesPath, "bin", `${name}${_exe}`);
   if (!isDev && fs.existsSync(packaged)) return packaged;
-  return _whichOnPath("ffprobe") || null;
+  return _whichOnPath(name) || null;
+}
+
+export function getFfprobePath() {
+  return resolveBinary("ffprobe");
 }
 
 export function getFfmpegPath() {
-  const devBin = path.join(__dirname, "..", "..", "bin", `ffmpeg${_exe}`);
-  if (fs.existsSync(devBin)) return devBin;
-  const packaged = path.join(process.resourcesPath, "bin", `ffmpeg${_exe}`);
-  if (!isDev && fs.existsSync(packaged)) return packaged;
-  return _whichOnPath("ffmpeg") || null;
+  return resolveBinary("ffmpeg");
 }
 
 /**

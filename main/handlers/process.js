@@ -134,19 +134,27 @@ function applyProbeInfoToJob(job, info) {
   };
 }
 
+// Normalize a job's width/height fields (used both when export metadata is
+// already present and as a fallback after a failed probe).
+function normalizeJobDimensions(job) {
+  const sw = Number(job.source_width || job.width || 0);
+  const sh = Number(job.source_height || job.height || 0);
+  return {
+    ...job,
+    width: sw,
+    height: sh,
+    source_width: sw,
+    source_height: sh,
+  };
+}
+
 async function enrichJobVideoInfo(job) {
   if (!hasVideoOperations(job)) return job;
 
   const sw = Number(job.source_width || job.width || 0);
   const sh = Number(job.source_height || job.height || 0);
   if (hasExportMetadata(job)) {
-    return {
-      ...job,
-      width: sw,
-      height: sh,
-      source_width: sw,
-      source_height: sh,
-    };
+    return normalizeJobDimensions(job);
   }
 
   if (!job?.input_path) return job;
@@ -160,13 +168,7 @@ async function enrichJobVideoInfo(job) {
   }
 
   if (sw > 0 && sh > 0) {
-    return {
-      ...job,
-      width: sw,
-      height: sh,
-      source_width: sw,
-      source_height: sh,
-    };
+    return normalizeJobDimensions(job);
   }
   return job;
 }

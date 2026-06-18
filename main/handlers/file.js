@@ -15,12 +15,16 @@ const IMAGE_MIMES = {
 export function registerFileHandlers(pathSecurity) {
   ipcMain.handle("fs:readExcel", async (_event, filePath) => {
     const check = pathSecurity.validateReadableFile(filePath, "excel");
-    if (!check.ok) return { error: check.error };
+    if (!check.ok) return { success: false, error: check.error };
     try {
       const buffer = await fs.promises.readFile(check.resolvedPath);
-      return { data: buffer.toString("base64"), name: path.basename(check.resolvedPath) };
+      return {
+        success: true,
+        data: buffer.toString("base64"),
+        name: path.basename(check.resolvedPath),
+      };
     } catch (e) {
-      return { error: e.message };
+      return { success: false, error: e.message };
     }
   });
 
