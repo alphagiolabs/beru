@@ -7,6 +7,7 @@ const labelKeys = {
   blur: "props.mode.blur",
   crop: "props.mode.crop",
   text: "props.mode.text",
+  image: "props.mode.image",
   delogo: "props.mode.delogo",
 };
 const colors = {
@@ -67,6 +68,8 @@ export default function LayerList() {
                   disabled={i === 0}
                   className="text-[10px] p-0.5 rounded hover:bg-white/10"
                   style={{ color: "var(--text-dim)" }}
+                  title={t("props.actions.moveUp")}
+                  aria-label={t("props.actions.moveUp")}
                 >
                   <ChevronUp size={12} />
                 </button>
@@ -75,6 +78,8 @@ export default function LayerList() {
                   disabled={i === ops.length - 1}
                   className="text-[10px] p-0.5 rounded hover:bg-white/10"
                   style={{ color: "var(--text-dim)" }}
+                  title={t("props.actions.moveDown")}
+                  aria-label={t("props.actions.moveDown")}
                 >
                   <ChevronDown size={12} />
                 </button>
@@ -83,6 +88,7 @@ export default function LayerList() {
                   className="text-[10px] p-0.5 rounded hover:bg-white/10"
                   style={{ color: "var(--text-dim)" }}
                   title={t("props.actions.duplicate")}
+                  aria-label={t("props.actions.duplicate")}
                 >
                   <Copy size={12} />
                 </button>
@@ -90,6 +96,8 @@ export default function LayerList() {
                   onClick={() => getState().removeOperation(i)}
                   className="text-[10px] p-0.5 rounded hover:bg-red-500/20 hover:text-red-400"
                   style={{ color: "var(--text-dim)" }}
+                  title={t("props.actions.deleteLayer")}
+                  aria-label={t("props.actions.deleteLayer")}
                 >
                   <Trash2 size={12} />
                 </button>

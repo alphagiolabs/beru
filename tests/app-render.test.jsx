@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import App from "../src/App.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
-import { createQueueItem } from "../src/utils/types.js";
+import { createOperation, createQueueItem } from "../src/utils/types.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -146,5 +146,49 @@ describe("App render", () => {
       await new Promise((r) => setTimeout(r, 10));
     });
     expect(document.body.textContent).toMatch(/demo\.mp4/);
+  });
+
+  it("keeps the editor header responsive and icon controls named", async () => {
+    useEditorStore.setState({
+      queue: [
+        createQueueItem({
+          path: "C:\\videos\\demo.mp4",
+          src: "beru://local/C%3A%5Cvideos%5Cdemo.mp4",
+          filename: "demo.mp4",
+          width: 1920,
+          height: 1080,
+          duration: 10,
+          operations: [
+            createOperation({
+              mode: "text",
+              text: "Auditoria",
+              region: { x: 0.1, y: 0.1, w: 0.3, h: 0.12 },
+            }),
+          ],
+        }),
+      ],
+      selectedIdx: 0,
+      sidebarMode: "logo",
+      activeTool: "text",
+    });
+
+    root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(<App />);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    expect(document.querySelector('[data-testid="header-actions"]')?.className).toMatch(
+      /flex-wrap/,
+    );
+
+    const unnamedIconButtons = Array.from(document.querySelectorAll("button")).filter(
+      (button) =>
+        !button.textContent.trim() &&
+        !button.getAttribute("aria-label") &&
+        !button.getAttribute("title"),
+    );
+
+    expect(unnamedIconButtons).toEqual([]);
   });
 });

@@ -213,6 +213,8 @@
 
   "props.actions.addRegion": "Add region",
   "props.actions.addLayer": "Add layer",
+  "props.actions.moveUp": "Move layer up",
+  "props.actions.moveDown": "Move layer down",
   "props.actions.deleteLayer": "Delete layer",
   "props.actions.duplicate": "Duplicate",
 
@@ -231,8 +233,16 @@
   "props.placeholder.noSelection": "Select a video from the queue to start.",
 
   "preview.playPause": "Play / pause",
+  "preview.jumpStart": "Jump to start",
+  "preview.jumpEnd": "Jump to end",
   "preview.mute": "Mute",
   "preview.unmute": "Unmute",
+  "preview.showTimeline": "Show timeline markers",
+  "preview.hideTimeline": "Hide timeline markers",
+  "preview.renderFrame": "Preview rendered frame (FFmpeg drawtext)",
+  "preview.zoomOut": "Zoom out (Ctrl + wheel)",
+  "preview.zoomReset": "Reset zoom (1:1)",
+  "preview.zoomIn": "Zoom in (Ctrl + wheel)",
   "preview.fullscreen": "Fullscreen",
   "preview.errorLoading": "Could not load the video.",
   "preview.noVideoSelected": "No video selected.",
