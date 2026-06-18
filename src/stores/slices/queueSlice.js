@@ -36,6 +36,7 @@ export function createQueueSlice(set, get) {
   return {
     queue: [],
     selectedIdx: -1,
+    selectedOperationIdx: null,
     currentRegion: null,
     imageDataCache: {},
     undoStack: [],
@@ -234,6 +235,7 @@ export function createQueueSlice(set, get) {
         return {
           queue: next,
           selectedIdx: sel,
+          selectedOperationIdx: null,
           excelMatchStatus: newStatus,
           imageDataCache: pruneImageDataCache(s.imageDataCache, next),
           batchSummary: null,
@@ -242,7 +244,13 @@ export function createQueueSlice(set, get) {
     },
 
     selectVideo: (idx) => {
-      set({ selectedIdx: idx, currentRegion: null, undoStack: [], redoStack: [] });
+      set({
+        selectedIdx: idx,
+        selectedOperationIdx: null,
+        currentRegion: null,
+        undoStack: [],
+        redoStack: [],
+      });
       const api = window.api;
       const item = get().queue[idx];
       if (api?.getThumbnail && item && !item.thumbnail) {
@@ -274,7 +282,7 @@ export function createQueueSlice(set, get) {
       const w = bounds?.width || 1920;
       const h = bounds?.height || 1080;
       const safe = ensureNormalized(region, w, h);
-      set({ currentRegion: clampRegionToVideo(safe) });
+      set({ currentRegion: clampRegionToVideo(safe), selectedOperationIdx: null });
     },
 
     updateRegionValue: (key, value) => {
@@ -287,6 +295,17 @@ export function createQueueSlice(set, get) {
 
     /* ── Operations ─────────────────────────────────────────────────── */
 
+    selectOperation: (opIdx) => {
+      const { queue, selectedIdx } = get();
+      const ops =
+        selectedIdx >= 0 && selectedIdx < queue.length ? queue[selectedIdx].operations : [];
+      if (opIdx == null || opIdx < 0 || opIdx >= ops.length) {
+        set({ selectedOperationIdx: null });
+        return;
+      }
+      set({ selectedOperationIdx: opIdx, currentRegion: null });
+    },
+
     _saveUndo: () => {
       const { queue, selectedIdx, undoStack } = get();
       if (selectedIdx < 0 || selectedIdx >= queue.length) return;
@@ -294,8 +313,17 @@ export function createQueueSlice(set, get) {
         ...op,
         region: op.region ? { ...op.region } : null,
       }));
-      set({ undoStack: [...undoStack.slice(-(MAX_UNDO_STACK - 1)), ops], redoStack: [] });
+      set({
+        undoStack: [...undoStack.slice(-(MAX_UNDO_STACK - 1)), ops],
+        redoStack: [],
+      });
     },
+
+    _cloneOps: (ops) =>
+      ops.map((op) => ({
+        ...op,
+        region: op.region ? { ...op.region } : null,
+      })),
 
     addOperation: (mode) => {
       const { queue, selectedIdx, currentRegion } = get();
@@ -353,7 +381,12 @@ export function createQueueSlice(set, get) {
       if (mode === "image" && op.imagePath && get().tempImageDataUrl) {
         newCache[op.imagePath] = get().tempImageDataUrl;
       }
-      set({ queue: updated, currentRegion: null, imageDataCache: newCache });
+      set({
+        queue: updated,
+        selectedOperationIdx: updated[selectedIdx].operations.length - 1,
+        currentRegion: null,
+        imageDataCache: newCache,
+      });
     },
 
     removeOperation: (opIdx) => {
@@ -375,8 +408,18 @@ export function createQueueSlice(set, get) {
         ...updated[videoIdx],
         operations: ops.filter((_, i) => i !== opIdx),
       };
+      const selectedOperationIdx = get().selectedOperationIdx;
+      const nextSelectedOperationIdx =
+        videoIdx !== selectedIdx || selectedOperationIdx == null
+          ? selectedOperationIdx
+          : selectedOperationIdx === opIdx
+            ? null
+            : selectedOperationIdx > opIdx
+              ? selectedOperationIdx - 1
+              : selectedOperationIdx;
       set({
         queue: updated,
+        selectedOperationIdx: nextSelectedOperationIdx,
         imageDataCache: pruneImageDataCache(get().imageDataCache, updated),
       });
       if (regionId != null && op?.mode === "text") {
@@ -395,7 +438,24 @@ export function createQueueSlice(set, get) {
       const [moved] = nextOps.splice(fromIdx, 1);
       nextOps.splice(toIdx, 0, moved);
       updated[selectedIdx] = { ...updated[selectedIdx], operations: nextOps };
-      set({ queue: updated });
+      const selectedOperationIdx = get().selectedOperationIdx;
+      let nextSelectedOperationIdx = selectedOperationIdx;
+      if (selectedOperationIdx === fromIdx) {
+        nextSelectedOperationIdx = toIdx;
+      } else if (
+        selectedOperationIdx != null &&
+        fromIdx < selectedOperationIdx &&
+        toIdx >= selectedOperationIdx
+      ) {
+        nextSelectedOperationIdx = selectedOperationIdx - 1;
+      } else if (
+        selectedOperationIdx != null &&
+        fromIdx > selectedOperationIdx &&
+        toIdx <= selectedOperationIdx
+      ) {
+        nextSelectedOperationIdx = selectedOperationIdx + 1;
+      }
+      set({ queue: updated, selectedOperationIdx: nextSelectedOperationIdx });
     },
 
     duplicateOperation: (opIdx) => {
@@ -411,12 +471,13 @@ export function createQueueSlice(set, get) {
       });
       ops.splice(opIdx + 1, 0, clone);
       updated[selectedIdx] = { ...updated[selectedIdx], operations: ops };
-      set({ queue: updated });
+      set({ queue: updated, selectedOperationIdx: opIdx + 1 });
     },
 
     updateOperationRegion: (opIdx, region) => {
       const { queue, selectedIdx } = get();
       if (selectedIdx < 0) return;
+      get()._saveUndo();
       const updated = [...queue];
       const ops = [...updated[selectedIdx].operations];
       ops[opIdx] = { ...ops[opIdx], region: { ...region } };
@@ -425,16 +486,18 @@ export function createQueueSlice(set, get) {
     },
 
     updateOperation: (videoIdx, opIdx, patch) => {
-      const { queue } = get();
+      const { queue, selectedIdx } = get();
       if (videoIdx < 0 || videoIdx >= queue.length) return;
       const updated = [...queue];
       const ops = [...updated[videoIdx].operations];
       if (opIdx < 0 || opIdx >= ops.length) return;
-      ops[opIdx] = { ...ops[opIdx], ...patch };
+      if (videoIdx === selectedIdx) get()._saveUndo();
+      const nextOp = { ...ops[opIdx], ...patch };
+      ops[opIdx] = nextOp;
       updated[videoIdx] = { ...updated[videoIdx], operations: ops };
       set({ queue: updated });
       if (Object.prototype.hasOwnProperty.call(patch, "text")) {
-        const regionId = get().findTemplateRegionIdForOp(ops[opIdx]);
+        const regionId = get().findTemplateRegionIdForOp(nextOp);
         if (regionId != null) get().syncTextToExcel(videoIdx, regionId, patch.text ?? "");
       }
     },
@@ -511,13 +574,13 @@ export function createQueueSlice(set, get) {
       const { undoStack, queue, selectedIdx } = get();
       if (undoStack.length === 0 || selectedIdx < 0) return;
       const prev = undoStack[undoStack.length - 1];
-      const current = queue[selectedIdx].operations.map((op) => ({
-        ...op,
-        region: op.region ? { ...op.region } : null,
-      }));
+      const current = get()._cloneOps(queue[selectedIdx].operations);
       set((s) => {
         const updated = [...s.queue];
-        updated[selectedIdx] = { ...updated[selectedIdx], operations: prev };
+        updated[selectedIdx] = {
+          ...updated[selectedIdx],
+          operations: get()._cloneOps(prev),
+        };
         return {
           queue: updated,
           undoStack: s.undoStack.slice(0, -1),
@@ -530,13 +593,13 @@ export function createQueueSlice(set, get) {
       const { redoStack, queue, selectedIdx } = get();
       if (redoStack.length === 0 || selectedIdx < 0) return;
       const next = redoStack[redoStack.length - 1];
-      const current = queue[selectedIdx].operations.map((op) => ({
-        ...op,
-        region: op.region ? { ...op.region } : null,
-      }));
+      const current = get()._cloneOps(queue[selectedIdx].operations);
       set((s) => {
         const updated = [...s.queue];
-        updated[selectedIdx] = { ...updated[selectedIdx], operations: next };
+        updated[selectedIdx] = {
+          ...updated[selectedIdx],
+          operations: get()._cloneOps(next),
+        };
         return {
           queue: updated,
           redoStack: s.redoStack.slice(0, -1),
