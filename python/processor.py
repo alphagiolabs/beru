@@ -22,6 +22,7 @@ import shutil
 import time
 import threading
 import concurrent.futures
+from collections import deque
 from pathlib import Path
 
 from encode_profiles import (
@@ -209,9 +210,21 @@ def _font_style_candidates(font_family, font_weight=None, italic=False, bold=Fal
     return candidates
 
 
+# Memoize _resolve_font results: system fonts don't change during a process
+# lifetime, and the per-call work (normalized_fonts dict rebuild + os.path.isfile
+# stats over every candidate) is repeated for identical args across jobs.
+_resolve_font_cache = {}
+_resolve_font_cache_lock = threading.Lock()
+
+
 def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
     """Resolve a font family name to a fontfile path or fallback name.
     Returns (option_key, value, is_fontfile) where option_key is 'fontfile' or 'font'."""
+    cache_key = (font_family, font_weight, italic, bold)
+    cached = _resolve_font_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     fonts = get_system_fonts()
     normalized_fonts = {_font_name_key(name): value for name, value in fonts.items()}
 
@@ -219,6 +232,7 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
         """Escape a font path for use in an FFmpeg drawtext filter option."""
         return full_path.replace("\\", "/").replace(":", "\\:")
 
+    result = None
     for candidate in _font_style_candidates(font_family, font_weight, italic, bold):
         match = fonts.get(candidate.lower()) or normalized_fonts.get(_font_name_key(candidate))
         if match:
@@ -227,20 +241,28 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
             # registry may reference a file that was removed or lives on a
             # different drive.  Without this check FFmpeg raises ENOENT.
             if os.path.isfile(full_path):
-                return "fontfile", _format_fontfile(full_path), True
+                result = ("fontfile", _format_fontfile(full_path), True)
+                break
             logger.debug("Font file missing, skipping: %s", full_path)
 
-    # Try partial match — same existence check.
-    key = _font_name_key(font_family)
-    for fkey, (fpath, fstem) in fonts.items():
-        normalized_key = _font_name_key(fkey)
-        if key in normalized_key or normalized_key in key:
-            if os.path.isfile(fpath):
-                return "fontfile", _format_fontfile(fpath), True
-            logger.debug("Font file missing (partial), skipping: %s", fpath)
+    if result is None:
+        # Try partial match — same existence check.
+        key = _font_name_key(font_family)
+        for fkey, (fpath, fstem) in fonts.items():
+            normalized_key = _font_name_key(fkey)
+            if key in normalized_key or normalized_key in key:
+                if os.path.isfile(fpath):
+                    result = ("fontfile", _format_fontfile(fpath), True)
+                    break
+                logger.debug("Font file missing (partial), skipping: %s", fpath)
 
-    # Fallback: let FFmpeg try fontconfig / system lookup
-    return "font", font_family, False
+    if result is None:
+        # Fallback: let FFmpeg try fontconfig / system lookup
+        result = ("font", font_family, False)
+
+    with _resolve_font_cache_lock:
+        _resolve_font_cache[cache_key] = result
+    return result
 
 
 def setup_logging():
@@ -338,14 +360,42 @@ def detect_hw_encoder(ffmpeg_path, *, force_test=False):
     else:
         priority = ["h264_nvenc", "h264_vaapi", "h264_qsv", "h264_amf"]
 
-    for enc in priority:
-        if enc in encoders_text:
-            if force_test:
+    candidates = [enc for enc in priority if enc in encoders_text]
+
+    if force_test and candidates:
+        probe_parallel = (os.environ.get("BERU_HW_PROBE_PARALLEL") or "0").strip().lower() in (
+            "1", "true", "yes", "on",
+        )
+        if probe_parallel and len(candidates) > 1:
+            # Run all 1-frame test encodes concurrently, then pick the
+            # highest-priority encoder that succeeded. Each probe can take up
+            # to 20s; parallelizing cuts pre-flight from O(n*20s) to ~20s max.
+            results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(candidates)) as pool:
+                future_map = {
+                    pool.submit(_test_hw_encoder_real, ffmpeg_path, enc): enc
+                    for enc in candidates
+                }
+                for future in concurrent.futures.as_completed(future_map):
+                    enc = future_map[future]
+                    try:
+                        results[enc] = future.result()
+                    except Exception as e:
+                        logger.info("Encoder %s probe exception: %s", enc, e)
+                        results[enc] = False
+            for enc in candidates:  # respect priority order
+                if results.get(enc):
+                    _HW_ENCODER_CACHE = enc
+                    logger.info("Using hardware encoder: %s (verified, parallel)", enc)
+                    return enc
+        else:
+            for enc in candidates:
                 if _test_hw_encoder_real(ffmpeg_path, enc):
                     _HW_ENCODER_CACHE = enc
                     logger.info("Using hardware encoder: %s (verified)", enc)
                     return enc
-                continue
+    else:
+        for enc in candidates:
             _HW_ENCODER_CACHE = enc
             logger.info("Using hardware encoder: %s", enc)
             return enc
@@ -886,11 +936,39 @@ def ffprobe(path):
     return _ffprobe_via_ffmpeg(path)
 
 
+_DRAWTEXT_CACHE = {}
+_DRAWTEXT_CACHE_LOCK = threading.Lock()
+_DRAWTEXT_CACHE_ENABLED = None
+
+
+def _drawtext_cache_enabled():
+    """Lazily read the env flag once (default off = legacy per-call rebuild)."""
+    global _DRAWTEXT_CACHE_ENABLED
+    if _DRAWTEXT_CACHE_ENABLED is None:
+        _DRAWTEXT_CACHE_ENABLED = (
+            os.environ.get("BERU_DRAWTEXT_CACHE") or "0"
+        ).strip().lower() in ("1", "true", "yes", "on")
+    return _DRAWTEXT_CACHE_ENABLED
+
+
 def build_drawtext(op):
     """Build ffmpeg drawtext filter string from operation."""
     text = (op.get("text") or "").strip()
     if not text:
         return None
+
+    # Memoize identical ops (same text + style + pixel region) across jobs in a
+    # batch. build_drawtext is a pure function of `op`, so the result is stable.
+    cache_key = None
+    if _drawtext_cache_enabled():
+        try:
+            cache_key = json.dumps(op, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError):
+            cache_key = None
+        if cache_key is not None:
+            cached = _DRAWTEXT_CACHE.get(cache_key)
+            if cached is not None:
+                return cached
 
     region = op.get("region", {}) or {}
     try:
@@ -1059,6 +1137,9 @@ def build_drawtext(op):
 
     filter_str = "drawtext=" + ":".join(parts)
     logger.debug("drawtext filter: %s", filter_str[:300])
+    if cache_key is not None:
+        with _DRAWTEXT_CACHE_LOCK:
+            _DRAWTEXT_CACHE[cache_key] = filter_str
     return filter_str
 
 
@@ -1334,8 +1415,44 @@ def _is_resource_pressure_error(stderr_text):
     return is_resource_pressure_error(stderr_text)
 
 
+class StderrBuffer:
+    """Bounded stderr accumulator.
+
+    Replaces the previous list+pop(0)+"".join() approach, which was O(n) per
+    appended line (list shift and full-buffer join inside the stderr lock).
+    Uses a deque(maxlen=...) for O(1) append/eviction and a running char count
+    so the char-cap check is O(1) per line instead of O(total buffered chars).
+    """
+
+    __slots__ = ("_buf", "_chars", "_max_chars")
+
+    def __init__(self, max_lines=MAX_STDERR_LINES, max_chars=MAX_STDERR_CHARS):
+        self._buf = deque(maxlen=max_lines)
+        self._chars = 0
+        self._max_chars = max_chars
+
+    def append(self, line):
+        self._buf.append(line)
+        self._chars += len(line)
+        # Evict oldest until both caps are satisfied. deque(maxlen) already
+        # handles the line cap; only the char cap needs manual eviction.
+        while self._chars > self._max_chars and len(self._buf) > 1:
+            evicted = self._buf.popleft()
+            self._chars -= len(evicted)
+
+    def join(self):
+        return "".join(self._buf)
+
+
 def _stderr_buffer_append(buffer, line):
-    """Keep stderr bounded while streaming FFmpeg output."""
+    """Keep stderr bounded while streaming FFmpeg output.
+
+    Backwards-compatible shim: accepts either a legacy list (legacy path) or a
+    StderrBuffer (new path). New call sites use StderrBuffer directly.
+    """
+    if isinstance(buffer, StderrBuffer):
+        buffer.append(line)
+        return
     buffer.append(line)
     while buffer and (
         len(buffer) > MAX_STDERR_LINES
@@ -1482,7 +1599,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
         errors="replace",
         bufsize=1,
     )
-    stderr_lines = []
+    stderr_lines = StderrBuffer()
     stderr_lock = threading.Lock()
     reader_done = threading.Event()
     progress_state = {"last_pct": -1.0}
@@ -1493,7 +1610,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
                 return
             for line in proc.stderr:
                 with stderr_lock:
-                    _stderr_buffer_append(stderr_lines, line)
+                    stderr_lines.append(line)
                 if job_id is None or duration_sec <= 0:
                     continue
                 m = _FFMPEG_TIME_RE.search(line)
@@ -1531,7 +1648,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
 
     reader_done.wait(timeout=2)
     with stderr_lock:
-        stderr = "".join(stderr_lines)
+        stderr = stderr_lines.join()
 
     if returncode == 0:
         if job_id is not None and duration_sec > 0:
