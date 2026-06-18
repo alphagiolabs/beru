@@ -33,7 +33,7 @@ export function registerFileHandlers(pathSecurity) {
       return { success: false, error: `Formato no soportado: ${ext}` };
     }
     try {
-      const buf = fs.readFileSync(check.resolvedPath);
+      const buf = await fs.promises.readFile(check.resolvedPath);
       const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
       return { success: true, dataUrl, size: buf.length, mime };
     } catch (e) {

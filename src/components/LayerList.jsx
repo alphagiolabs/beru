@@ -8,6 +8,7 @@ const labelKeys = {
   blur: "props.mode.blur",
   crop: "props.mode.crop",
   text: "props.mode.text",
+  image: "props.mode.image",
   delogo: "props.mode.delogo",
 };
 const colors = {
@@ -23,7 +24,10 @@ const LayerRow = memo(function LayerRow({
   count,
   label,
   color,
+  moveUpTitle,
+  moveDownTitle,
   duplicateTitle,
+  removeTitle,
   onMoveUp,
   onMoveDown,
   onDuplicate,
@@ -47,6 +51,8 @@ const LayerRow = memo(function LayerRow({
           disabled={i === 0}
           className="text-[10px] p-0.5 rounded hover:bg-white/10"
           style={{ color: "var(--text-dim)" }}
+          title={moveUpTitle}
+          aria-label={moveUpTitle}
         >
           <ChevronUp size={12} />
         </button>
@@ -55,6 +61,8 @@ const LayerRow = memo(function LayerRow({
           disabled={i === count - 1}
           className="text-[10px] p-0.5 rounded hover:bg-white/10"
           style={{ color: "var(--text-dim)" }}
+          title={moveDownTitle}
+          aria-label={moveDownTitle}
         >
           <ChevronDown size={12} />
         </button>
@@ -63,6 +71,7 @@ const LayerRow = memo(function LayerRow({
           className="text-[10px] p-0.5 rounded hover:bg-white/10"
           style={{ color: "var(--text-dim)" }}
           title={duplicateTitle}
+          aria-label={duplicateTitle}
         >
           <Copy size={12} />
         </button>
@@ -70,6 +79,8 @@ const LayerRow = memo(function LayerRow({
           onClick={onRemove}
           className="text-[10px] p-0.5 rounded hover:bg-red-500/20 hover:text-red-400"
           style={{ color: "var(--text-dim)" }}
+          title={removeTitle}
+          aria-label={removeTitle}
         >
           <Trash2 size={12} />
         </button>
@@ -112,7 +123,10 @@ export default function LayerList() {
               count={ops.length}
               label={t(labelKeys[op.mode] || op.mode)}
               color={colors[op.mode]}
+              moveUpTitle={t("props.actions.moveUp")}
+              moveDownTitle={t("props.actions.moveDown")}
               duplicateTitle={t("props.actions.duplicate")}
+              removeTitle={t("props.actions.deleteLayer")}
               onMoveUp={() => getState().moveOperation(i, i - 1)}
               onMoveDown={() => getState().moveOperation(i, i + 1)}
               onDuplicate={() => getState().duplicateOperation(i)}

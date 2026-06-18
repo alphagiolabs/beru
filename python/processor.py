@@ -12,7 +12,6 @@ Outputs progress as JSON lines to stdout.
 import base64
 import json
 import re
-import unicodedata
 import platform
 import logging
 import logging.handlers
@@ -23,6 +22,7 @@ import shutil
 import time
 import threading
 import concurrent.futures
+from collections import deque
 from pathlib import Path
 
 from encode_profiles import (
@@ -35,6 +35,39 @@ from batch_errors import (
     is_hardware_encode_error,
     is_resource_pressure_error,
     remove_partial_output,
+)
+
+# Pure helpers extracted into sibling modules (kept stateless & un-patched so
+# they are safe outside this module's single namespace — the JS test suite
+# monkeypatches processor.X heavily, so anything callable through a patched
+# name MUST stay in this file).  Re-exported below for the Python smoke tests.
+from op_shared import (
+    VALID_DELOGO_METHODS,
+    _build_enable_clause,
+    _coerce_int,
+    _normalize_operation,
+    _optimize_delogo_for_speed,
+    _overlay_opts,
+    _region_to_pixels,
+)
+from delogo_chains import (
+    _build_cleanup_filter,
+    _build_delogo_chain,
+    _build_mirror_patch,
+    _build_padded_region,
+    _fit_delogo_rect,
+)
+from text_layout_helpers import (
+    _apply_letter_spacing_fallback,
+    _build_region_bg_drawbox,
+    _estimate_char_width,
+    _fit_font_size,
+    _text_bg_enabled,
+    _text_box_pad,
+    _text_clusters,
+    _text_layout_bounds,
+    _truncate_text,
+    _wrap_text_to_width,
 )
 
 FFMPEG = os.environ.get("BERU_FFMPEG", "ffmpeg")
@@ -177,9 +210,21 @@ def _font_style_candidates(font_family, font_weight=None, italic=False, bold=Fal
     return candidates
 
 
+# Memoize _resolve_font results: system fonts don't change during a process
+# lifetime, and the per-call work (normalized_fonts dict rebuild + os.path.isfile
+# stats over every candidate) is repeated for identical args across jobs.
+_resolve_font_cache = {}
+_resolve_font_cache_lock = threading.Lock()
+
+
 def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
     """Resolve a font family name to a fontfile path or fallback name.
     Returns (option_key, value, is_fontfile) where option_key is 'fontfile' or 'font'."""
+    cache_key = (font_family, font_weight, italic, bold)
+    cached = _resolve_font_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     fonts = get_system_fonts()
     normalized_fonts = {_font_name_key(name): value for name, value in fonts.items()}
 
@@ -187,6 +232,7 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
         """Escape a font path for use in an FFmpeg drawtext filter option."""
         return full_path.replace("\\", "/").replace(":", "\\:")
 
+    result = None
     for candidate in _font_style_candidates(font_family, font_weight, italic, bold):
         match = fonts.get(candidate.lower()) or normalized_fonts.get(_font_name_key(candidate))
         if match:
@@ -195,20 +241,28 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
             # registry may reference a file that was removed or lives on a
             # different drive.  Without this check FFmpeg raises ENOENT.
             if os.path.isfile(full_path):
-                return "fontfile", _format_fontfile(full_path), True
+                result = ("fontfile", _format_fontfile(full_path), True)
+                break
             logger.debug("Font file missing, skipping: %s", full_path)
 
-    # Try partial match — same existence check.
-    key = _font_name_key(font_family)
-    for fkey, (fpath, fstem) in fonts.items():
-        normalized_key = _font_name_key(fkey)
-        if key in normalized_key or normalized_key in key:
-            if os.path.isfile(fpath):
-                return "fontfile", _format_fontfile(fpath), True
-            logger.debug("Font file missing (partial), skipping: %s", fpath)
+    if result is None:
+        # Try partial match — same existence check.
+        key = _font_name_key(font_family)
+        for fkey, (fpath, fstem) in fonts.items():
+            normalized_key = _font_name_key(fkey)
+            if key in normalized_key or normalized_key in key:
+                if os.path.isfile(fpath):
+                    result = ("fontfile", _format_fontfile(fpath), True)
+                    break
+                logger.debug("Font file missing (partial), skipping: %s", fpath)
 
-    # Fallback: let FFmpeg try fontconfig / system lookup
-    return "font", font_family, False
+    if result is None:
+        # Fallback: let FFmpeg try fontconfig / system lookup
+        result = ("font", font_family, False)
+
+    with _resolve_font_cache_lock:
+        _resolve_font_cache[cache_key] = result
+    return result
 
 
 def setup_logging():
@@ -306,14 +360,42 @@ def detect_hw_encoder(ffmpeg_path, *, force_test=False):
     else:
         priority = ["h264_nvenc", "h264_vaapi", "h264_qsv", "h264_amf"]
 
-    for enc in priority:
-        if enc in encoders_text:
-            if force_test:
+    candidates = [enc for enc in priority if enc in encoders_text]
+
+    if force_test and candidates:
+        probe_parallel = (os.environ.get("BERU_HW_PROBE_PARALLEL") or "0").strip().lower() in (
+            "1", "true", "yes", "on",
+        )
+        if probe_parallel and len(candidates) > 1:
+            # Run all 1-frame test encodes concurrently, then pick the
+            # highest-priority encoder that succeeded. Each probe can take up
+            # to 20s; parallelizing cuts pre-flight from O(n*20s) to ~20s max.
+            results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(candidates)) as pool:
+                future_map = {
+                    pool.submit(_test_hw_encoder_real, ffmpeg_path, enc): enc
+                    for enc in candidates
+                }
+                for future in concurrent.futures.as_completed(future_map):
+                    enc = future_map[future]
+                    try:
+                        results[enc] = future.result()
+                    except Exception as e:
+                        logger.info("Encoder %s probe exception: %s", enc, e)
+                        results[enc] = False
+            for enc in candidates:  # respect priority order
+                if results.get(enc):
+                    _HW_ENCODER_CACHE = enc
+                    logger.info("Using hardware encoder: %s (verified, parallel)", enc)
+                    return enc
+        else:
+            for enc in candidates:
                 if _test_hw_encoder_real(ffmpeg_path, enc):
                     _HW_ENCODER_CACHE = enc
                     logger.info("Using hardware encoder: %s (verified)", enc)
                     return enc
-                continue
+    else:
+        for enc in candidates:
             _HW_ENCODER_CACHE = enc
             logger.info("Using hardware encoder: %s", enc)
             return enc
@@ -854,199 +936,19 @@ def ffprobe(path):
     return _ffprobe_via_ffmpeg(path)
 
 
-def _estimate_char_width(font_size):
-    try:
-        font_size = float(font_size)
-    except (TypeError, ValueError):
-        font_size = 32
-    return max(4.0, font_size * 0.55)
+_DRAWTEXT_CACHE = {}
+_DRAWTEXT_CACHE_LOCK = threading.Lock()
+_DRAWTEXT_CACHE_ENABLED = None
 
 
-def _wrap_text_to_width(text, max_width_px, font_size):
-    """Word-wrap using the same heuristic as src/utils/text-layout.js."""
-    raw = str(text or "")
-    if not raw or max_width_px <= 0:
-        return raw
-    max_chars = max(1, int(max_width_px / _estimate_char_width(font_size)))
-    longest_line = max((len(line) for line in raw.split("\n")), default=0)
-    if longest_line <= max_chars:
-        return raw
-    lines = []
-    for paragraph in raw.split("\n"):
-        tokens = re.split(r"(\s+)", paragraph)
-        line = ""
-        for token in tokens:
-            if not token:
-                continue
-            next_line = line + token
-            if len(next_line) <= max_chars or not line:
-                line = next_line
-            else:
-                if line.strip():
-                    lines.append(line.rstrip())
-                line = token.lstrip()
-        if line.strip() or paragraph == "":
-            lines.append(line.rstrip() if line.strip() else "")
-        elif line:
-            lines.append(line.rstrip())
-    return "\n".join(lines)
-
-
-def _truncate_text(text, max_width_px, font_size, mode):
-    raw = str(text or "")
-    if mode != "ellipsis" or not raw or max_width_px <= 0:
-        return raw
-    max_chars = max(1, int(max_width_px / _estimate_char_width(font_size)))
-    if len(raw.replace("\n", "")) <= max_chars:
-        return raw
-    keep = max(1, max_chars - 1)
-    return raw[:keep].rstrip() + "…"
-
-
-def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_size=8):
-    try:
-        base_size = int(base_size)
-    except (TypeError, ValueError):
-        base_size = 32
-    try:
-        line_height = float(line_height)
-    except (TypeError, ValueError):
-        line_height = 1.2
-    try:
-        region_w = int(region_w)
-        region_h = int(region_h)
-    except (TypeError, ValueError):
-        region_w = 0
-        region_h = 0
-    min_size = max(8, int(min_size))
-    size = max(min_size, base_size)
-    if region_w <= 0 or region_h <= 0:
-        return size
-    while size >= min_size:
-        display = _wrap_text_to_width(text, region_w, size) if wrap else str(text or "")
-        line_count = max(1, display.count("\n") + 1) if display else 1
-        longest = max((len(line) for line in display.split("\n")), default=0)
-        total_h = line_count * size * line_height
-        line_w = longest * _estimate_char_width(size)
-        if total_h <= region_h and line_w <= region_w:
-            return size
-        size -= 1
-    return min_size
-
-
-def _text_clusters(text):
-    """Group combining marks and joined emoji so spacing is only added between glyphs."""
-    clusters = []
-    join_next = False
-    for char in text:
-        codepoint = ord(char)
-        is_variation_selector = (
-            0xFE00 <= codepoint <= 0xFE0F or 0xE0100 <= codepoint <= 0xE01EF
-        )
-        if clusters and (join_next or unicodedata.combining(char) or is_variation_selector):
-            clusters[-1] += char
-            join_next = char == "\u200d"
-        elif char == "\u200d" and clusters:
-            clusters[-1] += char
-            join_next = True
-        else:
-            clusters.append(char)
-            join_next = False
-    return clusters
-
-
-def _apply_letter_spacing_fallback(text, spacing_px, font_size):
-    """Approximate CSS letter-spacing when drawtext lacks a native spacing option."""
-    try:
-        spacing_px = max(0.0, float(spacing_px))
-        font_size = max(1.0, float(font_size))
-    except (TypeError, ValueError):
-        return text
-    if spacing_px <= 0:
-        return text
-
-    # U+200A is roughly 1/12 em in FreeType. Distributing it cumulatively keeps
-    # the total requested width accurate even when one spacer is wider than 1 px.
-    spacer = "\u200a"
-    spacer_width = max(1.0, font_size / 12.0)
-    spaced_lines = []
-    for line in str(text).split("\n"):
-        clusters = _text_clusters(line)
-        if len(clusters) < 2:
-            spaced_lines.append(line)
-            continue
-        parts = []
-        target_width = 0.0
-        emitted_spacers = 0
-        for index, cluster in enumerate(clusters):
-            parts.append(cluster)
-            if index == len(clusters) - 1:
-                continue
-            target_width += spacing_px
-            total_spacers = int(round(target_width / spacer_width))
-            spacer_count = max(0, total_spacers - emitted_spacers)
-            if spacer_count:
-                parts.append(spacer * spacer_count)
-                emitted_spacers += spacer_count
-        spaced_lines.append("".join(parts))
-    return "\n".join(spaced_lines)
-
-
-def _text_bg_enabled(op):
-    bg = op.get("bg_enabled", True)
-    if isinstance(bg, str):
-        return bg.lower() not in ("0", "false", "no")
-    return bool(bg)
-
-
-def _text_box_pad(op):
-    """Inner text padding when the region background is enabled (matches CSS preview)."""
-    if not _text_bg_enabled(op):
-        return 0
-    try:
-        box_pad = int(op.get("box_border_width", 4))
-    except (TypeError, ValueError):
-        box_pad = 4
-    return max(0, box_pad)
-
-
-def _text_layout_bounds(region, safe_margin, box_pad):
-    """Usable text area inside a region (safe margin + optional box padding)."""
-    rx = int(region.get("x", 0))
-    ry = int(region.get("y", 0))
-    rw = int(region.get("w", 0))
-    rh = int(region.get("h", 0))
-    inset = max(0, safe_margin) + max(0, box_pad)
-    return {
-        "x": rx + inset,
-        "y": ry + inset,
-        "w": max(0, rw - (2 * inset)),
-        "h": max(0, rh - (2 * inset)),
-    }
-
-
-def _build_region_bg_drawbox(region, bg_color, bg_opacity, enable_clause=""):
-    """Fill the full text region — CSS preview paints inset:0, not a glyph box."""
-    x = int(region.get("x", 0))
-    y = int(region.get("y", 0))
-    w = max(1, int(region.get("w", 0)))
-    h = max(1, int(region.get("h", 0)))
-    try:
-        bg_opacity = float(bg_opacity)
-    except (TypeError, ValueError):
-        bg_opacity = 0.65
-    bg_opacity = max(0.0, min(1.0, bg_opacity))
-    parts = [
-        f"x={x}",
-        f"y={y}",
-        f"w={w}",
-        f"h={h}",
-        f"color={bg_color}@{bg_opacity:.3f}",
-        "t=fill",
-    ]
-    if enable_clause:
-        parts.append(enable_clause)
-    return "drawbox=" + ":".join(parts)
+def _drawtext_cache_enabled():
+    """Lazily read the env flag once (default off = legacy per-call rebuild)."""
+    global _DRAWTEXT_CACHE_ENABLED
+    if _DRAWTEXT_CACHE_ENABLED is None:
+        _DRAWTEXT_CACHE_ENABLED = (
+            os.environ.get("BERU_DRAWTEXT_CACHE") or "0"
+        ).strip().lower() in ("1", "true", "yes", "on")
+    return _DRAWTEXT_CACHE_ENABLED
 
 
 def build_drawtext(op):
@@ -1054,6 +956,19 @@ def build_drawtext(op):
     text = (op.get("text") or "").strip()
     if not text:
         return None
+
+    # Memoize identical ops (same text + style + pixel region) across jobs in a
+    # batch. build_drawtext is a pure function of `op`, so the result is stable.
+    cache_key = None
+    if _drawtext_cache_enabled():
+        try:
+            cache_key = json.dumps(op, sort_keys=True, separators=(",", ":"))
+        except (TypeError, ValueError):
+            cache_key = None
+        if cache_key is not None:
+            cached = _DRAWTEXT_CACHE.get(cache_key)
+            if cached is not None:
+                return cached
 
     region = op.get("region", {}) or {}
     try:
@@ -1222,368 +1137,10 @@ def build_drawtext(op):
 
     filter_str = "drawtext=" + ":".join(parts)
     logger.debug("drawtext filter: %s", filter_str[:300])
+    if cache_key is not None:
+        with _DRAWTEXT_CACHE_LOCK:
+            _DRAWTEXT_CACHE[cache_key] = filter_str
     return filter_str
-
-
-def _build_enable_clause(op):
-    """Build an `enable=...` clause for time-bounding filters.
-
-    Returns "" if no time range, else a clause like:
-        enable=between(t\\,0.500000\\,2.000000)
-    Note: literal commas are escaped (\\,) so they don't split filter options.
-    """
-    start = op.get("start_time", op.get("startTime"))
-    end = op.get("end_time", op.get("endTime"))
-    if start is None and end is None:
-        return ""
-    s = float(start) if start is not None else 0.0
-    e = float(end) if end is not None else 0.0
-    if e <= s:
-        return ""
-    return f"enable=between(t\\,{s:.6f}\\,{e:.6f})"
-
-
-VALID_DELOGO_METHODS = frozenset({
-    "temporal", "mirror", "mosaic", "inpaint", "blur", "fill", "cover",
-})
-
-
-def _coerce_int(val, default, lo, hi):
-    if val is None:
-        v = default
-    else:
-        try:
-            v = int(val)
-        except (TypeError, ValueError):
-            v = default
-    return max(lo, min(hi, v))
-
-
-def _normalize_operation(op):
-    """Accept snake_case or camelCase keys from jobs / hand-edited JSON."""
-    if not isinstance(op, dict):
-        return op
-    out = dict(op)
-    mode = (out.get("mode") or "").lower()
-    if mode != "delogo":
-        return out
-
-    method = out.get("delogo_method") or out.get("delogoMethod") or "temporal"
-    method = str(method).lower()
-    out["delogo_method"] = method if method in VALID_DELOGO_METHODS else "temporal"
-
-    pairs = (
-        ("temporal_radius", "temporalRadius"),
-        ("mosaic_size", "mosaicSize"),
-        ("mirror_side", "mirrorSide"),
-        ("edge_feather", "edgeFeather"),
-        ("blur_strength", "blurStrength"),
-        ("delogo_fill_color", "delogoFillColor"),
-        ("delogo_fill_opacity", "delogoFillOpacity"),
-        ("delogo_image_path", "delogoImagePath"),
-        ("start_time", "startTime"),
-        ("end_time", "endTime"),
-    )
-    for snake, camel in pairs:
-        if out.get(snake) is None and camel in out:
-            out[snake] = out[camel]
-
-    return out
-
-
-def _optimize_delogo_for_speed(op, video_w, video_h):
-    """Use inpaint instead of tmedian for full-duration static logos (much faster)."""
-    if (op.get("mode") or "").lower() != "delogo":
-        return op
-    method = (op.get("delogo_method") or "temporal").lower()
-    if method != "temporal":
-        return op
-
-    start = op.get("start_time", op.get("startTime"))
-    end = op.get("end_time", op.get("endTime"))
-    if start is not None or end is not None:
-        return op
-
-    radius = op.get("temporal_radius")
-    if radius is not None:
-        try:
-            if int(radius) != 3:
-                return op
-        except (TypeError, ValueError):
-            pass
-
-    region = op.get("region") or {}
-    rw = float(region.get("w", 0))
-    rh = float(region.get("h", 0))
-    if rw <= 0 or rh <= 0:
-        return op
-
-    if video_w > 0 and video_h > 0 and rw <= 1 and rh <= 1:
-        area_ratio = rw * rh
-    elif video_w > 0 and video_h > 0:
-        area_ratio = (rw * rh) / (video_w * video_h)
-    else:
-        area_ratio = 0.1
-
-    if area_ratio > 0.25:
-        return op
-
-    optimized = dict(op)
-    optimized["delogo_method"] = "inpaint"
-    logger.debug(
-        "delogo: temporal -> inpaint (%.1f%% frame, faster static path)", area_ratio * 100
-    )
-    return optimized
-
-
-def _fit_delogo_rect(x, y, w, h, video_w, video_h):
-    """Clamp logo box to frame; FFmpeg delogo prefers even width/height."""
-    x = max(0, min(int(x), max(0, video_w - 2)))
-    y = max(0, min(int(y), max(0, video_h - 2)))
-    w = max(2, min(int(w), video_w - x))
-    h = max(2, min(int(h), video_h - y))
-    if w % 2:
-        w -= 1
-    if h % 2:
-        h -= 1
-    if w < 2:
-        w = 2
-    if h < 2:
-        h = 2
-    if x + w > video_w:
-        x = max(0, video_w - w)
-    if y + h > video_h:
-        y = max(0, video_h - h)
-    return x, y, w, h
-
-
-def _build_padded_region(x, y, w, h, video_w, video_h, pad):
-    """Return (x0, y0, rw, rh) for a feather/context pad around the logo box."""
-    x0 = max(0, x - pad)
-    y0 = max(0, y - pad)
-    x1 = min(video_w, x + w + pad)
-    y1 = min(video_h, y + h + pad)
-    rw = x1 - x0
-    rh = y1 - y0
-    if rw <= 0 or rh <= 0:
-        return None
-    return x0, y0, rw, rh
-
-
-def _build_cleanup_filter(method, op, rw, rh):
-    """Single-input cleanup filters for a cropped patch (rw x rh).
-
-    Mirror and inpaint are handled separately on the full frame.
-    """
-    if method == "temporal":
-        radius = _coerce_int(op.get("temporal_radius"), 3, 1, 15)
-        # Median across neighboring frames removes static logos on motion.
-        return f"tmedian=radius={radius}:planes=0x7"
-
-    if method == "mosaic":
-        block = _coerce_int(op.get("mosaic_size"), 12, 2, 80)
-        return (
-            f"scale=iw/{block}:ih/{block}:flags=neighbor,"
-            f"scale={rw}:{rh}:flags=neighbor"
-        )
-
-    if method == "blur":
-        strength = _coerce_int(op.get("blur_strength"), 20, 1, 100)
-        luma = max(1, min(100, strength // 3))
-        chroma = max(1, luma // 2)
-        return f"boxblur=luma_radius={luma}:luma_power=1:chroma_radius={chroma}:chroma_power=1"
-
-    if method == "fill":
-        fill_color = op.get("delogo_fill_color", "black") or "black"
-        fill_opacity = float(op.get("delogo_fill_opacity", 1) or 1)
-        return (
-            f"drawbox=x=0:y=0:w={rw}:h={rh}:color={fill_color}@{fill_opacity}:t=fill"
-        )
-
-    # inpaint / mirror use dedicated paths; fallback = edge blend
-    return "boxblur=luma_radius=10:luma_power=1:chroma_radius=5:chroma_power=1"
-
-
-def _build_mirror_patch(side, x, y, w, h, video_w, video_h, in_label, out_label):
-    """Sample pixels adjacent to the logo box and mirror them into the patch.
-
-    Matches the live-preview logic: reflect the strip beside the selection
-    over the logo area (same approach as online logo removers on uniform bg).
-    """
-    side = (side or "right").lower()
-    in_pad = f"[{in_label}]"
-    out_pad = f"[{out_label}]"
-
-    if side == "right":
-        if x + w + w <= video_w:
-            return f"{in_pad}crop={w}:{h}:{x + w}:{y},hflip{out_pad}"
-        if x >= w:
-            return f"{in_pad}crop={w}:{h}:{x - w}:{y},hflip{out_pad}"
-    elif side == "left":
-        if x >= w:
-            return f"{in_pad}crop={w}:{h}:{x - w}:{y},hflip{out_pad}"
-        if x + w + w <= video_w:
-            return f"{in_pad}crop={w}:{h}:{x + w}:{y},hflip{out_pad}"
-    elif side == "bottom":
-        if y + h + h <= video_h:
-            return f"{in_pad}crop={w}:{h}:{x}:{y + h},vflip{out_pad}"
-        if y >= h:
-            return f"{in_pad}crop={w}:{h}:{x}:{y - h},vflip{out_pad}"
-    elif side == "top":
-        if y >= h:
-            return f"{in_pad}crop={w}:{h}:{x}:{y - h},vflip{out_pad}"
-        if y + h + h <= video_h:
-            return f"{in_pad}crop={w}:{h}:{x}:{y + h},vflip{out_pad}"
-
-    # Partial strip at frame edge: use whatever context exists, then scale.
-    if side in ("left", "right"):
-        avail = video_w - (x + w) if side == "right" else x
-        src_x = x + w if side == "right" else max(0, x - avail)
-        cw = max(1, min(w, avail if avail > 0 else w))
-        return (
-            f"{in_pad}crop={cw}:{h}:{src_x}:{y},hflip,"
-            f"scale={w}:{h}:flags=bilinear{out_pad}"
-        )
-    avail = video_h - (y + h) if side == "bottom" else y
-    src_y = y + h if side == "bottom" else max(0, y - avail)
-    ch = max(1, min(h, avail if avail > 0 else h))
-    return (
-        f"{in_pad}crop={w}:{ch}:{x}:{src_y},vflip,"
-        f"scale={w}:{h}:flags=bilinear{out_pad}"
-    )
-
-
-def _overlay_opts(x, y, enable_clause):
-    opts = f"{x}:{y}"
-    if enable_clause:
-        opts += f":{enable_clause}"
-    return opts
-
-
-def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=None):
-    """Build delogo filter chain (split → clean → overlay).
-
-    - temporal / mosaic / blur / fill: clean the (optionally padded) crop.
-    - inpaint: FFmpeg delogo on full frame (interpolates from edges).
-    - mirror: reflect adjacent pixels into the logo box (uniform backgrounds).
-    - cover: overlay a user image scaled/padded to the logo box.
-    """
-    region = op.get("region") or {}
-    x = int(region.get("x", 0))
-    y = int(region.get("y", 0))
-    w = int(region.get("w", video_w))
-    h = int(region.get("h", video_h))
-    if w <= 0 or h <= 0:
-        return None
-
-    x, y, w, h = _fit_delogo_rect(x, y, w, h, video_w, video_h)
-
-    method = (op.get("delogo_method") or "temporal").lower()
-    if method not in VALID_DELOGO_METHODS:
-        method = "temporal"
-    raw_feather = op.get("edge_feather")
-    feather = max(0, min(40, int(raw_feather if raw_feather is not None else 6)))
-    pad = max(2, feather)
-    padded = _build_padded_region(x, y, w, h, video_w, video_h, pad)
-    if padded is None:
-        return None
-    x0, y0, rw, rh = padded
-
-    enable_clause = _build_enable_clause(op)
-    src = "[0:v]" if prev_label is None else f"[{prev_label}]"
-    s = f"d{idx}"
-    feather_blur = max(1, feather)
-
-    # ── Inpaint: native delogo on full frame (best for watermark boxes) ──
-    if method == "inpaint":
-        delogo = f"delogo=x={x}:y={y}:w={w}:h={h}"
-        if feather <= 0 and not enable_clause:
-            return f"{src}{delogo}[tmp{idx}]"
-        return (
-            f"{src}split[full{s}][work{s}];"
-            f"[work{s}]{delogo}[work_clean{s}];"
-            f"[work_clean{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
-            f"[crop{s}]boxblur={feather_blur}[soft{s}];"
-            f"[full{s}][soft{s}]overlay={_overlay_opts(x0, y0, enable_clause)}[tmp{idx}]"
-        )
-
-    # ── Mirror: sample from outside the logo, overlay at logo coords ──
-    if method == "mirror":
-        mirror_side = op.get("mirror_side") or "right"
-        mirror_chain = _build_mirror_patch(
-            mirror_side, x, y, w, h, video_w, video_h, f"work{s}", f"clean{s}"
-        )
-        if feather <= 0:
-            return (
-                f"{src}split[full{s}][work{s}];"
-                f"{mirror_chain};"
-                f"[full{s}][clean{s}]overlay={_overlay_opts(x, y, enable_clause)}[tmp{idx}]"
-            )
-        return (
-            f"{src}split[full{s}][work{s}];"
-            f"{mirror_chain};"
-            f"[clean{s}]boxblur={feather_blur}[soft{s}];"
-            f"[full{s}][soft{s}]overlay={_overlay_opts(x, y, enable_clause)}[tmp{idx}]"
-        )
-
-    # ── Cover: user image scaled and padded to the logo box, overlaid at logo coords ──
-    if method == "cover":
-        img_path = op.get("delogo_image_path")
-        if not img_path or not os.path.exists(img_path):
-            logger.warning("Cover delogo skipped: file not found: %s", img_path)
-            return None
-        if img_input_index is None:
-            logger.warning("Cover delogo skipped: img_input_index not available")
-            return None
-        input_idx = img_input_index(img_path)
-        overlay_opts = _overlay_opts(x, y, enable_clause)
-        return (
-            f"[{input_idx}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
-            f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,format=rgba[cover{s}];"
-            f"{src}[cover{s}]overlay={overlay_opts}[tmp{idx}]"
-        )
-
-    # ── Patch methods: crop → clean → (feather) → overlay ──
-    cleanup = _build_cleanup_filter(method, op, rw, rh)
-
-    if feather <= 0:
-        return (
-            f"{src}split[full{s}][work{s}];"
-            f"[work{s}]crop={w}:{h}:{x}:{y}[crop{s}];"
-            f"[crop{s}]{cleanup}[clean{s}];"
-            f"[full{s}][clean{s}]overlay={_overlay_opts(x, y, enable_clause)}[tmp{idx}]"
-        )
-
-    return (
-        f"{src}split[full{s}][work{s}];"
-        f"[work{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
-        f"[crop{s}]{cleanup}[clean{s}];"
-        f"[clean{s}]boxblur={feather_blur}[soft{s}];"
-        f"[full{s}][soft{s}]overlay={_overlay_opts(x0, y0, enable_clause)}[tmp{idx}]"
-    )
-
-
-def _region_to_pixels(region, video_w, video_h):
-    """Convert a normalized (0..1) or pixel region to integer pixel coords."""
-    if not region:
-        return None
-    x = float(region.get("x", 0))
-    y = float(region.get("y", 0))
-    w = float(region.get("w", 0))
-    h = float(region.get("h", 0))
-    if w <= 0 or h <= 0:
-        return None
-    if video_w > 0 and video_h > 0 and x <= 1 and y <= 1 and w <= 1 and h <= 1:
-        px = max(0, int(round(x * video_w)))
-        py = max(0, int(round(y * video_h)))
-        pw = max(1, min(video_w - px, int(round(w * video_w))))
-        ph = max(1, min(video_h - py, int(round(h * video_h))))
-        return {"x": px, "y": py, "w": pw, "h": ph}
-    px = max(0, int(round(x)))
-    py = max(0, int(round(y)))
-    pw = max(1, min(video_w - px, int(round(w)))) if video_w > 0 else max(1, int(round(w)))
-    ph = max(1, min(video_h - py, int(round(h)))) if video_h > 0 else max(1, int(round(h)))
-    return {"x": px, "y": py, "w": pw, "h": ph}
 
 
 def _build_watermark_filter(watermark, video_w, video_h):
@@ -1858,8 +1415,44 @@ def _is_resource_pressure_error(stderr_text):
     return is_resource_pressure_error(stderr_text)
 
 
+class StderrBuffer:
+    """Bounded stderr accumulator.
+
+    Replaces the previous list+pop(0)+"".join() approach, which was O(n) per
+    appended line (list shift and full-buffer join inside the stderr lock).
+    Uses a deque(maxlen=...) for O(1) append/eviction and a running char count
+    so the char-cap check is O(1) per line instead of O(total buffered chars).
+    """
+
+    __slots__ = ("_buf", "_chars", "_max_chars")
+
+    def __init__(self, max_lines=MAX_STDERR_LINES, max_chars=MAX_STDERR_CHARS):
+        self._buf = deque(maxlen=max_lines)
+        self._chars = 0
+        self._max_chars = max_chars
+
+    def append(self, line):
+        self._buf.append(line)
+        self._chars += len(line)
+        # Evict oldest until both caps are satisfied. deque(maxlen) already
+        # handles the line cap; only the char cap needs manual eviction.
+        while self._chars > self._max_chars and len(self._buf) > 1:
+            evicted = self._buf.popleft()
+            self._chars -= len(evicted)
+
+    def join(self):
+        return "".join(self._buf)
+
+
 def _stderr_buffer_append(buffer, line):
-    """Keep stderr bounded while streaming FFmpeg output."""
+    """Keep stderr bounded while streaming FFmpeg output.
+
+    Backwards-compatible shim: accepts either a legacy list (legacy path) or a
+    StderrBuffer (new path). New call sites use StderrBuffer directly.
+    """
+    if isinstance(buffer, StderrBuffer):
+        buffer.append(line)
+        return
     buffer.append(line)
     while buffer and (
         len(buffer) > MAX_STDERR_LINES
@@ -2006,7 +1599,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
         errors="replace",
         bufsize=1,
     )
-    stderr_lines = []
+    stderr_lines = StderrBuffer()
     stderr_lock = threading.Lock()
     reader_done = threading.Event()
     progress_state = {"last_pct": -1.0}
@@ -2017,7 +1610,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
                 return
             for line in proc.stderr:
                 with stderr_lock:
-                    _stderr_buffer_append(stderr_lines, line)
+                    stderr_lines.append(line)
                 if job_id is None or duration_sec <= 0:
                     continue
                 m = _FFMPEG_TIME_RE.search(line)
@@ -2055,7 +1648,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
 
     reader_done.wait(timeout=2)
     with stderr_lock:
-        stderr = "".join(stderr_lines)
+        stderr = stderr_lines.join()
 
     if returncode == 0:
         if job_id is not None and duration_sec > 0:

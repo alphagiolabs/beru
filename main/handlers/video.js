@@ -21,20 +21,33 @@ export function registerVideoHandlers(pathSecurity) {
     const cpus = os.cpus()?.length || 4;
     const limit = Math.max(2, Math.min(16, filePaths.length, cpus * 2));
     const fastResults = await runWithConcurrency(filePaths, limit, probeVideoFast);
-    return await Promise.all(
-      fastResults.map(async (info, i) => {
-        if (info.width > 0 && info.height > 0) return info;
-        const check = pathSecurity.validateReadableFile(filePaths[i], "video");
-        if (!check.ok) return info;
+    // Build the fallback work list (only entries that need a full probe), then
+    // run those probes with the same concurrency cap instead of an unbounded
+    // Promise.all that could spawn one ffprobe process per queued file.
+    const fallbacks = [];
+    fastResults.forEach((info, i) => {
+      if (info.width > 0 && info.height > 0) return;
+      const check = pathSecurity.validateReadableFile(filePaths[i], "video");
+      if (!check.ok) return;
+      fallbacks.push({ i, resolvedPath: check.resolvedPath });
+    });
+    const fallbackLimit = Math.max(2, Math.min(8, fallbacks.length, cpus));
+    const fullResults = await runWithConcurrency(
+      fallbacks,
+      fallbackLimit,
+      async ({ resolvedPath, i }) => {
         try {
-          const full = await probeVideo(check.resolvedPath);
-          if (full.width > 0 && full.height > 0) return full;
+          const full = await probeVideo(resolvedPath);
+          if (full.width > 0 && full.height > 0) return { i, full };
         } catch (e) {
           console.error("[beru] Full video probe failed:", filePaths[i], e.message);
         }
-        return info;
-      }),
+        return { i, full: null };
+      },
     );
+    const fullByIndex = new Map();
+    for (const r of fullResults) if (r.full) fullByIndex.set(r.i, r.full);
+    return fastResults.map((info, i) => fullByIndex.get(i) || info);
   });
 
   ipcMain.handle("video:thumbnail", async (_event, filePath) => {
