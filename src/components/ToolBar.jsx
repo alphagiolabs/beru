@@ -1,9 +1,10 @@
-import { Droplet, Crop, Type, Eraser, Image } from "lucide-react";
+import { Droplet, Crop, Type, Eraser, Image, Hand } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 
 const tools = [
+  { id: "pan", icon: Hand, labelKey: "toolbar.pan" },
   { id: "blur", icon: Droplet, labelKey: "toolbar.blur" },
   { id: "crop", icon: Crop, labelKey: "toolbar.crop" },
   { id: "text", icon: Type, labelKey: "toolbar.text" },
@@ -34,6 +35,7 @@ export default function ToolBar() {
       {tools.map((tool) => {
         const active = activeTool === tool.id;
         const colors = {
+          pan: "var(--text-secondary)",
           blur: "var(--accent)",
           crop: "var(--amber)",
           text: "var(--purple)",

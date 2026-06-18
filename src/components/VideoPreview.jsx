@@ -174,7 +174,7 @@ export default function VideoPreview() {
     isSplitCompareRef,
     setZoomBoth,
     setPanBoth,
-  } = useZoomPan(videoRef, isSplitCompare);
+  } = useZoomPan(videoRef, isSplitCompare, { panToolActive: activeTool === "pan" });
   isSplitCompareRef.current = isSplitCompare;
   const showFfmpegOverlay =
     showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "ffmpeg";
@@ -491,7 +491,9 @@ export default function VideoPreview() {
       ref={outerRef}
       onMouseDown={onPanMouseDown}
       className="flex-1 flex items-center justify-center p-4 min-h-0 relative overflow-hidden"
-      style={{ cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default" }}
+      style={{
+        cursor: activeTool === "pan" && zoom > 1 ? (isPanning ? "grabbing" : "grab") : "default",
+      }}
     >
       <div
         ref={wrapperRef}
@@ -881,6 +883,7 @@ export default function VideoPreview() {
           <canvas
             ref={canvasRef}
             className="absolute top-0 left-0"
+            style={{ cursor: activeTool === "pan" && zoom > 1 ? "grab" : undefined }}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
