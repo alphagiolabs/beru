@@ -81,16 +81,35 @@ def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_s
     size = max(min_size, base_size)
     if region_w <= 0 or region_h <= 0:
         return size
-    while size >= min_size:
-        display = _wrap_text_to_width(text, region_w, size) if wrap else str(text or "")
+
+    def _fits(font_size):
+        """True if text at font_size fits within the region.
+
+        Monotonic in font_size: a smaller size never wraps to more lines than a
+        larger one, and both total_h and line_w shrink as size shrinks, so if
+        size S fits every size <= S also fits. That makes binary search valid.
+        """
+        display = _wrap_text_to_width(text, region_w, font_size) if wrap else str(text or "")
         line_count = max(1, display.count("\n") + 1) if display else 1
         longest = max((len(line) for line in display.split("\n")), default=0)
-        total_h = line_count * size * line_height
-        line_w = longest * _estimate_char_width(size)
-        if total_h <= region_h and line_w <= region_w:
-            return size
-        size -= 1
-    return min_size
+        total_h = line_count * font_size * line_height
+        line_w = longest * _estimate_char_width(font_size)
+        return total_h <= region_h and line_w <= region_w
+
+    # Binary search for the largest fitting size in [min_size, size].
+    # Replaces the previous linear `size -= 1` scan (O(base-min) wrap calls).
+    if _fits(size):
+        return size
+    lo, hi = min_size, size
+    best = min_size
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if _fits(mid):
+            best = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best
 
 
 def _text_clusters(text):
