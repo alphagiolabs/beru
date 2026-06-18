@@ -35,4 +35,24 @@ describe("installer packaging config", () => {
       ]),
     });
   });
+
+  it("includes the updater runtime modules in the packaged app", () => {
+    expect(pkg.dependencies).toHaveProperty("electron-updater");
+
+    expect(pkg.build.files).toEqual(
+      expect.arrayContaining([
+        "node_modules/electron-updater/**/*",
+        "node_modules/js-yaml/**/*",
+        "node_modules/lazy-val/**/*",
+        "node_modules/lodash.escaperegexp/**/*",
+        "node_modules/lodash.isequal/**/*",
+        "node_modules/tiny-typed-emitter/**/*",
+        "node_modules/debug/**/*",
+        "node_modules/ms/**/*",
+        "node_modules/sax/**/*",
+        "node_modules/argparse/**/*",
+        "node_modules/graceful-fs/**/*",
+      ]),
+    );
+  });
 });

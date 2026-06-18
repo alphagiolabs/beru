@@ -213,6 +213,8 @@
 
   "props.actions.addRegion": "Agregar región",
   "props.actions.addLayer": "Agregar capa",
+  "props.actions.moveUp": "Subir capa",
+  "props.actions.moveDown": "Bajar capa",
   "props.actions.deleteLayer": "Eliminar capa",
   "props.actions.duplicate": "Duplicar",
 
@@ -231,8 +233,16 @@
   "props.placeholder.noSelection": "Selecciona un video de la cola para empezar.",
 
   "preview.playPause": "Reproducir / pausar",
+  "preview.jumpStart": "Ir al inicio",
+  "preview.jumpEnd": "Ir al final",
   "preview.mute": "Silenciar",
   "preview.unmute": "Activar audio",
+  "preview.showTimeline": "Mostrar marcadores de tiempo",
+  "preview.hideTimeline": "Ocultar marcadores de tiempo",
+  "preview.renderFrame": "Previsualizar frame renderizado (FFmpeg drawtext)",
+  "preview.zoomOut": "Alejar (Ctrl + rueda)",
+  "preview.zoomReset": "Restablecer zoom (1:1)",
+  "preview.zoomIn": "Acercar (Ctrl + rueda)",
   "preview.fullscreen": "Pantalla completa",
   "preview.errorLoading": "No se pudo cargar el video.",
   "preview.noVideoSelected": "No hay video seleccionado.",

@@ -5,6 +5,7 @@ import useCanvas from "../hooks/useCanvas";
 import { regionToScreen, fmtTime } from "../utils/video-utils";
 import DelogoLivePreview from "./DelogoLivePreview";
 import TextOverlay from "./TextOverlay";
+import { useT } from "../i18n/useT";
 import { findTextOpForRegion, getGlobalTextStyleFromState } from "../utils/text-style";
 import {
   Play,
@@ -31,6 +32,7 @@ import {
 import useZoomPan from "./video-preview/useZoomPan";
 
 export default function VideoPreview() {
+  const t = useT();
   const {
     selectedIdx,
     sel,
@@ -944,6 +946,8 @@ export default function VideoPreview() {
             }}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
+            title={t("preview.jumpStart")}
+            aria-label={t("preview.jumpStart")}
           >
             <SkipBack size={14} />
           </button>
@@ -956,6 +960,8 @@ export default function VideoPreview() {
             }}
             className="p-1.5 rounded-full hover:bg-white/15"
             style={{ color: "var(--accent)" }}
+            title={t("preview.playPause")}
+            aria-label={t("preview.playPause")}
           >
             {playing ? <Pause size={16} /> : <Play size={16} />}
           </button>
@@ -967,6 +973,8 @@ export default function VideoPreview() {
             }}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
+            title={t("preview.jumpEnd")}
+            aria-label={t("preview.jumpEnd")}
           >
             <SkipForward size={14} />
           </button>
@@ -980,6 +988,8 @@ export default function VideoPreview() {
             }}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
+            title={muted ? t("preview.unmute") : t("preview.mute")}
+            aria-label={muted ? t("preview.unmute") : t("preview.mute")}
           >
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
           </button>
@@ -987,7 +997,8 @@ export default function VideoPreview() {
             onClick={() => setShowTimeline((v) => !v)}
             className="p-1 rounded hover:bg-white/10"
             style={{ color: showTimeline ? "var(--accent)" : "var(--text-dim)" }}
-            title={showTimeline ? "Ocultar marcadores de tiempo" : "Mostrar marcadores de tiempo"}
+            title={showTimeline ? t("preview.hideTimeline") : t("preview.showTimeline")}
+            aria-label={showTimeline ? t("preview.hideTimeline") : t("preview.showTimeline")}
           >
             {showTimeline ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
@@ -998,7 +1009,8 @@ export default function VideoPreview() {
             style={{
               color: showFfmpegPreview ? "var(--accent)" : "var(--text-dim)",
             }}
-            title="Previsualizar frame renderizado (FFmpeg drawtext)"
+            title={t("preview.renderFrame")}
+            aria-label={t("preview.renderFrame")}
           >
             {ffmpegPreviewLoading ? (
               <Loader2 size={14} className="animate-spin" />
@@ -1021,7 +1033,8 @@ export default function VideoPreview() {
                 disabled={zoom <= MIN_ZOOM}
                 className="p-0.5 rounded hover:bg-white/10 disabled:opacity-30"
                 style={{ color: "var(--text-dim)" }}
-                title="Alejar (Ctrl + rueda)"
+                title={t("preview.zoomOut")}
+                aria-label={t("preview.zoomOut")}
               >
                 <ZoomOut size={13} />
               </button>
@@ -1030,7 +1043,8 @@ export default function VideoPreview() {
                 onClick={zoomReset}
                 className="px-1.5 py-0.5 rounded text-[9px] font-mono hover:bg-white/10 min-w-[40px] text-center"
                 style={{ color: zoom > 1 ? "var(--accent)" : "var(--text-dim)" }}
-                title="Restablecer zoom (1:1)"
+                title={t("preview.zoomReset")}
+                aria-label={t("preview.zoomReset")}
               >
                 {Math.round(zoom * 100)}%
               </button>
@@ -1040,7 +1054,8 @@ export default function VideoPreview() {
                 disabled={zoom >= MAX_ZOOM}
                 className="p-0.5 rounded hover:bg-white/10 disabled:opacity-30"
                 style={{ color: "var(--text-dim)" }}
-                title="Acercar (Ctrl + rueda)"
+                title={t("preview.zoomIn")}
+                aria-label={t("preview.zoomIn")}
               >
                 <ZoomIn size={13} />
               </button>
