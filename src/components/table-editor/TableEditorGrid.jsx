@@ -12,7 +12,13 @@ import { findTextOpForRegion } from "../../utils/text-style";
  *  - cellText:   string[][]                   (row -> region col text)
  *  - hasOpText:  boolean[][]                  (row -> region col has op.text)
  */
-function usePrecomputedCells(queue, templateRegions, excelMapping, excelRows, excelRowIndexByFilename) {
+function usePrecomputedCells(
+  queue,
+  templateRegions,
+  excelMapping,
+  excelRows,
+  excelRowIndexByFilename,
+) {
   return useMemo(() => {
     const get = useEditorStore.getState;
     const rowCount = queue.length;
@@ -99,7 +105,11 @@ const TableRow = memo(
         >
           {displayId}
           {matchStatus === "unmatched" && excelPath && (
-            <span className="ml-1 text-[9px]" style={{ color: "var(--amber)" }} title="Sin fila en Excel">
+            <span
+              className="ml-1 text-[9px]"
+              style={{ color: "var(--amber)" }}
+              title="Sin fila en Excel"
+            >
               ⚠
             </span>
           )}
@@ -154,9 +164,7 @@ const TableRow = memo(
                     color: fromExcelOnly ? "var(--text-secondary)" : "var(--text-primary)",
                     fontStyle: fromExcelOnly ? "italic" : "normal",
                   }}
-                  title={
-                    fromExcelOnly ? "Valor desde Excel (doble clic para editar)" : undefined
-                  }
+                  title={fromExcelOnly ? "Valor desde Excel (doble clic para editar)" : undefined}
                 >
                   {cellText}
                 </div>

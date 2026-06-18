@@ -125,6 +125,5 @@ describe("sanitize-preset", () => {
       expect(sanitizeDefaults({ blurStrength: NaN }).blurStrength).toBe(20);
       expect(sanitizeDefaults({ temporalRadius: NaN }).temporalRadius).toBe(5);
     });
-
   });
 });

@@ -277,29 +277,26 @@ export default function QueueSidebar() {
     };
   }, [openMenuIdx]);
 
-  const handleAdd = useCallback(
-    async () => {
-      if (!api?.openVideos) {
-        showToast({ kind: "err", text: t("errors.noApi") });
-        return;
-      }
-      try {
-        const paths = await api.openVideos();
-        if (!paths?.length) return;
-        await get().addVideos(paths, api);
-        showToast({ kind: "ok", text: t("drop.added", { count: paths.length }) });
-      } catch (err) {
-        console.error("[beru] Video import failed:", err);
-        showToast({
-          kind: "err",
-          text: t("errors.importVideosFailed", {
-            message: err?.message || t("errors.unknown"),
-          }),
-        });
-      }
-    },
-    [showToast, t, get],
-  );
+  const handleAdd = useCallback(async () => {
+    if (!api?.openVideos) {
+      showToast({ kind: "err", text: t("errors.noApi") });
+      return;
+    }
+    try {
+      const paths = await api.openVideos();
+      if (!paths?.length) return;
+      await get().addVideos(paths, api);
+      showToast({ kind: "ok", text: t("drop.added", { count: paths.length }) });
+    } catch (err) {
+      console.error("[beru] Video import failed:", err);
+      showToast({
+        kind: "err",
+        text: t("errors.importVideosFailed", {
+          message: err?.message || t("errors.unknown"),
+        }),
+      });
+    }
+  }, [showToast, t, get]);
 
   const handleProcessThis = useCallback(
     async (idx) => {
@@ -359,7 +356,10 @@ export default function QueueSidebar() {
   );
 
   const handleSelect = useCallback((idx) => get().selectVideo(idx), [get]);
-  const handleToggleMenu = useCallback((idx) => setOpenMenuIdx((prev) => (prev === idx ? -1 : idx)), []);
+  const handleToggleMenu = useCallback(
+    (idx) => setOpenMenuIdx((prev) => (prev === idx ? -1 : idx)),
+    [],
+  );
   // Only the row with the open menu receives the shared menuRef; the comparator
   // above treats menuRef as identity, so a stable ref object keeps the open row
   // from re-rendering when unrelated rows update.
