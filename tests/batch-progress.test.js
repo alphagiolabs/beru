@@ -93,4 +93,40 @@ describe("getBatchProgress", () => {
       }),
     ).toEqual({ completed: 3, total: 3, percent: 100 });
   });
+
+  describe("jobProgress map (VITE_BERU_RENDER_PROGRESS_MAP)", () => {
+    it("reads in-flight progress from jobProgress instead of item.progress", () => {
+      expect(
+        getBatchProgress({
+          // item.progress is stale (0) — real progress lives in jobProgress
+          queue: [item("processing", 0), item("idle")],
+          progressDone: 0,
+          progressTotal: 2,
+          jobProgress: { 0: 50 },
+        }),
+      ).toEqual({ completed: 0, total: 2, percent: 25 });
+    });
+
+    it("falls back to item.progress when jobProgress lacks the index", () => {
+      expect(
+        getBatchProgress({
+          queue: [item("processing", 40), item("idle")],
+          progressDone: 0,
+          progressTotal: 2,
+          jobProgress: {},
+        }),
+      ).toEqual({ completed: 0, total: 2, percent: 20 });
+    });
+
+    it("ignores jobProgress for terminal jobs", () => {
+      expect(
+        getBatchProgress({
+          queue: [item("done"), item("processing", 0)],
+          progressDone: 1,
+          progressTotal: 2,
+          jobProgress: { 0: 99, 1: 60 },
+        }).percent,
+      ).toBe(80);
+    });
+  });
 });
