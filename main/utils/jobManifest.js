@@ -34,7 +34,8 @@ export function createProcessorManifest(manifest, jobs) {
     type: JOB_MANIFEST_TYPE,
     version: JOB_MANIFEST_VERSION,
     createdAt: manifest?.createdAt || new Date().toISOString(),
-    profile: manifest?.profile || jobs?.[0]?.encode_profile || "balanced",
+    // Encode profile is resolved per-job by the Python processor; no
+    // manifest-level profile is emitted (Python never reads it).
     jobs,
   };
 }

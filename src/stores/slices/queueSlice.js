@@ -53,20 +53,6 @@ export function createQueueSlice(set, get) {
       return getLockedDimensions(s);
     },
 
-    /* Convert a normalized region to pixel coords for the current selected video. */
-    currentRegionPx: () => {
-      const r = get().currentRegion;
-      const b = get().videoBounds();
-      if (!r || !b.width || !b.height) return null;
-      return denormalizeRegion(r, b.width, b.height);
-    },
-
-    /* Convert a normalized region to pixel coords for an arbitrary video. */
-    regionPxFor: (region, videoW, videoH) => {
-      if (!region || !videoW || !videoH) return null;
-      return denormalizeRegion(region, videoW, videoH);
-    },
-
     /* Compute the output file path for a queue item. */
     outputPathFor: (item) => {
       if (!item) return null;
@@ -118,14 +104,6 @@ export function createQueueSlice(set, get) {
     },
 
     _thumbnailAbortController: null,
-
-    _cancelPendingThumbnails: () => {
-      const ctrl = get()._thumbnailAbortController;
-      if (ctrl) {
-        ctrl.abort();
-        set({ _thumbnailAbortController: null });
-      }
-    },
 
     _scheduleThumbnailLoads: (api, toAdd, startIdx) => {
       if (!api?.getThumbnailBatch || toAdd.length === 0) return;
@@ -331,7 +309,6 @@ export function createQueueSlice(set, get) {
           mode,
           region: { ...currentRegion },
           blurStrength: get().blurStrength,
-          simpleDelogo: get().simpleDelogo,
           delogoMethod: get().delogoMethod,
           delogoFillColor: get().delogoFillColor,
           delogoFillOpacity: get().delogoFillOpacity,

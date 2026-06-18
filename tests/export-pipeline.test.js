@@ -204,7 +204,7 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[0].blur_strength).toBe(1);
   });
 
-  it("simpleDelogo forces blur and discards method-specific params", () => {
+  it("simpleDelogo is no longer a recognized field (dead auto-mode removed)", () => {
     const region = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 };
     useEditorStore.setState({
       queue: [
@@ -214,9 +214,9 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
               id: "delogo-5",
               mode: "delogo",
               region,
-              simpleDelogo: true,
-              delogoMethod: "inpaint", // should be overridden to blur
-              blurStrength: 2, // should clamp to 5
+              simpleDelogo: true, // ignored — method stays as declared below
+              delogoMethod: "inpaint",
+              blurStrength: 2,
               temporalRadius: 999,
               mosaicSize: 200,
               edgeFeather: 100,
@@ -230,14 +230,11 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
-    expect(job.operations[0].delogo_method).toBe("blur");
-    expect(job.operations[0].blur_strength).toBe(5);
-    expect(job.operations[0].temporal_radius).toBeUndefined();
-    expect(job.operations[0].mosaic_size).toBeUndefined();
-    expect(job.operations[0].edge_feather).toBeUndefined();
-    expect(job.operations[0].mirror_side).toBeUndefined();
-    expect(job.operations[0].delogo_fill_color).toBeUndefined();
-    expect(job.operations[0].delogo_fill_opacity).toBeUndefined();
+    // The declared method is honored; simpleDelogo no longer forces blur.
+    expect(job.operations[0].delogo_method).toBe("inpaint");
+    // simpleDelogo must not leak into the backend job.
+    expect(job.operations[0].simple_delogo).toBeUndefined();
+    expect(job.operations[0].simpleDelogo).toBeUndefined();
   });
 
   it("builds valid delogo job for cover method", () => {

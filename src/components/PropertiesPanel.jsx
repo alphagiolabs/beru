@@ -6,7 +6,7 @@ import PresetManager from "./PresetManager";
 import BatchPanel from "./BatchPanel";
 import { isRegionUsable } from "../utils/video-utils";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
-import { Timer, FlipHorizontal2, Grid3x3, Sparkles, Droplet, PaintBucket, Eye } from "lucide-react";
+import { Timer, FlipHorizontal2, Grid3x3, Sparkles, Droplet, PaintBucket, Eye, Upload } from "lucide-react";
 
 const DELOGO_ICONS = {
   temporal: Timer,
@@ -29,6 +29,7 @@ export default function PropertiesPanel() {
     tempImageScale,
     blurStrength,
     delogoMethod,
+    delogoImagePath,
     delogoFillColor,
     delogoFillOpacity,
     temporalRadius,
@@ -47,6 +48,7 @@ export default function PropertiesPanel() {
       tempImageScale: s.tempImageScale,
       blurStrength: s.blurStrength,
       delogoMethod: s.delogoMethod,
+      delogoImagePath: s.delogoImagePath,
       delogoFillColor: s.delogoFillColor,
       delogoFillOpacity: s.delogoFillOpacity,
       temporalRadius: s.temporalRadius,
@@ -471,6 +473,51 @@ export default function PropertiesPanel() {
                       {delogoFillOpacity.toFixed(2)}
                     </span>
                   </div>
+                </div>
+              )}
+
+              {delogoMethod === "cover" && (
+                <div className="mb-1">
+                  <div className="cap-input-label mb-1">Imagen de cobertura</div>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={delogoImagePath ? delogoImagePath.split(/[\\/]/).pop() : ""}
+                      placeholder="Seleccionar imagen..."
+                      readOnly
+                      className="cap-input flex-1 font-mono text-[10px] truncate"
+                    />
+                    <button
+                      onClick={async () => {
+                        const res = await window.api?.pickImage();
+                        if (res?.success) {
+                          get().setDelogoImagePath(res.path);
+                        } else if (res && !res.canceled) {
+                          get().showToast(res.error || "No se pudo cargar la imagen", "error");
+                        }
+                      }}
+                      className="cap-btn-secondary !text-[10px] !px-2 flex items-center gap-1"
+                    >
+                      <Upload size={12} /> Elegir
+                    </button>
+                    {delogoImagePath && (
+                      <button
+                        onClick={() => get().setDelogoImagePath("")}
+                        className="cap-btn-secondary !text-[10px] !px-2"
+                        style={{ color: "var(--rose)" }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                  {!delogoImagePath && (
+                    <div
+                      className="text-[9px] mt-1 leading-relaxed"
+                      style={{ color: "var(--rose)" }}
+                    >
+                      Selecciona una imagen o el método caerá a “Temporal”.
+                    </div>
+                  )}
                 </div>
               )}
 

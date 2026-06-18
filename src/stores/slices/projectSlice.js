@@ -81,7 +81,6 @@ export function createProjectSlice(set, get) {
         },
         defaults: {
           blurStrength: s.blurStrength,
-          simpleDelogo: s.simpleDelogo,
           delogoMethod: s.delogoMethod,
           delogoFillColor: s.delogoFillColor,
           delogoFillOpacity: s.delogoFillOpacity,
@@ -184,7 +183,6 @@ export function createProjectSlice(set, get) {
         textShadowOffsetX: textStyle.textShadowOffsetX,
         textShadowOffsetY: textStyle.textShadowOffsetY,
         blurStrength: defaults.blurStrength,
-        simpleDelogo: defaults.simpleDelogo,
         delogoMethod: defaults.delogoMethod,
         delogoFillColor: defaults.delogoFillColor,
         delogoFillOpacity: defaults.delogoFillOpacity,

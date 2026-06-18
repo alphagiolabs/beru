@@ -92,7 +92,6 @@ export function sanitizeTextStyle(textStyle = {}) {
 export function sanitizeDefaults(defaults = {}) {
   return {
     blurStrength: clampNum(defaults.blurStrength, 1, 100, 20),
-    simpleDelogo: !!defaults.simpleDelogo,
     delogoMethod: VALID_DELOGO_METHODS.has(defaults.delogoMethod)
       ? defaults.delogoMethod
       : "temporal",

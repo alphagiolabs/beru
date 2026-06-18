@@ -46,14 +46,6 @@ export function createBatchSlice(set, get) {
       });
     },
 
-    getGlobalTextStyle: () => getGlobalTextStyleFromState(get()),
-
-    getTemplateRegionStyle: (regionId) => {
-      const { templateRegions } = get();
-      const tr = templateRegions.find((r) => r.id === regionId);
-      return mergeTextStyles(getGlobalTextStyleFromState(get()), tr?.style);
-    },
-
     getBatchPreviewText: (videoIdx, regionId) => {
       const text = get().getCellTextForRegion(videoIdx, regionId);
       if (text) return text;
