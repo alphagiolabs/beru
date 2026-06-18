@@ -6,6 +6,7 @@ import {
   createBeruVideoResponse,
   filePathFromBeruUrl,
   validateBeruRequestPath,
+  invalidateBeruStatCache,
 } from "../main/utils/beru-protocol.js";
 
 describe("beru protocol path parsing", () => {
@@ -74,6 +75,55 @@ describe("beru protocol path parsing", () => {
       expect(response.headers.get("content-range")).toBe("bytes */10");
     } finally {
       unlinkSync(tmp);
+    }
+  });
+
+  it("returns correct size when stat cache is enabled", async () => {
+    const prev = process.env.BERU_PROTOCOL_STAT_CACHE;
+    process.env.BERU_PROTOCOL_STAT_CACHE = "1";
+    try {
+      invalidateBeruStatCache();
+      const tmp = path.join(os.tmpdir(), `beru-protocol-cache-${Date.now()}.mp4`);
+      writeFileSync(tmp, "0123456789");
+      try {
+        const response1 = createBeruVideoResponse(tmp, {
+          headers: { get: () => null },
+        });
+        expect(response1.status).toBe(200);
+        expect(response1.headers.get("content-length")).toBe("10");
+        expect(await response1.text()).toBe("0123456789");
+        // Delete the file and request again. With the stat cache enabled, the
+        // second response headers must still be derived from the cached size
+        // even though the file no longer exists on disk.
+        unlinkSync(tmp);
+        const response2 = createBeruVideoResponse(tmp, {
+          headers: { get: () => null },
+        });
+        expect(response2.status).toBe(200);
+        expect(response2.headers.get("content-length")).toBe("10");
+      } finally {
+        try {
+          unlinkSync(tmp);
+        } catch {
+          /* already removed */
+        }
+        invalidateBeruStatCache();
+      }
+    } finally {
+      if (prev === undefined) delete process.env.BERU_PROTOCOL_STAT_CACHE;
+      else process.env.BERU_PROTOCOL_STAT_CACHE = prev;
+      invalidateBeruStatCache();
+    }
+  });
+
+  it("invalidateBeruStatCache is a no-op when cache disabled", () => {
+    const prev = process.env.BERU_PROTOCOL_STAT_CACHE;
+    delete process.env.BERU_PROTOCOL_STAT_CACHE;
+    try {
+      expect(() => invalidateBeruStatCache()).not.toThrow();
+      expect(() => invalidateBeruStatCache("C:\\nonexistent.mp4")).not.toThrow();
+    } finally {
+      if (prev !== undefined) process.env.BERU_PROTOCOL_STAT_CACHE = prev;
     }
   });
 });

@@ -9,6 +9,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const _exe = process.platform === "win32" ? ".exe" : "";
 const PROCESSOR_NAME = `beru-processor${_exe}`;
 
+// --- Spawn resolution cache (opt-in) ----------------------------------------
+// resolveProcessorSpawn() re-probes Python via execFileSync(..., "--version")
+// on every call, and getBundledProcessorPath() does fs.existsSync checks each
+// time. Both results are stable for the process lifetime, so memoize them.
+// Enable with BERU_PROCESSOR_SPAWN_CACHE=1. Default off = current behavior.
+let systemPythonCache = { resolved: false, value: null };
+let bundledProcessorCache = { resolved: false, value: null };
+
+function processorSpawnCacheEnabled() {
+  return process.env.BERU_PROCESSOR_SPAWN_CACHE === "1";
+}
+
+export function invalidateProcessorSpawnCache() {
+  systemPythonCache = { resolved: false, value: null };
+  bundledProcessorCache = { resolved: false, value: null };
+}
+
 const WINDOWS_CANDIDATES = [
   { command: "py", args: ["-3"] },
   { command: "python", args: [] },
@@ -30,29 +47,43 @@ function probePythonCandidate(candidate) {
 }
 
 function resolveSystemPythonSpawn() {
-  if (process.env.BERU_PYTHON && fs.existsSync(process.env.BERU_PYTHON)) {
-    return { command: process.env.BERU_PYTHON, args: [] };
+  if (processorSpawnCacheEnabled() && systemPythonCache.resolved) {
+    return systemPythonCache.value;
   }
-  const candidates = process.platform === "win32" ? WINDOWS_CANDIDATES : UNIX_CANDIDATES;
-  for (const candidate of candidates) {
-    try {
-      return probePythonCandidate(candidate);
-    } catch {
-      // Not available — try next candidate.
+  let value;
+  if (process.env.BERU_PYTHON && fs.existsSync(process.env.BERU_PYTHON)) {
+    value = { command: process.env.BERU_PYTHON, args: [] };
+  } else {
+    const candidates = process.platform === "win32" ? WINDOWS_CANDIDATES : UNIX_CANDIDATES;
+    value = null;
+    for (const candidate of candidates) {
+      try {
+        value = probePythonCandidate(candidate);
+        break;
+      } catch {
+        // Not available — try next candidate.
+      }
     }
   }
-  return null;
+  if (processorSpawnCacheEnabled()) systemPythonCache = { resolved: true, value };
+  return value;
 }
 
 /** Absolute path to the PyInstaller-built processor binary, if present. */
 export function getBundledProcessorPath() {
-  const devBin = path.join(__dirname, "..", "..", "bin", PROCESSOR_NAME);
-  if (fs.existsSync(devBin)) return devBin;
-  if (!isDev && process.resourcesPath) {
-    const packaged = path.join(process.resourcesPath, "bin", PROCESSOR_NAME);
-    if (fs.existsSync(packaged)) return packaged;
+  if (processorSpawnCacheEnabled() && bundledProcessorCache.resolved) {
+    return bundledProcessorCache.value;
   }
-  return null;
+  const devBin = path.join(__dirname, "..", "..", "bin", PROCESSOR_NAME);
+  let value = null;
+  if (fs.existsSync(devBin)) {
+    value = devBin;
+  } else if (!isDev && process.resourcesPath) {
+    const packaged = path.join(process.resourcesPath, "bin", PROCESSOR_NAME);
+    if (fs.existsSync(packaged)) value = packaged;
+  }
+  if (processorSpawnCacheEnabled()) bundledProcessorCache = { resolved: true, value };
+  return value;
 }
 
 /**
