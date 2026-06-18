@@ -574,127 +574,121 @@ export default function VideoPreview() {
           {activeOpsWithScreen.map(({ op, opIdx, screen: s }) => {
             if (!s) return null;
             if (op.mode === "blur") {
-                return (
+              return (
+                <div
+                  key={op.id}
+                  className="absolute pointer-events-none z-10"
+                  style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
+                >
                   <div
-                    key={op.id}
-                    className="absolute pointer-events-none z-10"
-                    style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
-                  >
-                    <div
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        background:
-                          "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
-                        border: "2px solid rgba(0,240,234,0.6)",
-                        borderRadius: "2px",
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        backdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
-                        WebkitBackdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
-                      }}
-                    />
-                  </div>
-                );
-              }
-              if (op.mode === "crop") {
-                return (
-                  <div
-                    key={op.id}
-                    className="absolute pointer-events-none z-10"
                     style={{
-                      left: s.x,
-                      top: s.y,
-                      width: s.w,
-                      height: s.h,
-                      outline: "2px dashed #fbbf24",
-                      outlineOffset: "-1px",
+                      width: "100%",
+                      height: "100%",
+                      background:
+                        "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
+                      border: "2px solid rgba(0,240,234,0.6)",
+                      borderRadius: "2px",
                     }}
                   />
-                );
-              }
-              if (op.mode === "delogo") {
-                const dm = op.delogoMethod || "inpaint";
-                let overlayStyle = { left: s.x, top: s.y, width: s.w, height: s.h };
-                if (dm === "inpaint") {
-                  overlayStyle.background =
-                    "repeating-conic-gradient(rgba(239,68,68,0.15) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px";
-                  overlayStyle.outline = "2px solid rgba(239,68,68,0.7)";
-                } else if (dm === "blur") {
-                  overlayStyle.background =
-                    "repeating-linear-gradient(135deg, rgba(59,130,246,0.10) 0px, rgba(59,130,246,0.10) 2px, transparent 2px, transparent 8px)";
-                  overlayStyle.backdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
-                  overlayStyle.WebkitBackdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
-                  overlayStyle.outline = "2px dashed rgba(59,130,246,0.7)";
-                } else {
-                  overlayStyle.background = `${op.delogoFillColor || "black"}`;
-                  overlayStyle.opacity = op.delogoFillOpacity ?? 1;
-                  overlayStyle.outline = "2px solid rgba(239,68,68,0.6)";
-                }
-                return (
                   <div
-                    key={op.id}
-                    className="absolute pointer-events-none z-10"
-                    style={overlayStyle}
-                  />
-                );
-              }
-              if (op.mode === "image" && op.imagePath) {
-                const dataUrl = imageDataCache?.[op.imagePath];
-                const isDragging = draggingOp?.opIdx === opIdx;
-                return (
-                  <div
-                    key={op.id}
-                    className={`absolute z-30 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
                     style={{
-                      left: s.x,
-                      top: s.y,
-                      width: s.w,
-                      height: s.h,
-                      opacity: op.imageOpacity ?? 1,
-                      outline: isDragging
-                        ? "2px solid rgba(16,185,129,1)"
-                        : "1px dashed rgba(16,185,129,0.6)",
-                      pointerEvents: "auto",
+                      position: "absolute",
+                      inset: 0,
+                      backdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
+                      WebkitBackdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
                     }}
-                    onMouseDown={(e) => handleImageDragStart(op, opIdx, e)}
-                  >
-                    {dataUrl ? (
-                      <img
-                        src={dataUrl}
-                        alt=""
-                        className="w-full h-full"
-                        style={{ objectFit: "fill" }}
-                        draggable={false}
-                      />
-                    ) : (
-                      <div
-                        className="w-full h-full flex items-center justify-center text-[10px]"
-                        style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
-                      >
-                        {op.imagePath.split(/[\\/]/).pop()}
-                      </div>
-                    )}
-                  </div>
-                );
-              }
-              if (op.mode === "text" && op.text && sidebarMode !== "batch") {
-                return (
-                  <TextOverlay
-                    key={op.id}
-                    screen={s}
-                    text={op.text}
-                    style={op}
-                    showOutline={false}
                   />
-                );
+                </div>
+              );
+            }
+            if (op.mode === "crop") {
+              return (
+                <div
+                  key={op.id}
+                  className="absolute pointer-events-none z-10"
+                  style={{
+                    left: s.x,
+                    top: s.y,
+                    width: s.w,
+                    height: s.h,
+                    outline: "2px dashed #fbbf24",
+                    outlineOffset: "-1px",
+                  }}
+                />
+              );
+            }
+            if (op.mode === "delogo") {
+              const dm = op.delogoMethod || "inpaint";
+              let overlayStyle = { left: s.x, top: s.y, width: s.w, height: s.h };
+              if (dm === "inpaint") {
+                overlayStyle.background =
+                  "repeating-conic-gradient(rgba(239,68,68,0.15) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px";
+                overlayStyle.outline = "2px solid rgba(239,68,68,0.7)";
+              } else if (dm === "blur") {
+                overlayStyle.background =
+                  "repeating-linear-gradient(135deg, rgba(59,130,246,0.10) 0px, rgba(59,130,246,0.10) 2px, transparent 2px, transparent 8px)";
+                overlayStyle.backdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
+                overlayStyle.WebkitBackdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
+                overlayStyle.outline = "2px dashed rgba(59,130,246,0.7)";
+              } else {
+                overlayStyle.background = `${op.delogoFillColor || "black"}`;
+                overlayStyle.opacity = op.delogoFillOpacity ?? 1;
+                overlayStyle.outline = "2px solid rgba(239,68,68,0.6)";
               }
-              return null;
-            })}
+              return (
+                <div
+                  key={op.id}
+                  className="absolute pointer-events-none z-10"
+                  style={overlayStyle}
+                />
+              );
+            }
+            if (op.mode === "image" && op.imagePath) {
+              const dataUrl = imageDataCache?.[op.imagePath];
+              const isDragging = draggingOp?.opIdx === opIdx;
+              return (
+                <div
+                  key={op.id}
+                  className={`absolute z-30 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
+                  style={{
+                    left: s.x,
+                    top: s.y,
+                    width: s.w,
+                    height: s.h,
+                    opacity: op.imageOpacity ?? 1,
+                    outline: isDragging
+                      ? "2px solid rgba(16,185,129,1)"
+                      : "1px dashed rgba(16,185,129,0.6)",
+                    pointerEvents: "auto",
+                  }}
+                  onMouseDown={(e) => handleImageDragStart(op, opIdx, e)}
+                >
+                  {dataUrl ? (
+                    <img
+                      src={dataUrl}
+                      alt=""
+                      className="w-full h-full"
+                      style={{ objectFit: "fill" }}
+                      draggable={false}
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full flex items-center justify-center text-[10px]"
+                      style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
+                    >
+                      {op.imagePath.split(/[\\/]/).pop()}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+            if (op.mode === "text" && op.text && sidebarMode !== "batch") {
+              return (
+                <TextOverlay key={op.id} screen={s} text={op.text} style={op} showOutline={false} />
+              );
+            }
+            return null;
+          })}
 
           {/* Live blur preview while configuring */}
           {sidebarMode === "logo" &&

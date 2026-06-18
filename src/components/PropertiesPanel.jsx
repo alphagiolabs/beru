@@ -6,7 +6,16 @@ import PresetManager from "./PresetManager";
 import BatchPanel from "./BatchPanel";
 import { isRegionUsable } from "../utils/video-utils";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
-import { Timer, FlipHorizontal2, Grid3x3, Sparkles, Droplet, PaintBucket, Eye, Upload } from "lucide-react";
+import {
+  Timer,
+  FlipHorizontal2,
+  Grid3x3,
+  Sparkles,
+  Droplet,
+  PaintBucket,
+  Eye,
+  Upload,
+} from "lucide-react";
 
 const DELOGO_ICONS = {
   temporal: Timer,

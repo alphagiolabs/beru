@@ -34,7 +34,10 @@ const LayerRow = memo(function LayerRow({
   onRemove,
 }) {
   return (
-    <div className="flex items-center gap-2 p-2 rounded" style={{ background: "var(--bg-elevated)" }}>
+    <div
+      className="flex items-center gap-2 p-2 rounded"
+      style={{ background: "var(--bg-elevated)" }}
+    >
       <div
         className="w-2 h-2 rounded-full flex-shrink-0"
         style={{ background: color || "var(--text-dim)" }}

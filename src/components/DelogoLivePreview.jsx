@@ -282,10 +282,10 @@ function renderTemporal(ctx, video, region, screen, radius, ws) {
       gs.push(fd[o + 1]);
       bs.push(fd[o + 2]);
     }
-      d[o] = medianFn(rs);
-      d[o + 1] = medianFn(gs);
-      d[o + 2] = medianFn(bs);
-      d[o + 3] = 255;
+    d[o] = medianFn(rs);
+    d[o + 1] = medianFn(gs);
+    d[o + 2] = medianFn(bs);
+    d[o + 3] = 255;
   }
   sctx.putImageData(out, 0, 0);
 
