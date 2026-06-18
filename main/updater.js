@@ -93,6 +93,7 @@ const init = (win) => {
     pendingVersion = null;
     updateDownloaded = false;
     userInitiatedDownload = false;
+    au.autoInstallOnAppQuit = false;
     send({ type: "not-available", version: info?.version });
   });
   au.on("download-progress", (p) =>
@@ -109,21 +110,25 @@ const init = (win) => {
     updateDownloaded = true;
     pendingVersion = info?.version || pendingVersion;
     send({ type: "ready", version: info?.version || pendingVersion });
-    // Honor the downloading-modal copy: "Beru se reiniciará e instalará la
-    // actualización automáticamente al terminar." When the user explicitly
-    // clicked "Actualizar ahora" in this session, trigger quitAndInstall so
-    // the app actually restarts. For cached updates from a previous session
-    // (no userInitiatedDownload flag) the renderer keeps showing the "ready"
-    // modal so the user can confirm the restart themselves.
-    if (userInitiatedDownload) {
-      userInitiatedDownload = false;
-      scheduleInstall(au);
-    }
+    // Enable auto-install-on-quit as a fallback: if the user closes the app
+    // without clicking "Reiniciar e instalar", the NSIS installer will run on
+    // the next normal quit so the update is not silently lost.
+    au.autoInstallOnAppQuit = true;
+    // Do NOT auto-install here. The renderer shows a "Reiniciar e instalar"
+    // modal and the user must confirm the restart. Auto-installing via
+    // quitAndInstall(true, true) fails silently when NSIS is configured with
+    // oneClick: false (the installer cannot run in silent mode), causing the
+    // app to quit, relaunch the OLD version, and re-show the same update —
+    // an update loop. Let the user initiate the install explicitly instead.
+    userInitiatedDownload = false;
   });
   au.on("error", (err) => {
     checkInProgress = false;
     if (downloadInProgress) downloadInProgress = false;
     userInitiatedDownload = false;
+    // Don't let a stale autoInstallOnAppQuit flag cause an unexpected install
+    // after a download or update error.
+    au.autoInstallOnAppQuit = false;
     send({ type: "error", message: err?.message || String(err) });
   });
 
@@ -214,13 +219,13 @@ const INSTALL_GRACE_MS = 10000;
 const scheduleInstall = (au) => {
   if (isDev || !au || quittingForUpdate) return;
   quittingForUpdate = true;
-  // Silent + force-run is the standard for NSIS auto-updates. A non-silent
-  // assisted update (oneClick: false) can surface a wizard or fail to apply
-  // silently; the app then quits, --force-run relaunches the OLD version, and
-  // the same update reappears on the next launch → update loop.
+  // Use silent=false because NSIS is configured with oneClick: false — the
+  // installer wizard must be visible for the user to confirm the installation.
+  // forceRunAfter=true so the app relaunches once the user completes the
+  // wizard.
   setImmediate(() => {
     try {
-      const result = au.quitAndInstall(true, true);
+      const result = au.quitAndInstall(false, true);
       // electron-updater's install is fire-and-forget for NSIS, but newer
       // builds may return a promise — handle both so a rejection never leaves
       // us stuck in the "install-in-progress" state.
