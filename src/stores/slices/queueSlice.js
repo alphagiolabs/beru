@@ -331,7 +331,6 @@ export function createQueueSlice(set, get) {
           mode,
           region: { ...currentRegion },
           blurStrength: get().blurStrength,
-          simpleDelogo: get().simpleDelogo,
           delogoMethod: get().delogoMethod,
           delogoFillColor: get().delogoFillColor,
           delogoFillOpacity: get().delogoFillOpacity,

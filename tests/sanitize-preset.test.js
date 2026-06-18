@@ -126,12 +126,5 @@ describe("sanitize-preset", () => {
       expect(sanitizeDefaults({ temporalRadius: NaN }).temporalRadius).toBe(5);
     });
 
-    it("normalizes simpleDelogo to boolean", () => {
-      expect(sanitizeDefaults({ simpleDelogo: true }).simpleDelogo).toBe(true);
-      expect(sanitizeDefaults({ simpleDelogo: "yes" }).simpleDelogo).toBe(true);
-      expect(sanitizeDefaults({ simpleDelogo: false }).simpleDelogo).toBe(false);
-      expect(sanitizeDefaults({}).simpleDelogo).toBe(false);
-      expect(sanitizeDefaults({ simpleDelogo: null }).simpleDelogo).toBe(false);
-    });
   });
 });

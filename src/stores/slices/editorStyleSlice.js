@@ -8,7 +8,6 @@ export function createEditorStyleSlice(set, get) {
 
     ...GLOBAL_TEXT_STYLE_DEFAULTS,
     blurStrength: 20,
-    simpleDelogo: false,
     delogoMethod: "temporal",
     delogoFillColor: "black",
     delogoFillOpacity: 1,
@@ -64,7 +63,6 @@ export function createEditorStyleSlice(set, get) {
     },
 
     setDelogoMethod: (val) => set({ delogoMethod: val }),
-    setSimpleDelogo: (val) => set({ simpleDelogo: !!val }),
     setDelogoFillColor: (val) => set({ delogoFillColor: val }),
     setDelogoFillOpacity: (val) => set({ delogoFillOpacity: Number(val) }),
     setDelogoImagePath: (val) => set({ delogoImagePath: val || "" }),
