@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import useEditorStore from "../stores/useEditorStore";
 import { regionToScreen } from "../utils/video-utils";
+import { PERF_FLAGS } from "../utils/perf-flags.js";
 
 /* ── Per-preview workspace (released on unmount) ─────────────────────── */
 
@@ -214,6 +215,43 @@ function medianChannel(values) {
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
+/**
+ * In-place quickselect median (O(n) avg). Mutates `a` (caller builds it fresh).
+ * Used when VITE_BERU_DELGO_QUICKSELECT is enabled to avoid the per-pixel full sort.
+ */
+function quickselectMedian(a) {
+  const n = a.length;
+  if (n === 0) return 0;
+  if (n === 1) return a[0];
+  const k = n >> 1;
+  let lo = 0;
+  let hi = n - 1;
+  while (lo < hi) {
+    const pivot = a[(lo + hi) >> 1];
+    let i = lo;
+    let j = hi;
+    while (i <= j) {
+      while (a[i] < pivot) i++;
+      while (a[j] > pivot) j--;
+      if (i <= j) {
+        const t = a[i];
+        a[i++] = a[j];
+        a[j--] = t;
+      }
+    }
+    if (k <= j) hi = j;
+    else if (k >= i) lo = i;
+    else break;
+  }
+  if (n % 2) return a[k];
+  // even n: a[k] is placed; a[k-1] is the max of the lower partition.
+  let maxLo = a[0];
+  for (let i = 1; i < k; i++) if (a[i] > maxLo) maxLo = a[i];
+  return Math.round((maxLo + a[k]) / 2);
+}
+
+const medianFn = PERF_FLAGS.delogoQuickselect ? quickselectMedian : medianChannel;
+
 function renderTemporal(ctx, video, region, screen, radius, ws) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
   const src = getSourceCanvas(sw, sh, ws);
@@ -244,10 +282,10 @@ function renderTemporal(ctx, video, region, screen, radius, ws) {
       gs.push(fd[o + 1]);
       bs.push(fd[o + 2]);
     }
-    d[o] = medianChannel(rs);
-    d[o + 1] = medianChannel(gs);
-    d[o + 2] = medianChannel(bs);
-    d[o + 3] = 255;
+      d[o] = medianFn(rs);
+      d[o + 1] = medianFn(gs);
+      d[o + 2] = medianFn(bs);
+      d[o + 3] = 255;
   }
   sctx.putImageData(out, 0, 0);
 
@@ -300,22 +338,43 @@ export default function DelogoLivePreview({ videoRef }) {
     const ws = workspaceRef.current;
 
     let rafId = 0;
+    let timerId = 0;
+    let lastDrawTs = 0;
+    let pauseController = null;
+    const throttleFps = PERF_FLAGS.delogoThrottleFps;
+    const throttleInterval = throttleFps > 0 ? 1000 / throttleFps : 0;
+
+    const scheduleNext = () => {
+      rafId = requestAnimationFrame(draw);
+    };
+
     const draw = () => {
       const video = videoRef.current;
       const region = useEditorStore.getState().currentRegion;
       const method = useEditorStore.getState().delogoMethod;
       const notReady = !video || !region || video.readyState < 2;
       if (document.hidden) {
-        rafId = setTimeout(draw, 1000);
+        timerId = setTimeout(draw, 1000);
         return;
       }
+      // Backoff when the video isn't ready instead of spinning at RAF rate.
       if (notReady) {
-        rafId = requestAnimationFrame(draw);
+        timerId = setTimeout(draw, 100);
         return;
+      }
+      // FPS throttle (flag-gated; 0 = uncapped legacy behaviour).
+      if (throttleInterval > 0) {
+        const now = performance.now();
+        const remaining = throttleInterval - (now - lastDrawTs);
+        if (remaining > 0) {
+          timerId = setTimeout(draw, remaining);
+          return;
+        }
+        lastDrawTs = now;
       }
       const screen = regionToScreen(region, video);
       if (!screen || screen.w < 1 || screen.h < 1) {
-        rafId = requestAnimationFrame(draw);
+        scheduleNext();
         return;
       }
 
@@ -345,12 +404,27 @@ export default function DelogoLivePreview({ videoRef }) {
         label.style.top = Math.max(0, screen.y - 18) + "px";
       }
 
-      rafId = requestAnimationFrame(draw);
+      // Pause the loop while the video is paused — the frame is static, so
+      // redrawing only burns CPU. Resume on play/seeked.
+      if (video.paused) {
+        if (!pauseController) {
+          pauseController = new AbortController();
+          const resume = () => {
+            pauseController = null;
+            scheduleNext();
+          };
+          video.addEventListener("play", resume, { once: true, signal: pauseController.signal });
+          video.addEventListener("seeked", resume, { once: true, signal: pauseController.signal });
+        }
+        return;
+      }
+      scheduleNext();
     };
     rafId = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(rafId);
-      clearTimeout(rafId);
+      clearTimeout(timerId);
+      if (pauseController) pauseController.abort();
     };
   }, [isCanvas, videoRef, mosaicSize, mirrorSide, temporalRadius]);
 

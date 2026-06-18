@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { memo, useLayoutEffect, useRef, useState } from "react";
 import { letterSpacingToPx } from "../utils/letter-spacing";
 import {
   binarySearchAutoFitFontSize,
@@ -13,7 +13,7 @@ import {
  * screen: return value of regionToScreen()
  * style: operation-style fields (fontSize, fontColor, …)
  */
-export default function TextOverlay({
+function TextOverlay({
   screen,
   text,
   style = {},
@@ -274,3 +274,6 @@ export default function TextOverlay({
     </div>
   );
 }
+
+// Memoize so stable props (screen/style/text from memoized parents) skip re-render.
+export default memo(TextOverlay);

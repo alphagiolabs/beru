@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx";
 import { createOperation, uid } from "../../utils/types";
 import { stripExt, rowGet, isRegionUsable, normalizeMatchId } from "../../utils/video-utils";
 import { sanitizeOperation } from "../../utils/delogo-ops";
@@ -175,6 +174,9 @@ export function createBatchSlice(set, get) {
           return { success: false, error: "Empty Excel file data" };
         }
 
+        // Dynamic import keeps xlsx out of the main bundle — it's only needed
+        // when the user actually imports an Excel file.
+        const XLSX = await import("xlsx");
         const wb = XLSX.read(base64Data, { type: "base64" });
         const sheetName = wb.SheetNames && wb.SheetNames[0];
         if (!sheetName) return { success: false, error: "Excel file has no sheets" };

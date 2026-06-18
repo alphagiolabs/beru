@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import useCanvas from "../hooks/useCanvas";
@@ -84,6 +84,40 @@ export default function VideoPreview() {
   const getBatchPreviewPayload = useEditorStore((s) => s.getBatchPreviewPayload);
   const buildPreviewFrameJob = useEditorStore((s) => s.buildPreviewFrameJob);
   const showToast = useEditorStore((s) => s.showToast);
+  // Subscribe to the global text style so the logo/batch live text preview
+  // re-renders on style edits without reading the whole store via getState()
+  // during render (which also caused stale inputs after preset apply/undo).
+  const globalTextStyle = useEditorStore(
+    (s) =>
+      getGlobalTextStyleFromState({
+        textFontSize: s.textFontSize,
+        textFontColor: s.textFontColor,
+        fontFamily: s.fontFamily,
+        fontWeight: s.fontWeight,
+        letterSpacing: s.letterSpacing,
+        textAlign: s.textAlign,
+        textOpacity: s.textOpacity,
+        bold: s.bold,
+        italic: s.italic,
+        bgEnabled: s.bgEnabled,
+        bgColor: s.bgColor,
+        bgOpacity: s.bgOpacity,
+        boxBorderWidth: s.boxBorderWidth,
+        borderWidth: s.borderWidth,
+        borderColor: s.borderColor,
+        textShadowEnabled: s.textShadowEnabled,
+        textShadowColor: s.textShadowColor,
+        textShadowOffsetX: s.textShadowOffsetX,
+        textShadowOffsetY: s.textShadowOffsetY,
+        autoFit: s.autoFit,
+        lineHeight: s.lineHeight,
+        verticalAlign: s.verticalAlign,
+        textWrap: s.textWrap,
+        safeMargin: s.safeMargin,
+        truncate: s.truncate,
+      }),
+    shallow,
+  );
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -95,7 +129,7 @@ export default function VideoPreview() {
   const [dragStart, setDragStart] = useState(null);
   const [draggingBatchText, setDraggingBatchText] = useState(null);
   const [batchTextDragStart, setBatchTextDragStart] = useState(null);
-  const [, setLayoutTick] = useState(0);
+  const [layoutTick, setLayoutTick] = useState(0);
   const [videoError, setVideoError] = useState(null);
   const [ffmpegPreviewUrl, setFfmpegPreviewUrl] = useState(null);
   const [ffmpegPreviewLoading, setFfmpegPreviewLoading] = useState(false);
@@ -105,6 +139,47 @@ export default function VideoPreview() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
+
+  // Active operations with their screen-space coords, memoized so the overlay
+  // geometry (regionToScreen) only recomputes when the operations or the video
+  // layout change — not on every `timeupdate` / progress tick. The `currentTime`
+  // filter still runs on each tick (cheap), but regionToScreen is avoided.
+  const activeOpsWithScreen = useMemo(() => {
+    if (!sel?.operations) return [];
+    const videoEl = videoRef.current;
+    const out = [];
+    for (let i = 0; i < sel.operations.length; i++) {
+      const op = sel.operations[i];
+      if (!isOpActive(op, currentTime)) continue;
+      const screen = regionToScreen(op.region, videoEl);
+      out.push({ op, opIdx: i, screen });
+    }
+    return out;
+    // `currentTime` filters which ops are active; `sel.operations` / `layoutTick`
+    // gate the regionToScreen recomputation. eslint sees currentTime as a dep
+    // that "should" be split, but keeping one memo is simpler and the filter is O(n).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel?.operations, layoutTick, currentTime]);
+
+  // Batch-mode per-region preview payloads with screen coords, memoized so
+  // getBatchPreviewPayload + regionToScreen don't run on every render.
+  const batchRegionPreviews = useMemo(() => {
+    if (sidebarMode !== "batch" || selectedIdx < 0 || !templateRegions?.length) return [];
+    const videoEl = videoRef.current;
+    const out = [];
+    for (let i = 0; i < templateRegions.length; i++) {
+      const tr = templateRegions[i];
+      const payload = getBatchPreviewPayload(selectedIdx, tr.id);
+      if (!payload) continue;
+      const screen = regionToScreen(payload.region, videoEl);
+      out.push({ tr, payload, screen });
+    }
+    return out;
+    // getBatchPreviewPayload reads queue/style state from the store; the memo
+    // invalidates when the inputs that affect its output change. `layoutTick`
+    // covers video element resize.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sidebarMode, selectedIdx, templateRegions, sel, globalTextStyle, layoutTick]);
 
   /* Zoom & pan refs (avoid stale closures in native event handlers) */
   const outerRef = useRef(null);
@@ -630,13 +705,11 @@ export default function VideoPreview() {
             </div>
           )}
 
-          {/* Operation overlays */}
-          {sel.operations
-            .filter((op) => isOpActive(op, currentTime))
-            .map((op, opIdx) => {
-              const s = regionToScreen(op.region, videoRef.current);
-              if (!s) return null;
-              if (op.mode === "blur") {
+          {/* Operation overlays — coords memoized so they don't recompute on
+              every playback timeupdate tick, only when ops or layout change. */}
+          {activeOpsWithScreen.map(({ op, opIdx, screen: s }) => {
+            if (!s) return null;
+            if (op.mode === "blur") {
                 return (
                   <div
                     key={op.id}
@@ -807,19 +880,16 @@ export default function VideoPreview() {
                 <TextOverlay
                   screen={s}
                   text={textInput}
-                  style={getGlobalTextStyleFromState(useEditorStore.getState())}
+                  style={globalTextStyle}
                   showOutline={false}
                 />
               );
             })()}
 
-          {/* Batch: live text preview per template region */}
+          {/* Batch: live text preview per template region (coords memoized) */}
           {sidebarMode === "batch" &&
             selectedIdx >= 0 &&
-            templateRegions.map((tr) => {
-              const payload = getBatchPreviewPayload(selectedIdx, tr.id);
-              if (!payload) return null;
-              const s = regionToScreen(payload.region, videoRef.current);
+            batchRegionPreviews.map(({ tr, payload, screen: s }) => {
               if (!s) return null;
               const isSelected = selectedTemplateRegionId === tr.id;
               const isDragging =
@@ -851,7 +921,7 @@ export default function VideoPreview() {
                 <TextOverlay
                   screen={s}
                   text="Texto de ejemplo"
-                  style={getGlobalTextStyleFromState(useEditorStore.getState())}
+                  style={globalTextStyle}
                   isFocused
                   showOutline
                 />

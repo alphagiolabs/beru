@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Plus, FileSpreadsheet, Table2, Copy, Trash2, Settings2 } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
@@ -16,6 +17,7 @@ export default function BatchPanel() {
     selectedTemplateRegionId,
     currentRegion,
     queue,
+    excelMatchStatus,
   } = useEditorStore(
     (s) => ({
       templateRegions: s.templateRegions,
@@ -26,13 +28,19 @@ export default function BatchPanel() {
       selectedTemplateRegionId: s.selectedTemplateRegionId,
       currentRegion: s.currentRegion,
       queue: s.queue,
+      excelMatchStatus: s.excelMatchStatus,
     }),
     shallow,
   );
   const showToast = useEditorStore((s) => s.showToast);
   const get = useEditorStore.getState;
   const t = useT();
-  const report = get().getMatchReport();
+  const report = useMemo(() => {
+    const matched = Object.values(excelMatchStatus).filter((s) => s === "matched").length;
+    const unmatched = Object.values(excelMatchStatus).filter((s) => s === "unmatched").length;
+    const duplicate = Object.values(excelMatchStatus).filter((s) => s === "duplicate").length;
+    return { matched, unmatched, duplicate, total: queue.length };
+  }, [excelMatchStatus, queue.length]);
 
   const handleImportExcel = async () => {
     // Warn when Excel will replace text ops linked to template regions (_reapplyExcel preserves non-text ops)

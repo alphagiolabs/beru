@@ -92,26 +92,33 @@ export default function Header() {
   useEffect(() => {
     if (!api?.getBatchCapacity) return undefined;
     let cancelled = false;
-    const currentQueue = get().queue;
-    const jobCount = Math.max(1, currentQueue.length);
-    let maxSourcePixels = 0;
-    for (const item of currentQueue) {
-      const w = Number(item.sourceWidth || item.width || 0);
-      const h = Number(item.sourceHeight || item.height || 0);
-      if (w > 0 && h > 0) maxSourcePixels = Math.max(maxSourcePixels, w * h);
-    }
-    const hasVideoFilters =
-      templateRegions.length > 0 || currentQueue.some((item) => (item.operations || []).length > 0);
-    api
-      .getBatchCapacity({ jobCount, maxSourcePixels, hasVideoFilters, encodeProfile })
-      .then((cap) => {
-        if (!cancelled && Number(cap?.recommended) > 0) {
-          setAutoWorkerHint(cap.recommended);
-        }
-      })
-      .catch(() => {});
+    let timer = 0;
+    // Debounce: queue/template/profile can change in rapid bursts (e.g. when
+    // importing many videos or applying a preset); coalesce into one IPC call.
+    timer = setTimeout(() => {
+      const currentQueue = get().queue;
+      const jobCount = Math.max(1, currentQueue.length);
+      let maxSourcePixels = 0;
+      for (const item of currentQueue) {
+        const w = Number(item.sourceWidth || item.width || 0);
+        const h = Number(item.sourceHeight || item.height || 0);
+        if (w > 0 && h > 0) maxSourcePixels = Math.max(maxSourcePixels, w * h);
+      }
+      const hasVideoFilters =
+        templateRegions.length > 0 ||
+        currentQueue.some((item) => (item.operations || []).length > 0);
+      api
+        .getBatchCapacity({ jobCount, maxSourcePixels, hasVideoFilters, encodeProfile })
+        .then((cap) => {
+          if (!cancelled && Number(cap?.recommended) > 0) {
+            setAutoWorkerHint(cap.recommended);
+          }
+        })
+        .catch(() => {});
+    }, 200);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [queueLength, templateRegions, encodeProfile]);
 
@@ -298,6 +305,7 @@ export default function Header() {
       queue: queueReset,
       progressTotal: jobs.length,
       progressDone: 0,
+      jobProgress: {},
       isProcessing: true,
     });
 

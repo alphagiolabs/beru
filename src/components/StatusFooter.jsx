@@ -9,6 +9,20 @@ import { getBatchProgress } from "../utils/batch-progress";
 import { APP_VERSION, formatFooterClock, parseReleaseNotesSections } from "../utils/appVersion";
 import { formatHistoryTimestamp } from "../utils/execution-history";
 
+/**
+ * Ticks a counter every `intervalMs` while `active` is true, so time-based UI
+ * (run/session clocks) re-renders at a fixed cadence instead of on every store
+ * change. Returns nothing — callers read `Date.now()` during render.
+ */
+function useClock(active, intervalMs = 1000) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!active) return undefined;
+    const id = setInterval(() => setTick((n) => (n + 1) % 1e9), intervalMs);
+    return () => clearInterval(id);
+  }, [active, intervalMs]);
+}
+
 function FooterChip({ children, className = "", title, onClick, active }) {
   const Tag = onClick ? "button" : "div";
   return (
@@ -332,6 +346,7 @@ export default function StatusFooter() {
     progressDone,
     progressTotal,
     queue,
+    jobProgress,
     executionHistory,
     batchSummary,
     update,
@@ -341,6 +356,7 @@ export default function StatusFooter() {
       progressDone: s.progressDone,
       progressTotal: s.progressTotal,
       queue: s.queue,
+      jobProgress: s.jobProgress,
       executionHistory: s.executionHistory,
       batchSummary: s.batchSummary,
       update: s.update,
@@ -354,12 +370,12 @@ export default function StatusFooter() {
   const closeUpToDate = useCallback(() => setUpToDateOpen(false), []);
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [sessionStartedAt] = useState(() => Date.now());
-  const [clockTick, setClockTick] = useState(0);
 
   const { completed, total, percent } = getBatchProgress({
     queue,
     progressDone,
     progressTotal,
+    jobProgress,
   });
   const showProgress = isProcessing || completed > 0 || percent > 0;
 
@@ -378,11 +394,8 @@ export default function StatusFooter() {
     setRunStartedAt(null);
   }, [isProcessing]);
 
-  useEffect(() => {
-    if (!isProcessing && updateStatus !== "downloading") return undefined;
-    const id = setInterval(() => setClockTick((n) => n + 1), 1000);
-    return () => clearInterval(id);
-  }, [isProcessing, updateStatus]);
+  // One-second clock tick while a run is active or an update is downloading.
+  useClock(isProcessing || updateStatus === "downloading", 1000);
 
   useEffect(() => {
     // Auto-open the install modal whenever an update is ready to install, on
@@ -408,7 +421,6 @@ export default function StatusFooter() {
 
   const runClock = runStartedAt != null ? formatFooterClock(Date.now() - runStartedAt) : "00:00";
   const sessionClock = formatFooterClock(Date.now() - sessionStartedAt);
-  void clockTick;
 
   const handleClearHistory = async () => {
     const ok = await get().requestConfirm({ message: t("footer.clearHistoryConfirm") });
