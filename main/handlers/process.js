@@ -51,7 +51,7 @@ function dispatchProcessorLine(line) {
     else if (msg.type === "job_progress") sendToRenderer("process:jobProgress", msg);
     else if (msg.type === "complete") sendToRenderer("process:complete", msg);
     else if (msg.type === "error") {
-      const errText = msg.error || msg.message || "Unknown error";
+      const errText = msg.error || "Unknown error";
       const idx = msg.index;
       if (Number.isInteger(idx) && idx >= 0) {
         sendToRenderer("process:jobError", msg);

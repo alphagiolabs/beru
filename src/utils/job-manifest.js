@@ -6,7 +6,9 @@ export function createJobManifest(jobs, meta = {}) {
     type: JOB_MANIFEST_TYPE,
     version: JOB_MANIFEST_VERSION,
     createdAt: meta.createdAt || new Date().toISOString(),
-    profile: meta.profile || jobs?.[0]?.encode_profile || "balanced",
+    // Encode profile is resolved per-job by the Python processor (with
+    // BERU_ENCODE_PROFILE fallback). No manifest-level profile is emitted —
+    // Python never reads it.
     jobs: Array.isArray(jobs) ? jobs : [],
   };
 }

@@ -18,15 +18,14 @@ describe("job manifest", () => {
         type: JOB_MANIFEST_TYPE,
         version: JOB_MANIFEST_VERSION,
         createdAt: "2026-06-05T00:00:00.000Z",
-        profile: "quality",
         jobs: [{ id: 7, encode_profile: "quality" }],
       });
       expect(isJobManifest(manifest)).toBe(true);
     });
 
-    it("uses balanced as default profile when not specified", () => {
-      const manifest = createJobManifest([{ id: 1 }]);
-      expect(manifest.profile).toBe("balanced");
+    it("does not emit a manifest-level profile (resolved per-job by Python)", () => {
+      const manifest = createJobManifest([{ id: 1, encode_profile: "quality" }]);
+      expect(manifest).not.toHaveProperty("profile");
     });
 
     it("generates createdAt timestamp when not provided", () => {
@@ -38,7 +37,6 @@ describe("job manifest", () => {
     it("handles empty jobs array", () => {
       const manifest = createJobManifest([]);
       expect(manifest.jobs).toEqual([]);
-      expect(manifest.profile).toBe("balanced");
     });
   });
 

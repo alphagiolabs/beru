@@ -152,14 +152,9 @@ export function createUiSlice(set, get) {
       try {
         const res = await api.addRecent({ path: filePath, name: name || "" });
         if (res?.success && Array.isArray(res.recent)) {
-          const decorated = res.recent.map((r) => {
-            let exists = true;
-            try {
-              exists = api._statExists ? api._statExists(r.path) : true;
-            } catch {}
-            return { ...r, exists };
-          });
-          set({ recent: decorated });
+          // The path was just picked/added, so it exists. listRecent re-checks
+          // server-side on next load via recent:list.
+          set({ recent: res.recent.map((r) => ({ ...r, exists: true })) });
         }
       } catch {}
     },
