@@ -126,6 +126,17 @@ function startWorker() {
       settleWorkerRequests(proc, { ok: false, error: err.message });
     });
 
+    // The worker's stdin is a separate Writable stream: if the worker dies
+    // (crash/OOM/external kill) while a renderPreviewFrame write is in flight or
+    // queued, the closed pipe emits an 'error' (EPIPE) on stdin. proc.on("error")
+    // only covers spawn-time errors, NOT stream errors on proc.stdin — and an
+    // unhandled stream error becomes an uncaughtException that takes down the
+    // whole Electron main process (see main.js onFatalError). Handle it here.
+    proc.stdin?.on("error", (err) => {
+      failStartup(`Preview worker stdin error: ${err.message}`);
+      settleWorkerRequests(proc, { ok: false, error: "Preview worker se cerró" });
+    });
+
     proc.on("close", (code) => {
       const message = stderrTail.trim() || `Preview worker finalizó (exit ${code ?? "?"})`;
       failStartup(message);
@@ -166,15 +177,26 @@ export async function renderPreviewFrame(payload) {
     }, REQUEST_TIMEOUT_MS);
 
     pending.set(id, { resolve, timer, proc });
-    proc.stdin.write(`${JSON.stringify({ id, payload })}\n`, (err) => {
-      if (!err) return;
+    // Guard against the worker dying between startWorker() resolving and this
+    // write landing: if stdin is already destroyed, .write throws synchronously.
+    try {
+      proc.stdin.write(`${JSON.stringify({ id, payload })}\n`, (err) => {
+        if (!err) return;
+        settleRequest(id, { ok: false, error: err.message });
+        if (worker === proc) {
+          try {
+            proc.kill();
+          } catch {}
+        }
+      });
+    } catch (err) {
       settleRequest(id, { ok: false, error: err.message });
       if (worker === proc) {
         try {
           proc.kill();
         } catch {}
       }
-    });
+    }
   });
 }
 

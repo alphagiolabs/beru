@@ -77,7 +77,30 @@ export function createPathSecurity(app) {
     try {
       return fs.realpathSync.native ? fs.realpathSync.native(filePath) : fs.realpathSync(filePath);
     } catch {
+      // realpathSync throws ENOENT when the leaf doesn't exist (or for a broken
+      // symlink). Falling back to path.resolve would skip ALL symlink resolution,
+      // so a symlink planted inside a trusted root pointing elsewhere could pass
+      // the lexical isUnderTrustedRoot check while shell.openPath later follows
+      // it outside the sandbox. Resolve the longest existing ancestor with
+      // realpath, then re-append the remaining (possibly non-existent) tail so
+      // the ancestor symlinks are still collapsed.
       try {
+        const resolved = path.resolve(filePath);
+        let dir = resolved;
+        let tail = [];
+        // Walk up until an existing ancestor is found.
+        while (dir !== path.dirname(dir)) {
+          try {
+            const realDir = fs.realpathSync.native
+              ? fs.realpathSync.native(dir)
+              : fs.realpathSync(dir);
+            return tail.length ? path.join(realDir, ...tail) : realDir;
+          } catch {
+            tail.unshift(path.basename(dir));
+            dir = path.dirname(dir);
+          }
+        }
+        // Reached the root without an existing ancestor — best effort.
         return path.resolve(filePath);
       } catch {
         return null;

@@ -133,14 +133,14 @@ export default function useKeyboard() {
 
       // Queue navigation
       if (key === "[" || (key === "ArrowUp" && !cmd)) {
-        e.preventDefault();
         if (store.queue.length === 0) return;
+        e.preventDefault();
         store.selectVideo(Math.max(0, store.selectedIdx - 1));
         return;
       }
       if (key === "]" || (key === "ArrowDown" && !cmd)) {
-        e.preventDefault();
         if (store.queue.length === 0) return;
+        e.preventDefault();
         store.selectVideo(Math.min(store.queue.length - 1, store.selectedIdx + 1));
         return;
       }

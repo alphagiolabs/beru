@@ -24,9 +24,10 @@ export const setCurrentTmpFile = (file) => {
 let _isProcessing = false;
 let _processingRunId = null;
 export const getIsProcessing = () => _isProcessing;
-export const setIsProcessing = (val) => {
-  _isProcessing = !!val;
-};
+// NOTE: there is intentionally no setIsProcessing. _isProcessing must always be
+// mutated together with _processingLock via beginProcessingRun/clearProcessingRun
+// (and the watchdog). A standalone setter that touched only _isProcessing would
+// desync the lock and wedge the next run until the watchdog fires.
 
 export const getProcessingRunId = () => _processingRunId;
 

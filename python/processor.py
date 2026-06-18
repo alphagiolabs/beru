@@ -779,6 +779,29 @@ def find_ffprobe(ffmpeg_bin):
     return ffmpeg_bin.replace(f"ffmpeg{_exe}", f"ffprobe{_exe}").replace("ffmpeg", "ffprobe")
 
 
+def _safe_float(value, default=0.0):
+    """Coerce an ffprobe field to float.
+
+    ffprobe emits the string 'N/A' (and sometimes empty strings) for fields it
+    cannot measure (bit_rate, duration on some streams). A bare float() would
+    raise ValueError and, because ffprobe() wraps the whole parse in a single
+    try/except, discard an otherwise-valid probe and fall back to the slow
+    regex parse — or report zero dimensions for a readable file.
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value, default=0):
+    """Coerce an ffprobe field to int, tolerating 'N/A' / None / float strings."""
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
 def _parse_frame_rate(rate_str):
     """Parse ffprobe frame rate string (e.g. '30000/1001' or '30') to float."""
     if not rate_str:
@@ -853,10 +876,16 @@ def _ffprobe_via_ffmpeg(path):
                 + int(dur_match.group(2)) * 60
                 + float(dur_match.group(3))
             )
+        # Classify lines in a single pass instead of calling text.splitlines()
+        # three separate times for video/audio detection.
         video_line = ""
+        audio_line = ""
         for line in text.splitlines():
-            if re.search(r"\bVideo:\s*", line, re.I):
+            if not video_line and re.search(r"\bVideo:\s*", line, re.I):
                 video_line = line
+            elif not audio_line and re.search(r"\bAudio:\s*", line, re.I):
+                audio_line = line
+            if video_line and audio_line:
                 break
         res_matches = list(re.finditer(r"(\d{2,6})x(\d{2,6})", video_line or text))
         width = height = 0
@@ -868,7 +897,6 @@ def _ffprobe_via_ffmpeg(path):
         if width <= 0 or height <= 0:
             return empty
         codec_match = re.search(r"Video:\s*([^,\s(]+)", video_line or text, re.I)
-        audio_line = next((ln for ln in text.splitlines() if re.search(r"\bAudio:\s*", ln, re.I)), "")
         audio_match = re.search(r"Audio:\s*([^,\s(]+)", audio_line, re.I)
         fps_match = re.search(r",\s*([0-9]+(?:\.[0-9]+)?)\s*fps\b", video_line or text, re.I)
         return {
@@ -877,7 +905,7 @@ def _ffprobe_via_ffmpeg(path):
             "duration": duration,
             "video_codec": codec_match.group(1) if codec_match else "",
             "pix_fmt": "yuv420p",
-            "frame_rate": float(fps_match.group(1)) if fps_match else 0.0,
+            "frame_rate": _safe_float(fps_match.group(1)) if fps_match else 0.0,
             "audio_codec": audio_match.group(1) if audio_match else "",
             "audio_channels": _parse_channel_layout(audio_line),
         }
@@ -921,15 +949,15 @@ def ffprobe(path):
             return _ffprobe_via_ffmpeg(path)
 
         return {
-            "width": video_stream.get("width", 0),
-            "height": video_stream.get("height", 0),
-            "duration": float(fmt.get("duration", 0)),
+            "width": _safe_int(video_stream.get("width", 0)),
+            "height": _safe_int(video_stream.get("height", 0)),
+            "duration": _safe_float(fmt.get("duration", 0)),
             "video_codec": video_stream.get("codec_name", ""),
             "pix_fmt": video_stream.get("pix_fmt", "yuv420p"),
-            "bit_rate": int(fmt.get("bit_rate", 0)) or int(video_stream.get("bit_rate", 0)),
+            "bit_rate": _safe_int(fmt.get("bit_rate", 0)) or _safe_int(video_stream.get("bit_rate", 0)),
             "frame_rate": _parse_frame_rate(video_stream.get("r_frame_rate") or video_stream.get("avg_frame_rate", "")),
             "audio_codec": audio_stream.get("codec_name", "") if audio_stream else "",
-            "audio_channels": int(audio_stream.get("channels", 0)) if audio_stream else 0,
+            "audio_channels": _safe_int(audio_stream.get("channels", 0)) if audio_stream else 0,
         }
     except Exception as e:
         logger.warning("ffprobe failed for %s: %s", os.path.basename(path), e)

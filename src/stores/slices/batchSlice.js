@@ -158,7 +158,7 @@ export function createBatchSlice(set, get) {
         }
 
         const result = await api.readExcel(excelPath);
-        if (!result || result.error) {
+        if (!result || !result.success || result.error) {
           return { success: false, error: result?.error || "Failed to read Excel file" };
         }
         const base64Data = result.data;

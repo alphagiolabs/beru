@@ -22,7 +22,11 @@ function loadProductionBuild(win) {
 }
 
 export function createWindow() {
-  const initialTheme = resolveWindowTheme(readSettings().theme);
+  // Read settings once; the theme is applied to the constructor background and
+  // re-applied after did-finish-load (setTitleBarOverlay can fail before the
+  // window is fully ready). No need for a mid-creation apply.
+  const theme = readSettings().theme;
+  const initialTheme = resolveWindowTheme(theme);
   const useOverlay = process.platform === "win32" || process.platform === "darwin";
 
   const win = new BrowserWindow({
@@ -53,7 +57,6 @@ export function createWindow() {
   });
   win.setMenu(null);
   setMainWindow(win);
-  applyWindowTheme(win, readSettings().theme);
 
   let devFallbackUsed = false;
   if (isDev) {
@@ -77,7 +80,7 @@ export function createWindow() {
   }
 
   win.webContents.once("did-finish-load", () => {
-    applyWindowTheme(win, readSettings().theme);
+    applyWindowTheme(win, theme);
     updater.init(win);
   });
 }

@@ -1,5 +1,5 @@
 import fs from "fs";
-import { probeVideoFile } from "../videoProbe.js";
+import { probeVideoFile, hasVideoDimensions } from "../videoProbe.js";
 import { getFfprobePath, getFfmpegPath } from "./paths.js";
 
 const videoInfoCache = new Map();
@@ -7,9 +7,7 @@ const VIDEO_INFO_CACHE_MAX = 500;
 
 const pendingProbes = new Map();
 
-function hasVideoDimensions(info) {
-  return Number(info?.width || 0) > 0 && Number(info?.height || 0) > 0;
-}
+// hasVideoDimensions is re-exported from videoProbe.js — single source of truth.
 
 function trimVideoInfoCache() {
   if (videoInfoCache.size <= VIDEO_INFO_CACHE_MAX) return;
