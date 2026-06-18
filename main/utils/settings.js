@@ -25,21 +25,45 @@ export const SETTINGS_DEFAULTS = {
 
 let cachedHwEncoder = null;
 
+// --- Settings cache (opt-in) ------------------------------------------------
+// readSettings() is called on many IPC handlers; each call does
+// existsSync + readFileSync + JSON.parse on the main thread. The cache holds
+// the parsed object in memory and is invalidated on writeSettings.
+// Enable with BERU_SETTINGS_CACHE=1. Default off = current behavior.
+let settingsCache = null;
+
+function settingsCacheEnabled() {
+  return process.env.BERU_SETTINGS_CACHE === "1";
+}
+
+export function invalidateSettingsCache() {
+  settingsCache = null;
+}
+
 export function readSettings() {
+  // Always return a shallow copy so callers cannot mutate the cached object.
+  if (settingsCacheEnabled() && settingsCache) return { ...settingsCache };
+  let parsed;
   try {
     const file = path.join(app.getPath("userData"), "settings.json");
-    if (!fs.existsSync(file)) return { ...SETTINGS_DEFAULTS };
-    const raw = fs.readFileSync(file, "utf8");
-    const parsed = JSON.parse(raw);
-    return { ...SETTINGS_DEFAULTS, ...parsed };
+    if (!fs.existsSync(file)) {
+      parsed = { ...SETTINGS_DEFAULTS };
+    } else {
+      const raw = fs.readFileSync(file, "utf8");
+      parsed = { ...SETTINGS_DEFAULTS, ...JSON.parse(raw) };
+    }
   } catch {
-    return { ...SETTINGS_DEFAULTS };
+    parsed = { ...SETTINGS_DEFAULTS };
   }
+  if (settingsCacheEnabled()) settingsCache = parsed;
+  return parsed;
 }
 
 export function writeSettings(obj) {
   const file = path.join(app.getPath("userData"), "settings.json");
   fs.writeFileSync(file, JSON.stringify(obj, null, 2), "utf8");
+  // Store a copy so external mutations after write do not corrupt the cache.
+  if (settingsCacheEnabled()) settingsCache = { ...obj };
 }
 
 export async function detectHwEncoderCached() {
