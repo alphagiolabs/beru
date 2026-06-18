@@ -22,7 +22,7 @@ export default function useCanvas(videoEl) {
   const resizeInfo = useRef(null);
   const moveInfo = useRef(null);
 
-  const fitCanvas = useCallback(() => {
+  const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const video = videoEl?.current;
     if (!canvas || !video) return;
@@ -31,17 +31,31 @@ export default function useCanvas(videoEl) {
     canvas.height = rect.height;
     canvas.style.width = rect.width + "px";
     canvas.style.height = rect.height + "px";
+  }, [videoEl]);
+
+  const redrawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const video = videoEl?.current;
+    if (!canvas || !video) return;
     drawRegionOnCanvas(canvas, video, currentRegion, activeTool, delogoMethod);
   }, [videoEl, currentRegion, activeTool, delogoMethod]);
 
   useEffect(() => {
     const video = videoEl?.current;
     if (!video || !canvasRef.current) return;
-    const ro = new ResizeObserver(fitCanvas);
+    const ro = new ResizeObserver(() => {
+      resizeCanvas();
+      redrawCanvas();
+    });
     ro.observe(video);
-    fitCanvas();
+    resizeCanvas();
+    redrawCanvas();
     return () => ro.disconnect();
-  }, [videoEl, fitCanvas]);
+  }, [videoEl, resizeCanvas, redrawCanvas]);
+
+  useEffect(() => {
+    redrawCanvas();
+  }, [redrawCanvas]);
 
   const getScreenRect = useCallback(() => {
     const r = currentRegion;

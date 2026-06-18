@@ -28,6 +28,8 @@ const LayerRow = memo(function LayerRow({
   moveDownTitle,
   duplicateTitle,
   removeTitle,
+  isSelected,
+  onSelect,
   onMoveUp,
   onMoveDown,
   onDuplicate,
@@ -36,18 +38,26 @@ const LayerRow = memo(function LayerRow({
   return (
     <div
       className="flex items-center gap-2 p-2 rounded"
-      style={{ background: "var(--bg-elevated)" }}
+      style={{
+        background: isSelected ? "rgba(0,240,234,0.12)" : "var(--bg-elevated)",
+        border: `1px solid ${isSelected ? "var(--accent)" : "transparent"}`,
+      }}
     >
       <div
         className="w-2 h-2 rounded-full flex-shrink-0"
         style={{ background: color || "var(--text-dim)" }}
       />
-      <span className="flex-1 text-[11px] font-medium" style={{ color: "var(--text-primary)" }}>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="flex-1 text-left text-[11px] font-medium min-w-0"
+        style={{ color: "var(--text-primary)" }}
+      >
         {label}
         {op.mode === "text" && op.text
           ? ` "${op.text.slice(0, 20)}${op.text.length > 20 ? "…" : ""}"`
           : ""}
-      </span>
+      </button>
       <div className="flex items-center gap-0.5">
         <button
           onClick={onMoveUp}
@@ -93,9 +103,10 @@ const LayerRow = memo(function LayerRow({
 });
 
 export default function LayerList() {
-  const { ops } = useEditorStore(
+  const { ops, selectedOperationIdx } = useEditorStore(
     (s) => ({
       selectedIdx: s.selectedIdx,
+      selectedOperationIdx: s.selectedOperationIdx,
       ops:
         s.selectedIdx >= 0 && s.selectedIdx < s.queue.length
           ? s.queue[s.selectedIdx].operations
@@ -130,6 +141,8 @@ export default function LayerList() {
               moveDownTitle={t("props.actions.moveDown")}
               duplicateTitle={t("props.actions.duplicate")}
               removeTitle={t("props.actions.deleteLayer")}
+              isSelected={selectedOperationIdx === i}
+              onSelect={() => getState().selectOperation(i)}
               onMoveUp={() => getState().moveOperation(i, i - 1)}
               onMoveDown={() => getState().moveOperation(i, i + 1)}
               onDuplicate={() => getState().duplicateOperation(i)}

@@ -48,6 +48,7 @@ describe("App render", () => {
     useEditorStore.setState({
       queue: [],
       selectedIdx: -1,
+      selectedOperationIdx: null,
       language: "es",
       sidebarMode: "logo",
       templateRegions: [],
@@ -190,5 +191,92 @@ describe("App render", () => {
     );
 
     expect(unnamedIconButtons).toEqual([]);
+  });
+
+  it("shows applied text editing controls after selecting a text layer", async () => {
+    useEditorStore.setState({
+      queue: [
+        createQueueItem({
+          path: "C:\\videos\\demo.mp4",
+          src: "beru://local/C%3A%5Cvideos%5Cdemo.mp4",
+          filename: "demo.mp4",
+          width: 1920,
+          height: 1080,
+          duration: 10,
+          operations: [
+            createOperation({
+              mode: "text",
+              text: "Auditoria",
+              region: { x: 0.1, y: 0.1, w: 0.3, h: 0.12 },
+              fontSize: 32,
+              textWrap: true,
+              truncate: "none",
+            }),
+          ],
+        }),
+      ],
+      selectedIdx: 0,
+      sidebarMode: "logo",
+      activeTool: "text",
+      currentRegion: null,
+    });
+
+    root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(<App />);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const layerButton = Array.from(document.querySelectorAll("button")).find((button) =>
+      button.textContent.includes("Auditoria"),
+    );
+    expect(layerButton).toBeTruthy();
+
+    await act(async () => {
+      layerButton.click();
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    expect(document.body.textContent).toMatch(/Texto aplicado/i);
+    expect(document.body.textContent).toMatch(/Cuadro de texto/i);
+    expect(document.body.textContent).toMatch(/Ajuste de línea/i);
+  });
+
+  it("shows batch region editing controls after a text region has been added", async () => {
+    useEditorStore.setState({
+      queue: [
+        createQueueItem({
+          path: "C:\\videos\\demo.mp4",
+          src: "beru://local/C%3A%5Cvideos%5Cdemo.mp4",
+          filename: "demo.mp4",
+          width: 1920,
+          height: 1080,
+          duration: 10,
+        }),
+      ],
+      selectedIdx: 0,
+      sidebarMode: "batch",
+      activeTool: "text",
+      currentRegion: null,
+      templateRegions: [
+        {
+          id: "region-1",
+          label: "TEXT_1",
+          region: { x: 0.1, y: 0.1, w: 0.3, h: 0.12 },
+          style: { fontSize: 32, textWrap: true, truncate: "none" },
+        },
+      ],
+      selectedTemplateRegionId: "region-1",
+    });
+
+    root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(<App />);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    expect(document.body.textContent).toMatch(/Región aplicada/i);
+    expect(document.body.textContent).toMatch(/Cuadro de texto/i);
+    expect(document.body.textContent).toMatch(/Ajuste de línea/i);
   });
 });

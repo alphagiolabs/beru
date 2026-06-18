@@ -85,6 +85,38 @@ export function createBatchSlice(set, get) {
       });
     },
 
+    updateTemplateRegion: (id, patch) => {
+      const target = get().templateRegions.find((r) => r.id === id);
+      if (!target) return;
+      const nextRegion = patch.region || target.region;
+      const stylePatch = pickTextStyle(patch);
+      const hasStylePatch = Object.keys(stylePatch).length > 0;
+
+      set((s) => ({
+        templateRegions: s.templateRegions.map((tr) =>
+          tr.id === id
+            ? {
+                ...tr,
+                region: nextRegion,
+                style: hasStylePatch ? mergeTextStyles(tr.style, stylePatch) : tr.style,
+              }
+            : tr,
+        ),
+        queue: patch.region
+          ? s.queue.map((item) => ({
+              ...item,
+              operations: item.operations.map((op) =>
+                textOpMatchesRegion(op, target.region, target.id)
+                  ? { ...op, region: { ...nextRegion } }
+                  : op,
+              ),
+            }))
+          : s.queue,
+      }));
+
+      if (hasStylePatch) get().patchBatchTextStyle(stylePatch);
+    },
+
     patchBatchTextStyle: (patch) => {
       const opPatch = pickTextStyle(patch);
       if (Object.keys(opPatch).length === 0) return;

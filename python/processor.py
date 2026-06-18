@@ -267,23 +267,34 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
 
 def setup_logging():
     """Configure structured logging to rotating file and stderr."""
-    log_dir = Path(os.environ.get("BERU_LOG_DIR", Path.home() / ".beru" / "logs"))
-    log_dir.mkdir(parents=True, exist_ok=True)
-
     logger = logging.getLogger("beru")
     logger.setLevel(logging.DEBUG)
 
-    fh = logging.handlers.RotatingFileHandler(
-        log_dir / "processor.log", maxBytes=5_000_000, backupCount=3, encoding="utf-8"
-    )
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
-    logger.addHandler(fh)
+    if not any(getattr(handler, "_beru_stderr", False) for handler in logger.handlers):
+        sh = logging.StreamHandler(sys.stderr)
+        sh._beru_stderr = True
+        sh.setLevel(logging.INFO)
+        sh.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+        logger.addHandler(sh)
 
-    sh = logging.StreamHandler(sys.stderr)
-    sh.setLevel(logging.INFO)
-    sh.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
-    logger.addHandler(sh)
+    try:
+        log_dir = Path(os.environ.get("BERU_LOG_DIR", Path.home() / ".beru" / "logs"))
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_path = log_dir / "processor.log"
+        already_has_file_handler = any(
+            isinstance(handler, logging.handlers.RotatingFileHandler)
+            and Path(handler.baseFilename) == log_path
+            for handler in logger.handlers
+        )
+        if not already_has_file_handler:
+            fh = logging.handlers.RotatingFileHandler(
+                log_path, maxBytes=5_000_000, backupCount=3, encoding="utf-8"
+            )
+            fh.setLevel(logging.DEBUG)
+            fh.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+            logger.addHandler(fh)
+    except OSError as exc:
+        logger.warning("File logging disabled: %s", exc)
 
     return logger
 

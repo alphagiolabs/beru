@@ -4,6 +4,7 @@ import { useT } from "../i18n/useT";
 import StyleEditor from "./StyleEditor";
 import PresetManager from "./PresetManager";
 import BatchPanel from "./BatchPanel";
+import AppliedTextEditor from "./AppliedTextEditor";
 import { isRegionUsable } from "../utils/video-utils";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
 import {
@@ -45,9 +46,27 @@ export default function PropertiesPanel() {
     mosaicSize,
     mirrorSide,
     edgeFeather,
+    selectedIdx,
+    selectedOperationIdx,
+    selectedOperation,
+    selectedTemplateRegion,
   } = useEditorStore(
     (s) => ({
+      selectedIdx: s.selectedIdx,
       sel: s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null,
+      selectedOperationIdx: s.selectedOperationIdx,
+      selectedOperation:
+        s.selectedIdx >= 0 &&
+        s.selectedIdx < s.queue.length &&
+        s.selectedOperationIdx != null &&
+        s.selectedOperationIdx >= 0 &&
+        s.selectedOperationIdx < s.queue[s.selectedIdx].operations.length
+          ? s.queue[s.selectedIdx].operations[s.selectedOperationIdx]
+          : null,
+      selectedTemplateRegion:
+        s.selectedTemplateRegionId != null
+          ? s.templateRegions.find((tr) => tr.id === s.selectedTemplateRegionId)
+          : null,
       currentRegion: s.currentRegion,
       activeTool: s.activeTool,
       sidebarMode: s.sidebarMode,
@@ -670,6 +689,29 @@ export default function PropertiesPanel() {
             </div>
           )}
         </>
+      )}
+
+      {!currentRegion && sidebarMode === "logo" && selectedOperation?.mode === "text" && (
+        <AppliedTextEditor
+          op={selectedOperation}
+          video={sel}
+          onPatch={(patch) => get().updateOperation(selectedIdx, selectedOperationIdx, patch)}
+        />
+      )}
+
+      {!currentRegion && sidebarMode === "batch" && selectedTemplateRegion && (
+        <AppliedTextEditor
+          op={{
+            mode: "text",
+            text: selectedTemplateRegion.label,
+            region: selectedTemplateRegion.region,
+            ...(selectedTemplateRegion.style || {}),
+          }}
+          video={sel}
+          title="Región aplicada"
+          showContent={false}
+          onPatch={(patch) => get().updateTemplateRegion(selectedTemplateRegion.id, patch)}
+        />
       )}
 
       {/* Batch panel */}

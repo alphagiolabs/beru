@@ -112,6 +112,7 @@ export default function VideoPreview() {
   const [draggingBatchText, setDraggingBatchText] = useState(null);
   const [batchTextDragStart, setBatchTextDragStart] = useState(null);
   const [layoutTick, setLayoutTick] = useState(0);
+  const draggingRef = useRef({ image: null, batch: null });
   const [videoError, setVideoError] = useState(null);
   const [ffmpegPreviewUrl, setFfmpegPreviewUrl] = useState(null);
   const [ffmpegPreviewLoading, setFfmpegPreviewLoading] = useState(false);
@@ -203,13 +204,15 @@ export default function VideoPreview() {
   }, [sel?.path]);
 
   /* Video event listeners */
+  const seekingRef = useRef(false);
+  seekingRef.current = seeking;
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     const onTimeUpdate = () => {
-      if (!seeking) setCurrentTime(v.currentTime);
+      if (!seekingRef.current) setCurrentTime(v.currentTime);
     };
     const onLoadedMeta = () => setDuration(resolvedDuration(v, sel?.duration));
     const onEnded = () => setPlaying(false);
@@ -225,7 +228,7 @@ export default function VideoPreview() {
       v.removeEventListener("loadedmetadata", onLoadedMeta);
       v.removeEventListener("ended", onEnded);
     };
-  }, [sel?.path, sel?.duration, seeking]);
+  }, [sel?.path, sel?.duration]);
 
   /* Keyboard commands dispatched by useKeyboard (play/pause, seek) */
   useEffect(() => {
@@ -318,17 +321,6 @@ export default function VideoPreview() {
     setDragStart(null);
   }, []);
 
-  useEffect(() => {
-    if (draggingOp) {
-      window.addEventListener("mousemove", handleImageDragMove);
-      window.addEventListener("mouseup", handleImageDragEnd);
-      return () => {
-        window.removeEventListener("mousemove", handleImageDragMove);
-        window.removeEventListener("mouseup", handleImageDragEnd);
-      };
-    }
-  }, [draggingOp, handleImageDragMove, handleImageDragEnd]);
-
   const handleBatchTextDragStart = (tr, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -393,15 +385,32 @@ export default function VideoPreview() {
     setBatchTextDragStart(null);
   }, []);
 
+  // Keep a stable ref mirror of dragging states so the global window
+  // drag listener can read the latest state without re-registering on every
+  // state change. Also guarantees cleanup on unmount.
+  draggingRef.current.image = { move: handleImageDragMove, end: handleImageDragEnd };
+  draggingRef.current.batch = { move: handleBatchTextDragMove, end: handleBatchTextDragEnd };
+
   useEffect(() => {
-    if (!draggingBatchText) return;
-    window.addEventListener("mousemove", handleBatchTextDragMove);
-    window.addEventListener("mouseup", handleBatchTextDragEnd);
-    return () => {
-      window.removeEventListener("mousemove", handleBatchTextDragMove);
-      window.removeEventListener("mouseup", handleBatchTextDragEnd);
+    const onMouseMove = (e) => {
+      const image = draggingRef.current.image;
+      const batch = draggingRef.current.batch;
+      if (image) image.move(e);
+      if (batch) batch.move(e);
     };
-  }, [draggingBatchText, handleBatchTextDragMove, handleBatchTextDragEnd]);
+    const onMouseUp = () => {
+      const image = draggingRef.current.image;
+      const batch = draggingRef.current.batch;
+      if (image) image.end();
+      if (batch) batch.end();
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
 
   const handleRenderPreviewFrame = useCallback(async () => {
     const api = window.api;
@@ -504,7 +513,7 @@ export default function VideoPreview() {
         }
         style={
           isSplitCompare
-            ? { maxHeight: "calc(100vh-200px)" }
+            ? { maxHeight: "calc(100vh - 200px)" }
             : {
                 maxWidth: "100%",
                 maxHeight: "100%",
