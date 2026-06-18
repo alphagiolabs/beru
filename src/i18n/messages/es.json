@@ -168,6 +168,7 @@
   "drop.toast.noneAdded": "Sin videos en la selección ({n} ignorados)",
 
   "toolbar.blur": "Desenfocar",
+  "toolbar.pan": "Mano",
   "toolbar.crop": "Recortar",
   "toolbar.text": "Texto",
   "toolbar.image": "Imagen",

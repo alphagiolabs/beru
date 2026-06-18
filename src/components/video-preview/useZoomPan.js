@@ -10,13 +10,14 @@ import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from "./utils";
  * @param {React.RefObject<HTMLVideoElement>} videoRef - shared video element ref
  * @param {boolean} isSplitCompare - whether split-compare mode is active
  *   (zoom is disabled and reset to fit while true)
+ * @param {{ panToolActive?: boolean }} options
  * @returns {{
  *   outerRef, wrapperRef, zoom, pan, isPanning,
  *   zoomIn, zoomOut, zoomReset, onPanMouseDown,
  *   isSplitCompareRef, setZoomBoth, setPanBoth,
  * }}
  */
-export default function useZoomPan(videoRef, isSplitCompare) {
+export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = false } = {}) {
   /* Zoom & pan refs (avoid stale closures in native event handlers) */
   const outerRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -86,19 +87,24 @@ export default function useZoomPan(videoRef, isSplitCompare) {
     setPanBoth({ x: 0, y: 0 });
   }, [setZoomBoth, setPanBoth]);
 
-  /* Pan with middle-mouse drag (never conflicts with left-click region drawing). */
-  const onPanMouseDown = useCallback((e) => {
-    if (e.button !== 1) return;
-    if (zoomRef.current <= 1) return;
-    e.preventDefault();
-    setIsPanning(true);
-    panDragRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      panX: panRef.current.x,
-      panY: panRef.current.y,
-    };
-  }, []);
+  /* Pan with middle-mouse drag, or primary drag while the explicit hand tool is active. */
+  const onPanMouseDown = useCallback(
+    (e) => {
+      const primaryPan = panToolActive && e.button === 0;
+      const middlePan = e.button === 1;
+      if (!primaryPan && !middlePan) return;
+      if (zoomRef.current <= 1) return;
+      e.preventDefault();
+      setIsPanning(true);
+      panDragRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        panX: panRef.current.x,
+        panY: panRef.current.y,
+      };
+    },
+    [panToolActive],
+  );
 
   const onPanMouseMove = useCallback(
     (e) => {
