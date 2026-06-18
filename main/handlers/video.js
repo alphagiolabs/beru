@@ -18,18 +18,34 @@ export function registerVideoHandlers(pathSecurity) {
 
   ipcMain.handle("fs:getVideoInfoBatch", async (_event, filePaths) => {
     if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
+    const validated = filePaths.map((filePath) =>
+      pathSecurity.validateReadableFile(filePath, "video"),
+    );
+    const results = validated.map((check) =>
+      check.ok ? null : { exists: false, width: 0, height: 0, duration: 0, error: check.error },
+    );
+    const validFiles = validated
+      .map((check, i) => (check.ok ? { i, resolvedPath: check.resolvedPath } : null))
+      .filter(Boolean);
+    if (validFiles.length === 0) return results;
+
     const cpus = os.cpus()?.length || 4;
-    const limit = Math.max(2, Math.min(16, filePaths.length, cpus * 2));
-    const fastResults = await runWithConcurrency(filePaths, limit, probeVideoFast);
+    const limit = Math.max(2, Math.min(16, validFiles.length, cpus * 2));
+    const fastResults = await runWithConcurrency(validFiles, limit, async ({ resolvedPath }) =>
+      probeVideoFast(resolvedPath),
+    );
+    validFiles.forEach(({ i }, resultIndex) => {
+      results[i] = fastResults[resultIndex];
+    });
+
     // Build the fallback work list (only entries that need a full probe), then
     // run those probes with the same concurrency cap instead of an unbounded
     // Promise.all that could spawn one ffprobe process per queued file.
     const fallbacks = [];
-    fastResults.forEach((info, i) => {
+    validFiles.forEach(({ i, resolvedPath }) => {
+      const info = results[i] || {};
       if (info.width > 0 && info.height > 0) return;
-      const check = pathSecurity.validateReadableFile(filePaths[i], "video");
-      if (!check.ok) return;
-      fallbacks.push({ i, resolvedPath: check.resolvedPath });
+      fallbacks.push({ i, resolvedPath });
     });
     const fallbackLimit = Math.max(2, Math.min(8, fallbacks.length, cpus));
     const fullResults = await runWithConcurrency(
@@ -47,7 +63,7 @@ export function registerVideoHandlers(pathSecurity) {
     );
     const fullByIndex = new Map();
     for (const r of fullResults) if (r.full) fullByIndex.set(r.i, r.full);
-    return fastResults.map((info, i) => fullByIndex.get(i) || info);
+    return results.map((info, i) => fullByIndex.get(i) || info);
   });
 
   ipcMain.handle("video:thumbnail", async (_event, filePath) => {
@@ -58,17 +74,22 @@ export function registerVideoHandlers(pathSecurity) {
 
   ipcMain.handle("video:thumbnailBatch", async (_event, filePaths) => {
     if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
-    const validated = filePaths
-      .map((p) => pathSecurity.validateReadableFile(p, "video"))
-      .filter((c) => c.ok);
-    if (validated.length === 0) return [];
+    const validated = filePaths.map((p) => pathSecurity.validateReadableFile(p, "video"));
+    const results = new Array(filePaths.length).fill(null);
+    const validFiles = validated
+      .map((check, i) => (check.ok ? { i, resolvedPath: check.resolvedPath } : null))
+      .filter(Boolean);
+    if (validFiles.length === 0) return results;
+
     const cpus = os.cpus()?.length || 4;
-    const limit = Math.max(2, Math.min(8, validated.length, cpus));
-    return await runWithConcurrency(
-      validated.map((c) => c.resolvedPath),
-      limit,
-      (p) => extractThumbnail(p, 80),
+    const limit = Math.max(2, Math.min(8, validFiles.length, cpus));
+    const thumbnails = await runWithConcurrency(validFiles, limit, ({ resolvedPath }) =>
+      extractThumbnail(resolvedPath, 80),
     );
+    validFiles.forEach(({ i }, resultIndex) => {
+      results[i] = thumbnails[resultIndex] || null;
+    });
+    return results;
   });
 
   ipcMain.handle("video:renderPreviewFrame", async (_event, payload) => {

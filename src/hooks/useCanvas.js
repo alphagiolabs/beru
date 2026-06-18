@@ -22,7 +22,7 @@ export default function useCanvas(videoEl) {
   const resizeInfo = useRef(null);
   const moveInfo = useRef(null);
 
-  const fitCanvas = useCallback(() => {
+  const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const video = videoEl?.current;
     if (!canvas || !video) return;
@@ -31,17 +31,31 @@ export default function useCanvas(videoEl) {
     canvas.height = rect.height;
     canvas.style.width = rect.width + "px";
     canvas.style.height = rect.height + "px";
+  }, [videoEl]);
+
+  const redrawCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    const video = videoEl?.current;
+    if (!canvas || !video) return;
     drawRegionOnCanvas(canvas, video, currentRegion, activeTool, delogoMethod);
   }, [videoEl, currentRegion, activeTool, delogoMethod]);
 
   useEffect(() => {
     const video = videoEl?.current;
     if (!video || !canvasRef.current) return;
-    const ro = new ResizeObserver(fitCanvas);
+    const ro = new ResizeObserver(() => {
+      resizeCanvas();
+      redrawCanvas();
+    });
     ro.observe(video);
-    fitCanvas();
+    resizeCanvas();
+    redrawCanvas();
     return () => ro.disconnect();
-  }, [videoEl, fitCanvas]);
+  }, [videoEl, resizeCanvas, redrawCanvas]);
+
+  useEffect(() => {
+    redrawCanvas();
+  }, [redrawCanvas]);
 
   const getScreenRect = useCallback(() => {
     const r = currentRegion;
@@ -115,6 +129,7 @@ export default function useCanvas(videoEl) {
     (e) => {
       const video = videoEl?.current;
       if (!video) return;
+      if (activeTool === "pan") return;
       /* Only the primary button draws/resizes regions; middle button is
        * reserved for zoom-pan (see VideoPreview). */
       if (e.button !== 0) return;
@@ -142,13 +157,19 @@ export default function useCanvas(videoEl) {
       isDrawing.current = true;
       setCurrentRegion({ x: v.x, y: v.y, w: 0, h: 0 });
     },
-    [videoEl, currentRegion, setCurrentRegion, hitTestHandle, hitTestRegion],
+    [videoEl, activeTool, currentRegion, setCurrentRegion, hitTestHandle, hitTestRegion],
   );
 
   const onMouseMove = useCallback(
     (e) => {
       const video = videoEl?.current;
       if (!video) return;
+
+      if (activeTool === "pan") {
+        const canvas = canvasRef.current;
+        if (canvas) canvas.style.cursor = "grab";
+        return;
+      }
 
       if (resizeInfo.current) {
         const v = toVideoCoordsNormalized(video, e.clientX, e.clientY);
@@ -229,7 +250,7 @@ export default function useCanvas(videoEl) {
         }
       }
     },
-    [videoEl, currentRegion, setCurrentRegion, hitTestHandle, hitTestRegion],
+    [videoEl, activeTool, currentRegion, setCurrentRegion, hitTestHandle, hitTestRegion],
   );
 
   const onMouseUp = useCallback(() => {

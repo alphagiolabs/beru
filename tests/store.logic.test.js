@@ -437,6 +437,50 @@ describe("useEditorStore logic regressions", () => {
     expect(state.queue[1].operations[0].textShadowOffsetY).toBe(6);
   });
 
+  it("updateTemplateRegion resizes the selected batch region and matching queue text ops", () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const resized = { x: 0.1, y: 0.2, w: 0.5, h: 0.16 };
+    useEditorStore.setState({
+      selectedTemplateRegionId: "region-1",
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region, style: { fontSize: 32 } }],
+      queue: [
+        queueItem({
+          operations: [
+            {
+              id: "op-1",
+              mode: "text",
+              batchRegionId: "region-1",
+              region: { ...region },
+              text: "A",
+              fontSize: 32,
+            },
+          ],
+        }),
+      ],
+    });
+
+    useEditorStore.getState().updateTemplateRegion("region-1", {
+      region: resized,
+      fontSize: 48,
+      textWrap: false,
+      truncate: "ellipsis",
+    });
+
+    const state = useEditorStore.getState();
+    expect(state.templateRegions[0].region).toEqual(resized);
+    expect(state.templateRegions[0].style).toEqual(
+      expect.objectContaining({ fontSize: 48, textWrap: false, truncate: "ellipsis" }),
+    );
+    expect(state.queue[0].operations[0]).toEqual(
+      expect.objectContaining({
+        region: resized,
+        fontSize: 48,
+        textWrap: false,
+        truncate: "ellipsis",
+      }),
+    );
+  });
+
   it("reapplying Excel preserves an individually moved batch text region", () => {
     const templateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     const movedRegion = { x: 0.35, y: 0.28, w: 0.3, h: 0.1 };
