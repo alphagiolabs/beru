@@ -5,6 +5,21 @@ All notable changes to Beru will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Frontend performance audit fixes** — reduced React re-render surface during batch processing:
+  - `StatusFooter` and `BatchPanel` now subscribe to `queue.length` instead of the full `queue` array, so a single queue item update no longer re-renders the whole footer/batch panel.
+  - `VideoPreview` groups its 5 stable action subscriptions into one `useEditorStore(..., shallow)` call, halving `useSyncExternalStore` subscriptions on the preview component.
+  - `PERF_FLAGS` defaults changed to `delogoThrottleFps = 30` and `logBatch = true`, reducing CPU use in the delogo live preview and coalescing processing log updates into 50 ms batches.
+  - Added `tests/frontend-perf-audit.test.js` with 27 read-only assertions that guard the performance-critical patterns above.
+
+### Fixed
+
+- **ESLint configuration** now correctly applies Node.js globals to `scripts/**/*.mjs`, resolving `no-undef` errors for `console`/`process` in `scripts/release-loop.mjs` and siblings.
+- Removed redundant `/* global console */` / `/* global console, process */` comments from `scripts/build-processor.mjs` and `scripts/fetch-ffmpeg.mjs` now that the ESLint config provides the globals.
+
 ## [1.6.33] - 2026-06-19
 
 ### Added
@@ -24,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Timed export filters** — start-only overlays use `enable=gte(t,…)` (matching preview), timed crop overlays render at the selected `(x,y)` instead of the top-left corner, and preview-frame seek runs after `-i` so time-bounded filters align with the editor timeline.
 - **Queue/preset state** — removing a video clears undo/redo stacks and stray `currentRegion`; applying a preset without Excel preserves blur/crop/delogo operations.
 - **Release tooling** — `build-processor` invalidates its cache when helper Python modules change; pre-push regression guard diffs against upstream; `release-loop` checks GitHub releases without bash-only syntax on Windows.
+- **FFmpeg color validation** — background and delogo fill colors now use the same strict allowlist as drawtext colors, closing filter-string injection paths before command construction.
+- **Cross-platform regression checks** — the pre-push guard reads only Vitest's final test total, and the release loop now checks Git ancestry with `execFileSync` instead of shell redirection syntax.
 
 ## [1.6.22] - 2026-06-11
 

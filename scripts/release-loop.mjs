@@ -26,7 +26,7 @@
  *   1 = validación fallida
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdtempSync, readdirSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -161,7 +161,16 @@ function validateEnvironment() {
   ok("working tree limpio");
 
   // Estamos al día con origin?
-  const behind = runCapture("git rev-list --count HEAD..origin/main 2>/dev/null || echo 0");
+  let behind;
+  try {
+    behind = execFileSync("git", ["rev-list", "--count", "HEAD..origin/main"], {
+      cwd: ROOT,
+      encoding: "utf-8",
+      timeout: 30_000,
+    }).trim();
+  } catch (error) {
+    fail("git ancestry", error?.message || "No se pudo comparar HEAD con origin/main");
+  }
   if (Number(behind) > 0) {
     fail("git pull", `main está ${behind} commits detrás de origin/main. Haz git pull primero.`);
   }

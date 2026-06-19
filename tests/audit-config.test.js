@@ -7,6 +7,8 @@ const changelog = fs.readFileSync("CHANGELOG.md", "utf-8");
 
 const viteConfig = fs.readFileSync("vite.config.js", "utf-8");
 const eslintConfig = fs.readFileSync("eslint.config.js", "utf-8");
+const regressionGuard = fs.readFileSync("scripts/regression-guard.sh", "utf-8");
+const releaseLoop = fs.readFileSync("scripts/release-loop.mjs", "utf-8");
 
 describe("audit: project configuration", () => {
   it("package.json and package-lock.json versions match", () => {
@@ -36,5 +38,19 @@ describe("audit: project configuration", () => {
 
   it("electron-builder output directory is consistent", () => {
     expect(pkg.build.directories.output).toBe("dist-installer");
+  });
+
+  it("regression guard reduces Vitest summaries to one numeric total", () => {
+    const totalLines = regressionGuard
+      .split(/\r?\n/)
+      .filter((line) => /(?:BASELINE|CURRENT)_TOTAL=/.test(line));
+
+    expect(totalLines).toHaveLength(2);
+    for (const line of totalLines) expect(line).toContain("| tail -1");
+  });
+
+  it("release loop checks git ancestry without Unix-only shell redirection", () => {
+    expect(releaseLoop).not.toContain("2>/dev/null");
+    expect(releaseLoop).toMatch(/execFileSync\(\s*["']git["']/);
   });
 });

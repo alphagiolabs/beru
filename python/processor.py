@@ -142,7 +142,18 @@ def _validated_job_media(job, *, require_output):
     asset_roots = job.get("asset_roots")
     operations = []
     for raw_operation in job.get("operations", []) or []:
-        operation = dict(raw_operation)
+        operation = dict(_normalize_operation(raw_operation))
+        for color_field in (
+            "font_color",
+            "border_color",
+            "text_shadow_color",
+            "bg_color",
+            "delogo_fill_color",
+        ):
+            if color_field in operation:
+                operation[color_field] = _validate_drawtext_color(
+                    operation[color_field], color_field
+                )
         for field, extensions in (
             ("image_path", IMAGE_EXTENSIONS),
             ("delogo_image_path", IMAGE_EXTENSIONS),

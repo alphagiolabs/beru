@@ -61,11 +61,22 @@ export default function VideoPreview() {
     }),
     shallow,
   );
-  const setCurrentRegion = useEditorStore((s) => s.setCurrentRegion);
-  const updateOperationRegion = useEditorStore((s) => s.updateOperationRegion);
-  const getBatchPreviewPayload = useEditorStore((s) => s.getBatchPreviewPayload);
-  const buildPreviewFrameJob = useEditorStore((s) => s.buildPreviewFrameJob);
-  const showToast = useEditorStore((s) => s.showToast);
+  const {
+    setCurrentRegion,
+    updateOperationRegion,
+    getBatchPreviewPayload,
+    buildPreviewFrameJob,
+    showToast,
+  } = useEditorStore(
+    (s) => ({
+      setCurrentRegion: s.setCurrentRegion,
+      updateOperationRegion: s.updateOperationRegion,
+      getBatchPreviewPayload: s.getBatchPreviewPayload,
+      buildPreviewFrameJob: s.buildPreviewFrameJob,
+      showToast: s.showToast,
+    }),
+    shallow,
+  );
   // Subscribe to the global text style so the logo/batch live text preview
   // re-renders on style edits without reading the whole store via getState()
   // during render (which also caused stale inputs after preset apply/undo).

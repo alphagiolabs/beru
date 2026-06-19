@@ -105,11 +105,11 @@ if echo "$CHANGED" | grep -qE '^python/'; then
     # ── Baseline comparison ──
     if [[ -f tests-baseline.log ]]; then
         echo -e "\n${CYAN}├── Comparación contra baseline${NC}"
-        BASELINE_TOTAL=$(grep -oP '\d+ passed.*\(\K\d+(?=\))' tests-baseline.log 2>/dev/null || echo "")
+        BASELINE_TOTAL=$(grep -oP '\d+ passed.*\(\K\d+(?=\))' tests-baseline.log 2>/dev/null | tail -1 || echo "")
         BASELINE_PASSED=$(grep -oP '(\d+) passed' tests-baseline.log | tail -1 | grep -oP '\d+' || echo "0")
 
         npm test 2>&1 | tee /tmp/beru-regression-current.log
-        CURRENT_TOTAL=$(grep -oP '\d+ passed.*\(\K\d+(?=\))' /tmp/beru-regression-current.log 2>/dev/null || echo "")
+        CURRENT_TOTAL=$(grep -oP '\d+ passed.*\(\K\d+(?=\))' /tmp/beru-regression-current.log 2>/dev/null | tail -1 || echo "")
         CURRENT_PASSED=$(grep -oP '(\d+) passed' /tmp/beru-regression-current.log | tail -1 | grep -oP '\d+' || echo "0")
 
         if [[ -n "$BASELINE_TOTAL" && -n "$CURRENT_TOTAL" ]]; then

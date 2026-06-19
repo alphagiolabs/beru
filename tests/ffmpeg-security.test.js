@@ -115,4 +115,39 @@ describe("FFmpeg security validation", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout.trim()).toBe("rejected,rejected");
   });
+
+  it("rejects injected background and delogo fill colors before filter construction", () => {
+    const allowedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-color-root-"));
+
+    try {
+      const result = runPython(
+        [
+          "import os",
+          "root = sys.argv[1]",
+          "base = {'input_path': os.path.join(root, 'video.mp4'), 'input_root': root}",
+          "operations = [",
+          "    {'mode': 'text', 'bg_color': 'black:t=fill,drawtext=text=owned'},",
+          "    {'mode': 'delogo', 'delogo_fill_color': 'red:t=fill,drawtext=text=owned'},",
+          "    {'mode': 'delogo', 'delogoFillColor': 'blue:t=fill,drawtext=text=owned'},",
+          "]",
+          "results = []",
+          "for operation in operations:",
+          "    job = dict(base, operations=[operation])",
+          "    try:",
+          "        processor._validated_job_media(job, require_output=False)",
+          "    except ValueError:",
+          "        results.append('rejected')",
+          "    else:",
+          "        results.append('accepted')",
+          "print(','.join(results))",
+        ].join("\n"),
+        [allowedRoot],
+      );
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout.trim()).toBe("rejected,rejected,rejected");
+    } finally {
+      fs.rmSync(allowedRoot, { recursive: true, force: true });
+    }
+  });
 });

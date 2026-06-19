@@ -3,6 +3,7 @@
 // electron-builder can bundle them via extraResources.
 //
 // Idempotent: skips copy when the target already exists and is up-to-date.
+
 import { existsSync, mkdirSync, copyFileSync, statSync } from "node:fs";
 import { dirname, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
