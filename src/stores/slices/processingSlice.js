@@ -482,6 +482,22 @@ export function createProcessingSlice(set, get) {
         }
         return s.isProcessing === isProcessing ? {} : { isProcessing };
       }),
+
+    /** Reset queue rows left mid-batch after user cancel or main-process abort. */
+    abortActiveProcessing: () =>
+      set((s) => {
+        let queueChanged = false;
+        const queue = s.queue.map((item) => {
+          if (item.status !== "processing") return item;
+          queueChanged = true;
+          return { ...item, status: "idle", progress: 0, error: null };
+        });
+        return {
+          ...(queueChanged ? { queue } : {}),
+          jobProgress: {},
+          isProcessing: false,
+        };
+      }),
     setBatchSummary: (val) =>
       set((s) => {
         if (!val || !s.activeExecutionId) {

@@ -41,28 +41,43 @@ export const PROCESSING_LOCK_MAX_MS = 5 * 60 * 1000;
 let _processingLock = false;
 let _processingWatchdog = null;
 
+function isPythonChildAlive(proc) {
+  return Boolean(proc && proc.exitCode == null && proc.signalCode == null && !proc.killed);
+}
+
+function armProcessingWatchdog(runId) {
+  if (_processingWatchdog) clearTimeout(_processingWatchdog);
+  _processingWatchdog = setTimeout(() => {
+    // Only force-release if this is still the same run; a newer run sets its
+    // own timer and must not be cleared by a stale one.
+    if (_processingRunId !== runId) return;
+
+    // Long batches legitimately exceed PROCESSING_LOCK_MAX_MS — keep checking
+    // while the processor child is still alive.
+    if (isPythonChildAlive(_pythonProcess)) {
+      armProcessingWatchdog(runId);
+      return;
+    }
+
+    _isProcessing = false;
+    _processingRunId = null;
+    _processingLock = false;
+    _processingWatchdog = null;
+    console.error(
+      `[beru] Processing lock watchdog fired for run ${runId} — ` +
+        `force-releasing after ${PROCESSING_LOCK_MAX_MS}ms`,
+    );
+  }, PROCESSING_LOCK_MAX_MS);
+  // Don't keep the app alive on quit just for the watchdog.
+  _processingWatchdog?.unref?.();
+}
+
 export const beginProcessingRun = (runId) => {
   if (_isProcessing || _processingLock) return false;
   _processingLock = true;
   _isProcessing = true;
   _processingRunId = runId;
-  if (_processingWatchdog) clearTimeout(_processingWatchdog);
-  _processingWatchdog = setTimeout(() => {
-    // Only force-release if this is still the same run; a newer run sets its
-    // own timer and must not be cleared by a stale one.
-    if (_processingRunId === runId) {
-      _isProcessing = false;
-      _processingRunId = null;
-      _processingLock = false;
-      _processingWatchdog = null;
-      console.error(
-        `[beru] Processing lock watchdog fired for run ${runId} — ` +
-          `force-releasing after ${PROCESSING_LOCK_MAX_MS}ms`,
-      );
-    }
-  }, PROCESSING_LOCK_MAX_MS);
-  // Don't keep the app alive on quit just for the watchdog.
-  _processingWatchdog?.unref?.();
+  armProcessingWatchdog(runId);
   return true;
 };
 export const clearProcessingRun = (runId) => {

@@ -801,4 +801,25 @@ describe("useEditorStore logic regressions", () => {
     expect(executionHistory[1].summary).toEqual({ total: 2, succeeded: 2, failed: 0 });
     expect(executionHistory[0].lines).toEqual(["second-run"]);
   });
+
+  it("abortActiveProcessing resets in-flight queue rows and clears jobProgress", () => {
+    useEditorStore.setState({
+      queue: [
+        queueItem({ status: "done", progress: 100 }),
+        queueItem({ status: "processing", progress: 42 }),
+        queueItem({ status: "idle", progress: 0 }),
+      ],
+      isProcessing: true,
+      jobProgress: { 1: 42 },
+    });
+
+    useEditorStore.getState().abortActiveProcessing();
+    const state = useEditorStore.getState();
+    expect(state.isProcessing).toBe(false);
+    expect(state.queue[0].status).toBe("done");
+    expect(state.queue[1].status).toBe("idle");
+    expect(state.queue[1].progress).toBe(0);
+    expect(state.queue[2].status).toBe("idle");
+    expect(state.jobProgress).toEqual({});
+  });
 });

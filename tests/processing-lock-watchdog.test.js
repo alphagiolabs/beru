@@ -12,6 +12,7 @@ const {
   clearProcessingRun,
   getProcessingRunId,
   getIsProcessing,
+  setPythonProcess,
   PROCESSING_LOCK_MAX_MS,
 } = await import("../main/shared-state.js");
 
@@ -19,6 +20,7 @@ describe("processing lock watchdog", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     clearProcessingRun();
+    setPythonProcess(null);
   });
 
   afterEach(() => {
@@ -68,5 +70,19 @@ describe("processing lock watchdog", () => {
     expect(beginProcessingRun("run-3")).toBe(true);
     expect(beginProcessingRun("run-4")).toBe(false);
     clearProcessingRun("run-3");
+  });
+
+  it("does not force-release while the processor child is still alive", () => {
+    expect(beginProcessingRun("run-live")).toBe(true);
+    setPythonProcess({ exitCode: null, signalCode: null, killed: false });
+
+    vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
+    expect(getIsProcessing()).toBe(true);
+    expect(getProcessingRunId()).toBe("run-live");
+
+    setPythonProcess(null);
+    vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
+    expect(getIsProcessing()).toBe(false);
+    expect(getProcessingRunId()).toBe(null);
   });
 });

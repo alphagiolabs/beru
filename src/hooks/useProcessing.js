@@ -103,12 +103,16 @@ export default function useProcessing(api) {
         clearPendingJob(msg?.index);
         useEditorStore.getState().markJobError(msg);
       }),
-      bind(api.onFinished, () => {
+      bind(api.onFinished, (msg) => {
         cancelJobProgressFlush();
         flushJobProgress();
         const state = useEditorStore.getState();
         state.finalizeActiveExecution();
-        state.setProcessing(false);
+        if (msg?.cancelled) {
+          state.abortActiveProcessing();
+        } else {
+          state.setProcessing(false);
+        }
       }),
       bind(api.onError, (msg) => {
         pendingJobProgress.clear();
