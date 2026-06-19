@@ -22,6 +22,7 @@ const DENIED_PATH_FRAGMENTS = [
 export function createPathSecurity(app) {
   const allowedFiles = new Set();
   const ALLOWED_FILES_MAX = 2000;
+  let selectedOutputDirectory = null;
 
   function trimAllowedFiles() {
     if (allowedFiles.size <= ALLOWED_FILES_MAX) return;
@@ -130,6 +131,29 @@ export function createPathSecurity(app) {
     for (const p of paths) registerAllowedPath(p);
   }
 
+  function registerOutputDirectory(directoryPath) {
+    const resolved = resolveSafe(directoryPath);
+    if (!resolved || isDeniedPath(resolved)) {
+      return { ok: false, error: "Carpeta de salida no permitida" };
+    }
+    try {
+      if (!fs.statSync(resolved).isDirectory()) {
+        return { ok: false, error: "La salida debe ser una carpeta" };
+      }
+    } catch {
+      return { ok: false, error: "Carpeta de salida no encontrada" };
+    }
+
+    selectedOutputDirectory = resolved;
+    allowedFiles.add(normalizeKey(resolved));
+    trimAllowedFiles();
+    return { ok: true, resolvedPath: resolved };
+  }
+
+  function getOutputDirectory() {
+    return selectedOutputDirectory;
+  }
+
   const EXT_BY_KIND = {
     excel: new Set([".xlsx", ".xls", ".xlsm"]),
     image: new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]),
@@ -231,6 +255,8 @@ export function createPathSecurity(app) {
   return {
     registerAllowedPath,
     registerAllowedPaths,
+    registerOutputDirectory,
+    getOutputDirectory,
     validateReadableFile,
     validateShellPath,
     validateProtocolFile,

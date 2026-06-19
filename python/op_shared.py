@@ -142,11 +142,17 @@ def _build_enable_clause(op):
     end = op.get("end_time", op.get("endTime"))
     if start is None and end is None:
         return ""
-    s = float(start) if start is not None else 0.0
-    e = float(end) if end is not None else 0.0
-    if e <= s:
-        return ""
-    return f"enable=between(t\\,{s:.6f}\\,{e:.6f})"
+    if start is not None and end is not None:
+        s = float(start)
+        e = float(end)
+        if e <= s:
+            return ""
+        return f"enable=between(t\\,{s:.6f}\\,{e:.6f})"
+    if start is not None:
+        s = float(start)
+        return f"enable=gte(t\\,{s:.6f})"
+    e = float(end)
+    return f"enable=lte(t\\,{e:.6f})"
 
 
 def _overlay_opts(x, y, enable_clause):

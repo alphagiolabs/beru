@@ -20,6 +20,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ESLint configuration** now correctly applies Node.js globals to `scripts/**/*.mjs`, resolving `no-undef` errors for `console`/`process` in `scripts/release-loop.mjs` and siblings.
 - Removed redundant `/* global console */` / `/* global console, process */` comments from `scripts/build-processor.mjs` and `scripts/fetch-ffmpeg.mjs` now that the ESLint config provides the globals.
 
+## [1.6.33] - 2026-06-19
+
+### Added
+
+- Security regression coverage for FFmpeg media-path and drawtext validation, Electron shell handlers, and hardened BrowserWindow settings.
+
+### Changed
+
+- FFmpeg jobs now validate video, image, watermark, font, and output paths against approved roots and extension allowlists before command construction.
+- Process output paths are derived by the main process from the user-selected output directory, and Electron shell access is restricted to approved output media and trusted external domains.
+
+### Fixed
+
+- Synchronized `package-lock.json` with version `1.6.33` and applied Node globals to every `scripts/**/*.mjs` file so the project audit, ESLint, and release tooling agree on the shipped configuration.
+- **Processing watchdog** — no longer force-releases the lock while the Python processor child is still alive, preventing long batches from freezing progress and leaving the UI stuck in "processing".
+- **Batch cancel** — cancel now emits `process:finished`, resets in-flight queue rows to idle, and kills the processor on update-quit instead of leaving orphaned ffmpeg processes.
+- **Timed export filters** — start-only overlays use `enable=gte(t,…)` (matching preview), timed crop overlays render at the selected `(x,y)` instead of the top-left corner, and preview-frame seek runs after `-i` so time-bounded filters align with the editor timeline.
+- **Queue/preset state** — removing a video clears undo/redo stacks and stray `currentRegion`; applying a preset without Excel preserves blur/crop/delogo operations.
+- **Release tooling** — `build-processor` invalidates its cache when helper Python modules change; pre-push regression guard diffs against upstream; `release-loop` checks GitHub releases without bash-only syntax on Windows.
+- **FFmpeg color validation** — background and delogo fill colors now use the same strict allowlist as drawtext colors, closing filter-string injection paths before command construction.
+- **Cross-platform regression checks** — the pre-push guard reads only Vitest's final test total, and the release loop now checks Git ancestry with `execFileSync` instead of shell redirection syntax.
+
 ## [1.6.22] - 2026-06-11
 
 ### Fixed

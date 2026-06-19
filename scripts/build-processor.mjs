@@ -70,6 +70,9 @@ function isUpToDate() {
     join(pythonDir, "processor.py"),
     join(pythonDir, "encode_profiles.py"),
     join(pythonDir, "batch_errors.py"),
+    join(pythonDir, "op_shared.py"),
+    join(pythonDir, "delogo_chains.py"),
+    join(pythonDir, "text_layout_helpers.py"),
     specPath,
     profilesJson,
   ];

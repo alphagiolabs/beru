@@ -80,4 +80,16 @@ describe("pathSecurity", () => {
     expect(res.ok).toBe(false);
     expect(res.error).toBe("Archivo no encontrado");
   });
+
+  it("remembers only an output directory explicitly selected by the main process", () => {
+    const outputDirectory = path.dirname(tmpFile);
+
+    expect(security.getOutputDirectory()).toBeNull();
+    expect(security.registerOutputDirectory(outputDirectory)).toEqual({
+      ok: true,
+      resolvedPath: fs.realpathSync(outputDirectory),
+    });
+    expect(security.getOutputDirectory()).toBe(fs.realpathSync(outputDirectory));
+    expect(security.registerOutputDirectory(tmpFile).ok).toBe(false);
+  });
 });

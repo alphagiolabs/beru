@@ -52,6 +52,8 @@ export function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
       preload: path.join(__dirname, "..", "preload.cjs"),
     },
   });

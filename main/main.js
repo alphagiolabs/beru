@@ -60,12 +60,14 @@ function onFatalError(err) {
 }
 
 app.on("will-quit", (event) => {
-  if (isQuittingForUpdate()) return;
   if (quitCleanupStarted) return;
+  if (!getPythonProcess()) return;
   event.preventDefault();
   quitCleanupStarted = true;
-  cleanupTempFiles();
-  disposePreviewFrameWorker();
+  if (!isQuittingForUpdate()) {
+    cleanupTempFiles();
+    disposePreviewFrameWorker();
+  }
   cancelActiveProcessing().finally(() => {
     app.quit();
   });
@@ -130,11 +132,12 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
-  if (isQuittingForUpdate()) return;
   if (quitCleanupStarted || !getPythonProcess()) return;
   event.preventDefault();
   quitCleanupStarted = true;
-  disposePreviewFrameWorker();
+  if (!isQuittingForUpdate()) {
+    disposePreviewFrameWorker();
+  }
   cancelActiveProcessing().finally(() => app.quit());
 });
 
