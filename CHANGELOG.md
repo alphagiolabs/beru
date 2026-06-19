@@ -5,6 +5,21 @@ All notable changes to Beru will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.33] - 2026-06-19
+
+### Added
+
+- Security regression coverage for FFmpeg media-path and drawtext validation, Electron shell handlers, and hardened BrowserWindow settings.
+
+### Changed
+
+- FFmpeg jobs now validate video, image, watermark, font, and output paths against approved roots and extension allowlists before command construction.
+- Process output paths are derived by the main process from the user-selected output directory, and Electron shell access is restricted to approved output media and trusted external domains.
+
+### Fixed
+
+- Synchronized `package-lock.json` with version `1.6.33` and applied Node globals to every `scripts/**/*.mjs` file so the project audit, ESLint, and release tooling agree on the shipped configuration.
+
 ## [1.6.22] - 2026-06-11
 
 ### Fixed

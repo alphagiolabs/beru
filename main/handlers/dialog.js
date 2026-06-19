@@ -34,7 +34,12 @@ export function registerDialogHandlers(pathSecurity) {
         properties: ["openDirectory", "createDirectory"],
       });
       if (canceled || !filePaths || filePaths.length === 0) return null;
-      return filePaths[0];
+      const check = pathSecurity.registerOutputDirectory(filePaths[0]);
+      if (!check.ok) {
+        console.error("[beru] Invalid output directory:", check.error);
+        return null;
+      }
+      return check.resolvedPath;
     } catch (err) {
       console.error("[beru] Error opening output directory dialog:", err);
       return null;

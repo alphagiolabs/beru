@@ -75,6 +75,100 @@ FFPROBE = os.environ.get("BERU_FFPROBE", "ffprobe")
 JOB_MANIFEST_TYPE = "beru-job-manifest"
 JOB_MANIFEST_VERSION = 1
 
+VIDEO_INPUT_EXTENSIONS = frozenset(
+    {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".mpg", ".mpeg"}
+)
+VIDEO_OUTPUT_EXTENSIONS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".webm"})
+IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
+FONT_EXTENSIONS = frozenset({".ttf", ".otf", ".ttc"})
+
+
+def validate_media_path(path, allowed_root, allowed_extensions):
+    """Return a canonical media path constrained to an approved root and extension."""
+    if not isinstance(path, (str, os.PathLike)):
+        raise ValueError("Media path must be a string")
+
+    raw_path = os.fspath(path)
+    if not raw_path or "\x00" in raw_path or any(ord(char) < 32 or ord(char) == 127 for char in raw_path):
+        raise ValueError("Media path contains forbidden characters")
+    if any(part == ".." for part in re.split(r"[\\/]+", raw_path)):
+        raise ValueError("Media path traversal is not allowed")
+
+    extensions = {
+        extension.lower() if str(extension).startswith(".") else f".{str(extension).lower()}"
+        for extension in (allowed_extensions or ())
+    }
+    extension = os.path.splitext(raw_path)[1].lower()
+    if not extensions or extension not in extensions:
+        raise ValueError(f"Media extension is not allowed: {extension or '(none)'}")
+
+    roots = allowed_root if isinstance(allowed_root, (list, tuple, set, frozenset)) else [allowed_root]
+    canonical_path = os.path.realpath(os.path.abspath(raw_path))
+    for root in roots:
+        if not isinstance(root, (str, os.PathLike)) or not os.fspath(root):
+            continue
+        canonical_root = os.path.realpath(os.path.abspath(os.fspath(root)))
+        try:
+            if os.path.commonpath(
+                [os.path.normcase(canonical_path), os.path.normcase(canonical_root)]
+            ) == os.path.normcase(canonical_root):
+                return canonical_path
+        except ValueError:
+            continue
+
+    raise ValueError("Media path is outside the allowed root")
+
+
+def _path_parent(path):
+    return os.path.dirname(os.path.abspath(os.fspath(path)))
+
+
+def _validated_job_media(job, *, require_output):
+    """Validate and canonicalize every renderer-controlled media path in a job."""
+    validated = dict(job)
+    input_path = job.get("input_path")
+    input_root = job.get("input_root") or (_path_parent(input_path) if input_path else None)
+    validated["input_path"] = validate_media_path(
+        input_path, input_root, VIDEO_INPUT_EXTENSIONS
+    )
+
+    if require_output:
+        output_path = job.get("output_path")
+        output_root = job.get("output_root") or (_path_parent(output_path) if output_path else None)
+        validated["output_path"] = validate_media_path(
+            output_path, output_root, VIDEO_OUTPUT_EXTENSIONS
+        )
+
+    asset_roots = job.get("asset_roots")
+    operations = []
+    for raw_operation in job.get("operations", []) or []:
+        operation = dict(raw_operation)
+        for field, extensions in (
+            ("image_path", IMAGE_EXTENSIONS),
+            ("delogo_image_path", IMAGE_EXTENSIONS),
+            ("font_path", FONT_EXTENSIONS),
+        ):
+            media_path = operation.get(field)
+            if not media_path:
+                continue
+            roots = asset_roots or _path_parent(media_path)
+            operation[field] = validate_media_path(media_path, roots, extensions)
+        operations.append(operation)
+    validated["operations"] = operations
+
+    watermark = job.get("watermark")
+    if isinstance(watermark, dict):
+        watermark = dict(watermark)
+        watermark_image = watermark.get("imagePath") or watermark.get("watermark_image")
+        if watermark_image:
+            roots = asset_roots or _path_parent(watermark_image)
+            watermark["imagePath"] = validate_media_path(
+                watermark_image, roots, IMAGE_EXTENSIONS
+            )
+        validated["watermark"] = watermark
+
+    return validated
+
 FONT_DIRS = []
 
 
@@ -241,6 +335,7 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
             # registry may reference a file that was removed or lives on a
             # different drive.  Without this check FFmpeg raises ENOENT.
             if os.path.isfile(full_path):
+                validate_media_path(full_path, _path_parent(full_path), FONT_EXTENSIONS)
                 result = ("fontfile", _format_fontfile(full_path), True)
                 break
             logger.debug("Font file missing, skipping: %s", full_path)
@@ -252,6 +347,7 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
             normalized_key = _font_name_key(fkey)
             if key in normalized_key or normalized_key in key:
                 if os.path.isfile(fpath):
+                    validate_media_path(fpath, _path_parent(fpath), FONT_EXTENSIONS)
                     result = ("fontfile", _format_fontfile(fpath), True)
                     break
                 logger.debug("Font file missing (partial), skipping: %s", fpath)
@@ -979,6 +1075,82 @@ _DRAWTEXT_CACHE = {}
 _DRAWTEXT_CACHE_LOCK = threading.Lock()
 _DRAWTEXT_CACHE_ENABLED = None
 
+_ALLOWED_DRAWTEXT_PUNCTUATION = frozenset(
+    " .,!?¿¡:;'\"()_-+/&@#%$€£¥={}*"
+)
+_ALLOWED_NAMED_COLORS = frozenset(
+    {
+        "aqua",
+        "black",
+        "blue",
+        "brown",
+        "cyan",
+        "fuchsia",
+        "gold",
+        "gray",
+        "green",
+        "grey",
+        "lime",
+        "magenta",
+        "maroon",
+        "navy",
+        "olive",
+        "orange",
+        "pink",
+        "purple",
+        "red",
+        "silver",
+        "teal",
+        "transparent",
+        "white",
+        "yellow",
+    }
+)
+_HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+_RGBA_COLOR_RE = re.compile(
+    r"^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*"
+    r"(0(?:\.\d+)?|1(?:\.0+)?)\s*\)$",
+    re.IGNORECASE,
+)
+
+
+def _validate_drawtext_text(value):
+    for char in value:
+        if char == "\n" or char.isalnum() or char in _ALLOWED_DRAWTEXT_PUNCTUATION:
+            continue
+        raise ValueError("Drawtext contains forbidden characters")
+    return value
+
+
+def _validate_drawtext_color(value, field_name):
+    color = str(value or "").strip()
+    if not color:
+        raise ValueError(f"{field_name} is empty")
+    if _HEX_COLOR_RE.fullmatch(color) or color.lower() in _ALLOWED_NAMED_COLORS:
+        return color
+    rgba = _RGBA_COLOR_RE.fullmatch(color)
+    if rgba and all(0 <= int(channel) <= 255 for channel in rgba.groups()[:3]):
+        red, green, blue = (int(channel) for channel in rgba.groups()[:3])
+        alpha = round(float(rgba.group(4)) * 255)
+        return f"#{red:02x}{green:02x}{blue:02x}{alpha:02x}"
+    raise ValueError(f"{field_name} is not an allowed color")
+
+
+def _escape_drawtext_text(value):
+    return (
+        value.replace("\\", "\\\\")
+        .replace(":", "\\:")
+        .replace("'", "\\'")
+        .replace("=", "\\=")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("%", "\\%")
+        .replace("{", "\\{")
+        .replace("}", "\\}")
+        .replace("\n", "\\n")
+        .replace("\r", "")
+    )
+
 
 def _drawtext_cache_enabled():
     """Lazily read the env flag once (default off = legacy per-call rebuild)."""
@@ -995,6 +1167,7 @@ def build_drawtext(op):
     text = (op.get("text") or "").strip()
     if not text:
         return None
+    _validate_drawtext_text(text)
 
     # Memoize identical ops (same text + style + pixel region) across jobs in a
     # batch. build_drawtext is a pure function of `op`, so the result is stable.
@@ -1056,21 +1229,12 @@ def build_drawtext(op):
         text = _apply_letter_spacing_fallback(text, spacing_px, font_size)
 
     # Escape the text for FFmpeg drawtext syntax
-    text = (text
-            .replace("\\", "\\\\")
-            .replace(":", "\\:")
-            .replace("'", "\\'")
-            .replace("=", "\\=")
-            .replace(";", "\\;")
-            .replace(",", "\\,")
-            .replace("%", "\\%")
-            .replace("{", "\\{")
-            .replace("}", "\\}")
-            .replace("\n", "\\n")
-            .replace("\r", ""))
+    text = _escape_drawtext_text(text)
 
-    font_color = op.get("font_color", "white")
-    font_family = op.get("font_family", "Arial")
+    font_color = _validate_drawtext_color(op.get("font_color", "white"), "font_color")
+    font_family = str(op.get("font_family", "Arial") or "Arial").strip()
+    if not re.fullmatch(r"[\w .-]{1,100}", font_family, re.UNICODE):
+        raise ValueError("font_family contains forbidden characters")
     bold = 1 if op.get("bold") else 0
     italic = 1 if op.get("italic") else 0
     font_weight = op.get("font_weight")
@@ -1149,13 +1313,15 @@ def build_drawtext(op):
     # Border/stroke
     border_w = op.get("border_width", 0)
     if border_w > 0:
-        border_color = op.get("border_color", "black")
+        border_color = _validate_drawtext_color(op.get("border_color", "black"), "border_color")
         parts.append(f"bordercolor={border_color}:borderw={border_w}")
 
     # Drop shadow. FFmpeg drawtext uses whole-pixel offsets; preview scales the
     # same operation-style values to screen pixels.
     if op.get("text_shadow_enabled"):
-        shadow_color = op.get("text_shadow_color", "black")
+        shadow_color = _validate_drawtext_color(
+            op.get("text_shadow_color", "black"), "text_shadow_color"
+        )
         try:
             shadow_x = int(round(float(op.get("text_shadow_offset_x", 2))))
         except (TypeError, ValueError):
@@ -1213,14 +1379,15 @@ def _build_watermark_filter(watermark, video_w, video_h):
         text = watermark.get("text", "")
         if not text.strip():
             return None, False, None
+        _validate_drawtext_text(text)
         font_size = int(watermark.get("fontSize", 18))
-        font_color = watermark.get("fontColor", "white")
-        font_family = watermark.get("fontFamily", "Arial")
+        font_color = _validate_drawtext_color(watermark.get("fontColor", "white"), "fontColor")
+        font_family = str(watermark.get("fontFamily", "Arial") or "Arial").strip()
+        if not re.fullmatch(r"[\w .-]{1,100}", font_family, re.UNICODE):
+            raise ValueError("fontFamily contains forbidden characters")
         # Resolve font
         font_key, font_val, is_fontfile = _resolve_font(font_family)
-        escaped_text = text.replace("'", "'\\''")
-        escaped_text = escaped_text.replace("%", "%%")
-        escaped_text = escaped_text.replace(":", "\\:")
+        escaped_text = _escape_drawtext_text(text)
         alpha = f"{opacity:.2f}"
         x_expr, y_expr = xy.split(":")
         dt_parts = [
@@ -1328,7 +1495,7 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
             enable_clause = _build_enable_clause(op)
             if enable_clause:
                 # Time-bounded crop: overlay cropped region on original during time range
-                overlay_opts = f"0:0:{enable_clause}"
+                overlay_opts = _overlay_opts(x, y, enable_clause)
                 if n == 0:
                     filters.append(
                         f"[0:v]split[full{n}][crop_in{n}];"
@@ -1591,6 +1758,11 @@ def _job_failed_result(job_id, raw_error, *, max_workers=None):
     return result
 
 
+def _job_cancelled_result(job_id):
+    _safe_print(json.dumps({"type": "error", "index": job_id, "error": "Cancelled"}))
+    return {"index": job_id, "status": "cancelled"}
+
+
 def _emit_job_progress(job_id, percent, speed):
     """Per-video encode progress (0-100) for the renderer (throttled ~1 Hz per job)."""
     if job_id is None:
@@ -1736,6 +1908,14 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         logger.error("Job %d: invalid payload (expected object, got %s)", idx, type(job).__name__)
         return _job_failed_result(idx, "Invalid job payload", max_workers=_BATCH_ACTIVE_WORKERS)
 
+    try:
+        job = _validated_job_media(job, require_output=True)
+    except ValueError as exc:
+        logger.error("Job %d: rejected unsafe media path: %s", idx, exc)
+        return _job_failed_result(
+            job.get("id", idx), str(exc), max_workers=_BATCH_ACTIVE_WORKERS
+        )
+
     input_path = job.get("input_path")
     output_path = job.get("output_path")
     fname = os.path.basename(input_path) if input_path else "unknown"
@@ -1878,6 +2058,8 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     else:
         logger.error("Job %d: ffmpeg failed: %s", idx, err[:200] if err else "")
         _remove_partial_output(output_path, input_path)
+        if err == "Cancelled":
+            return _job_cancelled_result(job_id)
         return _job_failed_result(job_id, err or "Unknown error", max_workers=_BATCH_ACTIVE_WORKERS)
 
 
@@ -2111,6 +2293,11 @@ def render_preview_frame(payload):
 
     Returns a dict: {ok, data_url?, error?, width?, height?, timestamp?}
     """
+    try:
+        payload = _validated_job_media(payload, require_output=False)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
+
     input_path = payload.get("input_path")
     if not input_path or not os.path.exists(input_path):
         return {"ok": False, "error": f"Input not found: {input_path}"}
@@ -2138,8 +2325,8 @@ def render_preview_frame(payload):
 
     cmd = [
         FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-        "-ss", f"{timestamp:.3f}",
         "-i", input_path,
+        "-ss", f"{timestamp:.3f}",
     ]
     for img_path in image_paths:
         cmd += ["-loop", "1", "-i", img_path]
