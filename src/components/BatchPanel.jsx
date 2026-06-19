@@ -16,7 +16,7 @@ export default function BatchPanel() {
     excelRows,
     selectedTemplateRegionId,
     currentRegion,
-    queue,
+    queueLength,
     excelMatchStatus,
   } = useEditorStore(
     (s) => ({
@@ -27,7 +27,7 @@ export default function BatchPanel() {
       excelRows: s.excelRows,
       selectedTemplateRegionId: s.selectedTemplateRegionId,
       currentRegion: s.currentRegion,
-      queue: s.queue,
+      queueLength: s.queue.length,
       excelMatchStatus: s.excelMatchStatus,
     }),
     shallow,
@@ -39,12 +39,12 @@ export default function BatchPanel() {
     const matched = Object.values(excelMatchStatus).filter((s) => s === "matched").length;
     const unmatched = Object.values(excelMatchStatus).filter((s) => s === "unmatched").length;
     const duplicate = Object.values(excelMatchStatus).filter((s) => s === "duplicate").length;
-    return { matched, unmatched, duplicate, total: queue.length };
-  }, [excelMatchStatus, queue.length]);
+    return { matched, unmatched, duplicate, total: queueLength };
+  }, [excelMatchStatus, queueLength]);
 
   const handleImportExcel = async () => {
     // Warn when Excel will replace text ops linked to template regions (_reapplyExcel preserves non-text ops)
-    const hasLinkedTextToOverwrite = queue.some((v) =>
+    const hasLinkedTextToOverwrite = get().queue.some((v) =>
       v.operations.some(
         (op) =>
           op.mode === "text" &&

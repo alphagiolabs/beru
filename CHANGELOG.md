@@ -5,6 +5,21 @@ All notable changes to Beru will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Frontend performance audit fixes** — reduced React re-render surface during batch processing:
+  - `StatusFooter` and `BatchPanel` now subscribe to `queue.length` instead of the full `queue` array, so a single queue item update no longer re-renders the whole footer/batch panel.
+  - `VideoPreview` groups its 5 stable action subscriptions into one `useEditorStore(..., shallow)` call, halving `useSyncExternalStore` subscriptions on the preview component.
+  - `PERF_FLAGS` defaults changed to `delogoThrottleFps = 30` and `logBatch = true`, reducing CPU use in the delogo live preview and coalescing processing log updates into 50 ms batches.
+  - Added `tests/frontend-perf-audit.test.js` with 27 read-only assertions that guard the performance-critical patterns above.
+
+### Fixed
+
+- **ESLint configuration** now correctly applies Node.js globals to `scripts/**/*.mjs`, resolving `no-undef` errors for `console`/`process` in `scripts/release-loop.mjs` and siblings.
+- Removed redundant `/* global console */` / `/* global console, process */` comments from `scripts/build-processor.mjs` and `scripts/fetch-ffmpeg.mjs` now that the ESLint config provides the globals.
+
 ## [1.6.22] - 2026-06-11
 
 ### Fixed
