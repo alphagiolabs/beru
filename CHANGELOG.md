@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.34] - 2026-06-19
+
 ### Changed
 
 - **Frontend performance audit fixes** — reduced React re-render surface during batch processing:
