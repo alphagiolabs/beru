@@ -58,4 +58,10 @@ GEMINI.md
 
 # Versioned build output directories (never commit)
 dist-installer-v*/
+dist-installer-new/
 dist-build/
+
+# Local-only artifacts (not part of the project)
+.githooks/
+Review-beru.md
+nul
