@@ -11,6 +11,7 @@ const IMAGE_MIMES = {
   ".gif": "image/gif",
   ".bmp": "image/bmp",
 };
+const OUTPUT_VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv", ".avi", ".webm"]);
 
 export function registerFileHandlers(pathSecurity) {
   ipcMain.handle("fs:readExcel", async (_event, filePath) => {
@@ -64,6 +65,10 @@ export function registerFileHandlers(pathSecurity) {
     if (!filePath) return { success: false, error: "No path provided" };
     if (!fs.existsSync(filePath)) {
       return { success: false, error: "Archivo no existe" };
+    }
+    const stat = fs.statSync(filePath);
+    if (!stat.isDirectory() && !OUTPUT_VIDEO_EXTENSIONS.has(path.extname(filePath).toLowerCase())) {
+      return { success: false, error: "Sólo se pueden abrir videos de salida o carpetas" };
     }
     const result = await shell.openPath(filePath);
     if (result) return { success: false, error: result };
