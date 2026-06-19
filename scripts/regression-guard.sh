@@ -16,8 +16,16 @@
 # ===========================================================================
 set -euo pipefail
 
+# ── Windows/Git-Bash robustness ────────────────────────────────────────────
+# Git on Windows can close or corrupt stdout (fd 1) when invoking hooks via
+# exec + subprocess. Redirect all log/banner output to stderr (fd 2), which
+# Git keeps stable for the entire hook lifetime. Preserve the original stdout
+# on fd 3 in case a future caller needs it.
+exec 3>&1 1>&2
+
 # ── Colores (seguros para cron/CI) ─────────────────────────────────────────
-if [[ -t 1 ]]; then
+# Check fd 3 (original stdout) for TTY since fd 1 is now stderr.
+if [[ -t 3 ]]; then
     RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
     CYAN='\033[0;36m'; MAGENTA='\033[0;35m'; BOLD='\033[1m'; NC='\033[0m'
 else
@@ -30,10 +38,14 @@ cd "$BERU_DIR"
 PASS=0; FAIL=0; ERRORS=""
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
-ok()   { PASS=$((PASS+1)); echo -e "  ${GREEN}[PASS]${NC} $1"; }
-fail() { FAIL=$((FAIL+1)); ERRORS="${ERRORS}\n  ${RED}[FAIL]${NC} $1"; echo -e "  ${RED}[FAIL]${NC} $1"; }
-info() { echo -e "  ${CYAN}[INFO]${NC} $1"; }
-warn() { echo -e "  ${YELLOW}[WARN]${NC} $1"; }
+# Use printf (POSIX, robust) instead of echo -e (bash builtin, fragile on
+# Windows). Guard with || true so a broken fd never kills the hook under
+# `set -e` — a log line failing must not block a push/commit.
+ok()   { PASS=$((PASS+1)); printf '%b\n' "  ${GREEN}[PASS]${NC} $1" || true; }
+fail() { FAIL=$((FAIL+1)); ERRORS="${ERRORS}\n  ${RED}[FAIL]${NC} $1"; printf '%b\n' "  ${RED}[FAIL]${NC} $1" || true; }
+info() { printf '%b\n' "  ${CYAN}[INFO]${NC} $1" || true; }
+warn() { printf '%b\n' "  ${YELLOW}[WARN]${NC} $1" || true; }
+say()  { printf '%b\n' "$1" || true; }
 
 # ── Detectar archivos modificados ─────────────────────────────────────────
 MODE="working tree"
@@ -52,32 +64,32 @@ else
 fi
 
 if [[ -z "${CHANGED// /}" ]]; then
-    echo -e "${YELLOW}[WARN] No hay archivos cambiados. Nada que validar.${NC}"
+    say "${YELLOW}[WARN] No hay archivos cambiados. Nada que validar.${NC}"
     exit 0
 fi
 
 # ── Banner ──────────────────────────────────────────────────────────────────
-echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${NC}"
-echo -e "${BOLD}${CYAN}  Loop A: 🔁 Video Regression Guard  [${MODE}]${NC}"
-echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${NC}"
-echo ""
-echo -e "${BOLD}Archivos modificados:${NC}"
-echo "$CHANGED" | head -15 | sed 's/^/    /'
-COUNT=$(echo "$CHANGED" | grep -c . 2>/dev/null || echo 0)
-if [[ $COUNT -gt 15 ]]; then echo "    ... y $((COUNT-15)) archivos más"; fi
-echo ""
+say "${BOLD}${CYAN}══════════════════════════════════════════════════${NC}"
+say "${BOLD}${CYAN}  Loop A: 🔁 Video Regression Guard  [${MODE}]${NC}"
+say "${BOLD}${CYAN}══════════════════════════════════════════════════${NC}"
+say ""
+say "${BOLD}Archivos modificados:${NC}"
+printf '%s\n' "$CHANGED" | head -15 | sed 's/^/    /' || true
+COUNT=$(printf '%s\n' "$CHANGED" | grep -c . 2>/dev/null || echo 0)
+if [[ $COUNT -gt 15 ]]; then say "    ... y $((COUNT-15)) archivos más"; fi
+say ""
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  TRIGGER A: python/ — cualquier archivo en el pipeline Python
 # ═══════════════════════════════════════════════════════════════════════════
 PYTHON_CHANGED=false
-if echo "$CHANGED" | grep -qE '^python/'; then
+if printf '%s\n' "$CHANGED" | grep -qE '^python/'; then
     PYTHON_CHANGED=true
-    echo -e "${MAGENTA}┌─[Trigger A] python/ cambió ─────────────────────────────${NC}"
-    echo -e "${MAGENTA}│${NC} Ejecutando tests de delogo..."
+    say "${MAGENTA}┌─[Trigger A] python/ cambió ─────────────────────────────${NC}"
+    say "${MAGENTA}│${NC} Ejecutando tests de delogo..."
 
     # ── Smoke test: delogo filter graphs ──
-    echo -e "\n${CYAN}├── Smoke test: delogo filter graphs${NC}"
+    say "\n${CYAN}├── Smoke test: delogo filter graphs${NC}"
     if python python/test_delogo.py 2>/dev/null; then
         ok "test_delogo.py — todos los filtros OK"
     else
@@ -85,7 +97,7 @@ if echo "$CHANGED" | grep -qE '^python/'; then
     fi
 
     # ── E2E visual test ──
-    echo -e "\n${CYAN}├── E2E visual: pipeline delogo${NC}"
+    say "\n${CYAN}├── E2E visual: pipeline delogo${NC}"
     if python python/test_delogo_e2e.py 2>/dev/null; then
         ok "test_delogo_e2e.py — pipeline visual OK"
     else
@@ -94,7 +106,7 @@ if echo "$CHANGED" | grep -qE '^python/'; then
 
     # ── Robust test (si existe) ──
     if [[ -f python/test_delogo_robust.py ]]; then
-        echo -e "\n${CYAN}├── Robust test: casos extremos${NC}"
+        say "\n${CYAN}├── Robust test: casos extremos${NC}"
         if python python/test_delogo_robust.py 2>/dev/null; then
             ok "test_delogo_robust.py — casos extremos OK"
         else
@@ -104,7 +116,7 @@ if echo "$CHANGED" | grep -qE '^python/'; then
 
     # ── Baseline comparison ──
     if [[ -f tests-baseline.log ]]; then
-        echo -e "\n${CYAN}├── Comparación contra baseline${NC}"
+        say "\n${CYAN}├── Comparación contra baseline${NC}"
         BASELINE_TOTAL=$(grep -oP '\d+ passed.*\(\K\d+(?=\))' tests-baseline.log 2>/dev/null | tail -1 || echo "")
         BASELINE_PASSED=$(grep -oP '(\d+) passed' tests-baseline.log | tail -1 | grep -oP '\d+' || echo "0")
 
@@ -127,17 +139,17 @@ if echo "$CHANGED" | grep -qE '^python/'; then
             warn "No se pudo parsear baseline — comparación saltada"
         fi
     fi
-    echo -e "${MAGENTA}└─────────────────────────────────────────────────────────${NC}"
+    say "${MAGENTA}└─────────────────────────────────────────────────────────${NC}"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  TRIGGER B: main/handlers/process.js  (handler IPC del pipeline)
 # ═══════════════════════════════════════════════════════════════════════════
 PROCESS_JS_CHANGED=false
-if echo "$CHANGED" | grep -qE '^main/handlers/process\.js$'; then
+if printf '%s\n' "$CHANGED" | grep -qE '^main/handlers/process\.js$'; then
     PROCESS_JS_CHANGED=true
-    echo -e "${MAGENTA}┌─[Trigger B] main/handlers/process.js cambió ─────────────${NC}"
-    echo -e "${MAGENTA}│${NC} Ejecutando tests del pipeline IPC..."
+    say "${MAGENTA}┌─[Trigger B] main/handlers/process.js cambió ─────────────${NC}"
+    say "${MAGENTA}│${NC} Ejecutando tests del pipeline IPC..."
 
     PROCESS_TESTS=(
         "tests/processing-errors.test.js"
@@ -146,24 +158,24 @@ if echo "$CHANGED" | grep -qE '^main/handlers/process\.js$'; then
     )
 
     for test_file in "${PROCESS_TESTS[@]}"; do
-        echo -e "\n${CYAN}├── $test_file${NC}"
+        say "\n${CYAN}├── $test_file${NC}"
         if npx vitest run "$test_file" --reporter=verbose 2>/dev/null; then
             ok "$(basename $test_file .test.js)"
         else
             fail "$(basename $test_file .test.js)"
         fi
     done
-    echo -e "${MAGENTA}└─────────────────────────────────────────────────────────${NC}"
+    say "${MAGENTA}└─────────────────────────────────────────────────────────${NC}"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  TRIGGER C: main/utils/processor-spawn.js  (spawn del procesador Python)
 # ═══════════════════════════════════════════════════════════════════════════
 SPAWN_CHANGED=false
-if echo "$CHANGED" | grep -qE '^main/utils/processor-spawn\.js$'; then
+if printf '%s\n' "$CHANGED" | grep -qE '^main/utils/processor-spawn\.js$'; then
     SPAWN_CHANGED=true
-    echo -e "${MAGENTA}┌─[Trigger C] main/utils/processor-spawn.js cambió ───────${NC}"
-    echo -e "${MAGENTA}│${NC} Ejecutando tests de spawn + batch + pipeline..."
+    say "${MAGENTA}┌─[Trigger C] main/utils/processor-spawn.js cambió ───────${NC}"
+    say "${MAGENTA}│${NC} Ejecutando tests de spawn + batch + pipeline..."
 
     SPAWN_TESTS=(
         "tests/python.ffmpeg-path.test.js"
@@ -177,23 +189,23 @@ if echo "$CHANGED" | grep -qE '^main/utils/processor-spawn\.js$'; then
     )
 
     for test_file in "${SPAWN_TESTS[@]}"; do
-        echo -e "\n${CYAN}├── $test_file${NC}"
+        say "\n${CYAN}├── $test_file${NC}"
         if npx vitest run "$test_file" --reporter=verbose 2>/dev/null; then
             ok "$(basename $test_file .test.js)"
         else
             fail "$(basename $test_file .test.js)"
         fi
     done
-    echo -e "${MAGENTA}└─────────────────────────────────────────────────────────${NC}"
+    say "${MAGENTA}└─────────────────────────────────────────────────────────${NC}"
 fi
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  TRIGGER D: Otros cambios en main/ (genérico)
 # ═══════════════════════════════════════════════════════════════════════════
 MAIN_OTHER=false
-if echo "$CHANGED" | grep -qE '^main/' && ! $PROCESS_JS_CHANGED && ! $SPAWN_CHANGED; then
+if printf '%s\n' "$CHANGED" | grep -qE '^main/' && ! $PROCESS_JS_CHANGED && ! $SPAWN_CHANGED; then
     MAIN_OTHER=true
-    echo -e "${YELLOW}┌─[Trigger D] main/ (otros) cambió — tests generales${NC}"
+    say "${YELLOW}┌─[Trigger D] main/ (otros) cambió — tests generales${NC}"
 
     OTHER_TESTS=(
         "tests/path-security.test.js"
@@ -202,7 +214,7 @@ if echo "$CHANGED" | grep -qE '^main/' && ! $PROCESS_JS_CHANGED && ! $SPAWN_CHAN
     )
 
     for test_file in "${OTHER_TESTS[@]}"; do
-        echo -e "\n${CYAN}├── $test_file${NC}"
+        say "\n${CYAN}├── $test_file${NC}"
         if npx vitest run "$test_file" --reporter=verbose 2>/dev/null; then
             ok "$(basename $test_file .test.js)"
         else
@@ -215,7 +227,7 @@ fi
 #  TRIGGER E: Ningún trigger crítico — full suite
 # ═══════════════════════════════════════════════════════════════════════════
 if ! $PYTHON_CHANGED && ! $PROCESS_JS_CHANGED && ! $SPAWN_CHANGED && ! $MAIN_OTHER; then
-    echo -e "\n${CYAN}┌─[Trigger E] cambios generales — suite completa${NC}"
+    say "\n${CYAN}┌─[Trigger E] cambios generales — suite completa${NC}"
     if npm test 2>&1; then
         ok "npm test — suite completa OK"
     else
@@ -224,18 +236,18 @@ if ! $PYTHON_CHANGED && ! $PROCESS_JS_CHANGED && ! $SPAWN_CHANGED && ! $MAIN_OTH
 fi
 
 # ═══ REPORTE FINAL ══════════════════════════════════════════════════════════
-echo ""
-echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${NC}"
-echo -e "${BOLD}${CYAN}  📊 Reporte: ${PASS} ✅  |  ${FAIL} ❌${NC}"
-echo -e "${BOLD}${CYAN}══════════════════════════════════════════════════${NC}"
+say ""
+say "${BOLD}${CYAN}══════════════════════════════════════════════════${NC}"
+say "${BOLD}${CYAN}  📊 Reporte: ${PASS} ✅  |  ${FAIL} ❌${NC}"
+say "${BOLD}${CYAN}══════════════════════════════════════════════════${NC}"
 
 if [[ $FAIL -gt 0 ]]; then
-    echo -e "${RED}${BOLD}❌ Regresión detectada:${NC}$ERRORS"
-    echo ""
-    echo -e "${YELLOW}[WARN] Revisa los errores antes de continuar.${NC}"
-    echo -e "${YELLOW}[WARN] Para saltar: git push --no-verify (o commit -n)${NC}"
+    say "${RED}${BOLD}❌ Regresión detectada:${NC}$ERRORS"
+    say ""
+    say "${YELLOW}[WARN] Revisa los errores antes de continuar.${NC}"
+    say "${YELLOW}[WARN] Para saltar: git push --no-verify (o commit -n)${NC}"
     exit 1
 else
-    echo -e "${GREEN}${BOLD}✅ Pipeline de video OK — sin regresiones.${NC}"
+    say "${GREEN}${BOLD}✅ Pipeline de video OK — sin regresiones.${NC}"
     exit 0
 fi
