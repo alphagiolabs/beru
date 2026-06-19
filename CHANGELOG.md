@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Synchronized `package-lock.json` with version `1.6.33` and applied Node globals to every `scripts/**/*.mjs` file so the project audit, ESLint, and release tooling agree on the shipped configuration.
+- **Processing watchdog** — no longer force-releases the lock while the Python processor child is still alive, preventing long batches from freezing progress and leaving the UI stuck in "processing".
+- **Batch cancel** — cancel now emits `process:finished`, resets in-flight queue rows to idle, and kills the processor on update-quit instead of leaving orphaned ffmpeg processes.
+- **Timed export filters** — start-only overlays use `enable=gte(t,…)` (matching preview), timed crop overlays render at the selected `(x,y)` instead of the top-left corner, and preview-frame seek runs after `-i` so time-bounded filters align with the editor timeline.
+- **Queue/preset state** — removing a video clears undo/redo stacks and stray `currentRegion`; applying a preset without Excel preserves blur/crop/delogo operations.
+- **Release tooling** — `build-processor` invalidates its cache when helper Python modules change; pre-push regression guard diffs against upstream; `release-loop` checks GitHub releases without bash-only syntax on Windows.
 
 ## [1.6.22] - 2026-06-11
 

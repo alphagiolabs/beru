@@ -1,5 +1,5 @@
 import { createOperation } from "../../utils/types";
-import { pickTextStyle } from "../../utils/text-style";
+import { pickTextStyle, textOpMatchesRegion } from "../../utils/text-style";
 import {
   sanitizeTemplateRegions,
   sanitizeTextStyle,
@@ -239,9 +239,12 @@ export function createProjectSlice(set, get) {
       } else {
         const tr = get().templateRegions;
         set((s) => ({
-          queue: s.queue.map((item) => ({
-            ...item,
-            operations: tr.map((r) =>
+          queue: s.queue.map((item) => {
+            const preservedOps = item.operations.filter((op) => {
+              if (op.mode !== "text") return true;
+              return !tr.some((r) => r.region && textOpMatchesRegion(op, r.region, r.id));
+            });
+            const newTextOps = tr.map((r) =>
               createOperation({
                 mode: "text",
                 batchRegionId: r.id,
@@ -267,8 +270,12 @@ export function createProjectSlice(set, get) {
                 textShadowOffsetX: get().textShadowOffsetX,
                 textShadowOffsetY: get().textShadowOffsetY,
               }),
-            ),
-          })),
+            );
+            return {
+              ...item,
+              operations: [...preservedOps, ...newTextOps],
+            };
+          }),
         }));
       }
       return { ok: true, name: data.name };

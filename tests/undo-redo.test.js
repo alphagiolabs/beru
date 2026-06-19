@@ -207,6 +207,24 @@ describe("undo / redo", () => {
     expect(state.redoStack).toHaveLength(0);
   });
 
+  it("clears undo, redo, and currentRegion when removing the selected video", () => {
+    useEditorStore.setState({
+      queue: [queueItem({ path: "a.mp4" }), queueItem({ path: "b.mp4" })],
+      selectedIdx: 0,
+      undoStack: [[{ id: "op-1", mode: "blur", region: null }]],
+      redoStack: [[{ id: "op-2", mode: "text", region: null, text: "x" }]],
+      currentRegion: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
+    });
+
+    useEditorStore.getState().removeVideo(0);
+    const state = useEditorStore.getState();
+    expect(state.selectedIdx).toBe(0);
+    expect(state.queue).toHaveLength(1);
+    expect(state.undoStack).toHaveLength(0);
+    expect(state.redoStack).toHaveLength(0);
+    expect(state.currentRegion).toBeNull();
+  });
+
   it("undo stack stays bounded at MAX_UNDO_STACK (50)", () => {
     useEditorStore.setState({ queue: [queueItem()], selectedIdx: 0 });
     for (let i = 0; i < 80; i++) {
