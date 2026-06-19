@@ -347,7 +347,7 @@ export default function Header() {
 
   const handleCancel = async () => {
     await api?.cancelProcessing();
-    get().setProcessing(false);
+    get().abortActiveProcessing();
   };
 
   const canTest = !isProcessing && selectedIdx >= 0 && selectedIdx < queueLength;
