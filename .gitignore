@@ -52,7 +52,9 @@ wmic_procs.txt
 .agents/
 .commandcode/
 skills-lock.json
-# Note: AGENTS.md, CLAUDE.md, GEMINI.md ARE tracked in the repo.
+AGENTS.md
+CLAUDE.md
+GEMINI.md
 
 # Versioned build output directories (never commit)
 dist-installer-v*/
