@@ -49,7 +49,7 @@ export default [
     },
   },
   {
-    files: ["scripts/dev.mjs"],
+    files: ["scripts/**/*.mjs"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",

@@ -34,7 +34,7 @@ export default function StatusFooter() {
     isProcessing,
     progressDone,
     progressTotal,
-    queue,
+    queueLength,
     jobProgress,
     executionHistory,
     batchSummary,
@@ -44,7 +44,7 @@ export default function StatusFooter() {
       isProcessing: s.isProcessing,
       progressDone: s.progressDone,
       progressTotal: s.progressTotal,
-      queue: s.queue,
+      queueLength: s.queue.length,
       jobProgress: s.jobProgress,
       executionHistory: s.executionHistory,
       batchSummary: s.batchSummary,
@@ -60,8 +60,11 @@ export default function StatusFooter() {
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [sessionStartedAt] = useState(() => Date.now());
 
+  // Read the queue snapshot directly via get() to avoid re-rendering the footer
+  // every time a single queue item mutates during batch processing. The footer still
+  // re-renders on progressDone / progressTotal / jobProgress / isProcessing changes.
   const { completed, total, percent } = getBatchProgress({
-    queue,
+    queue: get().queue,
     progressDone,
     progressTotal,
     jobProgress,
