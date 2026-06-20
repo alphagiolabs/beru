@@ -15,7 +15,7 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, n));
 }
 
-const ACTIVE_STATUSES = new Set(["downloading", "ready"]);
+const PENDING_UPDATE_STATUSES = new Set(["available", "downloading", "ready"]);
 
 /** Pure reducer for updater IPC events → renderer store shape. */
 export function reduceUpdaterEvent(current, payload) {
@@ -24,7 +24,7 @@ export function reduceUpdaterEvent(current, payload) {
   const type = payload.type;
 
   if (type === "checking") {
-    if (ACTIVE_STATUSES.has(current?.status)) return current;
+    if (PENDING_UPDATE_STATUSES.has(current?.status)) return current;
     return { ...IDLE_UPDATE, status: "checking" };
   }
 
@@ -42,7 +42,7 @@ export function reduceUpdaterEvent(current, payload) {
   }
 
   if (type === "not-available") {
-    if (ACTIVE_STATUSES.has(current?.status)) return current;
+    if (PENDING_UPDATE_STATUSES.has(current?.status)) return current;
     return { ...IDLE_UPDATE };
   }
 
