@@ -144,6 +144,19 @@ const checkForUpdates = async () => {
   // Don't run a check that would wipe an already-downloaded update — it would
   // reset updateDownloaded and re-emit "available", forcing a re-download.
   if (updateDownloaded) return { ok: false, reason: "already-ready" };
+  // Re-use a known pending update instead of re-checking. A duplicate check can
+  // emit update-not-available and clobber renderer state while the user is
+  // reading the modal or starting a download.
+  if (pendingVersion && !downloadInProgress) {
+    send({
+      type: "available",
+      version: pendingVersion,
+      releaseDate: lastSnapshot?.releaseDate,
+      releaseNotes: lastSnapshot?.releaseNotes || "",
+      releaseUrl: releaseUrlFor(pendingVersion),
+    });
+    return { ok: true, version: pendingVersion, reason: "pending-update" };
+  }
   if (checkInProgress) return { ok: false, reason: "check-in-progress" };
   if (downloadInProgress) return { ok: false, reason: "download-in-progress" };
   const au = tryLoad();

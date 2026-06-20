@@ -114,6 +114,15 @@ describe("StatusFooter", () => {
     expect(document.body.textContent).toMatch(/Corregido/i);
     expect(document.body.textContent).toMatch(/Actualizar ahora/i);
 
+    const primaryBtn = document.querySelector(".status-footer-update-primary");
+    const moreNote = document.querySelector(".status-footer-update-more");
+    expect(primaryBtn).toBeTruthy();
+    if (moreNote) {
+      expect(
+        primaryBtn.compareDocumentPosition(moreNote) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+
     const updateNow = Array.from(document.querySelectorAll("button")).find((btn) =>
       btn.textContent.includes("Actualizar ahora"),
     );

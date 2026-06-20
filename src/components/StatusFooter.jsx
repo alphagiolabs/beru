@@ -90,9 +90,9 @@ export default function StatusFooter() {
   useClock(isProcessing || updateStatus === "downloading", 1000);
 
   useEffect(() => {
-    // Auto-open the install modal whenever an update is ready to install, on
-    // every launch, so the prompt is persistent until the update is applied.
-    if (updateStatus === "ready" && update?.version) {
+    // Auto-open while downloading or ready so the user always sees progress and
+    // the install prompt until the update is applied.
+    if ((updateStatus === "ready" || updateStatus === "downloading") && update?.version) {
       setUpdateOpen(true);
     }
   }, [updateStatus, update?.version]);
@@ -132,6 +132,7 @@ export default function StatusFooter() {
   };
 
   const handleUpdateNow = async () => {
+    setUpdateOpen(true);
     const res = await get().downloadUpdate();
     if (res?.ok === false) {
       showToast({ kind: "err", text: t("header.updateDownloadFailed") });

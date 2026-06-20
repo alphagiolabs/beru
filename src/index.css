@@ -494,12 +494,13 @@ label {
 
 .status-footer-update-panel {
   @apply relative w-full text-center;
-  max-width: 400px;
-  padding: 36px 32px 28px;
-  border-radius: 12px;
-  background: #1a1d23;
-  border: 1px solid color-mix(in srgb, #ffffff 8%, transparent);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  max-width: 384px;
+  padding: 34px 32px 27px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg-app));
+  border: 1px solid color-mix(in srgb, var(--border) 90%, var(--text-dim));
+  box-shadow: var(--modal-shadow);
+  overflow: visible;
 }
 
 .status-footer-update-close {
@@ -522,10 +523,10 @@ label {
   @apply mx-auto flex items-center justify-center overflow-hidden;
   width: 64px;
   height: 64px;
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--text-primary);
-  background: #0a0a0a;
-  border: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
+  background: color-mix(in srgb, var(--bg-app) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
 }
 
 .status-footer-update-title {
@@ -552,10 +553,11 @@ label {
 }
 
 .status-footer-update-changelog {
-  @apply mt-5 mb-4 text-left rounded-lg;
-  overflow: hidden;
-  background: #12151a;
-  border: 1px solid color-mix(in srgb, #ffffff 6%, transparent);
+  @apply mt-5 text-left rounded;
+  overflow: visible;
+  max-height: none;
+  background: color-mix(in srgb, var(--bg-app) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 
 .status-footer-update-changelog-section + .status-footer-update-changelog-section {
@@ -570,17 +572,20 @@ label {
 .status-footer-update-changelog-list {
   @apply px-4 pb-3.5 text-[12px] leading-[1.55] list-disc pl-7 space-y-1.5;
   color: color-mix(in srgb, var(--text-primary) 62%, transparent);
+  overflow: visible;
+  max-height: none;
 }
 
 .status-footer-update-more {
-  margin-top: 14px;
+  margin-top: 18px;
   margin-bottom: 0;
   font-size: 11px;
+  line-height: 1.4;
   color: color-mix(in srgb, var(--text-primary) 32%, transparent);
 }
 
 .status-footer-update-primary {
-  @apply w-full rounded-lg py-3 text-[13px] font-semibold transition-opacity;
+  @apply w-full rounded py-3 text-[13px] font-semibold transition-opacity mt-5;
   background: #b0bac5;
   color: #111111;
 }

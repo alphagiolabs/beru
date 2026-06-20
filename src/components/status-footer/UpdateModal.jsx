@@ -5,15 +5,7 @@ import { parseReleaseNotesSections } from "../../utils/appVersion";
 import BeruMark from "./BeruMark";
 import UpdateChangelog from "./UpdateChangelog";
 
-export default function UpdateModal({
-  update,
-  onUpdateNow,
-  onLater,
-  onInstall,
-  onClose,
-  onOpenReleaseNotes,
-  t,
-}) {
+export default function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
   const closeBtnRef = useRef(null);
   const status = update?.status || "idle";
   const sections = parseReleaseNotesSections(update?.releaseNotes);
@@ -97,26 +89,15 @@ export default function UpdateModal({
           <>
             <p className="status-footer-update-subtitle">{t("updater.modal.subtitle")}</p>
             <UpdateChangelog sections={sections} t={t} />
-            {sections.hiddenCount > 0 && (
-              <p className="status-footer-update-more">
-                {t("footer.moreChanges", { count: sections.hiddenCount })}
-              </p>
-            )}
-            {update?.releaseUrl && onOpenReleaseNotes && (
-              <button
-                type="button"
-                className="status-footer-update-release-link"
-                onClick={() => onOpenReleaseNotes(update.releaseUrl)}
-              >
-                {t("footer.checkReleaseNotes")}
-              </button>
-            )}
             <button type="button" className="status-footer-update-primary" onClick={onUpdateNow}>
               {t("footer.updateNow")}
             </button>
             <button type="button" className="status-footer-update-secondary" onClick={onLater}>
               {t("footer.maybeLater")}
             </button>
+            {sections.hiddenCount > 0 && (
+              <p className="status-footer-update-more">{t("footer.moreChanges", { count: sections.hiddenCount })}</p>
+            )}
           </>
         )}
       </div>

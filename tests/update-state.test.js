@@ -40,6 +40,18 @@ describe("reduceUpdaterEvent", () => {
     expect(reduceUpdaterEvent(downloading, { type: "not-available" })).toBe(downloading);
   });
 
+  it("preserves an available update when a duplicate background check runs", () => {
+    const available = {
+      ...IDLE_UPDATE,
+      status: "available",
+      version: "1.6.0",
+      releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v1.6.0",
+    };
+
+    expect(reduceUpdaterEvent(available, { type: "checking" })).toBe(available);
+    expect(reduceUpdaterEvent(available, { type: "not-available" })).toBe(available);
+  });
+
   it("returns to available after a download error so the user can retry", () => {
     const downloading = {
       ...IDLE_UPDATE,
