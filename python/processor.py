@@ -44,12 +44,14 @@ from batch_errors import (
 from op_shared import (
     VALID_DELOGO_METHODS,
     _build_enable_clause,
+    _coerce_float,
     _coerce_int,
     _normalize_operation,
     _optimize_delogo_for_speed,
     _overlay_opts,
     _region_to_pixels,
 )
+from color_validation import _validate_drawtext_color
 from delogo_chains import (
     _build_cleanup_filter,
     _build_delogo_chain,
@@ -578,6 +580,9 @@ _ENCODER_CAPS = {
 }
 
 # Set in process_jobs so each FFmpeg child uses proportional filter threads.
+# This is safe because the processing lock (beginProcessingRun in JS) ensures
+# only one batch runs at a time. Do NOT read or write this from multiple
+# concurrent batches — it is single-batch state.
 _BATCH_ACTIVE_WORKERS = 1
 
 
@@ -1089,62 +1094,12 @@ _DRAWTEXT_CACHE_ENABLED = None
 _ALLOWED_DRAWTEXT_PUNCTUATION = frozenset(
     " .,!?¿¡:;'\"()_-+/&@#%$€£¥={}*"
 )
-_ALLOWED_NAMED_COLORS = frozenset(
-    {
-        "aqua",
-        "black",
-        "blue",
-        "brown",
-        "cyan",
-        "fuchsia",
-        "gold",
-        "gray",
-        "green",
-        "grey",
-        "lime",
-        "magenta",
-        "maroon",
-        "navy",
-        "olive",
-        "orange",
-        "pink",
-        "purple",
-        "red",
-        "silver",
-        "teal",
-        "transparent",
-        "white",
-        "yellow",
-    }
-)
-_HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
-_RGBA_COLOR_RE = re.compile(
-    r"^rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*"
-    r"(0(?:\.\d+)?|1(?:\.0+)?)\s*\)$",
-    re.IGNORECASE,
-)
-
-
 def _validate_drawtext_text(value):
     for char in value:
         if char == "\n" or char.isalnum() or char in _ALLOWED_DRAWTEXT_PUNCTUATION:
             continue
         raise ValueError("Drawtext contains forbidden characters")
     return value
-
-
-def _validate_drawtext_color(value, field_name):
-    color = str(value or "").strip()
-    if not color:
-        raise ValueError(f"{field_name} is empty")
-    if _HEX_COLOR_RE.fullmatch(color) or color.lower() in _ALLOWED_NAMED_COLORS:
-        return color
-    rgba = _RGBA_COLOR_RE.fullmatch(color)
-    if rgba and all(0 <= int(channel) <= 255 for channel in rgba.groups()[:3]):
-        red, green, blue = (int(channel) for channel in rgba.groups()[:3])
-        alpha = round(float(rgba.group(4)) * 255)
-        return f"#{red:02x}{green:02x}{blue:02x}{alpha:02x}"
-    raise ValueError(f"{field_name} is not an allowed color")
 
 
 def _escape_drawtext_text(value):
@@ -1540,7 +1495,7 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
                 logger.warning("Image op skipped: file not found: %s", img_path)
                 continue
             idx = img_input_index(img_path)
-            opacity = float(op.get("image_opacity", 1) or 1)
+            opacity = _coerce_float(op.get("image_opacity"), 1.0, 0.0, 1.0)
             enable_clause = _build_enable_clause(op)
             overlay_opts = f"{x}:{y}"
             if enable_clause:
@@ -1656,6 +1611,9 @@ class StderrBuffer:
         while self._chars > self._max_chars and len(self._buf) > 1:
             evicted = self._buf.popleft()
             self._chars -= len(evicted)
+
+    def __len__(self):
+        return len(self._buf)
 
     def join(self):
         return "".join(self._buf)
@@ -1852,6 +1810,12 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
     threading.Thread(target=read_stderr, daemon=True).start()
     deadline = time.monotonic() + timeout_sec
 
+    # Stall detector: if FFmpeg produces no stderr output for STALL_TIMEOUT_SEC,
+    # kill it. This catches hung processes that the fixed deadline would only
+    # catch after a much longer wait.
+    STALL_TIMEOUT_SEC = 120
+    last_output_time = time.monotonic()
+
     while True:
         returncode = proc.poll()
         if returncode is not None:
@@ -1861,11 +1825,22 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
             reader_done.wait(timeout=1)
             _cleanup_ffmpeg_partial(cmd)
             return False, "Cancelled"
-        if time.monotonic() >= deadline:
+        now = time.monotonic()
+        if now >= deadline:
             _kill_ffmpeg_process(proc)
             reader_done.wait(timeout=1)
             _cleanup_ffmpeg_partial(cmd)
             return False, f"Timeout after {timeout_sec}s"
+        # Check for stall: compare current stderr line count to detect activity
+        with stderr_lock:
+            current_lines = len(stderr_lines)
+        if current_lines > 0:
+            last_output_time = now
+        elif now - last_output_time > STALL_TIMEOUT_SEC:
+            _kill_ffmpeg_process(proc)
+            reader_done.wait(timeout=1)
+            _cleanup_ffmpeg_partial(cmd)
+            return False, f"FFmpeg stalled (no output for {STALL_TIMEOUT_SEC}s)"
         time.sleep(0.2)
 
     reader_done.wait(timeout=2)
@@ -1880,7 +1855,15 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
 
 
 def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
-    """Run ffmpeg with retry for transient failures."""
+    """Run ffmpeg with retry for transient failures.
+
+    The timeout scales with video duration when duration_sec is provided:
+    at least 600s (10 min) or 3x the video duration, whichever is larger.
+    This prevents false timeouts on long videos (4K, 1hr+) while keeping
+    a reasonable bound for short clips.
+    """
+    if duration_sec > 0:
+        timeout_sec = max(timeout_sec, int(duration_sec * 3))
     for attempt in range(MAX_RETRIES + 1):
         try:
             logger.debug("FFmpeg cmd: %s", " ".join(str(x) for x in cmd)[:500])

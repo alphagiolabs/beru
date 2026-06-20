@@ -31,6 +31,18 @@ def _coerce_int(val, default, lo, hi):
     return max(lo, min(hi, v))
 
 
+def _coerce_float(val, default, lo, hi):
+    """Parse a float and clamp to [lo, hi]. Preserves 0 (never uses ``or``)."""
+    if val is None:
+        v = default
+    else:
+        try:
+            v = float(val)
+        except (TypeError, ValueError):
+            v = default
+    return max(lo, min(hi, v))
+
+
 def _normalize_operation(op):
     """Accept snake_case or camelCase keys from jobs / hand-edited JSON."""
     if not isinstance(op, dict):
