@@ -64,7 +64,7 @@
   "updater.modal.title": "New update available",
   "updater.modal.subtitle": "A new version of Beru is ready to install.",
   "updater.modal.body": "Beru {version} has been downloaded. Restart the app to install it and apply the changes.",
-  "updater.sections.whatsNew": "What's new",
+  "updater.sections.whatsNew": "Improved",
   "updater.sections.fixed": "Fixed",
   "updater.modal.note": "Any video you are rendering will be lost if you restart now.",
   "updater.modal.install": "Restart and install",
@@ -141,6 +141,7 @@
 
   "queue.title": "Queue",
   "queue.addVideos": "Add videos",
+  "queue.clearQueue": "Clear queue",
   "queue.removeSelected": "Remove selected video",
   "queue.remove": "Remove",
   "queue.empty": "No videos in queue. Import files or drag and drop here.",

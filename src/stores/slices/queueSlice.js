@@ -246,6 +246,26 @@ export function createQueueSlice(set, get) {
       });
     },
 
+    clearQueue: () => {
+      const { queue, _thumbnailAbortController } = get();
+      if (queue.length === 0) return false;
+      _thumbnailAbortController?.abort();
+      set((s) => ({
+        queue: [],
+        selectedIdx: -1,
+        selectedOperationIdx: null,
+        currentRegion: null,
+        undoStack: [],
+        redoStack: [],
+        excelMatchStatus: {},
+        imageDataCache: pruneImageDataCache(s.imageDataCache, []),
+        batchSummary: null,
+        templateIdx: -1,
+        _thumbnailAbortController: null,
+      }));
+      return true;
+    },
+
     selectVideo: (idx) => {
       set({
         selectedIdx: idx,

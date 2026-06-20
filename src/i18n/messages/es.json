@@ -64,7 +64,7 @@
   "updater.modal.title": "Nueva actualización disponible",
   "updater.modal.subtitle": "Hay una nueva versión de Beru lista para instalar.",
   "updater.modal.body": "Beru {version} ya está descargada. Reiniciá la app para instalarla y aplicar los cambios.",
-  "updater.sections.whatsNew": "Novedades",
+  "updater.sections.whatsNew": "Mejorado",
   "updater.sections.fixed": "Corregido",
   "updater.modal.note": "El video que estés renderizando se perderá si reiniciás ahora.",
   "updater.modal.install": "Reiniciar e instalar",
@@ -141,6 +141,7 @@
 
   "queue.title": "Cola",
   "queue.addVideos": "Agregar videos",
+  "queue.clearQueue": "Limpiar cola",
   "queue.removeSelected": "Quitar video seleccionado",
   "queue.remove": "Quitar",
   "queue.empty": "No hay videos en la cola. Importa archivos o arrastra y suelta aquí.",

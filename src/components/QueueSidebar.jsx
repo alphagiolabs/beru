@@ -277,6 +277,14 @@ export default function QueueSidebar() {
     };
   }, [openMenuIdx]);
 
+  const handleClear = useCallback(() => {
+    if (isProcessing) {
+      showToast({ kind: "warn", text: t("queue.processingBusy") });
+      return;
+    }
+    get().clearQueue();
+  }, [isProcessing, showToast, t, get]);
+
   const handleAdd = useCallback(async () => {
     if (!api?.openVideos) {
       showToast({ kind: "err", text: t("errors.noApi") });
@@ -395,9 +403,19 @@ export default function QueueSidebar() {
         >
           {t("queue.title")} ({queue.length})
         </span>
-        <button onClick={handleAdd} className="cap-btn-secondary !p-1" title={t("queue.addVideos")}>
-          <Plus size={14} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleClear}
+            disabled={queue.length === 0 || isProcessing}
+            className="cap-btn-secondary !p-1 disabled:opacity-40"
+            title={t("queue.clearQueue")}
+          >
+            <Trash2 size={14} />
+          </button>
+          <button onClick={handleAdd} className="cap-btn-secondary !p-1" title={t("queue.addVideos")}>
+            <Plus size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
