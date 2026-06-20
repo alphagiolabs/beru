@@ -96,7 +96,9 @@ export default function UpdateModal({ update, onUpdateNow, onLater, onInstall, o
               {t("footer.maybeLater")}
             </button>
             {sections.hiddenCount > 0 && (
-              <p className="status-footer-update-more">{t("footer.moreChanges", { count: sections.hiddenCount })}</p>
+              <p className="status-footer-update-more">
+                {t("footer.moreChanges", { count: sections.hiddenCount })}
+              </p>
             )}
           </>
         )}

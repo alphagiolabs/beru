@@ -15,7 +15,6 @@ function clampPercent(value) {
   return Math.max(0, Math.min(100, n));
 }
 
-
 const PENDING_UPDATE_STATUSES = new Set(["available", "downloading", "ready"]);
 
 /** Pure reducer for updater IPC events → renderer store shape. */
