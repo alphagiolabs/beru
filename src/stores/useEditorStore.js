@@ -6,7 +6,6 @@ import { createUiSlice } from "./slices/uiSlice.js";
 import { createEditorStyleSlice } from "./slices/editorStyleSlice.js";
 import { createProjectSlice } from "./slices/projectSlice.js";
 import { createWatermarkSlice } from "./slices/watermarkSlice.js";
-import { createAuthSlice } from "./slices/authSlice.js";
 
 const useEditorStore = createWithEqualityFn(
   (set, get) => ({
@@ -17,7 +16,6 @@ const useEditorStore = createWithEqualityFn(
     ...createEditorStyleSlice(set, get),
     ...createProjectSlice(set, get),
     ...createWatermarkSlice(set, get),
-    ...createAuthSlice(set, get),
   }),
   Object.is,
 );

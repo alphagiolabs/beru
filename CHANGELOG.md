@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.35] - 2026-06-20
+
+### Removed
+
+- **Supabase authentication scaffolding**: removed the unused `authSlice`, `supabaseClient`, and animated `CatFooter` component along with their unit tests. The `@supabase/supabase-js` dependency has been dropped, and the renderer store (`useEditorStore`) no longer composes the auth slice.
+- **Cat footer CSS**: deleted the `cat-footer` styles and keyframe animations from `index.css`.
+
+### Changed
+
+- **Release-notes parsing**: `parseReleaseNotesSections` now strips markdown bold/inline-code formatting and truncates long lines at 96 characters so update-modal bullets stay single-line and readable. Added `changed`, `improved`, and `other improvements` as "what's new" section headers so the changelog grouping matches the Keep a Changelog vocabulary.
+- **Update modal**: `StatusFooter` no longer forwards `onOpenReleaseNotes`; the "Ver notas" link stays hidden (gated by the optional prop in `UpdateModal`), keeping the modal focused on the in-app update action.
+
+### Fixed
+
+- **`/scripts` gitignore**: the local machine-specific scripts directory is now ignored so scratch tooling is never committed accidentally.
+
 ## [1.6.34] - 2026-06-19
 
 ### Changed
