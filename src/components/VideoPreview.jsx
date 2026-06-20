@@ -652,10 +652,51 @@ export default function VideoPreview() {
                 overlayStyle.backdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
                 overlayStyle.WebkitBackdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
                 overlayStyle.outline = "2px dashed rgba(59,130,246,0.7)";
-              } else {
+              } else if (dm === "fill") {
                 overlayStyle.background = `${op.delogoFillColor || "black"}`;
                 overlayStyle.opacity = op.delogoFillOpacity ?? 1;
                 overlayStyle.outline = "2px solid rgba(239,68,68,0.6)";
+              } else if (dm === "mosaic") {
+                overlayStyle.background =
+                  "repeating-conic-gradient(rgba(168,85,247,0.18) 0% 25%, transparent 0% 50%) 0 0 / 10px 10px";
+                overlayStyle.outline = "2px solid rgba(168,85,247,0.7)";
+              } else if (dm === "mirror") {
+                overlayStyle.background =
+                  "repeating-linear-gradient(90deg, rgba(34,197,94,0.12) 0px, rgba(34,197,94,0.12) 2px, transparent 2px, transparent 8px)";
+                overlayStyle.outline = "2px dashed rgba(34,197,94,0.7)";
+              } else if (dm === "cover" && op.delogoImagePath) {
+                const coverDataUrl = imageDataCache?.[op.delogoImagePath];
+                overlayStyle.outline = "2px solid rgba(16,185,129,0.7)";
+                overlayStyle.overflow = "hidden";
+                return (
+                  <div
+                    key={op.id}
+                    className="absolute pointer-events-none z-10"
+                    style={overlayStyle}
+                  >
+                    {coverDataUrl ? (
+                      <img
+                        src={coverDataUrl}
+                        alt=""
+                        className="w-full h-full"
+                        style={{ objectFit: "contain" }}
+                        draggable={false}
+                      />
+                    ) : (
+                      <div
+                        className="w-full h-full flex items-center justify-center text-[10px]"
+                        style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
+                      >
+                        {op.delogoImagePath.split(/[\\/]/).pop()}
+                      </div>
+                    )}
+                  </div>
+                );
+              } else {
+                // temporal (and any unknown) — "restored area" indicator
+                overlayStyle.background =
+                  "repeating-linear-gradient(45deg, rgba(239,68,68,0.10) 0px, rgba(239,68,68,0.10) 2px, transparent 2px, transparent 8px)";
+                overlayStyle.outline = "2px dashed rgba(239,68,68,0.6)";
               }
               return (
                 <div
