@@ -67,7 +67,7 @@ def _build_cleanup_filter(method, op, rw, rh):
         return f"tmedian=radius={radius}:planes=0x7"
 
     if method == "mosaic":
-        block = _coerce_int(op.get("mosaic_size"), 12, 2, 80)
+        block = _coerce_int(op.get("mosaic_size"), 12, 4, 80)
         return (
             f"scale=iw/{block}:ih/{block}:flags=neighbor,"
             f"scale={rw}:{rh}:flags=neighbor"
@@ -122,17 +122,24 @@ def _build_mirror_patch(side, x, y, w, h, video_w, video_h, in_label, out_label)
             return f"{in_pad}crop={w}:{h}:{x}:{y + h},vflip{out_pad}"
 
     # Partial strip at frame edge: use whatever context exists, then scale.
+    # When there is no context on the requested side (logo flush at the edge),
+    # fall back to None so the caller drops the op or uses inpaint instead of
+    # sampling an out-of-frame crop.
     if side in ("left", "right"):
         avail = video_w - (x + w) if side == "right" else x
+        if avail <= 0:
+            return None
         src_x = x + w if side == "right" else max(0, x - avail)
-        cw = max(1, min(w, avail if avail > 0 else w))
+        cw = max(1, min(w, avail))
         return (
             f"{in_pad}crop={cw}:{h}:{src_x}:{y},hflip,"
             f"scale={w}:{h}:flags=bilinear{out_pad}"
         )
     avail = video_h - (y + h) if side == "bottom" else y
+    if avail <= 0:
+        return None
     src_y = y + h if side == "bottom" else max(0, y - avail)
-    ch = max(1, min(h, avail if avail > 0 else h))
+    ch = max(1, min(h, avail))
     return (
         f"{in_pad}crop={w}:{ch}:{x}:{src_y},vflip,"
         f"scale={w}:{h}:flags=bilinear{out_pad}"
@@ -160,8 +167,7 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
     method = (op.get("delogo_method") or "temporal").lower()
     if method not in VALID_DELOGO_METHODS:
         method = "temporal"
-    raw_feather = op.get("edge_feather")
-    feather = max(0, min(40, int(raw_feather if raw_feather is not None else 6)))
+    feather = _coerce_int(op.get("edge_feather"), 6, 0, 40)
     pad = max(2, feather)
     padded = _build_padded_region(x, y, w, h, video_w, video_h, pad)
     if padded is None:
@@ -192,6 +198,19 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
         mirror_chain = _build_mirror_patch(
             mirror_side, x, y, w, h, video_w, video_h, f"work{s}", f"clean{s}"
         )
+        # No context on the requested side (logo flush at frame edge): fall
+        # back to inpaint so FFmpeg still produces a valid output.
+        if mirror_chain is None:
+            delogo = f"delogo=x={x}:y={y}:w={w}:h={h}"
+            if feather <= 0 and not enable_clause:
+                return f"{src}{delogo}[tmp{idx}]"
+            return (
+                f"{src}split[full{s}][work{s}];"
+                f"[work{s}]{delogo}[work_clean{s}];"
+                f"[work_clean{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
+                f"[crop{s}]boxblur={feather_blur}[soft{s}];"
+                f"[full{s}][soft{s}]overlay={_overlay_opts(x0, y0, enable_clause)}[tmp{idx}]"
+            )
         if feather <= 0:
             return (
                 f"{src}split[full{s}][work{s}];"
