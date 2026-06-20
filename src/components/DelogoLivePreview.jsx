@@ -71,7 +71,7 @@ function sourceRect(region, video) {
 
 function renderMosaic(ctx, video, region, screen, blockSize, ws) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
-  const src = getSourceCanvas(sw, sh, ws);
+  getSourceCanvas(sw, sh, ws);
   const sctx = ws.source.ctx;
   sctx.clearRect(0, 0, sw, sh);
   sctx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
@@ -121,28 +121,37 @@ function renderMosaic(ctx, video, region, screen, blockSize, ws) {
 
 function mirrorSampleRect(sx, sy, sw, sh, vw, vh, side) {
   const s = (side || "right").toLowerCase();
+  // flipAxis: "h" = horizontal flip (left/right), "v" = vertical (top/bottom)
   if (s === "right") {
-    if (sx + sw + sw <= vw) return { srcX: sx + sw, srcY: sy, cw: sw, ch: sh, flipX: true };
-    if (sx >= sw) return { srcX: sx - sw, srcY: sy, cw: sw, ch: sh, flipX: true };
-    const cw = Math.max(1, Math.min(sw, vw - (sx + sw)));
-    return { srcX: Math.max(0, sx + sw), srcY: sy, cw, ch: sh, flipX: true, scale: true };
+    if (sx + sw + sw <= vw) return { srcX: sx + sw, srcY: sy, cw: sw, ch: sh, flipAxis: "h" };
+    if (sx >= sw) return { srcX: sx - sw, srcY: sy, cw: sw, ch: sh, flipAxis: "h" };
+    const avail = vw - (sx + sw);
+    if (avail <= 0) return null;
+    const cw = Math.max(1, Math.min(sw, avail));
+    return { srcX: Math.max(0, sx + sw), srcY: sy, cw, ch: sh, flipAxis: "h" };
   }
   if (s === "left") {
-    if (sx >= sw) return { srcX: sx - sw, srcY: sy, cw: sw, ch: sh, flipX: true };
-    if (sx + sw + sw <= vw) return { srcX: sx + sw, srcY: sy, cw: sw, ch: sh, flipX: true };
-    const cw = Math.max(1, Math.min(sw, sx));
-    return { srcX: Math.max(0, sx - cw), srcY: sy, cw, ch: sh, flipX: true, scale: true };
+    if (sx >= sw) return { srcX: sx - sw, srcY: sy, cw: sw, ch: sh, flipAxis: "h" };
+    if (sx + sw + sw <= vw) return { srcX: sx + sw, srcY: sy, cw: sw, ch: sh, flipAxis: "h" };
+    const avail = sx;
+    if (avail <= 0) return null;
+    const cw = Math.max(1, Math.min(sw, avail));
+    return { srcX: Math.max(0, sx - cw), srcY: sy, cw, ch: sh, flipAxis: "h" };
   }
   if (s === "bottom") {
-    if (sy + sh + sh <= vh) return { srcX: sx, srcY: sy + sh, cw: sw, ch: sh, flipX: false };
-    if (sy >= sh) return { srcX: sx, srcY: sy - sh, cw: sw, ch: sh, flipX: false };
-    const ch = Math.max(1, Math.min(sh, vh - (sy + sh)));
-    return { srcX: sx, srcY: Math.max(0, sy + sh), cw: sw, ch, flipX: false, scale: true };
+    if (sy + sh + sh <= vh) return { srcX: sx, srcY: sy + sh, cw: sw, ch: sh, flipAxis: "v" };
+    if (sy >= sh) return { srcX: sx, srcY: sy - sh, cw: sw, ch: sh, flipAxis: "v" };
+    const avail = vh - (sy + sh);
+    if (avail <= 0) return null;
+    const ch = Math.max(1, Math.min(sh, avail));
+    return { srcX: sx, srcY: Math.max(0, sy + sh), cw: sw, ch, flipAxis: "v" };
   }
-  if (sy >= sh) return { srcX: sx, srcY: sy - sh, cw: sw, ch: sh, flipX: false };
-  if (sy + sh + sh <= vh) return { srcX: sx, srcY: sy + sh, cw: sw, ch: sh, flipX: false };
-  const ch = Math.max(1, Math.min(sh, sy));
-  return { srcX: sx, srcY: Math.max(0, sy - ch), cw: sw, ch, flipX: false, scale: true };
+  if (sy >= sh) return { srcX: sx, srcY: sy - sh, cw: sw, ch: sh, flipAxis: "v" };
+  if (sy + sh + sh <= vh) return { srcX: sx, srcY: sy + sh, cw: sw, ch: sh, flipAxis: "v" };
+  const avail = sy;
+  if (avail <= 0) return null;
+  const ch = Math.max(1, Math.min(sh, avail));
+  return { srcX: sx, srcY: Math.max(0, sy - ch), cw: sw, ch, flipAxis: "v" };
 }
 
 function renderMirror(ctx, video, region, screen, side) {
@@ -150,11 +159,19 @@ function renderMirror(ctx, video, region, screen, side) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   const sample = mirrorSampleRect(sx, sy, sw, sh, vw, vh, side);
+  // No context on the requested side: draw nothing (matches Python fallback
+  // to inpaint, which we can't replicate in a live canvas preview).
+  if (!sample) {
+    ctx.save();
+    ctx.clearRect(0, 0, screen.w, screen.h);
+    ctx.restore();
+    return;
+  }
 
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.clearRect(0, 0, screen.w, screen.h);
-  if (sample.flipX) {
+  if (sample.flipAxis === "h") {
     ctx.translate(screen.w, 0);
     ctx.scale(-1, 1);
   } else {
@@ -250,7 +267,11 @@ function quickselectMedian(a) {
   return Math.round((maxLo + a[k]) / 2);
 }
 
-const medianFn = PERF_FLAGS.delogoQuickselect ? quickselectMedian : medianChannel;
+/** Resolve the median function based on the current perf flag value so
+ *  `reloadPerfFlags()` takes effect at runtime (not just at module load). */
+function pickMedianFn() {
+  return PERF_FLAGS.delogoQuickselect ? quickselectMedian : medianChannel;
+}
 
 function renderTemporal(ctx, video, region, screen, radius, ws) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
@@ -270,6 +291,7 @@ function renderTemporal(ctx, video, region, screen, radius, ws) {
   const d = out.data;
   const buffers = ws.temporalFrames;
   const n = buffers.length;
+  const medianFn = pickMedianFn();
 
   for (let i = 0; i < sw * sh; i++) {
     const o = i * 4;
@@ -298,6 +320,8 @@ function renderTemporal(ctx, video, region, screen, radius, ws) {
 
 /* ── Component ────────────────────────────────────────────────────────── */
 
+/** Methods rendered via the canvas RAF loop (per-frame pixel work).
+ *  All other valid methods (blur, fill, cover) use the CSS overlay path. */
 const CANVAS_METHODS = new Set(["temporal", "mirror", "mosaic", "inpaint"]);
 
 export default function DelogoLivePreview({ videoRef }) {
@@ -308,12 +332,14 @@ export default function DelogoLivePreview({ videoRef }) {
   const blurStrength = useEditorStore((s) => s.blurStrength);
   const delogoFillColor = useEditorStore((s) => s.delogoFillColor);
   const delogoFillOpacity = useEditorStore((s) => s.delogoFillOpacity);
+  const delogoImagePath = useEditorStore((s) => s.delogoImagePath);
   const mosaicSize = useEditorStore((s) => s.mosaicSize);
   const mirrorSide = useEditorStore((s) => s.mirrorSide);
   const temporalRadius = useEditorStore((s) => s.temporalRadius);
   const canvasRef = useRef(null);
   const labelRef = useRef(null);
   const cssRef = useRef(null);
+  const coverImgRef = useRef(null);
   const workspaceRef = useRef(null);
   if (!workspaceRef.current) {
     workspaceRef.current = createPreviewWorkspace();
@@ -458,6 +484,15 @@ export default function DelogoLivePreview({ videoRef }) {
       el.style.opacity = String(delogoFillOpacity ?? 1);
       el.style.outline = "1px dashed rgba(244,63,94,0.7)";
       el.style.outlineOffset = "-1px";
+    } else if (delogoMethod === "cover") {
+      // Cover: show the user's image scaled to the logo box (contain fit,
+      // matching the Python pad=...:(ow-iw)/2:(oh-ih)/2 overlay).
+      el.style.backdropFilter = "none";
+      el.style.WebkitBackdropFilter = "none";
+      el.style.background = "transparent";
+      el.style.opacity = "1";
+      el.style.outline = "1px dashed rgba(16,185,129,0.7)";
+      el.style.outlineOffset = "-1px";
     }
 
     const label = labelRef.current;
@@ -473,10 +508,53 @@ export default function DelogoLivePreview({ videoRef }) {
     blurStrength,
     delogoFillColor,
     delogoFillOpacity,
+    delogoImagePath,
     videoRef,
   ]);
 
+  /* Cover image: load on demand and render as a background-image on the CSS
+     overlay div so it scales with the region without a separate canvas. */
+  useEffect(() => {
+    if (!visible || delogoMethod !== "cover") {
+      coverImgRef.current = null;
+      return;
+    }
+    if (!delogoImagePath) {
+      coverImgRef.current = null;
+      return;
+    }
+    // Reuse the Electron-preloaded data URL cache when available (the image
+    // op path uses the same cache); fall back to a raw file URL.
+    const cached = useEditorStore.getState().imageDataCache?.[delogoImagePath];
+    if (cached) {
+      coverImgRef.current = cached;
+      return;
+    }
+    coverImgRef.current = null;
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => {
+      if (cancelled) return;
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext("2d").drawImage(img, 0, 0);
+      try {
+        coverImgRef.current = canvas.toDataURL("image/png");
+      } catch {
+        coverImgRef.current = null;
+      }
+    };
+    img.src = `beru://local/${encodeURIComponent(delogoImagePath)}`;
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, delogoMethod, delogoImagePath]);
+
   if (!visible) return null;
+
+  const isCover = delogoMethod === "cover";
+  const coverUrl = isCover ? coverImgRef.current : null;
 
   return (
     <>
@@ -489,7 +567,17 @@ export default function DelogoLivePreview({ videoRef }) {
         ref={cssRef}
         className="absolute pointer-events-none"
         style={{ zIndex: 5, display: isCanvas ? "none" : "block" }}
-      />
+      >
+        {isCover && coverUrl && (
+          <img
+            src={coverUrl}
+            alt=""
+            className="w-full h-full"
+            style={{ objectFit: "contain" }}
+            draggable={false}
+          />
+        )}
+      </div>
       <div
         ref={labelRef}
         className="absolute pointer-events-none text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded"

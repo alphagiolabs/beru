@@ -2,7 +2,11 @@ import { clampRegionToVideo, isRegionUsable } from "./video-utils";
 import { ensureNormalized, isNormalizedRegion } from "./types";
 import { normalizeTextStyle, pickTextStyle } from "./text-style";
 import { clampNum } from "./clamp";
-import { VALID_DELOGO_METHODS } from "./delogo-ops";
+import {
+  VALID_DELOGO_METHODS,
+  DELOGO_FIELD_BOUNDS,
+  sanitizeMirrorSide,
+} from "./delogo-ops";
 
 const MAX_LABEL_LEN = 64;
 const MAX_TEXT_INPUT_LEN = 2000;
@@ -91,18 +95,36 @@ export function sanitizeTextStyle(textStyle = {}) {
 }
 export function sanitizeDefaults(defaults = {}) {
   return {
-    blurStrength: clampNum(defaults.blurStrength, 1, 100, 20),
+    blurStrength: clampNum(
+      defaults.blurStrength,
+      DELOGO_FIELD_BOUNDS.blurStrength.min,
+      DELOGO_FIELD_BOUNDS.blurStrength.max,
+      DELOGO_FIELD_BOUNDS.blurStrength.default,
+    ),
     delogoMethod: VALID_DELOGO_METHODS.has(defaults.delogoMethod)
       ? defaults.delogoMethod
       : "temporal",
     delogoFillColor: String(defaults.delogoFillColor ?? "black").slice(0, 32),
     delogoFillOpacity: clampNum(defaults.delogoFillOpacity, 0, 1, 1),
     delogoImagePath: typeof defaults.delogoImagePath === "string" ? defaults.delogoImagePath : "",
-    temporalRadius: clampNum(defaults.temporalRadius, 1, 30, 5),
-    mosaicSize: clampNum(defaults.mosaicSize, 2, 64, 8),
-    mirrorSide: ["left", "right", "top", "bottom"].includes(defaults.mirrorSide)
-      ? defaults.mirrorSide
-      : "right",
-    edgeFeather: clampNum(defaults.edgeFeather, 0, 32, 0),
+    temporalRadius: clampNum(
+      defaults.temporalRadius,
+      DELOGO_FIELD_BOUNDS.temporalRadius.min,
+      DELOGO_FIELD_BOUNDS.temporalRadius.max,
+      DELOGO_FIELD_BOUNDS.temporalRadius.default,
+    ),
+    mosaicSize: clampNum(
+      defaults.mosaicSize,
+      DELOGO_FIELD_BOUNDS.mosaicSize.min,
+      DELOGO_FIELD_BOUNDS.mosaicSize.max,
+      DELOGO_FIELD_BOUNDS.mosaicSize.default,
+    ),
+    mirrorSide: sanitizeMirrorSide(defaults.mirrorSide),
+    edgeFeather: clampNum(
+      defaults.edgeFeather,
+      DELOGO_FIELD_BOUNDS.edgeFeather.min,
+      DELOGO_FIELD_BOUNDS.edgeFeather.max,
+      DELOGO_FIELD_BOUNDS.edgeFeather.default,
+    ),
   };
 }

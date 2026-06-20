@@ -606,6 +606,48 @@ describe("useEditorStore logic regressions", () => {
     );
   });
 
+  it("clearQueue empties the queue and resets selection state", () => {
+    useEditorStore.setState({
+      queue: [
+        queueItem({ path: "C:\\videos\\a.mp4", filename: "a.mp4" }),
+        queueItem({ path: "C:\\videos\\b.mp4", filename: "b.mp4" }),
+      ],
+      selectedIdx: 1,
+      selectedOperationIdx: 0,
+      currentRegion: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 },
+      undoStack: [[{ id: "op-1", mode: "blur", region: null }]],
+      redoStack: [[{ id: "op-2", mode: "blur", region: null }]],
+      excelMatchStatus: { 0: "matched", 1: "unmatched" },
+      imageDataCache: { "C:\\img\\a.png": "data:image/png;base64,abc" },
+      batchSummary: { total: 2, succeeded: 1, failed: 1 },
+      templateIdx: 0,
+    });
+
+    const cleared = useEditorStore.getState().clearQueue();
+    const state = useEditorStore.getState();
+
+    expect(cleared).toBe(true);
+    expect(state.queue).toEqual([]);
+    expect(state.selectedIdx).toBe(-1);
+    expect(state.selectedOperationIdx).toBeNull();
+    expect(state.currentRegion).toBeNull();
+    expect(state.undoStack).toEqual([]);
+    expect(state.redoStack).toEqual([]);
+    expect(state.excelMatchStatus).toEqual({});
+    expect(state.imageDataCache).toEqual({});
+    expect(state.batchSummary).toBeNull();
+    expect(state.templateIdx).toBe(-1);
+  });
+
+  it("clearQueue is a no-op on an empty queue", () => {
+    useEditorStore.setState({ queue: [], selectedIdx: -1 });
+
+    const cleared = useEditorStore.getState().clearQueue();
+
+    expect(cleared).toBe(false);
+    expect(useEditorStore.getState().queue).toEqual([]);
+  });
+
   it("prunes imageDataCache when a video is removed from the queue", () => {
     useEditorStore.setState({
       queue: [
