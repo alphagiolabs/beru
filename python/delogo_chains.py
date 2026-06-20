@@ -12,9 +12,11 @@ import with ``processor`` (which configures the "beru" logger at import time).
 import logging
 import os
 
+from color_validation import _validate_drawtext_color
 from op_shared import (
     VALID_DELOGO_METHODS,
     _build_enable_clause,
+    _coerce_float,
     _coerce_int,
     _overlay_opts,
 )
@@ -80,8 +82,10 @@ def _build_cleanup_filter(method, op, rw, rh):
         return f"boxblur=luma_radius={luma}:luma_power=1:chroma_radius={chroma}:chroma_power=1"
 
     if method == "fill":
-        fill_color = op.get("delogo_fill_color", "black") or "black"
-        fill_opacity = float(op.get("delogo_fill_opacity", 1) or 1)
+        fill_color = _validate_drawtext_color(
+            op.get("delogo_fill_color") or "black", "delogo_fill_color"
+        )
+        fill_opacity = _coerce_float(op.get("delogo_fill_opacity"), 1.0, 0.0, 1.0)
         return (
             f"drawbox=x=0:y=0:w={rw}:h={rh}:color={fill_color}@{fill_opacity}:t=fill"
         )

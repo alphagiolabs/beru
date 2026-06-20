@@ -8,6 +8,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from processor import build_filter_complex, _region_to_pixels, _normalize_operation  # noqa: E402
+from delogo_chains import _build_delogo_chain  # noqa: E402
 
 FFMPEG = HERE.parent / "bin" / "ffmpeg.exe"
 
@@ -84,6 +85,43 @@ def test_corner_region():
     assert_graph([op], 1920, 1080, "corner inpaint")
 
 
+def test_fill_opacity_zero_preserved():
+    # Regression: opacity 0 must not be coerced to 1 (the old `or 1` bug).
+    op = {"mode": "delogo", "region": {"x": 10, "y": 10, "w": 80, "h": 40},
+          "delogo_method": "fill", "delogo_fill_color": "red",
+          "delogo_fill_opacity": 0}
+    fc, _, _ = build_filter_complex([op], 320, 180)
+    assert "color=red@0.0:" in fc, f"opacity 0 not preserved in filter: {fc}"
+
+
+def test_fill_opacity_out_of_range_clamped():
+    op = {"mode": "delogo", "region": {"x": 10, "y": 10, "w": 80, "h": 40},
+          "delogo_method": "fill", "delogo_fill_color": "red",
+          "delogo_fill_opacity": 2.5}
+    fc, _, _ = build_filter_complex([op], 320, 180)
+    assert "color=red@1.0:" in fc, f"opacity not clamped to 1: {fc}"
+
+
+def test_image_opacity_zero_preserved():
+    op = {"mode": "image", "region": {"x": 10, "y": 10, "w": 80, "h": 40},
+          "image_path": __file__, "image_opacity": 0}
+    fc, _, _ = build_filter_complex([op], 320, 180)
+    assert "colorchannelmixer=aa=0.000" in fc, f"image opacity 0 not preserved: {fc}"
+
+
+def test_delogo_color_injection_rejected():
+    # Defensive: a malicious color reaching _build_delogo_chain directly (i.e.
+    # not via _validated_job_media) must raise instead of injecting filters.
+    op = {"mode": "delogo", "region": {"x": 10, "y": 10, "w": 80, "h": 40},
+          "delogo_method": "fill",
+          "delogo_fill_color": "red:t=fill,drawtext=text=owned"}
+    try:
+        _build_delogo_chain(op, None, 0, 320, 180)
+    except ValueError:
+        return
+    raise AssertionError("injected fill color was not rejected")
+
+
 def test_temporal_removes_static_logo():
     if not FFMPEG.exists():
         print("  [skip] temporal e2e — no ffmpeg")
@@ -143,6 +181,10 @@ def main():
         test_invalid_method_fallback,
         test_feather_zero,
         test_corner_region,
+        test_fill_opacity_zero_preserved,
+        test_fill_opacity_out_of_range_clamped,
+        test_image_opacity_zero_preserved,
+        test_delogo_color_injection_rejected,
         test_temporal_removes_static_logo,
     ]
     failed = 0

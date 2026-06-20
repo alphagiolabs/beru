@@ -99,6 +99,8 @@ CASES = [
     ("inpaint", [make_op("inpaint")], 0),
     ("blur", [make_op("blur", blur_strength=30)], 0),
     ("fill red", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=0.5)], 0),
+    ("fill opacity 0", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=0)], 0),
+    ("fill opacity clamped", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=-0.5)], 0),
     # Multiple ops chained (delogo + delogo)
     ("two temporal ops + feather", [
         make_op("temporal", edge_feather=10),
