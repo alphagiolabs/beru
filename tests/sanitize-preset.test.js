@@ -105,12 +105,12 @@ describe("sanitize-preset", () => {
     });
 
     it("clamps temporalRadius and mosaicSize", () => {
-      expect(sanitizeDefaults({ temporalRadius: 100 }).temporalRadius).toBe(30);
-      expect(sanitizeDefaults({ mosaicSize: 200 }).mosaicSize).toBe(64);
+      expect(sanitizeDefaults({ temporalRadius: 100 }).temporalRadius).toBe(15);
+      expect(sanitizeDefaults({ mosaicSize: 200 }).mosaicSize).toBe(80);
     });
 
     it("clamps edgeFeather and delogoFillOpacity", () => {
-      expect(sanitizeDefaults({ edgeFeather: 100 }).edgeFeather).toBe(32);
+      expect(sanitizeDefaults({ edgeFeather: 100 }).edgeFeather).toBe(40);
       expect(sanitizeDefaults({ delogoFillOpacity: 2 }).delogoFillOpacity).toBe(1);
       expect(sanitizeDefaults({ delogoFillOpacity: -1 }).delogoFillOpacity).toBe(0);
     });
@@ -123,7 +123,7 @@ describe("sanitize-preset", () => {
 
     it("uses fallback values for NaN inputs", () => {
       expect(sanitizeDefaults({ blurStrength: NaN }).blurStrength).toBe(20);
-      expect(sanitizeDefaults({ temporalRadius: NaN }).temporalRadius).toBe(5);
+      expect(sanitizeDefaults({ temporalRadius: NaN }).temporalRadius).toBe(3);
     });
   });
 });
