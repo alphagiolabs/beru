@@ -2,11 +2,7 @@ import { clampRegionToVideo, isRegionUsable } from "./video-utils";
 import { ensureNormalized, isNormalizedRegion } from "./types";
 import { normalizeTextStyle, pickTextStyle } from "./text-style";
 import { clampNum } from "./clamp";
-import {
-  VALID_DELOGO_METHODS,
-  DELOGO_FIELD_BOUNDS,
-  sanitizeMirrorSide,
-} from "./delogo-ops";
+import { VALID_DELOGO_METHODS, DELOGO_FIELD_BOUNDS, sanitizeMirrorSide } from "./delogo-ops";
 
 const MAX_LABEL_LEN = 64;
 const MAX_TEXT_INPUT_LEN = 2000;

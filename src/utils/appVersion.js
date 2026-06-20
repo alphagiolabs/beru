@@ -10,15 +10,29 @@ function normalizeReleaseNoteLines(notes) {
     .trim();
   return text
     .split("\n")
-    .map((line) => line.replace(/^[-*•#]+\s*/, "").trim())
+    .map((line) =>
+      line
+        .replace(/^[-*•#]+\s*/, "")
+        .replace(/\*\*/g, "")
+        .replace(/`/g, "")
+        .trim(),
+    )
     .filter((line) => line.length > 0 && !/^#{1,6}\s/.test(line));
 }
 
-const WHATS_NEW_HEADER = /^(what'?s?\s*new|novedades|features?|added|mejoras?)\b/i;
+const WHATS_NEW_HEADER =
+  /^(what'?s?\s*new|novedades|features?|added|mejoras?|changed|improved?|other\s+improvements?)\b/i;
 const FIXED_HEADER = /^(fixed?|fixes|corregid[oa]s?|bugs?)\b/i;
 const FIX_PREFIX = /^(fix(\([^)]+\))?:|bug:|hotfix:)/i;
 const FEAT_PREFIX =
   /^(feat(\([^)]+\))?:|add:|new:|ui\+tests:|refactor(\([^)]+\))?:|chore(\([^)]+\))?:)/i;
+const CHANGELOG_LINE_MAX = 96;
+
+function formatChangelogLine(text) {
+  const clean = text.trim();
+  if (clean.length <= CHANGELOG_LINE_MAX) return clean;
+  return `${clean.slice(0, CHANGELOG_LINE_MAX - 1).trim()}…`;
+}
 
 function classifyReleaseNoteLine(line, activeSection) {
   if (WHATS_NEW_HEADER.test(line)) return { kind: "header", section: "whatsNew" };
@@ -45,7 +59,7 @@ export function parseReleaseNotesSections(notes, maxPerSection = 4) {
       activeSection = parsed.section;
       continue;
     }
-    buckets[parsed.section].push(parsed.text);
+    buckets[parsed.section].push(formatChangelogLine(parsed.text));
   }
 
   const whatsNew = buckets.whatsNew.slice(0, maxPerSection);

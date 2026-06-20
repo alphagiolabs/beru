@@ -412,7 +412,11 @@ export default function QueueSidebar() {
           >
             <Trash2 size={14} />
           </button>
-          <button onClick={handleAdd} className="cap-btn-secondary !p-1" title={t("queue.addVideos")}>
+          <button
+            onClick={handleAdd}
+            className="cap-btn-secondary !p-1"
+            title={t("queue.addVideos")}
+          >
             <Plus size={14} />
           </button>
         </div>

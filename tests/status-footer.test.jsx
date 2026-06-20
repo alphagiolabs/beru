@@ -110,7 +110,7 @@ describe("StatusFooter", () => {
     expect(dialog).toBeTruthy();
     expect(dialog.getAttribute("role")).toBe("dialog");
     expect(document.body.textContent).toMatch(/Nueva actualización disponible/i);
-    expect(document.body.textContent).toMatch(/Novedades/i);
+    expect(document.body.textContent).toMatch(/Mejorado/i);
     expect(document.body.textContent).toMatch(/Corregido/i);
     expect(document.body.textContent).toMatch(/Actualizar ahora/i);
 
@@ -126,10 +126,8 @@ describe("StatusFooter", () => {
   });
 
   it("surfaces the ready modal after the user authorizes a download; auto-install lives in main", async () => {
-    // The downloading modal promises "Beru se reiniciará e instalará la
-    // actualización automáticamente al terminar" — that auto-install runs in
-    // the main process via quitAndInstall once the "update-downloaded" IPC
-    // event fires. The renderer's job here is just to show the "ready" modal
+    // Auto-install runs in the main process via quitAndInstall once the
+    // "update-downloaded" IPC event fires. The renderer's job here is just to show the "ready" modal
     // and NOT call window.api.installUpdate (that path is for cached updates
     // where the user has to opt in). This test pins the renderer-side contract.
     window.api = {
@@ -251,11 +249,7 @@ describe("StatusFooter", () => {
     expect(document.querySelector(".status-footer-up-to-date-panel")).toBeNull();
   });
 
-  it("shows a release notes link when releaseUrl is present", async () => {
-    window.api = {
-      openExternal: vi.fn(async () => ({})),
-    };
-
+  it("does not show a release notes link in the update modal", async () => {
     useEditorStore.setState({
       update: {
         status: "available",
@@ -278,17 +272,8 @@ describe("StatusFooter", () => {
       versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    const releaseLink = document.querySelector(".status-footer-update-release-link");
-    expect(releaseLink).toBeTruthy();
-    expect(releaseLink.textContent).toMatch(/Ver notas/i);
-
-    await act(async () => {
-      releaseLink.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(window.api.openExternal).toHaveBeenCalledWith(
-      "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
-    );
+    expect(document.querySelector(".status-footer-update-release-link")).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Ver notas/i);
   });
 
   it("shows a check-for-updates button in the up-to-date dialog", async () => {

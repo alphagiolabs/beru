@@ -65,3 +65,6 @@ dist-build/
 .githooks/
 Review-beru.md
 nul
+
+# Local scripts (machine-specific, never commit)
+/scripts

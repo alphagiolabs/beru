@@ -152,10 +152,6 @@ export default function StatusFooter() {
     }
   };
 
-  const handleOpenReleaseNotes = (url) => {
-    window.api?.openExternal?.(url);
-  };
-
   const handleManualCheck = async () => {
     setUpToDateOpen(false);
     await get().checkForUpdates();
@@ -286,7 +282,6 @@ export default function StatusFooter() {
           onLater={handleUpdateLater}
           onInstall={handleInstall}
           onClose={() => setUpdateOpen(false)}
-          onOpenReleaseNotes={handleOpenReleaseNotes}
           t={t}
         />
       )}
