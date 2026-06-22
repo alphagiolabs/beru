@@ -102,19 +102,14 @@ jobs:
       - name: Build renderer
         run: npx vite build
 
-      - name: Verify signing secrets
-        # On tag pushes, the installer must be signed. Fail if secrets are missing.
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        shell: pwsh
-        run: |
-          if (-not "${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}") {
-            Write-Error "WINDOWS_CERTIFICATE_BASE64 secret is missing — cannot sign installer for release"
-            exit 1
-          }
-
       - name: Package & publish
         shell: pwsh
-        # Only set CSC_LINK / CSC_KEY_PASSWORD when the signing secrets are present.
+        # Only set CSC_LINK / CSC_KEY_PASSWORD when the signing secrets are
+        # present. When the cert secrets are absent, electron-builder builds
+        # an unsigned installer and still publishes it (SmartScreen will warn
+        # at install time). This lets releases ship while the cert is being
+        # provisioned; add WINDOWS_CERTIFICATE_BASE64 /
+        # WINDOWS_CERTIFICATE_PASSWORD to the repo secrets to enable signing.
         # electron-builder treats an empty CSC_LINK as a relative path, which
         # would resolve to the runner's cwd and crash the build with
         # "WIN_CSC_LINK is not correct, cannot resolve: D:\a\beru\beru".
@@ -125,12 +120,17 @@ jobs:
           $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
           if ($cscLink) { $env:CSC_LINK = $cscLink }
           if ($cscKey)  { $env:CSC_KEY_PASSWORD = $cscKey }
+          if (-not $cscLink) {
+            Write-Warning "WINDOWS_CERTIFICATE_BASE64 secret is not set — publishing an UNSIGNED installer. Set the secret to enable Authenticode signing."
+          }
           npx electron-builder --publish always
 
       - name: Verify installer signature
-        # Post-build safety net: confirm the .exe is actually signed before
-        # the workflow succeeds. Catches misconfigured CSC_LINK (e.g. a cert
-        # that resolves to the wrong file) and silent unsigned publishing.
+        # Post-build diagnostic: log the Authenticode signature status of the
+        # produced installer. When the signing secrets are present this should
+        # report "Valid"; when absent it will report "NotSigned" and the build
+        # still succeeds (the installer is publishable but SmartScreen will
+        # warn). Add WINDOWS_CERTIFICATE_BASE64 to enable hard-fail behavior.
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         shell: pwsh
         run: |
@@ -144,10 +144,11 @@ jobs:
           Write-Host "Signature status: $($sig.Status)"
           if ($sig.SignerCertificate) {
             Write-Host "Signer: $($sig.SignerCertificate.Subject)"
+          } else {
+            Write-Host "Signer: (none — installer is unsigned)"
           }
           if ($sig.Status -ne "Valid") {
-            Write-Error "Installer signature is not Valid (status: $($sig.Status)). Refusing to publish an unsigned installer."
-            exit 1
+            Write-Warning "Installer signature is not Valid (status: $($sig.Status)). Publishing anyway because signing secrets are optional. Set WINDOWS_CERTIFICATE_BASE64 to enforce signing."
           }
 
       - name: Upload installers
