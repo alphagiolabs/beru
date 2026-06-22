@@ -1,3 +1,9 @@
+// ARCHITECTURE NOTE: This slice has cross-slice dependencies on batchSlice.
+// Methods like syncTextToExcel, getCellTextForRegion, materializeBatchTextOps,
+// and getExcelDisplayId are defined in batchSlice but called from queueSlice
+// via get(). This works because all slices merge into a single store, but
+// creates implicit coupling. If extracting to separate stores, these calls
+// must be refactored to receive the dependencies as parameters.
 import {
   createOperation,
   createQueueItem,
@@ -604,6 +610,11 @@ export function createQueueSlice(set, get) {
     },
 
     /* ── Undo / Redo ────────────────────────────────────────────────── */
+    /* DESIGN: Undo/redo is per-video, not global. Switching videos resets the
+     * stack (see selectVideo). This is a deliberate trade-off: it keeps the
+     * implementation simple and avoids cross-video state confusion, but means
+     * users can't undo an operation after switching to another video. A global
+     * undo that tracks the affected video index is a future enhancement. */
 
     undo: () => {
       const { undoStack, queue, selectedIdx } = get();

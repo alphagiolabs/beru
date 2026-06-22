@@ -193,8 +193,8 @@ describe("Frontend performance audit", () => {
   describe("Known performance gaps", () => {
     it("PERF_FLAGS default to safe, proven performance values", () => {
       const pf = readSrc("src/utils/perf-flags.js");
-      // Progress map keeps queue stable during batch processing (kept disabled until validated).
-      expect(pf).toContain('flagBool("VITE_BERU_RENDER_PROGRESS_MAP", false)');
+      // Progress map keeps queue stable during batch processing (enabled by default).
+      expect(pf).toContain('flagBool("VITE_BERU_RENDER_PROGRESS_MAP", true)');
       // Virtualization requires @tanstack/react-virtual; kept off by default.
       expect(pf).toContain('flagBool("VITE_BERU_RENDER_VIRTUALIZE", false)');
       // Delogo preview throttled to 30 FPS to reduce CPU while remaining smooth.

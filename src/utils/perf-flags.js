@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Renderer-side performance feature flags.
  *
@@ -37,7 +38,7 @@ export const PERF_FLAGS = {
    * mutating `queue` on every progress tick. Keeps `queue` referentially stable
    * during processing so subscribers that only need `queue` don't re-render.
    */
-  progressMap: flagBool("VITE_BERU_RENDER_PROGRESS_MAP", false),
+  progressMap: flagBool("VITE_BERU_RENDER_PROGRESS_MAP", true),
 
   /**
    * Virtualize the queue sidebar list (`@tanstack/react-virtual`) when the queue
@@ -58,7 +59,7 @@ export const PERF_FLAGS = {
 
 /** Re-read flags (mainly for tests that mutate `import.meta.env`). */
 export function reloadPerfFlags() {
-  PERF_FLAGS.progressMap = flagBool("VITE_BERU_RENDER_PROGRESS_MAP", false);
+  PERF_FLAGS.progressMap = flagBool("VITE_BERU_RENDER_PROGRESS_MAP", true);
   PERF_FLAGS.virtualize = flagBool("VITE_BERU_RENDER_VIRTUALIZE", false);
   PERF_FLAGS.virtualizeThreshold = flagNumber("VITE_BERU_RENDER_VIRTUALIZE_THRESHOLD", 100);
   PERF_FLAGS.delogoThrottleFps = flagNumber("VITE_BERU_DELGO_THROTTLE_FPS", 30);

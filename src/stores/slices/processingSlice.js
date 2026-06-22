@@ -16,7 +16,12 @@ import {
   summarizeQueue,
 } from "../../utils/execution-history.js";
 import { PERF_FLAGS } from "../../utils/perf-flags.js";
+import { swallow } from "../../utils/swallow.js";
 
+// Module-level debounce timer for execution history persistence.
+// This is safe because the store lives for the entire app session — the timer
+// is never leaked. The debounce (1200ms) coalesces rapid history updates
+// (e.g. batch log lines) into a single IPC save call.
 let persistHistoryTimer = null;
 
 function schedulePersistExecutionHistory(history) {
@@ -140,7 +145,8 @@ export function createProcessingSlice(set, get) {
         const history = normalizeExecutionHistory(res?.history || []);
         set({ executionHistory: history });
         return history;
-      } catch {
+      } catch (e) {
+        swallow("loadExecutionHistory", e);
         return [];
       }
     },
@@ -150,7 +156,9 @@ export function createProcessingSlice(set, get) {
       if (api?.clearExecutionHistory) {
         try {
           await api.clearExecutionHistory();
-        } catch {}
+        } catch (e) {
+          swallow("clearExecutionHistory", e);
+        }
       }
       set({ executionHistory: [], activeExecutionId: null, logLines: [] });
       return { ok: true };
@@ -332,7 +340,8 @@ export function createProcessingSlice(set, get) {
         } else if (api.getVideoInfo) {
           infos = await Promise.all(missing.map((item) => api.getVideoInfo(item.path)));
         }
-      } catch {
+      } catch (e) {
+        swallow("refreshMissingVideoInfo-batch", e);
         return get().queue;
       }
       if (!Array.isArray(infos)) infos = [];
@@ -344,8 +353,8 @@ export function createProcessingSlice(set, get) {
             try {
               const retry = await api.getVideoInfo(item.path);
               if (hasVideoDimensions(retry)) infos[i] = retry;
-            } catch {
-              /* keep prior info */
+            } catch (e) {
+              swallow("refreshMissingVideoInfo-retry", e);
             }
           }),
         );

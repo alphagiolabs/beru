@@ -113,7 +113,13 @@ describe("Stability under heavy load", () => {
     const state = useEditorStore.getState();
     expect(updates).toBe(1);
     expect(state.queue.every((q) => q.status === "processing")).toBe(true);
-    expect(state.queue.every((q) => q.progress === 42)).toBe(true);
+    // With progressMap enabled (default), progress lives in jobProgress map,
+    // not in queue. With progressMap disabled, progress is in queue.
+    if (state.jobProgress && Object.keys(state.jobProgress).length > 0) {
+      expect(Object.values(state.jobProgress).every((p) => p === 42)).toBe(true);
+    } else {
+      expect(state.queue.every((q) => q.progress === 42)).toBe(true);
+    }
   });
 
   it("handles rapid error/done alternation without state corruption", () => {

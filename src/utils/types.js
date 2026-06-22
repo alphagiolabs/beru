@@ -1,3 +1,4 @@
+// @ts-check
 /* ── Region normalization ─────────────────────────────────────────────── */
 
 import { TEXT_STYLE_DEFAULTS } from "./text-style";

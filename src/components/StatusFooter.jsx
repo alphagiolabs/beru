@@ -61,8 +61,13 @@ export default function StatusFooter() {
   const [sessionStartedAt] = useState(() => Date.now());
 
   // Read the queue snapshot directly via get() to avoid re-rendering the footer
-  // every time a single queue item mutates during batch processing. The footer still
-  // re-renders on progressDone / progressTotal / jobProgress / isProcessing changes.
+  // every time a single queue item mutates during batch processing. The footer
+  // still re-renders on progressDone / progressTotal / jobProgress / isProcessing
+  // changes. With PERF_FLAGS.progressMap enabled (default), per-job progress lives
+  // in the `jobProgress` map, not in `queue`, so this is safe — `queue` only
+  // changes on status flips (idle → processing → done/error), not on every tick.
+  // NOTE: If progressMap is disabled, this may show stale status during batch
+  // processing since the footer won't re-render on per-item progress changes.
   const { completed, total, percent } = getBatchProgress({
     queue: get().queue,
     progressDone,

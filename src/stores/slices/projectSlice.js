@@ -5,6 +5,7 @@ import {
   sanitizeTextStyle,
   sanitizeDefaults,
 } from "../../utils/sanitize-preset";
+import { swallow } from "../../utils/swallow.js";
 
 /** Project/preset serialization, persistence, and apply/load helpers. */
 export function createProjectSlice(set, get) {
@@ -31,7 +32,9 @@ export function createProjectSlice(set, get) {
         try {
           const r = await api.listPresets();
           if (r?.success) set({ presets: r.presets, presetsUserDir: r.userDir });
-        } catch {}
+        } catch (e) {
+          swallow("listPresets-after-delete", e);
+        }
       } else {
         set((s) => ({ presets: s.presets.filter((x) => x.filename !== filename) }));
       }
@@ -46,7 +49,9 @@ export function createProjectSlice(set, get) {
         console.error("[beru] Failed to load presets from storage:", e.message);
         try {
           localStorage.removeItem("beru-presets");
-        } catch {}
+        } catch (e) {
+          swallow("localStorage.removeItem", e);
+        }
       }
     },
 
@@ -136,7 +141,9 @@ export function createProjectSlice(set, get) {
           if (r?.success) {
             set({ presets: r.presets, presetsUserDir: r.userDir });
           }
-        } catch {}
+        } catch (e) {
+          swallow("listPresets-after-save", e);
+        }
       }
       return { ok: true, fileName: res.fileName, filePath: res.filePath };
     },
