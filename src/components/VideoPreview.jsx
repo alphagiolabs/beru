@@ -434,6 +434,10 @@ export default function VideoPreview() {
     const video = videoRef.current;
     if (video && !video.paused) video.pause();
 
+    // ts uses video.currentTime first (always current after a seek via
+    // seekTo), falling back to the React currentTime state. Both are updated
+    // during seek: video.currentTime by seekTo(), and React currentTime by
+    // the range input's onChange handler. Neither is stale after seek.
     const ts = video?.currentTime ?? currentTime;
     const job = buildPreviewFrameJob(selectedIdx, ts);
     if (!job) {
@@ -876,6 +880,13 @@ export default function VideoPreview() {
                 },
                 "bottom-right": { right: margin, bottom: margin + 60 },
               };
+              // NOTE: The +60 offset on bottom-* positions lifts the watermark
+              // above the player controls overlay (absolute bottom-0 z-30).
+              // FFmpeg export does NOT apply this offset (uses H-h-margin), so
+              // bottom-* watermarks appear ~60px lower in export than in preview.
+              // This is a known WYSIWYG divergence for bottom-* positions. The
+              // alternative (removing +60) hides the watermark behind controls
+              // in preview, which is worse UX. Left as-is to preserve UI.
               const posStyle = posMap[pos] || posMap["bottom-right"];
               /* Wrapper sized to the video's rendered (post-zoom) box so that
                * right/bottom-anchored positions stay aligned with the visible
@@ -912,6 +923,11 @@ export default function VideoPreview() {
                 );
               }
               if (watermark.type === "image" && watermark.imageDataUrl) {
+                // FFmpeg scales the watermark to target_h = 80 * scale (in
+                // native video pixels). To represent that size on screen we
+                // multiply by sy (screen_height / video_height), so the
+                // watermark occupies the same fraction of the frame in preview
+                // as it will in export. This is WYSIWYG-correct.
                 const baseSize = 80 * sy;
                 const scaledSize = baseSize * (watermark.scale || 1);
                 return (

@@ -218,6 +218,18 @@ export function createQueueSlice(set, get) {
         .catch(() => {});
     },
 
+    /**
+     * Prime `imageDataCache` for a path that isn't tied to a queue op yet.
+     * Used by the delogo "cover" picker so the live preview can render the
+     * chosen image before the user commits the operation.
+     */
+    cacheImageData: (imagePath, dataUrl) => {
+      if (!imagePath || !dataUrl) return;
+      set((s) => ({
+        imageDataCache: { ...s.imageDataCache, [imagePath]: dataUrl },
+      }));
+    },
+
     removeVideo: (idx) => {
       set((s) => {
         const next = s.queue.filter((_, i) => i !== idx);

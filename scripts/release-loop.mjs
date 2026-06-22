@@ -16,6 +16,11 @@
  *   7. Pushea el tag → CI se encarga del build firmado + publish
  *   8. Crea GitHub Release con las notas del changelog
  *
+ * STAGED ROLLOUT: To do a staged rollout, publish the GitHub Release as a
+ * draft first, validate on a test machine, then make it public.
+ * electron-updater only checks published releases, so drafts are invisible
+ * to existing installations until you publish.
+ *
  * Uso:
  *   node scripts/release-loop.mjs               # dry-run: valida todo, no taggea
  *   node scripts/release-loop.mjs --ship        # ejecuta el release completo
@@ -370,7 +375,9 @@ function createGitHubRelease(version) {
     const yamls = findFiles(distDir, "latest\\.yml$");
     const allAssets = [...exes, ...blockmaps, ...yamls];
     if (allAssets.length > 0) {
-      assets = allAssets.join(" ");
+      // Quote each asset path so paths with spaces don't break the shell
+      // command. Double-quote and escape any embedded double-quotes.
+      assets = allAssets.map((p) => `"${String(p).replace(/"/g, '\\"')}"`).join(" ");
     }
   }
 

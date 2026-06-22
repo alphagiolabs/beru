@@ -14,6 +14,10 @@ export const isOpActive = (op, t) => {
   const s = op.startTime;
   const e = op.endTime;
   if (s == null && e == null) return true;
+  // Parity with python/op_shared._is_op_time_disabled: when end <= start the
+  // range is empty/invalid and the op is skipped in export. The preview must
+  // match (op inactive for every t) or WYSIWYG breaks.
+  if (s != null && e != null && e <= s) return false;
   if (s != null && t < s) return false;
   if (e != null && t > e) return false;
   return true;

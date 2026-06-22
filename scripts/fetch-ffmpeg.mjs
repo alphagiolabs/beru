@@ -18,7 +18,23 @@ const ffmpegStaticPkg = requireCJS("ffmpeg-static/package.json");
 const ffprobeStaticPkg = requireCJS("ffprobe-static/package.json");
 const ffmpegSource = requireCJS("ffmpeg-static");
 const ffprobeModule = requireCJS("ffprobe-static");
-const ffprobeSource = ffprobeModule?.path || ffprobeModule;
+// `ffprobe-static` exports `{ path: "..." }`. Guard against a future breaking
+// change in the export shape (or a misconfigured install) that returns an
+// object without `.path`: falling back to the object itself would make
+// `basename()` return "[object Object]" and `copyFileSync` would fail
+// silently (postinstall swallows errors).
+const ffprobeSource =
+  typeof ffprobeModule === "string"
+    ? ffprobeModule
+    : typeof ffprobeModule?.path === "string"
+      ? ffprobeModule.path
+      : null;
+if (!ffprobeSource) {
+  console.error(
+    `[ffmpeg] ffprobe-static did not export a path string (got ${typeof ffprobeModule}). Skipping ffprobe copy.`,
+  );
+  process.exit(1);
+}
 
 const ffmpegTarget = resolve(binDir, basename(ffmpegSource));
 const ffprobeTarget = resolve(binDir, basename(ffprobeSource));

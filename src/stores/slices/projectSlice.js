@@ -1,5 +1,5 @@
 import { createOperation } from "../../utils/types";
-import { pickTextStyle, textOpMatchesRegion } from "../../utils/text-style";
+import { pickTextStyle, regionsMatch, textOpMatchesRegion } from "../../utils/text-style";
 import {
   sanitizeTemplateRegions,
   sanitizeTextStyle,
@@ -232,7 +232,48 @@ export function createProjectSlice(set, get) {
       if (!data || (data.type !== "beru-preset" && data.type !== "beru-project")) {
         return { ok: false, error: "Preset inválido" };
       }
+      // Before replacing templateRegions, snapshot the old ones so we can
+      // re-map excelMapping.columns from old region IDs to new region IDs.
+      // A preset created from a different project will have fresh region IDs
+      // that don't exist in the user's current excelMapping.columns — without
+      // re-mapping, columns[tr.id] is undefined for every region and ALL text
+      // ops come out empty, silently destroying the user's Excel content.
+      const oldTemplateRegions = get().templateRegions;
+      const oldColumns = get().excelMapping?.columns || {};
+
       get()._applyTemplateState(data);
+
+      // Re-map excelMapping.columns from old IDs to new IDs by matching regions
+      // geometrically. Only re-map if the new templateRegions have IDs that are
+      // NOT already in oldColumns (the common case when loading a foreign preset).
+      const newTemplateRegions = get().templateRegions;
+      const needsRemap = newTemplateRegions.some((tr) => !(tr.id in oldColumns));
+      if (needsRemap && Object.keys(oldColumns).length > 0) {
+        const newColumns = {};
+        for (const newTr of newTemplateRegions) {
+          // Direct hit: the new ID was already mapped (rare but possible).
+          if (newTr.id in oldColumns) {
+            newColumns[newTr.id] = oldColumns[newTr.id];
+            continue;
+          }
+          // Geometric match: find an old region with the same coordinates.
+          const oldMatch = oldTemplateRegions.find(
+            (oldTr) => oldTr.region && regionsMatch(oldTr.region, newTr.region),
+          );
+          if (oldMatch && oldColumns[oldMatch.id] != null) {
+            newColumns[newTr.id] = oldColumns[oldMatch.id];
+          }
+        }
+        // Only update if we successfully mapped at least one region; otherwise
+        // leave the mapping untouched and let _reapplyExcel produce unmatched
+        // status (honest failure rather than silent empty text).
+        if (Object.keys(newColumns).length > 0) {
+          set((s) => ({
+            excelMapping: { ...s.excelMapping, columns: newColumns },
+          }));
+        }
+      }
+
       const { excelRows, excelMapping } = get();
       if (excelRows.length > 0 && Object.keys(excelMapping.columns || {}).length > 0) {
         get()._reapplyExcel();

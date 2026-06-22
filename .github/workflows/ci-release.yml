@@ -47,6 +47,22 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Run Python delogo smoke tests
+        # Run Python pipeline tests to catch regressions in the FFmpeg filter
+        # graph builder. These tests validate delogo chains, e2e pipeline, and
+        # edge cases. They require ffmpeg which is fetched above.
+        # Uses continue-on-error so a missing ffmpeg binary on CI does not
+        # block the JS quality gate. The definitive Python validation happens
+        # on the Windows build job.
+        continue-on-error: true
+        run: |
+          if [ -f bin/ffmpeg ] || [ -f bin/ffmpeg.exe ]; then
+            python python/test_delogo.py
+            python python/test_delogo_robust.py
+          else
+            echo "ffmpeg not found in bin/ — skipping Python tests"
+          fi
+
   # Build & publish: only runs on tag pushes.
   # `needs: test` ensures tests pass (in Ubuntu) before building on Windows.
   release:
@@ -78,8 +94,23 @@ jobs:
           npm run build:processor
           npm run fetch:ffmpeg
 
+      - name: Run Python delogo tests
+        # Run the Python pipeline tests on Windows where ffmpeg is guaranteed
+        # to be available after the fetch step above.
+        run: npm run test:python
+
       - name: Build renderer
         run: npx vite build
+
+      - name: Verify signing secrets
+        # On tag pushes, the installer must be signed. Fail if secrets are missing.
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        shell: pwsh
+        run: |
+          if (-not "${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}") {
+            Write-Error "WINDOWS_CERTIFICATE_BASE64 secret is missing — cannot sign installer for release"
+            exit 1
+          }
 
       - name: Package & publish
         shell: pwsh
@@ -95,6 +126,29 @@ jobs:
           if ($cscLink) { $env:CSC_LINK = $cscLink }
           if ($cscKey)  { $env:CSC_KEY_PASSWORD = $cscKey }
           npx electron-builder --publish always
+
+      - name: Verify installer signature
+        # Post-build safety net: confirm the .exe is actually signed before
+        # the workflow succeeds. Catches misconfigured CSC_LINK (e.g. a cert
+        # that resolves to the wrong file) and silent unsigned publishing.
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path dist-installer -Filter "Beru-Setup-*.exe" | Select-Object -First 1
+          if (-not $exe) {
+            Write-Error "No installer .exe found in dist-installer/"
+            exit 1
+          }
+          $sig = Get-AuthenticodeSignature -FilePath $exe.FullName
+          Write-Host "Installer: $($exe.Name)"
+          Write-Host "Signature status: $($sig.Status)"
+          if ($sig.SignerCertificate) {
+            Write-Host "Signer: $($sig.SignerCertificate.Subject)"
+          }
+          if ($sig.Status -ne "Valid") {
+            Write-Error "Installer signature is not Valid (status: $($sig.Status)). Refusing to publish an unsigned installer."
+            exit 1
+          }
 
       - name: Upload installers
         uses: actions/upload-artifact@v4

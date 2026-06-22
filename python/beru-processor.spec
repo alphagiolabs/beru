@@ -18,7 +18,17 @@ a = Analysis(
     pathex=[str(script_dir)],
     binaries=[],
     datas=datas,
-    hiddenimports=["encode_profiles", "batch_errors"],
+    # Safety net: PyInstaller's static analysis detects these automatically,
+    # but listing them explicitly guards against future refactors that switch
+    # to dynamic imports (which the static analyzer can't follow).
+    hiddenimports=[
+        "encode_profiles",
+        "batch_errors",
+        "op_shared",
+        "color_validation",
+        "delogo_chains",
+        "text_layout_helpers",
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

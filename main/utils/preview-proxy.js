@@ -109,6 +109,12 @@ export async function createPreviewProxy(filePath) {
   const ffmpeg = getFfmpegPath();
   if (!ffmpeg || !fs.existsSync(ffmpeg)) return { ok: false, error: "ffmpeg not found" };
 
+  // Check the dedup map BEFORE any await. Two concurrent calls for the same
+  // file would otherwise both pass the stat/mkdir awaits before either
+  // registers a pending job, spawning two ffmpeg processes that race for the
+  // same tmpPath and corrupt the cache.
+  if (pending.has(filePath)) return pending.get(filePath);
+
   const stat = await fs.promises.stat(filePath);
   const dir = path.resolve(cacheDir());
   await fs.promises.mkdir(dir, { recursive: true });
@@ -119,12 +125,14 @@ export async function createPreviewProxy(filePath) {
     if (existing.size > 0) return { ok: true, path: outputPath, cached: true };
   } catch {}
 
-  if (pending.has(outputPath)) return pending.get(outputPath);
+  // Re-check after the awaits in case a parallel call registered the same
+  // job while we were awaiting.
+  if (pending.has(filePath)) return pending.get(filePath);
 
   const job = transcodePreview(ffmpeg, filePath, outputPath).finally(() => {
-    pending.delete(outputPath);
+    pending.delete(filePath);
     setTimeout(() => prunePreviewCache(dir), 0);
   });
-  pending.set(outputPath, job);
+  pending.set(filePath, job);
   return job;
 }

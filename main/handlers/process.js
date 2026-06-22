@@ -308,8 +308,34 @@ export function registerProcessHandlers(pathSecurity) {
       try {
         fs.unlinkSync(cancelFile);
       } catch {}
+
+      // Capture tmpFile in closure so this run always cleans up its own file,
+      // even if a new run overwrites the shared _currentTmpFile.
+      const runTmpFile = tmpFile;
+      const runCancelFile = cancelFile;
+      const isCurrentRun = () => getProcessingRunId() === runId;
+
+      const cleanupRunArtifacts = () => {
+        try {
+          if (runTmpFile) fs.unlinkSync(runTmpFile);
+        } catch {}
+        try {
+          if (runCancelFile) fs.unlinkSync(runCancelFile);
+        } catch {}
+      };
+
       const probeLimit = Math.max(1, Math.min(8, safeJobs.length, (os.cpus()?.length || 4) * 2));
       const enrichedJobs = await runWithConcurrency(safeJobs, probeLimit, enrichJobVideoInfo);
+
+      // The probe above can take seconds. If the user cancelled during the
+      // probe, cancelActiveProcessing() already cleared our runId and tmpFile.
+      // Bail before spawning so we don't start a Python process that nobody
+      // owns — it would run to completion (or until the watchdog fires) with
+      // no way for the renderer to cancel it.
+      if (!isCurrentRun()) {
+        cleanupRunArtifacts();
+        return { success: false, error: "Procesamiento cancelado", cancelled: true };
+      }
 
       await fs.promises.writeFile(
         tmpFile,
@@ -351,21 +377,6 @@ export function registerProcessHandlers(pathSecurity) {
       let stdoutBuf = "";
       let stderrBuf = "";
       let settled = false;
-      const isCurrentRun = () => getProcessingRunId() === runId;
-
-      // Capture tmpFile in closure so this run always cleans up its own file,
-      // even if a new run overwrites the shared _currentTmpFile.
-      const runTmpFile = tmpFile;
-      const runCancelFile = cancelFile;
-
-      const cleanupRunArtifacts = () => {
-        try {
-          if (runTmpFile) fs.unlinkSync(runTmpFile);
-        } catch {}
-        try {
-          if (runCancelFile) fs.unlinkSync(runCancelFile);
-        } catch {}
-      };
 
       let resolveClose = null;
       let resolveError = null;
@@ -408,6 +419,18 @@ export function registerProcessHandlers(pathSecurity) {
       };
 
       const onClose = (code) => {
+        // If onError already settled this run (spawn failure), don't emit a
+        // second terminal signal — the renderer would otherwise receive both
+        // `process:error` and `process:finished`, leaving the execution
+        // history in an ambiguous state.
+        if (settled) {
+          return settleRun({
+            success: false,
+            code,
+            error: "Processing superseded",
+            superseded: true,
+          });
+        }
         if (!isCurrentRun()) {
           return settleRun({
             success: false,

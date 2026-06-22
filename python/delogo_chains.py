@@ -188,6 +188,16 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
         delogo = f"delogo=x={x}:y={y}:w={w}:h={h}"
         if feather <= 0 and not enable_clause:
             return f"{src}{delogo}[tmp{idx}]"
+        if feather <= 0:
+            # feather=0 with time bounds: delogo the patch but don't blur it.
+            # Previously this fell through to boxblur=max(1,0)=1, applying a
+            # subtle blur the user explicitly disabled.
+            return (
+                f"{src}split[full{s}][work{s}];"
+                f"[work{s}]{delogo}[work_clean{s}];"
+                f"[work_clean{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
+                f"[full{s}][crop{s}]overlay={_overlay_opts(x0, y0, enable_clause)}[tmp{idx}]"
+            )
         return (
             f"{src}split[full{s}][work{s}];"
             f"[work{s}]{delogo}[work_clean{s}];"
@@ -208,6 +218,14 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
             delogo = f"delogo=x={x}:y={y}:w={w}:h={h}"
             if feather <= 0 and not enable_clause:
                 return f"{src}{delogo}[tmp{idx}]"
+            if feather <= 0:
+                # feather=0 with time bounds: delogo without blur.
+                return (
+                    f"{src}split[full{s}][work{s}];"
+                    f"[work{s}]{delogo}[work_clean{s}];"
+                    f"[work_clean{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
+                    f"[full{s}][crop{s}]overlay={_overlay_opts(x0, y0, enable_clause)}[tmp{idx}]"
+                )
             return (
                 f"{src}split[full{s}][work{s}];"
                 f"[work{s}]{delogo}[work_clean{s}];"

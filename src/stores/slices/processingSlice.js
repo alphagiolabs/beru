@@ -301,9 +301,16 @@ export function createProcessingSlice(set, get) {
         if (!isQueueJobIndex(idx, s.queue.length)) return {};
         const updated = [...s.queue];
         updated[idx] = { ...updated[idx], status: "error", error: msg.error };
+        // Delete the key (instead of setting it to undefined) so
+        // hasOwnProperty-based consumers like getBatchProgress don't read NaN
+        // and applyJobProgressMap doesn't carry stale entries forward.
         const jobProgress =
           PERF_FLAGS.progressMap && s.jobProgress?.[idx] !== undefined
-            ? { ...s.jobProgress, [idx]: undefined }
+            ? (() => {
+                const next = { ...s.jobProgress };
+                delete next[idx];
+                return next;
+              })()
             : s.jobProgress;
         return {
           queue: updated,

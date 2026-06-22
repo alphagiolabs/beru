@@ -1030,7 +1030,9 @@ def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
     calls.append(cmd)
     if "libx264" in cmd:
         return True, None
-    return False, "Error while filtering: Operation not permitted"
+    # Use a real hardware-encoder error marker (not "operation not permitted",
+    # which is a permissions error, not a GPU failure — see batch_errors.py).
+    return False, "Error while filtering: h264_nvenc: encoder init failed"
 
 processor.detect_hw_encoder = lambda _ffmpeg: "h264_nvenc"
 processor.get_system_fonts = lambda: {}

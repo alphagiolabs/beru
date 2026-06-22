@@ -50,6 +50,9 @@ export default function PropertiesPanel() {
     selectedOperationIdx,
     selectedOperation,
     selectedTemplateRegion,
+    textInput,
+    tempStart,
+    tempEnd,
   } = useEditorStore(
     (s) => ({
       selectedIdx: s.selectedIdx,
@@ -83,6 +86,13 @@ export default function PropertiesPanel() {
       mosaicSize: s.mosaicSize,
       mirrorSide: s.mirrorSide,
       edgeFeather: s.edgeFeather,
+      // Subscribe to textInput/tempStart/tempEnd so the inputs re-render when
+      // the store mutates externally (preset apply, undo, Excel reapply, project
+      // load). Reading these via get() in JSX breaks reactivity — the input
+      // shows a stale value while the store already has the new one.
+      textInput: s.textInput,
+      tempStart: s.tempStart,
+      tempEnd: s.tempEnd,
     }),
     shallow,
   );
@@ -520,6 +530,13 @@ export default function PropertiesPanel() {
                         const res = await window.api?.pickImage();
                         if (res?.success) {
                           get().setDelogoImagePath(res.path);
+                          // Prime imageDataCache so DelogoLivePreview can render
+                          // the cover image without falling back to beru://
+                          // (which would require serving a non-video file).
+                          const r = await window.api?.readImage(res.path);
+                          if (r?.success) {
+                            get().cacheImageData(res.path, r.dataUrl);
+                          }
                         } else if (res && !res.canceled) {
                           get().showToast(res.error || "No se pudo cargar la imagen", "error");
                         }
@@ -583,7 +600,7 @@ export default function PropertiesPanel() {
                   <span className="cap-input-label">Contenido</span>
                   <input
                     type="text"
-                    value={get().textInput}
+                    value={textInput}
                     onChange={(e) => get().setTextInput(e.target.value)}
                     placeholder="Texto..."
                     className="cap-input"
@@ -609,7 +626,7 @@ export default function PropertiesPanel() {
                 <span className="cap-input-label">Inicio (s)</span>
                 <input
                   type="number"
-                  value={get().tempStart ?? ""}
+                  value={tempStart ?? ""}
                   onChange={(e) =>
                     get().setTempStart(e.target.value ? Number(e.target.value) : null)
                   }
@@ -621,12 +638,21 @@ export default function PropertiesPanel() {
                 <span className="cap-input-label">Fin (s)</span>
                 <input
                   type="number"
-                  value={get().tempEnd ?? ""}
+                  value={tempEnd ?? ""}
                   onChange={(e) => get().setTempEnd(e.target.value ? Number(e.target.value) : null)}
                   placeholder="final"
                   className="cap-input font-mono text-[11px]"
                 />
               </label>
+              {tempStart != null && tempEnd != null && tempEnd <= tempStart && (
+                <div
+                  className="col-span-2 cap-card text-[10px] leading-relaxed"
+                  style={{ color: "#ef4444", borderColor: "rgba(239,68,68,0.3)" }}
+                >
+                  El rango es inválido (Fin ≤ Inicio). La operación no se aplicará en la
+                  exportación. Ajusta Fin para que sea mayor que Inicio.
+                </div>
+              )}
             </div>
           )}
 

@@ -25,6 +25,7 @@ function setupDelogoPanel() {
     queue: [],
     delogoMethod: "cover",
     delogoImagePath: "",
+    imageDataCache: {},
   });
 }
 
@@ -80,6 +81,37 @@ describe("PropertiesPanel — delogo cover method", () => {
       clearBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(useEditorStore.getState().delogoImagePath).toBe("");
+
+    act(() => root.unmount());
+  });
+
+  it("picking a cover image loads the data URL and primes imageDataCache for the live preview", async () => {
+    const root = renderPanel();
+
+    expect(useEditorStore.getState().imageDataCache).toEqual({});
+
+    const chooseBtn = Array.from(document.querySelectorAll("button")).find((b) =>
+      /Elegir/.test(b.textContent || ""),
+    );
+
+    await act(async () => {
+      chooseBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      // The handler awaits pickImage then readImage — flush both.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // readImage must be called so the live preview can use the data URL
+    // directly instead of falling back to beru://local/<path> (which would
+    // require the protocol handler to serve a non-video file).
+    expect(window.api.readImage).toHaveBeenCalledWith("C:\\imgs\\patch.png");
+    expect(useEditorStore.getState().delogoImagePath).toBe("C:\\imgs\\patch.png");
+    expect(useEditorStore.getState().imageDataCache["C:\\imgs\\patch.png"]).toBe(
+      "data:image/png;base64,AAAA",
+    );
 
     act(() => root.unmount());
   });

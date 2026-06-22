@@ -143,6 +143,27 @@ def _region_to_pixels(region, video_w, video_h):
     return {"x": px, "y": py, "w": pw, "h": ph}
 
 
+def _is_op_time_disabled(op):
+    """Return True when the op has an explicit, empty time range (end <= start).
+
+    A range like start=10, end=5 is invalid/empty. The user's intent is "don't
+    apply this op" (or "apply only at a single instant" at best). Historically
+    `_build_enable_clause` returned "" for this case, which callers treated as
+    "no time filter" and applied the op for every t — silently producing output
+    the user did not ask for. Centralising the empty-range check here lets
+    `build_filter_complex` skip the op entirely, matching what the UI preview
+    does (see isOpActive in src/components/video-preview/utils.js).
+    """
+    start = op.get("start_time", op.get("startTime"))
+    end = op.get("end_time", op.get("endTime"))
+    if start is None or end is None:
+        return False
+    try:
+        return float(end) <= float(start)
+    except (TypeError, ValueError):
+        return False
+
+
 def _build_enable_clause(op):
     """Build an `enable=...` clause for time-bounding filters.
 
