@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Update modal (Hermes flow)** — restyled without scrollbars or release-notes link; background re-checks now preserve pending updates in the reducer and main process instead of clearing the available state and breaking "Update now".
+- **`update-not-available` guard** — a stale or duplicate `update-not-available` event from `electron-updater` no longer wipes a pending or already-downloaded update, so the "Update now" and "Restart and install" buttons keep working.
 - **`downloadUpdate` retry** — auto-retries with exponential backoff (up to 2 retries) for transient network errors; the retry loop aborts if a newer version is announced or the download completes mid-wait.
 - **`PERF_FLAGS.progressMap`** — default flipped to `true`; typing extended. Frontend-perf-audit and stability-load tests updated for the new defaults.
 - **`beru-processor.spec`** — lists all local imports in `hiddenimports` as a safety net for PyInstaller.

@@ -68,5 +68,15 @@ export default [
       },
     },
   },
+  {
+    files: ["tests/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
   eslintConfigPrettier,
 ];
