@@ -33,6 +33,17 @@ const hasPy = (() => {
 const hasFfmpeg =
   existsSync(FFMPEG_BIN) && spawnSync(FFMPEG_BIN, ["-version"], { encoding: "utf8" }).status === 0;
 
+// `drawtext` requires ffmpeg to be compiled with --enable-libfreetype (and
+// optionally --enable-libfontconfig). The ffmpeg-static Linux build used on CI
+// does NOT include drawtext, while the Windows build does. Skip the drawtext
+// assertion when the filter is unavailable instead of failing the pipeline.
+const hasDrawtext = (() => {
+  if (!hasFfmpeg) return false;
+  const r = spawnSync(FFMPEG_BIN, ["-hide_banner", "-filters"], { encoding: "utf8" });
+  if (r.status !== 0) return false;
+  return /(^|\s)drawtext\s+/.test(r.stdout || "");
+})();
+
 const describeIf = hasPy && hasFfmpeg ? describe : describe.skip;
 
 function makeVideo(tmpDir) {
@@ -168,15 +179,18 @@ describeIf("render_preview_frame: -ss placement and filter-graph t", () => {
     } catch {}
   });
 
-  it("drawtext %{t} shows the correct timestamp at output seek t=2.0", () => {
-    // We can't OCR the rendered frame, but we can confirm ffmpeg runs and
-    // produces a frame. The seek test below is the real signal.
-    const out = renderWithSeekPlacement(videoPath, 2.0, false);
-    expect(existsSync(out)).toBe(true);
-    try {
-      unlinkSync(out);
-    } catch {}
-  });
+  (hasDrawtext ? it : it.skip)(
+    "drawtext %{t} shows the correct timestamp at output seek t=2.0",
+    () => {
+      // We can't OCR the rendered frame, but we can confirm ffmpeg runs and
+      // produces a frame. The seek test below is the real signal.
+      const out = renderWithSeekPlacement(videoPath, 2.0, false);
+      expect(existsSync(out)).toBe(true);
+      try {
+        unlinkSync(out);
+      } catch {}
+    },
+  );
 
   it("op with start_time=1.9,end_time=2.1 IS active at preview timestamp=2.0 (matches export)", () => {
     // If the bug existed (-ss resets t to 0), the op with [1.9,2.1] would NOT
