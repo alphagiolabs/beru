@@ -137,6 +137,34 @@ const init = (win) => {
   // didn't install before quitting).  Errors are silently swallowed — this is
   // best-effort.
   checkForUpdates().catch(() => {});
+
+  // KILL-SWITCH: Check if the current running version has been marked as bad.
+  // This allows forcing a downgrade by publishing a kill-switch file that
+  // blocks the current version from auto-updating to itself. The check is
+  // best-effort and silently fails if the endpoint is unreachable.
+  // Future: implement a remote endpoint at https://beru.app/api/kill-switch.json
+  // that returns { "bad_versions": ["1.6.35"], "force_downgrade": "1.6.34" }
+  checkKillSwitch().catch(() => {});
+};
+
+/**
+ * Best-effort kill-switch check. Fetches a remote JSON that can mark the
+ * current version as bad, forcing the user to manually downgrade.
+ * Currently a stub — the endpoint is not yet deployed.
+ */
+const checkKillSwitch = async () => {
+  if (isDev) return;
+  try {
+    const currentVersion = app.getVersion();
+    // Future: fetch from https://beru.app/api/kill-switch.json
+    // const resp = await fetch("https://beru.app/api/kill-switch.json");
+    // const data = await resp.json();
+    // if (data.bad_versions?.includes(currentVersion)) {
+    //   send({ type: "error", message: `Version ${currentVersion} has been recalled. Please downgrade to ${data.force_downgrade || "a previous version"}.` });
+    // }
+  } catch {
+    // Kill-switch check is best-effort — never block the app
+  }
 };
 
 const checkForUpdates = async () => {
@@ -214,17 +242,46 @@ const startDownload = async () => {
     transferred: 0,
     total: 0,
   });
-  try {
-    await au.downloadUpdate();
-    return { ok: true };
-  } catch (e) {
-    downloadInProgress = false;
-    userInitiatedDownload = false;
-    // electron-updater emits "error" for download failures; avoid duplicate IPC.
-    return { ok: false, error: e?.message };
+
+  // Auto-retry download with exponential backoff for transient network errors.
+  // Up to 2 retries: 3s, then 6s delay. Only retries if the update is still
+  // pending and no new version was announced in the meantime.
+  const MAX_DOWNLOAD_RETRIES = 2;
+  const BASE_RETRY_DELAY_MS = 3000;
+  for (let attempt = 0; attempt <= MAX_DOWNLOAD_RETRIES; attempt++) {
+    try {
+      await au.downloadUpdate();
+      return { ok: true };
+    } catch (e) {
+      downloadInProgress = false;
+      if (attempt < MAX_DOWNLOAD_RETRIES && pendingVersion && !updateDownloaded) {
+        const delay = BASE_RETRY_DELAY_MS * (attempt + 1);
+        send({
+          type: "error",
+          message: `Download failed (attempt ${attempt + 1}/${MAX_DOWNLOAD_RETRIES + 1}). Retrying in ${delay / 1000}s...`,
+        });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        if (!pendingVersion || updateDownloaded) {
+          userInitiatedDownload = false;
+          return { ok: false, reason: "aborted" };
+        }
+        downloadInProgress = true;
+        send({ type: "downloading", version: pendingVersion, percent: 0 });
+        continue;
+      }
+      userInitiatedDownload = false;
+      // electron-updater emits "error" for download failures; avoid duplicate IPC.
+      return { ok: false, error: e?.message };
+    }
   }
+  userInitiatedDownload = false;
+  return { ok: false, error: "download-failed" };
 };
 
+// Returns the last event payload sent to the renderer. Used by the renderer
+// on startup (via getUpdaterSnapshot IPC) to hydrate the update state after a
+// page reload or app restart. The snapshot is overwritten on every send(),
+// so it always reflects the most recent updater event.
 const getSnapshot = () => lastSnapshot;
 
 const INSTALL_GRACE_MS = 10000;

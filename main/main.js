@@ -21,6 +21,7 @@ import { registerExecutionHistoryHandlers } from "./handlers/execution-history.j
 import { registerSystemHandlers } from "./handlers/system.js";
 import { registerUpdaterHandlers } from "./handlers/updater.js";
 import { isQuittingForUpdate } from "./updater.js";
+import { initTelemetry } from "./utils/telemetry.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -46,6 +47,13 @@ function cleanupTempFiles() {
 
 function onFatalError(err) {
   console.error("[beru] FATAL:", err);
+  // Write crash info to a log file for post-mortem debugging.
+  // Future: integrate electron's crashReporter or Sentry for remote crash reporting.
+  try {
+    const crashLog = path.join(app.getPath("userData"), "crash.log");
+    const entry = `[${new Date().toISOString()}] ${err?.stack || err?.message || String(err)}\n`;
+    fs.appendFileSync(crashLog, entry, "utf-8");
+  } catch {}
   try {
     cleanupTempFiles();
     disposePreviewFrameWorker();
@@ -124,6 +132,7 @@ process.on("unhandledRejection", onFatalError);
 
 app.whenReady().then(() => {
   registerBeruProtocol();
+  initTelemetry();
   createWindow();
 });
 

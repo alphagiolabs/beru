@@ -10,5 +10,12 @@ export default defineConfig({
     globals: false,
     include: ["tests/**/*.test.{js,jsx}"],
     testTimeout: 20000,
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.{js,jsx}"],
+      exclude: ["src/i18n/**", "src/main.jsx"],
+      reporter: ["text", "text-summary", "html"],
+      reportsDirectory: "coverage",
+    },
   },
 });

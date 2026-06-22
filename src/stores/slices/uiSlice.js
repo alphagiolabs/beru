@@ -1,4 +1,5 @@
 import { canStartDownload, reduceUpdaterEvent } from "../../utils/updateState.js";
+import { swallow } from "../../utils/swallow.js";
 
 function applyThemeToDom(theme) {
   if (typeof document === "undefined") return;
@@ -85,7 +86,9 @@ export function createUiSlice(set, get) {
         if (api?.setWindowTheme) {
           try {
             await api.setWindowTheme(theme);
-          } catch {}
+          } catch (e) {
+            swallow("setWindowTheme", e);
+          }
         }
         set({
           theme,
@@ -109,12 +112,16 @@ export function createUiSlice(set, get) {
       if (api?.setWindowTheme) {
         try {
           await api.setWindowTheme(next);
-        } catch {}
+        } catch (e) {
+          swallow("setWindowTheme", e);
+        }
       }
       if (api?.saveSettings) {
         try {
           await api.saveSettings({ theme: next });
-        } catch {}
+        } catch (e) {
+          swallow("saveSettings(theme)", e);
+        }
       }
     },
 
@@ -130,7 +137,9 @@ export function createUiSlice(set, get) {
       if (api?.saveSettings) {
         try {
           await api.saveSettings({ language: next });
-        } catch {}
+        } catch (e) {
+          swallow("saveSettings(language)", e);
+        }
       }
     },
 
@@ -156,7 +165,9 @@ export function createUiSlice(set, get) {
           // server-side on next load via recent:list.
           set({ recent: res.recent.map((r) => ({ ...r, exists: true })) });
         }
-      } catch {}
+      } catch (e) {
+        swallow("addRecent", e);
+      }
     },
 
     removeRecent: async (filePath) => {
@@ -169,7 +180,8 @@ export function createUiSlice(set, get) {
         } else {
           set((s) => ({ recent: s.recent.filter((r) => r.path !== filePath) }));
         }
-      } catch {
+      } catch (e) {
+        swallow("removeRecent", e);
         set((s) => ({ recent: s.recent.filter((r) => r.path !== filePath) }));
       }
     },
