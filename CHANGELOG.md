@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.37] - 2026-06-22
+
+### Fixed
+
+- **`update-not-available` race guard** — `main/updater.js` now ignores stale or duplicate `update-not-available` events when an update is already pending or downloaded, so the "Update now" and "Restart and install" buttons keep working instead of silently failing. Added regression tests via a lightweight updater harness (`tests/updater-main.harness.mjs`, `tests/updater-main.event-race.test.js`).
+
 ## [1.6.36] - 2026-06-22
 
 ### Added
