@@ -90,9 +90,12 @@ const init = (win) => {
     });
   });
   au.on("update-not-available", (info) => {
-    pendingVersion = null;
-    updateDownloaded = false;
-    userInitiatedDownload = false;
+    // Don't wipe a pending or already-downloaded update if a stale
+    // update-not-available event arrives out of order (duplicate check,
+    // network flip, or CDN inconsistency). Otherwise the renderer's
+    // "Update now" button silently fails because the main process no
+    // longer has a pendingVersion.
+    if (pendingVersion || updateDownloaded) return;
     au.autoInstallOnAppQuit = false;
     send({ type: "not-available", version: info?.version });
   });
@@ -172,6 +175,9 @@ const checkForUpdates = async () => {
   // Don't run a check that would wipe an already-downloaded update — it would
   // reset updateDownloaded and re-emit "available", forcing a re-download.
   if (updateDownloaded) return { ok: false, reason: "already-ready" };
+  // A download in progress takes precedence over a check in progress so callers
+  // always see the correct blocker reason.
+  if (downloadInProgress) return { ok: false, reason: "download-in-progress" };
   // Re-use a known pending update instead of re-checking. A duplicate check can
   // emit update-not-available and clobber renderer state while the user is
   // reading the modal or starting a download.
@@ -186,7 +192,6 @@ const checkForUpdates = async () => {
     return { ok: true, version: pendingVersion, reason: "pending-update" };
   }
   if (checkInProgress) return { ok: false, reason: "check-in-progress" };
-  if (downloadInProgress) return { ok: false, reason: "download-in-progress" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
   checkInProgress = true;
