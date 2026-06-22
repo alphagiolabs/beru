@@ -73,6 +73,7 @@ function isUpToDate() {
     join(pythonDir, "op_shared.py"),
     join(pythonDir, "delogo_chains.py"),
     join(pythonDir, "text_layout_helpers.py"),
+    join(pythonDir, "color_validation.py"),
     specPath,
     profilesJson,
   ];

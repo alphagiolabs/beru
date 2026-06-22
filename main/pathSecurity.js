@@ -249,7 +249,12 @@ export function createPathSecurity(app) {
   }
 
   function validateProtocolFile(filePath) {
-    return validateReadableFile(filePath, "video");
+    // The beru:// protocol serves both video frames (for preview proxies) and
+    // image overlays (delogo cover, image op, watermark). Restrict to media
+    // kinds only — project/excel files must never be served over beru://.
+    const ext = path.extname(filePath || "").toLowerCase();
+    const kind = EXT_BY_KIND.image.has(ext) ? "image" : "video";
+    return validateReadableFile(filePath, kind);
   }
 
   return {

@@ -67,6 +67,19 @@ describe("pathSecurity", () => {
     expect(res.ok).toBe(false);
   });
 
+  it("allows registered image files through the beru protocol", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "beru-sec-img-"));
+    const imgFile = path.join(dir, "patch.png");
+    fs.writeFileSync(imgFile, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    security.registerAllowedPath(imgFile);
+    try {
+      const res = security.validateProtocolFile(imgFile);
+      expect(res.ok).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("rejects missing shell paths", () => {
     const res = security.validateShellPath(path.join(path.dirname(tmpFile), "missing.mp4"));
     expect(res.ok).toBe(false);

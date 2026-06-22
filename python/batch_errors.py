@@ -15,7 +15,11 @@ def is_hardware_encode_error(stderr_text):
         "h264_mf",
         "hwaccel",
         "error code: -22",
-        "operation not permitted",
+        # NOTE: "operation not permitted" (POSIX EPERM) was previously listed
+        # here, but it is a file/folder permission error, NOT a GPU failure.
+        # Classifying it as hardware gave users the wrong message ("update GPU
+        # drivers") for a permissions problem. It is handled by the
+        # permissions branch of format_processing_error instead.
         "no capable devices",
         "cannot create cuda",
         "encoder init",
@@ -82,7 +86,16 @@ def format_processing_error(raw_error, *, max_workers=None):
         )
     if "no space left" in lower:
         return "No hay espacio libre suficiente en el disco de salida."
-    if "permission denied" in lower or "access is denied" in lower:
+    # Permission errors: "permission denied" (Linux/macOS), "access is denied"
+    # (Windows), and "operation not permitted" (POSIX EPERM — e.g. file is open
+    # in another process, or folder has restrictive ACLs). Previously
+    # "operation not permitted" fell through to the hardware branch and users
+    # got a misleading "update GPU drivers" message.
+    if (
+        "permission denied" in lower
+        or "access is denied" in lower
+        or "operation not permitted" in lower
+    ):
         return (
             "No se pudo escribir el archivo de salida por permisos. "
             "Elige otra carpeta o cierra el video si está abierto en otro programa."

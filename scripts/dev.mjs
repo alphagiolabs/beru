@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import http from "http";
 import net from "net";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -129,7 +130,39 @@ try {
   electron = spawnLocal(process.execPath, [electronBin, "."], env);
   prefixOutput("electron", electron.stdout);
   prefixOutput("electron", electron.stderr);
-  electron.on("exit", (code) => shutdown(code ?? 0));
+  let electronExitHandler = (code) => shutdown(code ?? 0);
+  electron.on("exit", electronExitHandler);
+
+  // Watch Python files for changes — restart Electron (not Vite) when
+  // python/*.py changes, since the processor is loaded at runtime.
+  const pythonDir = path.join(root, "python");
+  let restartTimer = null;
+  try {
+    fs.watch(pythonDir, { recursive: false }, (eventType, filename) => {
+      if (!filename || !filename.endsWith(".py")) return;
+      // Debounce rapid saves
+      if (restartTimer) clearTimeout(restartTimer);
+      restartTimer = setTimeout(() => {
+        restartTimer = null;
+        if (shuttingDown || !electron) return;
+        console.log(`[dev] Python file changed (${filename}), restarting Electron...`);
+        // Remove the OLD exit handler before killing so the old process's
+        // exit (triggered by killTree) doesn't call shutdown() and tear down
+        // Vite + the new Electron we're about to spawn.
+        const oldProc = electron;
+        const oldHandler = electronExitHandler;
+        if (oldProc) oldProc.removeListener("exit", oldHandler);
+        killTree(oldProc);
+        electron = spawnLocal(process.execPath, [electronBin, "."], env);
+        prefixOutput("electron", electron.stdout);
+        prefixOutput("electron", electron.stderr);
+        electronExitHandler = (code) => shutdown(code ?? 0);
+        electron.on("exit", electronExitHandler);
+      }, 500);
+    });
+  } catch {
+    console.warn("[dev] Python file watcher could not be started (non-critical)");
+  }
 } catch (err) {
   console.error(`[dev] ${err.message}`);
   shutdown(1);

@@ -46,6 +46,7 @@ from op_shared import (
     _build_enable_clause,
     _coerce_float,
     _coerce_int,
+    _is_op_time_disabled,
     _normalize_operation,
     _optimize_delogo_for_speed,
     _overlay_opts,
@@ -1408,6 +1409,12 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
     for raw_op in operations:
         op = _normalize_operation(raw_op)
         mode = op.get("mode")
+        # Skip ops with an explicit empty time range (end <= start). The user's
+        # intent for start=10,end=5 is NOT "apply always" — it's an invalid
+        # range. Skipping matches the UI preview (isOpActive returns false for
+        # e<=s) and avoids silently producing output the user didn't ask for.
+        if _is_op_time_disabled(op):
+            continue
         region = _region_to_pixels(op.get("region", {}), video_w, video_h)
         if not region:
             continue
@@ -1460,18 +1467,25 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
         elif mode == "crop":
             enable_clause = _build_enable_clause(op)
             if enable_clause:
-                # Time-bounded crop: overlay cropped region on original during time range
-                overlay_opts = _overlay_opts(x, y, enable_clause)
+                # Time-bounded crop = ZOOM: during [start,end] the cropped
+                # region is scaled up to fill the entire frame. Outside the
+                # range the original frame shows through (overlay enable clause
+                # is false). Previously this was a no-op: the crop was scaled
+                # back to its own w:h and overlaid at x:y — pasting the crop
+                # exactly on top of its own pixels, producing zero visible
+                # change. The user's intent for "crop between t=5 and t=8" is a
+                # zoom into that region, not a no-op.
+                overlay_opts = f"0:0:{enable_clause}"
                 if n == 0:
                     filters.append(
                         f"[0:v]split[full{n}][crop_in{n}];"
-                        f"[crop_in{n}]crop={w}:{h}:{x}:{y},scale={w}:{h}[cropped{n}];"
+                        f"[crop_in{n}]crop={w}:{h}:{x}:{y},scale={video_w}:{video_h}:flags=fast_bilinear[cropped{n}];"
                         f"[full{n}][cropped{n}]overlay={overlay_opts}[tmp{n}]"
                     )
                 else:
                     filters.append(
                         f"[tmp{n-1}]split[full{n}][crop_in{n}];"
-                        f"[crop_in{n}]crop={w}:{h}:{x}:{y},scale={w}:{h}[cropped{n}];"
+                        f"[crop_in{n}]crop={w}:{h}:{x}:{y},scale={video_w}:{video_h}:flags=fast_bilinear[cropped{n}];"
                         f"[full{n}][cropped{n}]overlay={overlay_opts}[tmp{n}]"
                     )
             else:
@@ -1663,8 +1677,15 @@ def _extract_error_line(stderr_text):
         stripped = line.strip()
         if stripped and "error" in stripped.lower():
             return stripped[-400:]
-    if len(lines) > 1:
-        return lines[-2].strip()[-400:]
+    # No line contains "error": return the last NON-EMPTY line. Previously
+    # this returned lines[-2], which assumed a trailing newline (lines[-1]
+    # would be ""). Without a trailing newline, lines[-1] is the useful line
+    # and lines[-2] is noise. Iterating reversed for the first non-empty line
+    # is correct in both cases.
+    for line in reversed(lines):
+        stripped = line.strip()
+        if stripped:
+            return stripped[-400:]
     return stderr_text.strip()[-400:]
 
 
@@ -2317,10 +2338,16 @@ def render_preview_frame(payload):
         operations, vw, vh, watermark=watermark,
     )
 
+    # NOTE: `-ss` must come BEFORE `-i` (input seek). Placing it after `-i`
+    # performs an output seek that resets the filter graph's internal `t` to 0,
+    # so `enable=between(t,start,end)` clauses evaluate against t=0 regardless
+    # of the requested timestamp — time-bounded ops appear inactive in preview
+    # while export applies them at the correct t. Input seek preserves the
+    # original timeline so the filter graph sees the same `t` as export.
     cmd = [
         FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-        "-i", input_path,
         "-ss", f"{timestamp:.3f}",
+        "-i", input_path,
     ]
     for img_path in image_paths:
         cmd += ["-loop", "1", "-i", img_path]

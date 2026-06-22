@@ -64,8 +64,18 @@ else
 fi
 
 if [[ -z "${CHANGED// /}" ]]; then
-    say "${YELLOW}[WARN] No hay archivos cambiados. Nada que validar.${NC}"
-    exit 0
+    if [[ "${1:-}" == "--prepush" ]]; then
+        # Pre-push with empty upstream diff: HEAD is identical to upstream
+        # (rebased/no-op push). Silently exiting 0 skips all validation, so a
+        # broken build can slip through if the hook is later run from a state
+        # that DOES have changes. Fall through to the full-suite safety net
+        # (Trigger E) instead of bailing.
+        warn "[WARN] --prepush: sin diff vs upstream. Corriendo suite completa como safety net."
+        MODE="vs upstream (pre-push, sin diff) → safety net"
+    else
+        say "${YELLOW}[WARN] No hay archivos cambiados. Nada que validar.${NC}"
+        exit 0
+    fi
 fi
 
 # ── Banner ──────────────────────────────────────────────────────────────────
@@ -114,7 +124,7 @@ if printf '%s\n' "$CHANGED" | grep -qE '^python/'; then
         fi
     fi
 
-    # ── Baseline comparison ──
+    # ── Baseline comparison (if available, otherwise run full suite) ──
     if [[ -f tests-baseline.log ]]; then
         say "\n${CYAN}├── Comparación contra baseline${NC}"
         BASELINE_TOTAL=$(grep -oP '\d+ passed.*\(\K\d+(?=\))' tests-baseline.log 2>/dev/null | tail -1 || echo "")
@@ -137,6 +147,14 @@ if printf '%s\n' "$CHANGED" | grep -qE '^python/'; then
             fi
         else
             warn "No se pudo parsear baseline — comparación saltada"
+        fi
+    else
+        # No baseline log available — run the full JS suite as a safety net.
+        say "\n${CYAN}├── Sin baseline — suite completa JS${NC}"
+        if npm test 2>&1; then
+            ok "npm test — suite completa OK (sin baseline)"
+        else
+            fail "npm test — algunos tests fallaron"
         fi
     fi
     say "${MAGENTA}└─────────────────────────────────────────────────────────${NC}"

@@ -864,4 +864,45 @@ describe("useEditorStore logic regressions", () => {
     expect(state.queue[2].status).toBe("idle");
     expect(state.jobProgress).toEqual({});
   });
+
+  it("markJobError removes the index from jobProgress instead of leaving undefined", () => {
+    useEditorStore.setState({
+      queue: [
+        queueItem({ status: "done", progress: 100 }),
+        queueItem({ status: "processing", progress: 42 }),
+      ],
+      isProcessing: true,
+      progressTotal: 2,
+      progressDone: 1,
+      jobProgress: { 1: 42 },
+    });
+
+    useEditorStore.getState().markJobError({ index: 1, error: "boom" });
+    const state = useEditorStore.getState();
+    expect(state.queue[1].status).toBe("error");
+    // The key MUST be absent (not present-with-undefined). A present undefined
+    // key makes hasOwnProperty-based consumers (e.g. getBatchProgress) read
+    // NaN and makes future applyJobProgressMap copies carry stale entries.
+    expect(Object.prototype.hasOwnProperty.call(state.jobProgress, 1)).toBe(false);
+    expect(state.jobProgress).toEqual({});
+  });
+
+  it("markJobDone sets jobProgress[idx] to 100 and keeps other indices intact", () => {
+    useEditorStore.setState({
+      queue: [
+        queueItem({ status: "processing", progress: 0 }),
+        queueItem({ status: "processing", progress: 0 }),
+      ],
+      isProcessing: true,
+      progressTotal: 2,
+      progressDone: 0,
+      jobProgress: { 0: 50, 1: 30 },
+    });
+
+    useEditorStore.getState().markJobDone({ index: 0 });
+    const state = useEditorStore.getState();
+    expect(state.queue[0].status).toBe("done");
+    expect(state.jobProgress[0]).toBe(100);
+    expect(state.jobProgress[1]).toBe(30);
+  });
 });

@@ -17,6 +17,7 @@ export default function WatermarkModal() {
   const show = useEditorStore((s) => s.showWatermarkModal);
   const wm = useEditorStore((s) => s.watermark);
   const setWatermark = useEditorStore((s) => s.setWatermark);
+  const showToast = useEditorStore((s) => s.showToast);
   const close = () => useEditorStore.getState().setShowWatermarkModal(false);
 
   if (!show) return null;
@@ -162,10 +163,34 @@ export default function WatermarkModal() {
                   <button
                     onClick={async () => {
                       const res = await window.api?.pickImage();
-                      if (res?.success) {
-                        setWatermark({ imagePath: res.path });
-                        const r = await window.api?.readImage(res.path);
-                        if (r?.success) setWatermark({ imageDataUrl: r.dataUrl });
+                      if (!res || res.canceled) {
+                        // User cancelled: clear any stale imageDataUrl from a
+                        // previous selection so the preview doesn't show the
+                        // old image while imagePath is empty.
+                        setWatermark({ imagePath: "", imageDataUrl: "" });
+                        return;
+                      }
+                      if (!res.success) {
+                        showToast?.({
+                          kind: "err",
+                          text: res.error || "No se pudo cargar la imagen",
+                        });
+                        return;
+                      }
+                      // Read the image BEFORE setting imagePath so the store
+                      // stays consistent. If readImage fails, we don't leave
+                      // imagePath set with a stale/empty imageDataUrl — that
+                      // would break the CSS preview while FFmpeg still draws
+                      // the watermark (WYSIWYG divergence).
+                      const r = await window.api?.readImage(res.path);
+                      if (r?.success) {
+                        setWatermark({ imagePath: res.path, imageDataUrl: r.dataUrl });
+                      } else {
+                        showToast?.({
+                          kind: "err",
+                          text: r?.error || "No se pudo leer la imagen seleccionada",
+                        });
+                        setWatermark({ imagePath: "", imageDataUrl: "" });
                       }
                     }}
                     className="cap-btn-secondary !text-[10px] !px-2 flex items-center gap-1"
