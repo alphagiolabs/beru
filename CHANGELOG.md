@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.36] - 2026-06-22
+
+### Added
+
+- **Queue session persistence** — `useEditorStore` snapshots the queue into `sessionStorage` (800 ms debounce) and restores it on startup so a crash or accidental close no longer loses loaded videos and operations. Thumbnails and `imageDataCache` are excluded (too large, regenerable).
+- **`swallow` utility** — `src/utils/swallow.js` centralizes loggable error swallowing; bare `catch {}` blocks in `processingSlice` and `queueSlice` now route through `swallow()` so silent failures become traceable.
+- **Update-flow telemetry** — `main/main.js` wires a telemetry hook for update-flow event capture, and `main/updater.js` ships a best-effort kill-switch stub to support future remote bad-version recall (endpoint not yet deployed).
+- **`color_validation.py`** — shared Python module for strict color allowlist validation at filter build time, with regression tests.
+- **CI signing verification** — `ci-release.yml` now runs `Get-AuthenticodeSignature` post-build to fail the release if the installer is unsigned.
+- **Test & coverage scripts** — added `test:watch`, `test:python`, and `test:coverage` npm scripts, plus v8 coverage config in `vitest.config.js` (covers `src/**`, excluding i18n).
+- **Bundle analysis hook** — optional `rollup-plugin-visualizer` via `VITE_BERU_ANALYZE=1`, with manual `icons`/`vendor` chunk splitting in `vite.config.js`.
+- **E2E placeholder scaffold** — `tests/e2e.placeholder.test.js` reserved for future end-to-end coverage.
+- **Regression tests** — added coverage for batch error permissions, delogo feather=0 with time bounds, error-line extraction, time-disabled ops, timed crop/zoom parity, build-processor watch files, CI signing verification, dev-script listener cleanup, fetch-ffmpeg/ffprobe shape, op-active parity, preview-frame seek, preview-proxy race, cancel-during-probe, double-signal on spawn error, processor-spec hidden imports, PropertiesPanel reactivity, watermark-modal consistency, apply-preset excel remap, and the updater flow.
+
+### Changed
+
+- **Update modal (Hermes flow)** — restyled without scrollbars or release-notes link; background re-checks now preserve pending updates in the reducer and main process instead of clearing the available state and breaking "Update now".
+- **`downloadUpdate` retry** — auto-retries with exponential backoff (up to 2 retries) for transient network errors; the retry loop aborts if a newer version is announced or the download completes mid-wait.
+- **`PERF_FLAGS.progressMap`** — default flipped to `true`; typing extended. Frontend-perf-audit and stability-load tests updated for the new defaults.
+- **`beru-processor.spec`** — lists all local imports in `hiddenimports` as a safety net for PyInstaller.
+- **`scripts/regression-guard.sh`** — runs the full suite as a safety net when `--prepush` produces an empty diff.
+- **`scripts/release-loop.mjs`** — quotes `gh release create` asset paths so Windows paths with spaces don't break the command.
+
+### Fixed
+
+- **26 audit bugs (P1–P3) across Python and Electron layers:**
+  - `processor.py`: moved `-ss` before `-i` in `render_preview_frame` to preserve `t` parity with export.
+  - `video-preview/utils.js`: aligned `isOpActive` with `_build_enable_clause` for the `end<=start` edge case.
+  - `pathSecurity.js` + `queueSlice` + `PropertiesPanel`: delogo cover preview now serves images via `beru://` and primes `imageDataCache`.
+  - `build-processor.mjs`: added `color_validation.py` to `watchFiles`.
+  - `processingSlice.js`: deletes the `jobProgress` key on error instead of leaving `undefined`.
+  - `scripts/dev.mjs`: removes the old exit listener before `killTree` on Python file restart.
+  - `scripts/fetch-ffmpeg.mjs`: guards the `ffprobe-static` export shape before `copyFileSync`.
+  - `main/handlers/process.js`: bails on cancel-during-probe race and prevents a double signal on spawn error.
+  - `main/utils/preview-proxy.js`: checks the pending map before and after `await` to close the race window.
+  - `op_shared.py` + `processor.py`: skips ops with an empty time range (`end<=start`) instead of always applying; adds a UI warning.
+  - `batch_errors.py`: classifies "operation not permitted" as a permissions error, not hardware.
+  - `processor.py`: timed crop is now a zoom (scales the crop region to the full frame during the range); `_extract_error_line` returns the last non-empty line.
+  - `delogo_chains.py`: `feather=0` with time bounds now skips `boxblur`.
+  - `PropertiesPanel.jsx`: subscribes to `textInput`/`tempStart`/`tempEnd` for reactivity.
+  - `WatermarkModal.jsx`: sets `imagePath` and `imageDataUrl` atomically; handles cancel/error.
+  - `projectSlice.js`: re-maps `excelMapping.columns` by geometric region on preset load.
+  - `VideoPreview.jsx`: documents the watermark scale WYSIWYG and the `bottom-* +60` divergence.
+- **Processor opacity & fill colors** — `processor.py` preserves `opacity: 0` (previously coerced to a non-zero default) and re-validates delogo fill colors defensively at filter build time; shared float coercion with clamping prevents malformed payloads from corrupting FFmpeg output.
+
 ## [1.6.35] - 2026-06-20
 
 ### Removed
