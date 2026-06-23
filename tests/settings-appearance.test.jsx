@@ -40,7 +40,7 @@ describe("SettingsModal appearance", () => {
       root.render(<SettingsModal />);
     });
 
-    expect(document.body.textContent).toContain("Tema y apariencia");
+    expect(document.body.textContent).toContain("Acceso rápido");
     expect(document.body.textContent).toContain("Tema 1");
     expect(document.body.textContent).toContain("Tema 2");
     expect(document.body.textContent).toContain("Biblioteca de temas");
