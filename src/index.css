@@ -593,9 +593,21 @@ label {
 }
 
 .status-footer-update-primary {
-  @apply w-full rounded py-3 text-[13px] font-semibold transition-opacity mt-5;
+  @apply w-full rounded py-3 text-[13px] font-semibold transition-opacity mt-5 inline-flex items-center justify-center;
   background: #b0bac5;
   color: #111111;
+}
+
+.status-footer-update-primary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.status-footer-update-error {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--rose);
 }
 
 .status-footer-update-primary:hover {

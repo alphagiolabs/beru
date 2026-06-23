@@ -778,6 +778,65 @@ describe("useEditorStore logic regressions", () => {
     expect(window.api.downloadUpdate).not.toHaveBeenCalled();
   });
 
+  it("passes the pending update version to the native download IPC", async () => {
+    window.api = {
+      downloadUpdate: vi.fn(async () => ({ ok: true })),
+    };
+
+    useEditorStore.setState({
+      update: {
+        status: "available",
+        version: "1.6.99",
+        percent: 0,
+        error: null,
+        transferred: 0,
+        total: 0,
+        releaseNotes: "",
+        releaseUrl: null,
+      },
+    });
+
+    await useEditorStore.getState().downloadUpdate();
+
+    expect(window.api.downloadUpdate).toHaveBeenCalledWith({ version: "1.6.99" });
+  });
+
+  it("preserves download failure reason on the update slice", async () => {
+    window.api = {
+      downloadUpdate: vi.fn(async () => ({ ok: false, error: "no-update-available" })),
+    };
+
+    useEditorStore.setState({
+      update: {
+        status: "available",
+        version: "1.6.99",
+        percent: 0,
+        error: null,
+        transferred: 0,
+        total: 0,
+        releaseNotes: "",
+        releaseUrl: null,
+      },
+    });
+
+    await useEditorStore.getState().downloadUpdate();
+
+    expect(useEditorStore.getState().update).toEqual(
+      expect.objectContaining({
+        status: "available",
+        version: "1.6.99",
+        error: "no-update-available",
+      }),
+    );
+  });
+
+  it("setUpdateModalOpen controls the shared update modal flag", () => {
+    useEditorStore.getState().setUpdateModalOpen(true);
+    expect(useEditorStore.getState().updateModalOpen).toBe(true);
+    useEditorStore.getState().setUpdateModalOpen(false);
+    expect(useEditorStore.getState().updateModalOpen).toBe(false);
+  });
+
   it("addOperation rejects image and empty text ops in logo mode", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     useEditorStore.setState({

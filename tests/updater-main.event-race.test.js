@@ -73,4 +73,19 @@ describe("main/updater.js event race guard", () => {
     harness.resolveDownload();
     await downloadPromise;
   });
+
+  it("starts download using renderer version hint when pendingVersion was lost", async () => {
+    harness.init();
+
+    const downloadPromise = harness.updater.startDownload({ version: "1.6.99" });
+
+    expect(harness.events.at(-1).type).toBe("downloading");
+    expect(harness.events.at(-1).version).toBe("1.6.99");
+
+    harness.resolveDownload();
+    await downloadPromise;
+
+    harness.emit("update-downloaded", { version: "1.6.99" });
+    expect(harness.events.at(-1).type).toBe("ready");
+  });
 });

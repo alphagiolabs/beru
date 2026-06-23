@@ -29,7 +29,7 @@ contextBridge.exposeInMainWorld("api", {
   saveExecutionHistory: (history) => ipcRenderer.invoke("executionHistory:save", history),
   clearExecutionHistory: () => ipcRenderer.invoke("executionHistory:clear"),
   checkForUpdates: () => ipcRenderer.invoke("updater:check"),
-  downloadUpdate: () => ipcRenderer.invoke("updater:download"),
+  downloadUpdate: (opts) => ipcRenderer.invoke("updater:download", opts),
   installUpdate: () => ipcRenderer.invoke("updater:install"),
   getUpdaterSnapshot: () => ipcRenderer.invoke("updater:getSnapshot"),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),

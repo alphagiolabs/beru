@@ -48,8 +48,8 @@ export function registerUpdaterHandlers() {
     return await updater.checkForUpdates();
   });
 
-  ipcMain.handle("updater:download", async () => {
-    return await updater.startDownload();
+  ipcMain.handle("updater:download", async (_event, opts) => {
+    return await updater.startDownload(opts);
   });
 
   ipcMain.handle("updater:install", () => {

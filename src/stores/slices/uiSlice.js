@@ -59,6 +59,7 @@ export function createUiSlice(set, get) {
     showShortcuts: false,
     showSettings: false,
     settingsTab: "appearance",
+    updateModalOpen: false,
     isDragging: false,
     appToast: null,
     confirmDialog: null,
@@ -372,6 +373,8 @@ export function createUiSlice(set, get) {
         return { ok: false, reason: "not-available" };
       }
 
+      const targetVersion = update.version;
+
       set((s) => ({
         update: {
           ...reduceUpdaterEvent(s.update, {
@@ -385,17 +388,21 @@ export function createUiSlice(set, get) {
         },
       }));
 
-      const res = await api.downloadUpdate();
+      const res = await api.downloadUpdate({ version: targetVersion });
       if (res?.ok === false) {
         const current = get().update;
         if (current?.status === "downloading" && (current.percent || 0) === 0) {
+          const failureReason = res.reason || res.error || "unknown";
           set((s) => ({
-            update: reduceUpdaterEvent(s.update, {
-              type: "available",
-              version: s.update.version,
-              releaseNotes: s.update.releaseNotes,
-              releaseUrl: s.update.releaseUrl,
-            }),
+            update: {
+              ...reduceUpdaterEvent(s.update, {
+                type: "available",
+                version: s.update.version,
+                releaseNotes: s.update.releaseNotes,
+                releaseUrl: s.update.releaseUrl,
+              }),
+              error: failureReason,
+            },
           }));
         }
       }
@@ -411,6 +418,7 @@ export function createUiSlice(set, get) {
     setShowShortcuts: (val) => set({ showShortcuts: val }),
     setShowSettings: (val) => set({ showSettings: val }),
     setSettingsTab: (tab) => set({ settingsTab: tab }),
+    setUpdateModalOpen: (val) => set({ updateModalOpen: val }),
     setIsDragging: (val) => set({ isDragging: val }),
   };
 }

@@ -69,6 +69,7 @@ function onFatalError(err) {
 
 app.on("will-quit", (event) => {
   if (quitCleanupStarted) return;
+  if (isQuittingForUpdate()) return;
   if (!getPythonProcess()) return;
   event.preventDefault();
   quitCleanupStarted = true;
@@ -141,7 +142,8 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
-  if (quitCleanupStarted || !getPythonProcess()) return;
+  if (quitCleanupStarted || isQuittingForUpdate()) return;
+  if (!getPythonProcess()) return;
   event.preventDefault();
   quitCleanupStarted = true;
   if (!isQuittingForUpdate()) {

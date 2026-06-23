@@ -51,11 +51,11 @@ describe("App update check", () => {
       resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
     };
 
-    const { default: App } = await import("../src/App.jsx");
+    const { default: BeruRoot } = await import("../src/BeruRoot.jsx");
     await seedAuthenticatedAuth();
 
     await act(async () => {
-      root.render(<App />);
+      root.render(<BeruRoot />);
     });
 
     expect(document.body.textContent).not.toMatch(/Preparando actualización/i);
@@ -91,11 +91,11 @@ describe("App update check", () => {
       resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
     };
 
-    const { default: App } = await import("../src/App.jsx");
+    const { default: BeruRoot } = await import("../src/BeruRoot.jsx");
     await seedAuthenticatedAuth();
 
     await act(async () => {
-      root.render(<App />);
+      root.render(<BeruRoot />);
     });
 
     expect(typeof updaterHandler).toBe("function");
@@ -129,11 +129,11 @@ describe("App update check", () => {
       checkForUpdates: vi.fn(async () => ({ ok: true })),
     };
 
-    const { default: App } = await import("../src/App.jsx");
+    const { default: BeruRoot } = await import("../src/BeruRoot.jsx");
     await seedAuthenticatedAuth();
 
     await act(async () => {
-      root.render(<App />);
+      root.render(<BeruRoot />);
     });
 
     await act(async () => {

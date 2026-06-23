@@ -9,7 +9,6 @@ import { APP_VERSION, formatFooterClock } from "../utils/appVersion";
 import FooterChip from "./status-footer/FooterChip";
 import SegmentedProgress from "./status-footer/SegmentedProgress";
 import ExecutionHistoryPanel from "./status-footer/ExecutionHistoryPanel";
-import UpdateModal from "./status-footer/UpdateModal";
 import UpToDateDialog from "./status-footer/UpToDateDialog";
 
 /**
@@ -31,6 +30,7 @@ export default function StatusFooter() {
   const get = useEditorStore.getState;
   const showToast = useEditorStore((s) => s.showToast);
   const signOut = useEditorStore((s) => s.signOut);
+  const updateModalOpen = useEditorStore((s) => s.updateModalOpen);
 
   const {
     isProcessing,
@@ -56,20 +56,11 @@ export default function StatusFooter() {
   );
 
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [updateOpen, setUpdateOpen] = useState(false);
   const [upToDateOpen, setUpToDateOpen] = useState(false);
   const closeUpToDate = useCallback(() => setUpToDateOpen(false), []);
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [sessionStartedAt] = useState(() => Date.now());
 
-  // Read the queue snapshot directly via get() to avoid re-rendering the footer
-  // every time a single queue item mutates during batch processing. The footer
-  // still re-renders on progressDone / progressTotal / jobProgress / isProcessing
-  // changes. With PERF_FLAGS.progressMap enabled (default), per-job progress lives
-  // in the `jobProgress` map, not in `queue`, so this is safe — `queue` only
-  // changes on status flips (idle → processing → done/error), not on every tick.
-  // NOTE: If progressMap is disabled, this may show stale status during batch
-  // processing since the footer won't re-render on per-item progress changes.
   const { completed, total, percent } = getBatchProgress({
     queue: get().queue,
     progressDone,
@@ -79,9 +70,6 @@ export default function StatusFooter() {
   const showProgress = isProcessing || completed > 0 || percent > 0;
 
   const updateStatus = update?.status || "idle";
-  // The update badge stays visible for every active state. There is no
-  // permanent dismiss — the notification must persist until the app is fully
-  // up to date, so the user is always reminded that an update is waiting.
   const hasUpdateBadge =
     updateStatus === "available" || updateStatus === "downloading" || updateStatus === "ready";
 
@@ -93,30 +81,13 @@ export default function StatusFooter() {
     setRunStartedAt(null);
   }, [isProcessing]);
 
-  // One-second clock tick while a run is active or an update is downloading.
   useClock(isProcessing || updateStatus === "downloading", 1000);
-
-  useEffect(() => {
-    // Auto-open while downloading or ready so the user always sees progress and
-    // the install prompt until the update is applied.
-    if ((updateStatus === "ready" || updateStatus === "downloading") && update?.version) {
-      setUpdateOpen(true);
-    }
-  }, [updateStatus, update?.version]);
 
   useEffect(() => {
     if (updateStatus !== "idle" && updateStatus !== "disabled") {
       setUpToDateOpen(false);
     }
   }, [updateStatus]);
-
-  useEffect(() => {
-    if (updateStatus !== "available" || !update?.error) return;
-    showToast({ kind: "err", text: t("header.updateDownloadFailed") });
-    useEditorStore.setState((s) => ({
-      update: { ...s.update, error: null },
-    }));
-  }, [updateStatus, update?.error, showToast, t]);
 
   const runClock = runStartedAt != null ? formatFooterClock(Date.now() - runStartedAt) : "00:00";
   const sessionClock = formatFooterClock(Date.now() - sessionStartedAt);
@@ -142,28 +113,6 @@ export default function StatusFooter() {
       showToast({ kind: "ok", text: t("footer.logsExported") });
     } else if (!res?.canceled) {
       showToast({ kind: "err", text: t("footer.logsExportFailed") });
-    }
-  };
-
-  const handleUpdateNow = async () => {
-    setUpdateOpen(true);
-    const res = await get().downloadUpdate();
-    if (res?.ok === false) {
-      showToast({ kind: "err", text: t("header.updateDownloadFailed") });
-    }
-  };
-
-  const handleUpdateLater = () => {
-    // Session-only deferral: just close the modal. The badge stays visible and
-    // the modal re-opens on the next launch, so the update remains persistent
-    // until it is actually installed (no permanent dismiss).
-    setUpdateOpen(false);
-  };
-
-  const handleInstall = async () => {
-    const res = await get().installUpdate();
-    if (res?.ok === false) {
-      showToast({ kind: "err", text: t("header.updateDownloadFailed") });
     }
   };
 
@@ -195,7 +144,7 @@ export default function StatusFooter() {
           className={`status-footer-icon-btn${historyOpen ? " status-footer-icon-btn--active" : ""}`}
           onClick={() => {
             setHistoryOpen((v) => !v);
-            setUpdateOpen(false);
+            get().setUpdateModalOpen(false);
             setUpToDateOpen(false);
           }}
           title={t("footer.historyTitle")}
@@ -269,14 +218,15 @@ export default function StatusFooter() {
         <div className="status-footer-version-wrap">
           <button
             type="button"
-            className={`status-footer-version${hasUpdateBadge ? " status-footer-version--badge" : ""}${updateOpen || upToDateOpen ? " status-footer-version--open" : ""}`}
+            className={`status-footer-version${hasUpdateBadge ? " status-footer-version--badge" : ""}${updateModalOpen || upToDateOpen ? " status-footer-version--open" : ""}`}
             onClick={() => {
               if (hasUpdateBadge || updateStatus === "checking") {
-                setUpdateOpen((v) => !v);
+                const state = get();
+                state.setUpdateModalOpen(!state.updateModalOpen);
                 setUpToDateOpen(false);
               } else {
                 setUpToDateOpen(true);
-                setUpdateOpen(false);
+                get().setUpdateModalOpen(false);
               }
               setHistoryOpen(false);
             }}
@@ -286,7 +236,7 @@ export default function StatusFooter() {
                 : t("footer.version", { version: versionLabel })
             }
             aria-label={t("footer.version", { version: versionLabel })}
-            aria-expanded={updateOpen || upToDateOpen}
+            aria-expanded={updateModalOpen || upToDateOpen}
           >
             <Terminal size={11} />
             <span>
@@ -301,17 +251,6 @@ export default function StatusFooter() {
           </button>
         </div>
       </div>
-
-      {updateOpen && hasUpdateBadge && (
-        <UpdateModal
-          update={update}
-          onUpdateNow={handleUpdateNow}
-          onLater={handleUpdateLater}
-          onInstall={handleInstall}
-          onClose={() => setUpdateOpen(false)}
-          t={t}
-        />
-      )}
 
       {upToDateOpen && (
         <UpToDateDialog onClose={closeUpToDate} onCheckForUpdates={handleManualCheck} t={t} />
