@@ -6,6 +6,7 @@ import { createUiSlice } from "./slices/uiSlice.js";
 import { createEditorStyleSlice } from "./slices/editorStyleSlice.js";
 import { createProjectSlice } from "./slices/projectSlice.js";
 import { createWatermarkSlice } from "./slices/watermarkSlice.js";
+import { createAuthSlice } from "./slices/authSlice.js";
 
 const QUEUE_PERSIST_KEY = "beru-queue-session";
 const QUEUE_PERSIST_DELAY_MS = 800;
@@ -76,6 +77,7 @@ const useEditorStore = createWithEqualityFn(
     ...createEditorStyleSlice(set, get),
     ...createProjectSlice(set, get),
     ...createWatermarkSlice(set, get),
+    ...createAuthSlice(set, get),
     // Restore queue from sessionStorage if available
     ...(_restoredQueue
       ? {

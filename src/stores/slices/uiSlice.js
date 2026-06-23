@@ -28,6 +28,7 @@ export function createUiSlice(set, get) {
     },
 
     showShortcuts: false,
+    showSettings: false,
     isDragging: false,
     appToast: null,
     confirmDialog: null,
@@ -265,6 +266,7 @@ export function createUiSlice(set, get) {
     },
 
     setShowShortcuts: (val) => set({ showShortcuts: val }),
+    setShowSettings: (val) => set({ showSettings: val }),
     setIsDragging: (val) => set({ isDragging: val }),
   };
 }

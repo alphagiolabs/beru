@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import App from "../src/App.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { createOperation, createQueueItem } from "../src/utils/types.js";
+import { seedAuthenticatedAuthSync } from "./helpers/authTestState.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -43,7 +44,7 @@ window.api = {
 let root = null;
 
 describe("App render", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     document.body.innerHTML = '<div id="root"></div>';
     useEditorStore.setState({
       queue: [],
@@ -68,6 +69,7 @@ describe("App render", () => {
         releaseUrl: null,
       },
     });
+    await seedAuthenticatedAuthSync();
   });
 
   afterEach(async () => {

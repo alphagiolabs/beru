@@ -11,8 +11,6 @@ import PropertiesPanel from "./components/PropertiesPanel";
 import LayerList from "./components/LayerList";
 import StatusFooter from "./components/StatusFooter";
 import DragOverlay from "./components/DragOverlay";
-import AppToast from "./components/AppToast";
-import ConfirmDialog from "./components/ConfirmDialog";
 import { useT } from "./i18n/useT";
 
 const ShortcutsModal = lazy(() => import("./components/ShortcutsModal"));
@@ -31,8 +29,6 @@ export default function App() {
   const loadRecents = useEditorStore((s) => s.loadRecents);
   const loadExecutionHistory = useEditorStore((s) => s.loadExecutionHistory);
   const showToast = useEditorStore((s) => s.showToast);
-  const clearAppToast = useEditorStore((s) => s.clearAppToast);
-  const appToast = useEditorStore((s) => s.appToast);
   const t = useT();
   const dropRef = useRef(null);
   const dragDepthRef = useRef(0);
@@ -48,12 +44,6 @@ export default function App() {
     loadRecents();
     loadExecutionHistory();
   }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory]);
-
-  useEffect(() => {
-    if (!appToast) return;
-    const timer = setTimeout(() => clearAppToast(), 3500);
-    return () => clearTimeout(timer);
-  }, [appToast, clearAppToast]);
 
   useEffect(() => {
     const resetDragState = () => {
@@ -152,8 +142,6 @@ export default function App() {
         <ExcelMappingModal />
         <WatermarkModal />
       </Suspense>
-      <AppToast />
-      <ConfirmDialog />
     </div>
   );
 }

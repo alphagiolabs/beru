@@ -6,7 +6,7 @@ import {
   FolderOutput,
   Undo2,
   Redo2,
-  Keyboard,
+  Settings,
   FlaskConical,
   X,
   FolderOpen,
@@ -701,11 +701,11 @@ export default function Header() {
           <Droplets size={15} />
         </button>
         <button
-          onClick={() => get().setShowShortcuts(true)}
+          onClick={() => get().setShowSettings(true)}
           className="cap-btn-secondary !p-1.5"
-          title={t("header.shortcuts")}
+          title={t("header.settings")}
         >
-          <Keyboard size={14} />
+          <Settings size={14} />
         </button>
       </div>
 
