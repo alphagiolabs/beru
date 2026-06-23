@@ -887,7 +887,6 @@ label {
   border: 1px solid color-mix(in srgb, var(--accent-brand) 24%, transparent);
 }
 
-
 .settings-users--horizontal {
   @apply grid gap-3 h-full min-h-0 overflow-hidden;
   grid-template-columns: minmax(280px, 0.92fr) minmax(0, 1.08fr);
@@ -1203,7 +1202,9 @@ label {
   @apply flex flex-col gap-2.5 p-3 rounded-xl relative overflow-hidden;
   background: var(--bg-app);
   border: 1px solid var(--border);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .settings-appearance-slot::before {

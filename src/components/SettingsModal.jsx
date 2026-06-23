@@ -98,11 +98,7 @@ export default function SettingsModal() {
           </aside>
 
           <div className="settings-modal-main">
-            {settingsTab === "users" && isAdmin ? (
-              <UserManagementPanel />
-            ) : (
-              <AppearancePanel />
-            )}
+            {settingsTab === "users" && isAdmin ? <UserManagementPanel /> : <AppearancePanel />}
           </div>
         </div>
       </div>

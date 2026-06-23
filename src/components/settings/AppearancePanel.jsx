@@ -47,10 +47,7 @@ function ThemeLibraryCard({ preset, themeSlot1, themeSlot2, t, onAssign }) {
     <article
       className={`settings-library-card${inSlot1 || inSlot2 ? " settings-library-card--assigned" : ""}`}
     >
-      <div
-        className="settings-library-card-preview"
-        style={{ background: preset.tokens.bgApp }}
-      >
+      <div className="settings-library-card-preview" style={{ background: preset.tokens.bgApp }}>
         <ThemePreviewCard tokens={preset.tokens} compact className="settings-library-card-thumb" />
         <div className="settings-library-card-swatches" aria-hidden="true">
           {LIBRARY_SWATCH_KEYS.map((key) => (
@@ -109,13 +106,8 @@ function CustomThemeCard({
   const isActive = inSlot1 || inSlot2;
 
   return (
-    <article
-      className={`settings-custom-card${isActive ? " settings-custom-card--assigned" : ""}`}
-    >
-      <div
-        className="settings-custom-card-preview"
-        style={{ background: custom.tokens.bgApp }}
-      >
+    <article className={`settings-custom-card${isActive ? " settings-custom-card--assigned" : ""}`}>
+      <div className="settings-custom-card-preview" style={{ background: custom.tokens.bgApp }}>
         <ThemePreviewCard tokens={custom.tokens} compact className="settings-library-card-thumb" />
         <div className="settings-library-card-swatches" aria-hidden="true">
           {LIBRARY_SWATCH_KEYS.map((key) => (
@@ -151,16 +143,36 @@ function CustomThemeCard({
           </button>
         </div>
         <div className="settings-custom-toolbar">
-          <button type="button" className="settings-custom-tool-btn" title={t("settings.appearance.editColors")} onClick={onEdit}>
+          <button
+            type="button"
+            className="settings-custom-tool-btn"
+            title={t("settings.appearance.editColors")}
+            onClick={onEdit}
+          >
             <Pencil size={12} />
           </button>
-          <button type="button" className="settings-custom-tool-btn" title={t("settings.appearance.duplicate")} onClick={onDuplicate}>
+          <button
+            type="button"
+            className="settings-custom-tool-btn"
+            title={t("settings.appearance.duplicate")}
+            onClick={onDuplicate}
+          >
             <Copy size={12} />
           </button>
-          <button type="button" className="settings-custom-tool-btn" title={t("settings.appearance.export")} onClick={onExport}>
+          <button
+            type="button"
+            className="settings-custom-tool-btn"
+            title={t("settings.appearance.export")}
+            onClick={onExport}
+          >
             <Download size={12} />
           </button>
-          <button type="button" className="settings-custom-tool-btn settings-custom-tool-btn--danger" title={t("common.delete")} onClick={onDelete}>
+          <button
+            type="button"
+            className="settings-custom-tool-btn settings-custom-tool-btn--danger"
+            title={t("common.delete")}
+            onClick={onDelete}
+          >
             <Trash2 size={12} />
           </button>
         </div>
@@ -206,7 +218,9 @@ function ThemeSlot({
   onEdit,
 }) {
   return (
-    <div className={`settings-appearance-slot ${isActive ? "settings-appearance-slot--active" : ""}`}>
+    <div
+      className={`settings-appearance-slot ${isActive ? "settings-appearance-slot--active" : ""}`}
+    >
       <div className="settings-appearance-slot-head">
         <div className="settings-appearance-slot-icon" aria-hidden="true">
           <Icon size={14} strokeWidth={2.25} />
@@ -523,7 +537,8 @@ export default function AppearancePanel() {
                     }
                     onDuplicate={async () => {
                       const res = await duplicateThemeAsCustom(ref);
-                      if (res.ok) showToast({ kind: "ok", text: t("settings.appearance.duplicated") });
+                      if (res.ok)
+                        showToast({ kind: "ok", text: t("settings.appearance.duplicated") });
                     }}
                     onExport={() => handleExport(custom)}
                     onDelete={() => handleDeleteCustom(custom.id)}

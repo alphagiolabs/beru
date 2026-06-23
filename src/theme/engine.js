@@ -104,8 +104,7 @@ export function applyThemeTokens(tokens, activeSlot) {
   }
 
   // Legacy hint for any remaining CSS selectors
-  const isLightish =
-    parseLuminance(tokens.bgApp) > 0.45 || parseLuminance(tokens.bgSurface) > 0.5;
+  const isLightish = parseLuminance(tokens.bgApp) > 0.45 || parseLuminance(tokens.bgSurface) > 0.5;
   if (isLightish) {
     root.setAttribute("data-theme", "light");
   } else {

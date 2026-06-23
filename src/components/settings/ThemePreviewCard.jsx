@@ -16,10 +16,7 @@ export default function ThemePreviewCard({ tokens, compact = false, className = 
       >
         <div className="theme-preview-card-bar" style={{ background: tokens.bgElevated }}>
           <span style={{ color: tokens.textPrimary }}>Aa</span>
-          <span
-            className="theme-preview-card-dot"
-            style={{ background: tokens.accentBrand }}
-          />
+          <span className="theme-preview-card-dot" style={{ background: tokens.accentBrand }} />
         </div>
         <div className="theme-preview-card-body">
           <span style={{ color: tokens.textPrimary }}>Title</span>

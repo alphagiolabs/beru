@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.38] - 2026-06-23
+
+### Added
+
+- **Full editor layout on launch** — `App.jsx`, `LayerList.jsx`, `ToolBar.jsx`, and `VideoPreview.jsx` now always render the header, queue, preview, toolbar, and properties panels on startup. The import prompt is centered in the preview area and editing controls stay disabled until a video is selected, so the app no longer shows a blank shell on first open.
+- **Supabase auth and login gate** — `BeruRoot.jsx` inits auth and switches between a new `LoginScreen` and the editor. Added a `SettingsModal` with admin `UserManagementPanel`, a footer sign-out with confirmation (`StatusFooter.jsx`), `src/lib/supabaseClient.js`, an `authSlice` store, plus tests for the logout flow and an auth test-state helper.
+- **Appearance settings with custom theme editor** — new `SettingsModal` → `AppearancePanel`, `ThemeEditor`, and `ThemePreviewCard` components, backed by a `theme/engine.js`, `theme/presets.js`, and `theme/tokens.js` system. `uiSlice.js` grew to manage theme state; `main/utils/windowTheme.js` and `main/handlers/settings.js` sync the native window chrome. Added `tests/theme-engine.test.js` and `tests/settings-appearance.test.jsx`.
+- **Expanded theme library** — 14 presets with scrollable quick access, collapsible custom themes, and a grouped theme editor layout in `AppearancePanel.jsx` and `ThemeEditor.jsx`, with matching i18n strings and CSS variables.
+
+### Changed
+
+- **i18n** — added en/es strings for appearance, auth, login, and user-management flows.
+
 ## [1.6.37] - 2026-06-22
 
 ### Fixed

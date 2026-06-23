@@ -176,7 +176,11 @@ export default function ThemeEditor({
               <X size={12} />
               {t("common.cancel")}
             </button>
-            <button type="button" className="cap-btn-primary theme-editor-save" onClick={handleSave}>
+            <button
+              type="button"
+              className="cap-btn-primary theme-editor-save"
+              onClick={handleSave}
+            >
               <Save size={12} />
               {t("settings.appearance.editor.save")}
             </button>

@@ -217,9 +217,7 @@ export function createUiSlice(set, get) {
       const { customThemes } = get();
       const idx = customThemes.findIndex((c) => c.id === entry.id);
       const nextThemes =
-        idx >= 0
-          ? customThemes.map((c, i) => (i === idx ? entry : c))
-          : [...customThemes, entry];
+        idx >= 0 ? customThemes.map((c, i) => (i === idx ? entry : c)) : [...customThemes, entry];
 
       set({ customThemes: nextThemes });
       await persistThemeSettings({ customThemes: nextThemes });
