@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import StatusFooter from "../src/components/StatusFooter.jsx";
+import UpdatePrompt from "../src/components/UpdatePrompt.jsx";
 import { reduceUpdaterEvent, IDLE_UPDATE } from "../src/utils/updateState.js";
 
 globalThis.React = React;
@@ -14,7 +15,12 @@ function renderFooter() {
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
   return act(async () => {
-    root.render(<StatusFooter />);
+    root.render(
+      <>
+        <StatusFooter />
+        <UpdatePrompt />
+      </>,
+    );
   });
 }
 
@@ -39,6 +45,7 @@ describe("realistic update flow", () => {
       executionHistory: [],
       batchSummary: null,
       language: "es",
+      updateModalOpen: false,
       update: {
         status: "idle",
         version: null,
@@ -80,12 +87,15 @@ describe("realistic update flow", () => {
     expect(useEditorStore.getState().update.status).toBe("available");
 
     const versionBtn = document.querySelector(".status-footer-version--badge");
+    expect(versionBtn).toBeTruthy();
+
     await act(async () => {
-      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      useEditorStore.getState().setUpdateModalOpen(true);
     });
 
     await clickButton("Actualizar ahora");
     expect(downloadUpdate).toHaveBeenCalledTimes(1);
+    expect(downloadUpdate).toHaveBeenCalledWith({ version: "9.9.9" });
     expect(useEditorStore.getState().update.status).toBe("downloading");
 
     await act(async () => {
@@ -121,6 +131,7 @@ describe("realistic update flow", () => {
     };
 
     useEditorStore.setState({
+      updateModalOpen: true,
       update: {
         status: "available",
         version: "9.9.9",
@@ -136,12 +147,6 @@ describe("realistic update flow", () => {
 
     await renderFooter();
 
-    const versionBtn = document.querySelector(".status-footer-version--badge");
-    expect(versionBtn).toBeTruthy();
-    await act(async () => {
-      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
     const changelog = document.querySelector(".status-footer-update-changelog");
     const primaryBtn = document.querySelector(".status-footer-update-primary");
     const moreNote = document.querySelector(".status-footer-update-more");
@@ -153,6 +158,38 @@ describe("realistic update flow", () => {
     expect(
       primaryBtn.compareDocumentPosition(moreNote) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("shows an inline error when the download IPC fails immediately", async () => {
+    window.api = {
+      downloadUpdate: vi.fn(async () => ({ ok: false, error: "no-update-available" })),
+    };
+
+    useEditorStore.setState({
+      updateModalOpen: true,
+      update: {
+        status: "available",
+        version: "9.9.9",
+        percent: 0,
+        error: null,
+        transferred: 0,
+        total: 0,
+        releaseNotes: "- fix: inline error",
+        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
+      },
+    });
+
+    await renderFooter();
+
+    await clickButton("Actualizar ahora");
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(document.querySelector(".status-footer-update-error")).toBeTruthy();
+    expect(document.body.textContent).toMatch(/No se encontró la actualización/i);
+    expect(useEditorStore.getState().update.status).toBe("available");
+    expect(useEditorStore.getState().update.error).toBe("no-update-available");
   });
 });
 

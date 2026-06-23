@@ -2,7 +2,6 @@ import { useEffect, useRef, lazy, Suspense } from "react";
 import useEditorStore from "./stores/useEditorStore";
 import useKeyboard from "./hooks/useKeyboard";
 import useProcessing from "./hooks/useProcessing";
-import useUpdater from "./hooks/useUpdater";
 import Header from "./components/Header";
 import QueueSidebar from "./components/QueueSidebar";
 import VideoPreview from "./components/VideoPreview";
@@ -36,7 +35,6 @@ export default function App() {
 
   useKeyboard();
   useProcessing(api);
-  useUpdater(api);
 
   useEffect(() => {
     loadPresetsFromStorage();

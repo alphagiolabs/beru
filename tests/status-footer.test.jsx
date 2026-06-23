@@ -3,11 +3,23 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import useEditorStore from "../src/stores/useEditorStore";
 import StatusFooter from "../src/components/StatusFooter";
+import UpdatePrompt from "../src/components/UpdatePrompt";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let root = null;
+
+function renderFooterWithUpdatePrompt() {
+  return act(async () => {
+    root.render(
+      <>
+        <StatusFooter />
+        <UpdatePrompt />
+      </>,
+    );
+  });
+}
 
 describe("StatusFooter", () => {
   beforeEach(() => {
@@ -22,6 +34,7 @@ describe("StatusFooter", () => {
       executionHistory: [],
       batchSummary: null,
       language: "es",
+      updateModalOpen: false,
       update: {
         status: "idle",
         version: null,
@@ -95,15 +108,13 @@ describe("StatusFooter", () => {
       },
     });
 
-    await act(async () => {
-      root.render(<StatusFooter />);
-    });
+    await renderFooterWithUpdatePrompt();
 
     const versionBtn = document.querySelector(".status-footer-version--badge");
     expect(versionBtn).toBeTruthy();
 
     await act(async () => {
-      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      useEditorStore.getState().setUpdateModalOpen(true);
     });
 
     const dialog = document.querySelector(".status-footer-update-panel");
@@ -132,6 +143,7 @@ describe("StatusFooter", () => {
     });
 
     expect(window.api.downloadUpdate).toHaveBeenCalledTimes(1);
+    expect(window.api.downloadUpdate).toHaveBeenCalledWith({ version: "9.9.9" });
   });
 
   it("surfaces the ready modal after the user authorizes a download; auto-install lives in main", async () => {
@@ -145,6 +157,7 @@ describe("StatusFooter", () => {
     };
 
     useEditorStore.setState({
+      updateModalOpen: true,
       update: {
         status: "available",
         version: "9.9.9",
@@ -157,14 +170,7 @@ describe("StatusFooter", () => {
       },
     });
 
-    await act(async () => {
-      root.render(<StatusFooter />);
-    });
-
-    const versionBtn = document.querySelector(".status-footer-version--badge");
-    await act(async () => {
-      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    await renderFooterWithUpdatePrompt();
 
     const updateNow = Array.from(document.querySelectorAll("button")).find((btn) =>
       btn.textContent.includes("Actualizar ahora"),
@@ -174,10 +180,11 @@ describe("StatusFooter", () => {
       await Promise.resolve();
     });
 
-    expect(window.api.downloadUpdate).toHaveBeenCalledTimes(1);
+    expect(window.api.downloadUpdate).toHaveBeenCalledWith({ version: "9.9.9" });
 
     await act(async () => {
       useEditorStore.setState({
+        updateModalOpen: true,
         update: {
           status: "ready",
           version: "9.9.9",
@@ -203,6 +210,7 @@ describe("StatusFooter", () => {
     };
 
     useEditorStore.setState({
+      updateModalOpen: true,
       update: {
         status: "ready",
         version: "9.9.9",
@@ -215,9 +223,7 @@ describe("StatusFooter", () => {
       },
     });
 
-    await act(async () => {
-      root.render(<StatusFooter />);
-    });
+    await renderFooterWithUpdatePrompt();
 
     const dialog = document.querySelector(".status-footer-update-panel");
     expect(dialog).toBeTruthy();
@@ -272,9 +278,7 @@ describe("StatusFooter", () => {
       },
     });
 
-    await act(async () => {
-      root.render(<StatusFooter />);
-    });
+    await renderFooterWithUpdatePrompt();
 
     const versionBtn = document.querySelector(".status-footer-version--badge");
     await act(async () => {

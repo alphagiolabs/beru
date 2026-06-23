@@ -1,16 +1,28 @@
 import { useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { parseReleaseNotesSections } from "../../utils/appVersion";
+import { formatUpdateError } from "../../utils/updateErrors";
 import BeruMark from "./BeruMark";
 import UpdateChangelog from "./UpdateChangelog";
 
-export default function UpdateModal({ update, onUpdateNow, onLater, onInstall, onClose, t }) {
+export default function UpdateModal({
+  update,
+  isStartingDownload = false,
+  onUpdateNow,
+  onLater,
+  onInstall,
+  onClose,
+  t,
+}) {
   const closeBtnRef = useRef(null);
   const status = update?.status || "idle";
   const sections = parseReleaseNotesSections(update?.releaseNotes);
   const percent = Math.max(0, Math.min(100, Math.round(update?.percent || 0)));
   const version = update?.version || "?";
+  const inlineError =
+    status === "available" && update?.error ? formatUpdateError(t, update.error) : null;
+  const isBusy = isStartingDownload || status === "downloading";
 
   useEffect(() => {
     closeBtnRef.current?.focus();
@@ -76,7 +88,7 @@ export default function UpdateModal({ update, onUpdateNow, onLater, onInstall, o
         ) : status === "downloading" ? (
           <>
             <p className="status-footer-update-subtitle">{t("footer.updateWait")}</p>
-            <p className="status-footer-update-warning">{t("footer.updateAutoInstall")}</p>
+            <p className="status-footer-update-warning">{t("footer.updateReadyHint")}</p>
             <div className="status-footer-update-progress">
               <div
                 className="status-footer-update-progress-fill"
@@ -89,10 +101,32 @@ export default function UpdateModal({ update, onUpdateNow, onLater, onInstall, o
           <>
             <p className="status-footer-update-subtitle">{t("updater.modal.subtitle")}</p>
             <UpdateChangelog sections={sections} t={t} />
-            <button type="button" className="status-footer-update-primary" onClick={onUpdateNow}>
-              {t("footer.updateNow")}
+            {inlineError && (
+              <p className="status-footer-update-error" role="alert">
+                {inlineError}
+              </p>
+            )}
+            <button
+              type="button"
+              className="status-footer-update-primary"
+              onClick={onUpdateNow}
+              disabled={isBusy}
+            >
+              {isStartingDownload ? (
+                <>
+                  <Loader2 size={14} className="status-footer-spin inline mr-1.5" />
+                  {t("footer.updateStarting")}
+                </>
+              ) : (
+                t("footer.updateNow")
+              )}
             </button>
-            <button type="button" className="status-footer-update-secondary" onClick={onLater}>
+            <button
+              type="button"
+              className="status-footer-update-secondary"
+              onClick={onLater}
+              disabled={isStartingDownload}
+            >
               {t("footer.maybeLater")}
             </button>
             {sections.hiddenCount > 0 && (

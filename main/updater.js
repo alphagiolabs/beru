@@ -206,7 +206,17 @@ const checkForUpdates = async () => {
   }
 };
 
-const startDownload = async () => {
+const resolvePendingVersion = (hint) => {
+  if (pendingVersion) return pendingVersion;
+  const fromHint = hint && String(hint).replace(/^v/i, "");
+  if (fromHint) return fromHint;
+  if (lastSnapshot?.type === "available" && lastSnapshot?.version) {
+    return lastSnapshot.version;
+  }
+  return null;
+};
+
+const startDownload = async (opts = {}) => {
   if (isDev) return { ok: false, reason: "dev-build" };
   if (downloadInProgress) return { ok: true, reason: "already-downloading" };
   const au = tryLoad();
@@ -216,6 +226,11 @@ const startDownload = async () => {
   // can auto-install and honor the modal copy. Cleared on every error/cancel
   // path below.
   userInitiatedDownload = true;
+
+  const versionHint = opts?.version ?? null;
+  if (!pendingVersion) {
+    pendingVersion = resolvePendingVersion(versionHint);
+  }
 
   if (!pendingVersion) {
     try {
