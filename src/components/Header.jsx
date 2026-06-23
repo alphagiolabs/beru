@@ -28,6 +28,7 @@ import useEditorStore from "../stores/useEditorStore";
 import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
 import { hasVideoDimensions, listVideosMissingBatchText } from "../utils/batch-process";
 import { createJobManifest } from "../utils/job-manifest";
+import { resolveThemeName } from "../theme/engine.js";
 
 const api = window.api;
 
@@ -43,7 +44,10 @@ export default function Header() {
     templateRegions,
     selectedIdx,
     presets,
-    theme,
+    themeActiveSlot,
+    themeSlot1,
+    themeSlot2,
+    customThemes,
     language,
     recent,
   } = useEditorStore(
@@ -58,7 +62,10 @@ export default function Header() {
       templateRegions: s.templateRegions,
       selectedIdx: s.selectedIdx,
       presets: s.presets,
-      theme: s.theme,
+      themeActiveSlot: s.themeActiveSlot,
+      themeSlot1: s.themeSlot1,
+      themeSlot2: s.themeSlot2,
+      customThemes: s.customThemes,
       language: s.language,
       recent: s.recent,
     }),
@@ -653,10 +660,23 @@ export default function Header() {
         </button>
         <button
           onClick={() => get().toggleTheme()}
-          className="cap-btn-secondary !p-1.5"
-          title={t("header.theme")}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            get().setSettingsTab("appearance");
+            get().setShowSettings(true);
+          }}
+          className={`cap-btn-secondary !p-1.5 header-theme-toggle ${
+            themeActiveSlot === 1 ? "header-theme-toggle--slot1" : "header-theme-toggle--slot2"
+          }`}
+          title={t("header.themeSwitchTo", {
+            name: resolveThemeName(
+              themeActiveSlot === 1 ? themeSlot2 : themeSlot1,
+              customThemes,
+              t,
+            ),
+          })}
         >
-          {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
+          {themeActiveSlot === 1 ? <Sun size={14} /> : <Moon size={14} />}
         </button>
         <div className="relative" ref={langRef}>
           <button

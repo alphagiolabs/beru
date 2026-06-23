@@ -36,8 +36,8 @@ export function registerSettingsHandlers() {
     }
   });
 
-  ipcMain.handle("window:setTheme", async (_event, theme) => {
-    applyWindowTheme(getMainWindow(), theme);
+  ipcMain.handle("window:setTheme", async (_event, themeOrColors) => {
+    applyWindowTheme(getMainWindow(), themeOrColors);
     return { success: true };
   });
 }

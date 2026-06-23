@@ -778,123 +778,274 @@ label {
 }
 
 /* Settings modal */
+.settings-modal {
+  @apply p-0 overflow-hidden w-full;
+  max-width: 860px;
+}
+
 .settings-modal-header {
-  @apply flex items-center justify-between px-5 py-4 border-b;
+  @apply flex items-start justify-between gap-4 px-6 py-4 border-b;
   border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-surface) 55%, var(--bg-elevated));
 }
 
-.settings-modal-header-left {
-  @apply flex items-center gap-2;
+.settings-modal-header-brand {
+  @apply flex items-start gap-3 min-w-0;
 }
 
-.settings-modal-header-left h2 {
-  @apply text-sm font-semibold m-0;
+.settings-modal-header-icon {
+  @apply flex items-center justify-center flex-shrink-0 rounded-lg;
+  width: 36px;
+  height: 36px;
+  background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
+  color: var(--accent-brand);
+  border: 1px solid color-mix(in srgb, var(--accent-brand) 22%, transparent);
+}
+
+.settings-modal-header-brand h2 {
+  @apply text-[15px] font-semibold m-0 leading-tight;
   color: var(--text-primary);
 }
 
-.settings-modal-body {
-  @apply px-5 py-4 max-h-[min(70vh,520px)] overflow-y-auto;
+.settings-modal-header-sub {
+  @apply text-[11px] m-0 mt-1 leading-snug;
+  color: var(--text-dim);
 }
 
-.settings-modal-account {
-  @apply flex flex-wrap items-center gap-2 mb-4 pb-4 border-b text-[11px];
+.settings-modal-close {
+  @apply flex items-center justify-center rounded-md flex-shrink-0 transition-colors;
+  width: 28px;
+  height: 28px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.settings-modal-close:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--border) 35%, transparent);
   border-color: var(--border);
 }
 
+.settings-modal-body {
+  @apply flex gap-4 px-5 py-4 items-stretch;
+}
+
+.settings-modal-rail {
+  @apply flex flex-col gap-3 flex-shrink-0 self-stretch;
+  width: 196px;
+}
+
+.settings-modal-main {
+  @apply flex-1 min-w-0;
+}
+
+.settings-modal-account {
+  @apply flex flex-col items-center text-center gap-2.5 p-3.5 rounded-xl;
+  background: color-mix(in srgb, var(--bg-app) 70%, var(--bg-surface));
+  border: 1px solid var(--border);
+}
+
+.settings-modal-account-avatar {
+  @apply flex items-center justify-center flex-shrink-0 rounded-full text-[13px] font-semibold;
+  width: 40px;
+  height: 40px;
+  background: color-mix(in srgb, var(--accent-brand) 16%, transparent);
+  color: var(--accent-brand);
+  border: 1px solid color-mix(in srgb, var(--accent-brand) 28%, transparent);
+}
+
+.settings-modal-account-info {
+  @apply flex flex-col items-center min-w-0 w-full gap-1;
+}
+
 .settings-modal-account-label {
+  @apply text-[9px] uppercase tracking-wide font-medium;
   color: var(--text-dim);
 }
 
 .settings-modal-account-email {
+  @apply text-[11px] font-medium break-all leading-snug;
   color: var(--text-primary);
-  font-weight: 600;
 }
 
 .settings-modal-account-badge {
-  @apply rounded px-1.5 py-0.5 text-[10px] font-medium;
-  background: color-mix(in srgb, var(--accent-brand) 18%, transparent);
+  @apply rounded-full px-2 py-0.5 text-[9px] font-semibold;
+  background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
   color: var(--accent-brand);
+  border: 1px solid color-mix(in srgb, var(--accent-brand) 24%, transparent);
 }
 
-.settings-users-section {
-  @apply mb-5;
+
+.settings-users--horizontal {
+  @apply grid gap-3 h-full;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
 }
 
-.settings-users-section-head {
-  @apply flex items-center gap-2 mb-3 text-[11px] font-semibold uppercase tracking-wide;
+.settings-users-empty--wide {
+  grid-column: 1 / -1;
+}
+
+.settings-card {
+  @apply rounded-xl overflow-hidden flex flex-col min-w-0;
+  background: color-mix(in srgb, var(--bg-app) 55%, var(--bg-surface));
+  border: 1px solid var(--border);
+}
+
+.settings-card-head {
+  @apply flex items-center justify-between gap-3 px-3.5 py-2.5 border-b flex-shrink-0;
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.settings-card-head-left {
+  @apply flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider;
   color: var(--text-secondary);
 }
 
 .settings-users-count {
-  @apply ml-auto rounded px-1.5 py-0.5 text-[10px] font-normal normal-case;
-  background: color-mix(in srgb, var(--border) 40%, transparent);
+  @apply rounded-full min-w-[20px] h-[20px] px-1.5 inline-flex items-center justify-center text-[9px] font-semibold;
+  background: color-mix(in srgb, var(--border) 45%, transparent);
   color: var(--text-dim);
 }
 
 .settings-users-form {
-  @apply grid gap-2;
+  @apply flex flex-col gap-2.5 p-3.5 flex-1;
+}
+
+.settings-users-form--compact {
+  @apply grid gap-2.5;
   grid-template-columns: 1fr 1fr;
 }
 
-.settings-users-form input:nth-child(1) {
+.settings-field--full {
   grid-column: 1 / -1;
 }
 
-.settings-users-form input:nth-child(2) {
+.settings-users-form--compact .settings-users-submit {
   grid-column: 1 / -1;
+  margin-top: 0;
 }
 
-.settings-users-form button {
-  grid-column: 1 / -1;
+.settings-field {
+  @apply flex flex-col gap-1 min-w-0;
 }
 
-.settings-users-form input {
-  @apply rounded px-2.5 py-2 text-[12px] outline-none;
+.settings-field-label {
+  @apply text-[9px] font-medium uppercase tracking-wide;
+  color: var(--text-dim);
+}
+
+.settings-field input {
+  @apply rounded-lg px-2.5 py-2 text-[11px] outline-none transition-colors w-full min-w-0;
   background: var(--bg-app);
   border: 1px solid var(--border);
   color: var(--text-primary);
 }
 
-.settings-users-list {
-  @apply flex flex-col gap-1.5 m-0 p-0 list-none;
+.settings-field input::placeholder {
+  color: color-mix(in srgb, var(--text-dim) 85%, transparent);
 }
 
-.settings-users-row {
-  @apply flex items-center justify-between gap-3 rounded-lg px-3 py-2.5;
-  background: var(--bg-app);
-  border: 1px solid var(--border);
+.settings-field input:focus {
+  border-color: color-mix(in srgb, var(--accent-brand) 45%, var(--border));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-brand) 12%, transparent);
 }
 
-.settings-users-row--disabled {
+.settings-field input:disabled {
   opacity: 0.55;
 }
 
+.settings-users-submit {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold transition-opacity;
+  background: var(--accent-brand);
+  color: var(--bg-app);
+  border: none;
+}
+
+.settings-users-submit:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.settings-users-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.settings-users-list {
+  @apply flex flex-col gap-1.5 m-0 p-3 list-none;
+}
+
+.settings-users-row {
+  @apply flex items-center gap-2.5 rounded-lg px-2.5 py-2;
+  background: var(--bg-app);
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+}
+
+.settings-users-row--disabled {
+  opacity: 0.6;
+}
+
+.settings-users-avatar {
+  @apply flex items-center justify-center flex-shrink-0 rounded-full text-[10px] font-semibold;
+  width: 28px;
+  height: 28px;
+  background: color-mix(in srgb, var(--border) 35%, transparent);
+  color: var(--text-secondary);
+}
+
+.settings-users-avatar--admin {
+  background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
+  color: var(--accent-brand);
+}
+
+.settings-users-row-info {
+  @apply flex flex-col min-w-0 flex-1 gap-0;
+}
+
+.settings-users-row-top {
+  @apply flex items-center gap-1.5 min-w-0;
+}
+
 .settings-users-row-email {
-  @apply block text-[12px] font-medium;
+  @apply text-[11px] font-medium truncate;
   color: var(--text-primary);
 }
 
+.settings-users-you {
+  @apply rounded px-1 py-0.5 text-[8px] font-semibold uppercase tracking-wide flex-shrink-0;
+  background: color-mix(in srgb, var(--accent-brand) 12%, transparent);
+  color: var(--accent-brand);
+}
+
 .settings-users-row-name {
-  @apply block text-[11px] mt-0.5;
+  @apply text-[10px] truncate;
   color: var(--text-secondary);
 }
 
 .settings-users-row-meta {
-  @apply block text-[10px] mt-0.5;
+  @apply text-[9px];
   color: var(--text-dim);
 }
 
 .settings-users-toggle {
-  @apply inline-flex items-center gap-1.5 rounded px-2 py-1 text-[10px] font-medium flex-shrink-0 transition-colors;
+  @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold flex-shrink-0 transition-colors;
   background: color-mix(in srgb, var(--accent-brand) 12%, transparent);
   color: var(--accent-brand);
-  border: 1px solid color-mix(in srgb, var(--accent-brand) 25%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-brand) 28%, transparent);
+}
+
+.settings-users-toggle:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-brand) 18%, transparent);
 }
 
 .settings-users-toggle--off {
   background: color-mix(in srgb, var(--rose) 10%, transparent);
   color: var(--rose);
-  border-color: color-mix(in srgb, var(--rose) 25%, transparent);
+  border-color: color-mix(in srgb, var(--rose) 28%, transparent);
+}
+
+.settings-users-toggle--off:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--rose) 16%, transparent);
 }
 
 .settings-users-toggle:disabled {
@@ -902,28 +1053,351 @@ label {
   cursor: not-allowed;
 }
 
-.settings-users-empty,
+.settings-users-empty {
+  @apply flex flex-col items-center justify-center gap-2 py-8 text-[11px] text-center overflow-hidden;
+  color: var(--text-dim);
+}
+
+.settings-users-empty-icon {
+  @apply flex items-center justify-center rounded-full;
+  width: 36px;
+  height: 36px;
+  background: color-mix(in srgb, var(--border) 35%, transparent);
+  color: var(--text-secondary);
+}
+
 .settings-users-loading {
-  @apply flex flex-col items-center justify-center gap-2 py-8 text-[12px];
+  @apply flex items-center justify-center py-8 overflow-hidden;
   color: var(--text-dim);
 }
 
 .settings-users-empty-text {
-  @apply text-[12px] py-4 m-0;
+  @apply text-[11px] py-5 px-3 m-0 text-center overflow-hidden;
   color: var(--text-dim);
 }
 
-.settings-modal-shortcuts-link {
-  @apply pt-4 mt-2 border-t;
+/* Settings navigation */
+.settings-modal-nav {
+  @apply flex flex-col gap-1;
+}
+
+.settings-modal-nav-item {
+  @apply flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-medium transition-colors text-left w-full;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.settings-modal-nav-item:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-surface) 80%, var(--bg-elevated));
   border-color: var(--border);
 }
 
-.settings-modal-link-btn {
-  @apply inline-flex items-center gap-2 text-[11px] transition-opacity;
+.settings-modal-nav-item--active {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-brand) 10%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--accent-brand) 28%, transparent);
+}
+
+/* Header theme toggle */
+.header-theme-toggle--slot1 {
+  border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--amber) 22%, transparent);
+}
+
+.header-theme-toggle--slot2 {
+  border: 1px solid color-mix(in srgb, var(--accent-brand) 45%, transparent) !important;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 18%, transparent);
+}
+
+/* Appearance panel */
+.settings-appearance {
+  @apply flex flex-col gap-5 min-h-0 overflow-y-auto overflow-x-hidden pr-1;
+  max-height: min(68vh, 560px);
+}
+
+.settings-appearance-intro {
+  @apply flex items-start gap-3;
+}
+
+.settings-appearance-intro-icon {
+  @apply flex items-center justify-center flex-shrink-0 rounded-lg;
+  width: 32px;
+  height: 32px;
+  background: color-mix(in srgb, var(--accent-brand) 12%, transparent);
+  color: var(--accent-brand);
+  border: 1px solid color-mix(in srgb, var(--accent-brand) 24%, transparent);
+}
+
+.settings-appearance-title {
+  @apply text-[13px] font-semibold m-0;
+  color: var(--text-primary);
+}
+
+.settings-appearance-sub {
+  @apply text-[10px] m-0 mt-0.5 leading-snug;
+  color: var(--text-dim);
+}
+
+.settings-appearance-section {
+  @apply flex flex-col gap-3;
+}
+
+.settings-appearance-section-head {
+  @apply flex items-center justify-between gap-2 flex-wrap;
+}
+
+.settings-appearance-section-title {
+  @apply text-[11px] font-semibold uppercase tracking-wide m-0;
   color: var(--text-secondary);
 }
 
-.settings-modal-link-btn:hover {
-  opacity: 0.8;
+.settings-appearance-section-tools {
+  @apply flex items-center gap-2 flex-wrap;
+}
+
+.settings-appearance-slots {
+  @apply grid gap-3;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.settings-appearance-slot {
+  @apply flex flex-col gap-2.5 p-3 rounded-xl;
+  background: color-mix(in srgb, var(--bg-app) 65%, var(--bg-surface));
+  border: 1px solid var(--border);
+}
+
+.settings-appearance-slot--active {
+  border-color: color-mix(in srgb, var(--accent-brand) 40%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 12%, transparent);
+}
+
+.settings-appearance-slot-head {
+  @apply flex items-start gap-2;
+  color: var(--text-secondary);
+}
+
+.settings-appearance-slot-label {
+  @apply block text-[11px] font-semibold;
   color: var(--text-primary);
+}
+
+.settings-appearance-slot-hint {
+  @apply block text-[9px];
+  color: var(--text-dim);
+}
+
+.settings-appearance-slot-badge {
+  @apply inline-flex items-center gap-1 ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold;
+  background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
+  color: var(--accent-brand);
+  border: 1px solid color-mix(in srgb, var(--accent-brand) 24%, transparent);
+}
+
+.settings-appearance-select {
+  @apply w-full text-[11px];
+}
+
+.settings-appearance-slot-actions {
+  @apply flex flex-wrap gap-2;
+}
+
+.settings-appearance-grid {
+  @apply grid gap-3;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
+.settings-appearance-grid-item {
+  @apply flex flex-col gap-2 p-2.5 rounded-xl;
+  background: color-mix(in srgb, var(--bg-app) 70%, var(--bg-surface));
+  border: 1px solid var(--border);
+}
+
+.settings-appearance-grid-name {
+  @apply text-[10px] font-medium truncate;
+  color: var(--text-primary);
+}
+
+.settings-appearance-grid-actions {
+  @apply flex gap-1.5 flex-wrap;
+}
+
+.settings-appearance-custom-list {
+  @apply flex flex-col gap-2;
+}
+
+.settings-appearance-custom-row {
+  @apply flex items-center gap-3 p-2.5 rounded-xl;
+  background: color-mix(in srgb, var(--bg-app) 70%, var(--bg-surface));
+  border: 1px solid var(--border);
+}
+
+.settings-appearance-custom-info {
+  @apply flex flex-col gap-0.5 flex-1 min-w-0;
+}
+
+.settings-appearance-custom-name {
+  @apply text-[11px] font-medium truncate;
+  color: var(--text-primary);
+}
+
+.settings-appearance-custom-active {
+  @apply text-[9px];
+  color: var(--accent-brand);
+}
+
+.settings-appearance-custom-actions {
+  @apply flex items-center gap-1 flex-shrink-0;
+}
+
+/* Theme preview card */
+.theme-preview-card {
+  @apply rounded-lg p-2 border;
+  min-height: 72px;
+}
+
+.theme-preview-card--compact {
+  min-height: 56px;
+}
+
+.theme-preview-card-surface {
+  @apply rounded-md border overflow-hidden h-full;
+}
+
+.theme-preview-card-bar {
+  @apply flex items-center justify-between px-2 py-1;
+}
+
+.theme-preview-card-dot {
+  @apply rounded-full flex-shrink-0;
+  width: 8px;
+  height: 8px;
+}
+
+.theme-preview-card-body {
+  @apply flex flex-col gap-1 px-2 py-1.5;
+}
+
+.theme-preview-card-body span:first-child {
+  @apply text-[10px] font-semibold leading-none;
+}
+
+.theme-preview-card-body span:nth-child(2) {
+  @apply text-[8px] leading-none;
+}
+
+.theme-preview-card-actions {
+  @apply flex gap-1 mt-1;
+}
+
+.theme-preview-card-btn {
+  @apply inline-flex items-center justify-center rounded text-[8px] font-semibold px-1.5 py-0.5;
+}
+
+.theme-preview-card-btn--ghost {
+  @apply border bg-transparent;
+}
+
+/* Theme editor */
+.theme-editor {
+  @apply flex flex-col gap-4 min-h-0 overflow-hidden;
+  max-height: min(68vh, 560px);
+}
+
+.theme-editor-header {
+  @apply flex items-start justify-between gap-3 flex-wrap;
+}
+
+.theme-editor-title {
+  @apply text-[13px] font-semibold m-0;
+  color: var(--text-primary);
+}
+
+.theme-editor-sub {
+  @apply text-[10px] m-0 mt-0.5;
+  color: var(--text-dim);
+}
+
+.theme-editor-header-actions {
+  @apply flex flex-wrap gap-2;
+}
+
+.theme-editor-layout {
+  @apply grid gap-4 min-h-0 overflow-hidden;
+  grid-template-columns: minmax(0, 1fr) 200px;
+}
+
+@media (max-width: 720px) {
+  .theme-editor-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.theme-editor-fields {
+  @apply flex flex-col gap-3 min-h-0 overflow-y-auto pr-1;
+}
+
+.theme-editor-name-label {
+  @apply flex flex-col gap-1 text-[10px] font-medium;
+  color: var(--text-secondary);
+}
+
+.theme-token-list {
+  @apply flex flex-col gap-1.5;
+}
+
+.theme-token-row {
+  @apply grid gap-2 items-center;
+  grid-template-columns: 120px 1fr;
+}
+
+.theme-token-label {
+  @apply text-[10px] truncate;
+  color: var(--text-dim);
+}
+
+.theme-token-inputs {
+  @apply flex items-center gap-2 min-w-0;
+}
+
+.theme-token-color {
+  @apply flex-shrink-0 rounded cursor-pointer border-0 p-0;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+}
+
+.theme-token-text {
+  @apply flex-1 min-w-0 text-[10px] font-mono;
+}
+
+.theme-editor-error {
+  @apply text-[10px] m-0;
+  color: var(--rose);
+}
+
+.theme-editor-preview-panel {
+  @apply flex flex-col gap-2 min-h-0;
+}
+
+.theme-editor-preview-label {
+  @apply text-[10px] font-medium uppercase tracking-wide;
+  color: var(--text-dim);
+}
+
+.theme-editor-sample-modal {
+  @apply flex flex-col gap-2 p-3 rounded-lg border;
+}
+
+.theme-editor-sample-modal span:first-child {
+  @apply text-[11px] font-semibold;
+}
+
+.theme-editor-sample-modal span:nth-child(2) {
+  @apply text-[10px];
+}
+
+.theme-editor-sample-btn {
+  @apply self-start rounded px-2.5 py-1 text-[10px] font-semibold border-0 cursor-default;
 }

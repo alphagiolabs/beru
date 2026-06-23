@@ -3,6 +3,7 @@ import App from "./App";
 import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConfirmDialog from "./components/ConfirmDialog";
+import SettingsModal from "./components/SettingsModal";
 import AppToast from "./components/AppToast";
 import useEditorStore from "./stores/useEditorStore";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
@@ -32,6 +33,7 @@ export default function BeruRoot() {
       {showLogin ? <LoginScreen /> : <App />}
       <AppToast />
       <ConfirmDialog />
+      <SettingsModal />
     </ErrorBoundary>
   );
 }
