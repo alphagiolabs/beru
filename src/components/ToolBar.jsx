@@ -22,15 +22,14 @@ export default function ToolBar() {
     shallow,
   );
   const t = useT();
-  if (!hasSelection) return null;
-
   const isLogoMode = sidebarMode === "logo";
+  const toolbarEnabled = hasSelection && isLogoMode;
 
   return (
     <div
-      className={`flex items-center gap-1 px-4 py-2 border-t flex-shrink-0${isLogoMode ? "" : " invisible pointer-events-none"}`}
+      className={`flex items-center gap-1 px-4 py-2 border-t flex-shrink-0${toolbarEnabled ? "" : " opacity-50"}`}
       style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-      aria-hidden={isLogoMode ? undefined : true}
+      aria-hidden={toolbarEnabled ? undefined : true}
     >
       {tools.map((tool) => {
         const active = activeTool === tool.id;
@@ -47,8 +46,8 @@ export default function ToolBar() {
           <button
             key={tool.id}
             type="button"
-            disabled={!isLogoMode}
-            tabIndex={isLogoMode ? 0 : -1}
+            disabled={!toolbarEnabled}
+            tabIndex={toolbarEnabled ? 0 : -1}
             onClick={() => useEditorStore.getState().setActiveTool(tool.id)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-medium transition-all"
             style={{

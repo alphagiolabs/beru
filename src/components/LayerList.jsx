@@ -116,14 +116,14 @@ export default function LayerList() {
   );
   const t = useT();
   const getState = useEditorStore.getState;
-  if (!ops) return null;
+  const layerCount = ops?.length ?? 0;
 
   return (
     <div className="cap-section">
       <div className="cap-section-title">
-        {t("props.layers")} ({ops.length})
+        {t("props.layers")} ({layerCount})
       </div>
-      {ops.length === 0 ? (
+      {!ops || ops.length === 0 ? (
         <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>
           {t("props.noLayers")}
         </div>
