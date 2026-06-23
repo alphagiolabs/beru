@@ -146,14 +146,16 @@ export default function UserManagementPanel() {
               autoComplete="new-password"
             />
           </label>
-          <button type="submit" className="settings-users-submit" disabled={creating}>
-            {creating ? (
-              <Loader2 size={14} className="login-screen-spin" />
-            ) : (
-              <UserPlus size={14} strokeWidth={2.25} />
-            )}
-            {t("auth.addUserBtn")}
-          </button>
+          <div className="settings-users-form-actions">
+            <button type="submit" className="settings-users-submit" disabled={creating}>
+              {creating ? (
+                <Loader2 size={14} className="login-screen-spin" />
+              ) : (
+                <UserPlus size={14} strokeWidth={2.25} />
+              )}
+              {t("auth.addUserBtn")}
+            </button>
+          </div>
         </form>
       </section>
 
@@ -166,61 +168,67 @@ export default function UserManagementPanel() {
           <span className="settings-users-count">{users.length}</span>
         </header>
 
-        {loading ? (
-          <div className="settings-users-loading">
-            <Loader2 size={18} className="login-screen-spin" />
-          </div>
-        ) : users.length === 0 ? (
-          <p className="settings-users-empty-text">{t("auth.noUsers")}</p>
-        ) : (
-          <ul className="settings-users-list">
-            {users.map((u) => {
-              const isSelf = u.id === user?.id;
-              const isAdminUser = u.role === "admin";
-              return (
-                <li
-                  key={u.id}
-                  className={`settings-users-row${u.is_active ? "" : " settings-users-row--disabled"}`}
-                >
-                  <div
-                    className={`settings-users-avatar${isAdminUser ? " settings-users-avatar--admin" : ""}`}
-                    aria-hidden="true"
+        <div className="settings-users-list-scroll">
+          {loading ? (
+            <div className="settings-users-loading">
+              <Loader2 size={18} className="login-screen-spin" />
+            </div>
+          ) : users.length === 0 ? (
+            <div className="settings-users-empty-inline">
+              <Users size={16} strokeWidth={2} />
+              <p>{t("auth.noUsers")}</p>
+            </div>
+          ) : (
+            <ul className="settings-users-list">
+              {users.map((u) => {
+                const isSelf = u.id === user?.id;
+                const isAdminUser = u.role === "admin";
+                const displayName = u.full_name?.trim() || u.email;
+                return (
+                  <li
+                    key={u.id}
+                    className={`settings-users-row${u.is_active ? "" : " settings-users-row--disabled"}`}
                   >
-                    {userInitial(u.email)}
-                  </div>
-                  <div className="settings-users-row-info">
-                    <div className="settings-users-row-top">
-                      <span className="settings-users-row-email">{u.email}</span>
-                      {isSelf && <span className="settings-users-you">{t("auth.you")}</span>}
+                    <div
+                      className={`settings-users-avatar${isAdminUser ? " settings-users-avatar--admin" : ""}`}
+                      aria-hidden="true"
+                    >
+                      {userInitial(displayName)}
                     </div>
-                    {u.full_name && (
-                      <span className="settings-users-row-name">{u.full_name}</span>
-                    )}
-                    <span className="settings-users-row-meta">
-                      {isAdminUser ? t("auth.roleAdmin") : t("auth.roleUser")}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className={`settings-users-toggle${u.is_active ? "" : " settings-users-toggle--off"}`}
-                    onClick={() => handleToggle(u)}
-                    disabled={isSelf || togglingId === u.id}
-                    title={u.is_active ? t("auth.disable") : t("auth.enable")}
-                  >
-                    {togglingId === u.id ? (
-                      <Loader2 size={12} className="login-screen-spin" />
-                    ) : u.is_active ? (
-                      <Shield size={12} strokeWidth={2.25} />
-                    ) : (
-                      <ShieldOff size={12} strokeWidth={2.25} />
-                    )}
-                    <span>{u.is_active ? t("auth.active") : t("auth.inactive")}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+                    <div className="settings-users-row-info">
+                      <div className="settings-users-row-top">
+                        <span className="settings-users-row-title">{displayName}</span>
+                        {isSelf && <span className="settings-users-you">{t("auth.you")}</span>}
+                        <span className="settings-users-row-role">
+                          {isAdminUser ? t("auth.roleAdmin") : t("auth.roleUser")}
+                        </span>
+                      </div>
+                      {u.full_name?.trim() && (
+                        <span className="settings-users-row-sub">{u.email}</span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className={`settings-users-toggle${u.is_active ? "" : " settings-users-toggle--off"}`}
+                      onClick={() => handleToggle(u)}
+                      disabled={isSelf || togglingId === u.id}
+                      title={u.is_active ? t("auth.disable") : t("auth.enable")}
+                    >
+                      {togglingId === u.id ? (
+                        <Loader2 size={12} className="login-screen-spin" />
+                      ) : u.is_active ? (
+                        <Shield size={12} strokeWidth={2.25} />
+                      ) : (
+                        <ShieldOff size={12} strokeWidth={2.25} />
+                      )}
+                      <span>{u.is_active ? t("auth.active") : t("auth.inactive")}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </section>
     </div>
   );

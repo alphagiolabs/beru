@@ -35,7 +35,7 @@ export default function ConfirmDialog() {
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
       aria-describedby="confirm-dialog-message"
-      className="cap-modal-overlay"
+      className="cap-modal-overlay cap-modal-overlay--stack"
       onClick={() => resolveConfirm(false)}
     >
       <div className="cap-modal-panel max-w-[420px]" onClick={(e) => e.stopPropagation()}>
