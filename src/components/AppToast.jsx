@@ -14,7 +14,7 @@ export default function AppToast() {
 
   return (
     <div
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] rounded-md px-3 py-2 text-[11px] shadow-lg max-w-[min(90vw,480px)]"
+      className="app-toast-layer fixed bottom-4 left-1/2 -translate-x-1/2 rounded-md px-3 py-2 text-[11px] shadow-lg max-w-[min(90vw,480px)]"
       style={{
         background: "var(--bg-elevated)",
         border: `1px solid ${colors.border}`,
