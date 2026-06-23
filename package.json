@@ -25,6 +25,7 @@
     "postinstall": "node scripts/fetch-ffmpeg.mjs || node -e \"console.warn('[ffmpeg] postinstall skipped (deps not installed yet)')\""
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
     "electron-updater": "^6.8.3",
     "lucide-react": "^0.460.0",
     "react": "^19.2.7",

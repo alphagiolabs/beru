@@ -1,6 +1,7 @@
 import React, { act } from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
+import { seedAuthenticatedAuth } from "./helpers/authTestState.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -51,6 +52,7 @@ describe("App update check", () => {
     };
 
     const { default: App } = await import("../src/App.jsx");
+    await seedAuthenticatedAuth();
 
     await act(async () => {
       root.render(<App />);
@@ -90,6 +92,7 @@ describe("App update check", () => {
     };
 
     const { default: App } = await import("../src/App.jsx");
+    await seedAuthenticatedAuth();
 
     await act(async () => {
       root.render(<App />);
@@ -127,6 +130,7 @@ describe("App update check", () => {
     };
 
     const { default: App } = await import("../src/App.jsx");
+    await seedAuthenticatedAuth();
 
     await act(async () => {
       root.render(<App />);

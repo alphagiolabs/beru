@@ -6,6 +6,10 @@ node_modules
 .env
 .env.*
 !.env.example
+*.local
+
+# Cursor / IDE local config (may reference private project settings)
+.cursor/
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { shallow } from "zustand/shallow";
-import { Command, Loader2, Zap, Terminal, CheckCircle2 } from "lucide-react";
+import { Command, Loader2, Zap, Terminal, CheckCircle2, LogOut } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
+import { isSupabaseConfigured } from "../lib/supabaseClient";
 import { useT } from "../i18n/useT";
 import { getBatchProgress } from "../utils/batch-progress";
 import { APP_VERSION, formatFooterClock } from "../utils/appVersion";
@@ -29,6 +30,7 @@ export default function StatusFooter() {
   const t = useT();
   const get = useEditorStore.getState;
   const showToast = useEditorStore((s) => s.showToast);
+  const signOut = useEditorStore((s) => s.signOut);
 
   const {
     isProcessing,
@@ -119,6 +121,13 @@ export default function StatusFooter() {
   const runClock = runStartedAt != null ? formatFooterClock(Date.now() - runStartedAt) : "00:00";
   const sessionClock = formatFooterClock(Date.now() - sessionStartedAt);
 
+  const handleSignOut = async () => {
+    const ok = await get().requestConfirm({ message: t("auth.signOutConfirm") });
+    if (!ok) return;
+    await signOut();
+    showToast({ kind: "ok", text: t("auth.signedOut") });
+  };
+
   const handleClearHistory = async () => {
     const ok = await get().requestConfirm({ message: t("footer.clearHistoryConfirm") });
     if (!ok) return;
@@ -169,6 +178,18 @@ export default function StatusFooter() {
   return (
     <footer className="status-footer cap-no-drag" role="contentinfo">
       <div className="status-footer-left">
+        {isSupabaseConfigured && (
+          <button
+            type="button"
+            className="status-footer-icon-btn"
+            onClick={handleSignOut}
+            title={t("auth.signOut")}
+            aria-label={t("auth.signOut")}
+          >
+            <LogOut size={13} strokeWidth={2.2} />
+          </button>
+        )}
+
         <button
           type="button"
           className={`status-footer-icon-btn${historyOpen ? " status-footer-icon-btn--active" : ""}`}
