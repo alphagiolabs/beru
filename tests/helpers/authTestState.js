@@ -27,7 +27,6 @@ export async function seedAuthenticatedAuth(overrides = {}) {
 
 /** Sync variant when the store module is already loaded (no resetModules). */
 export function seedAuthenticatedAuthSync(overrides = {}) {
-  // eslint-disable-next-line import/no-unresolved -- resolved at runtime in tests
   return import("../../src/stores/useEditorStore.js").then(({ default: useEditorStore }) => {
     useEditorStore.setState({
       authStatus: "authenticated",
