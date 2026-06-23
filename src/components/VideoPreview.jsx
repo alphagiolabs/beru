@@ -527,7 +527,7 @@ export default function VideoPreview() {
           {isSplitCompare && (
             <div
               className="absolute top-2 left-2 z-[26] px-2 py-1 rounded text-[9px] font-medium pointer-events-none"
-              style={{ background: "rgba(0,0,0,0.75)", color: "var(--text-secondary)" }}
+              style={{ background: "var(--overlay)", color: "var(--text-secondary)" }}
             >
               CSS
             </div>
@@ -573,7 +573,10 @@ export default function VideoPreview() {
             <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
               <div
                 className="pointer-events-auto max-w-[80%] rounded px-3 py-2 text-[11px] font-medium"
-                style={{ background: "rgba(244, 63, 94, 0.95)", color: "white" }}
+                style={{
+                  background: "color-mix(in srgb, var(--rose) 95%, transparent)",
+                  color: "var(--text-primary)",
+                }}
               >
                 No se pudo cargar el video ({videoError}). Si el archivo cambió de ubicación, vuelve
                 a importarlo.
@@ -623,7 +626,7 @@ export default function VideoPreview() {
                     top: s.y,
                     width: s.w,
                     height: s.h,
-                    outline: "2px dashed #fbbf24",
+                    outline: "2px dashed var(--amber)",
                     outlineOffset: "-1px",
                   }}
                 />
@@ -964,7 +967,7 @@ export default function VideoPreview() {
             />
             <div
               className="absolute top-2 left-2 px-2 py-1 rounded text-[9px] font-medium pointer-events-none"
-              style={{ background: "rgba(0,0,0,0.75)", color: "var(--accent)" }}
+              style={{ background: "var(--overlay)", color: "var(--accent)" }}
             >
               FFmpeg (drawtext)
             </div>

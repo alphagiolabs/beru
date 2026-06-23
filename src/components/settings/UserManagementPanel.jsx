@@ -3,6 +3,11 @@ import { Loader2, Shield, ShieldOff, UserPlus, Users } from "lucide-react";
 import useEditorStore from "../../stores/useEditorStore";
 import { useT } from "../../i18n/useT";
 
+function userInitial(email) {
+  const ch = email?.trim()?.[0];
+  return ch ? ch.toUpperCase() : "?";
+}
+
 export default function UserManagementPanel() {
   const t = useT();
   const profile = useEditorStore((s) => s.profile);
@@ -86,66 +91,84 @@ export default function UserManagementPanel() {
 
   if (!isAdmin) {
     return (
-      <div className="settings-users-empty">
-        <Shield size={20} />
+      <div className="settings-card settings-users-empty settings-users-empty--wide">
+        <div className="settings-users-empty-icon">
+          <Shield size={18} />
+        </div>
         <p>{t("auth.adminOnly")}</p>
       </div>
     );
   }
 
   return (
-    <div className="settings-users">
-      <div className="settings-users-section">
-        <div className="settings-users-section-head">
-          <UserPlus size={14} />
-          <span>{t("auth.addUser")}</span>
-        </div>
-        <form className="settings-users-form" onSubmit={handleCreate}>
-          <input
-            type="text"
-            placeholder={t("auth.fullName")}
-            value={form.fullName}
-            onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
-            disabled={creating}
-          />
-          <input
-            type="email"
-            placeholder={t("auth.email")}
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            disabled={creating}
-            required
-          />
-          <input
-            type="password"
-            placeholder={t("auth.passwordMin")}
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            disabled={creating}
-            minLength={6}
-            required
-          />
-          <button type="submit" className="cap-btn-primary text-[11px] !py-1.5" disabled={creating}>
+    <div className="settings-users settings-users--horizontal">
+      <section className="settings-card settings-card--add">
+        <header className="settings-card-head">
+          <div className="settings-card-head-left">
+            <UserPlus size={14} strokeWidth={2.25} />
+            <span>{t("auth.addUser")}</span>
+          </div>
+        </header>
+        <form className="settings-users-form settings-users-form--compact" onSubmit={handleCreate}>
+          <label className="settings-field settings-field--full">
+            <span className="settings-field-label">{t("auth.fullNameLabel")}</span>
+            <input
+              type="text"
+              placeholder={t("auth.fullNamePlaceholder")}
+              value={form.fullName}
+              onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
+              disabled={creating}
+              autoComplete="name"
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">{t("auth.email")}</span>
+            <input
+              type="email"
+              placeholder="usuario@empresa.com"
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              disabled={creating}
+              required
+              autoComplete="off"
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">{t("auth.password")}</span>
+            <input
+              type="password"
+              placeholder="••••••••"
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              disabled={creating}
+              minLength={6}
+              required
+              autoComplete="new-password"
+            />
+          </label>
+          <button type="submit" className="settings-users-submit" disabled={creating}>
             {creating ? (
-              <Loader2 size={13} className="login-screen-spin" />
+              <Loader2 size={14} className="login-screen-spin" />
             ) : (
-              <UserPlus size={13} />
+              <UserPlus size={14} strokeWidth={2.25} />
             )}
             {t("auth.addUserBtn")}
           </button>
         </form>
-      </div>
+      </section>
 
-      <div className="settings-users-section">
-        <div className="settings-users-section-head">
-          <Users size={14} />
-          <span>{t("auth.userList")}</span>
+      <section className="settings-card settings-card--list">
+        <header className="settings-card-head">
+          <div className="settings-card-head-left">
+            <Users size={14} strokeWidth={2.25} />
+            <span>{t("auth.userList")}</span>
+          </div>
           <span className="settings-users-count">{users.length}</span>
-        </div>
+        </header>
 
         {loading ? (
           <div className="settings-users-loading">
-            <Loader2 size={16} className="login-screen-spin" />
+            <Loader2 size={18} className="login-screen-spin" />
           </div>
         ) : users.length === 0 ? (
           <p className="settings-users-empty-text">{t("auth.noUsers")}</p>
@@ -153,17 +176,28 @@ export default function UserManagementPanel() {
           <ul className="settings-users-list">
             {users.map((u) => {
               const isSelf = u.id === user?.id;
+              const isAdminUser = u.role === "admin";
               return (
                 <li
                   key={u.id}
                   className={`settings-users-row${u.is_active ? "" : " settings-users-row--disabled"}`}
                 >
+                  <div
+                    className={`settings-users-avatar${isAdminUser ? " settings-users-avatar--admin" : ""}`}
+                    aria-hidden="true"
+                  >
+                    {userInitial(u.email)}
+                  </div>
                   <div className="settings-users-row-info">
-                    <span className="settings-users-row-email">{u.email}</span>
-                    {u.full_name && <span className="settings-users-row-name">{u.full_name}</span>}
+                    <div className="settings-users-row-top">
+                      <span className="settings-users-row-email">{u.email}</span>
+                      {isSelf && <span className="settings-users-you">{t("auth.you")}</span>}
+                    </div>
+                    {u.full_name && (
+                      <span className="settings-users-row-name">{u.full_name}</span>
+                    )}
                     <span className="settings-users-row-meta">
-                      {u.role === "admin" ? t("auth.roleAdmin") : t("auth.roleUser")}
-                      {isSelf && ` · ${t("auth.you")}`}
+                      {isAdminUser ? t("auth.roleAdmin") : t("auth.roleUser")}
                     </span>
                   </div>
                   <button
@@ -174,11 +208,11 @@ export default function UserManagementPanel() {
                     title={u.is_active ? t("auth.disable") : t("auth.enable")}
                   >
                     {togglingId === u.id ? (
-                      <Loader2 size={13} className="login-screen-spin" />
+                      <Loader2 size={12} className="login-screen-spin" />
                     ) : u.is_active ? (
-                      <Shield size={13} />
+                      <Shield size={12} strokeWidth={2.25} />
                     ) : (
-                      <ShieldOff size={13} />
+                      <ShieldOff size={12} strokeWidth={2.25} />
                     )}
                     <span>{u.is_active ? t("auth.active") : t("auth.inactive")}</span>
                   </button>
@@ -187,7 +221,7 @@ export default function UserManagementPanel() {
             })}
           </ul>
         )}
-      </div>
+      </section>
     </div>
   );
 }

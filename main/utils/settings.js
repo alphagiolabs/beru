@@ -7,6 +7,10 @@ import { pickHwEncoderFromEncodersText } from "../workerPolicy.js";
 
 export const ALLOWED_SETTINGS_KEYS = new Set([
   "theme",
+  "themeActiveSlot",
+  "themeSlot1",
+  "themeSlot2",
+  "customThemes",
   "language",
   "encodeProfile",
   "batchWorkers",
@@ -16,6 +20,10 @@ export const ALLOWED_SETTINGS_KEYS = new Set([
 
 export const SETTINGS_DEFAULTS = {
   theme: "dark",
+  themeActiveSlot: 2,
+  themeSlot1: "beru-light",
+  themeSlot2: "beru-dark",
+  customThemes: [],
   language: "es",
   encodeProfile: "balanced",
   batchWorkers: 0,

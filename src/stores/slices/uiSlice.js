@@ -1,12 +1,36 @@
 import { canStartDownload, reduceUpdaterEvent } from "../../utils/updateState.js";
 import { swallow } from "../../utils/swallow.js";
+import {
+  applyThemeTokens,
+  createCustomTheme,
+  deriveWindowChrome,
+  duplicateCustomTheme,
+  migrateThemeSettings,
+  resolveTheme,
+  slotToLegacyTheme,
+  toCustomThemeRef,
+  validateThemeTokens,
+} from "../../theme/engine.js";
+import { DEFAULT_SLOT1_PRESET, DEFAULT_SLOT2_PRESET } from "../../theme/tokens.js";
+import { getPresetById } from "../../theme/presets.js";
 
-function applyThemeToDom(theme) {
-  if (typeof document === "undefined") return;
-  if (theme === "light") {
-    document.documentElement.setAttribute("data-theme", "light");
-  } else {
-    document.documentElement.removeAttribute("data-theme");
+async function syncWindowChrome(tokens) {
+  const api = window.api;
+  if (!api?.setWindowTheme) return;
+  try {
+    await api.setWindowTheme(deriveWindowChrome(tokens));
+  } catch (e) {
+    swallow("setWindowTheme", e);
+  }
+}
+
+async function persistThemeSettings(partial) {
+  const api = window.api;
+  if (!api?.saveSettings) return;
+  try {
+    await api.saveSettings(partial);
+  } catch (e) {
+    swallow("saveSettings(theme)", e);
   }
 }
 
@@ -14,6 +38,11 @@ function applyThemeToDom(theme) {
 export function createUiSlice(set, get) {
   return {
     theme: "dark",
+    themeActiveSlot: 2,
+    themeSlot1: DEFAULT_SLOT1_PRESET,
+    themeSlot2: DEFAULT_SLOT2_PRESET,
+    customThemes: [],
+    activeThemeRef: DEFAULT_SLOT2_PRESET,
     language: "es",
     recent: [],
     update: {
@@ -29,6 +58,7 @@ export function createUiSlice(set, get) {
 
     showShortcuts: false,
     showSettings: false,
+    settingsTab: "appearance",
     isDragging: false,
     appToast: null,
     confirmDialog: null,
@@ -64,12 +94,32 @@ export function createUiSlice(set, get) {
       set({ confirmDialog: null });
     },
 
+    applyActiveTheme: async () => {
+      const { themeActiveSlot, themeSlot1, themeSlot2, customThemes } = get();
+      const ref = themeActiveSlot === 1 ? themeSlot1 : themeSlot2;
+      const resolved = resolveTheme(ref, customThemes);
+      const fallback =
+        themeActiveSlot === 1
+          ? getPresetById(DEFAULT_SLOT1_PRESET)
+          : getPresetById(DEFAULT_SLOT2_PRESET);
+      const tokens = resolved?.tokens || fallback?.tokens;
+      if (!tokens) return;
+
+      applyThemeTokens(tokens, themeActiveSlot);
+      await syncWindowChrome(tokens);
+
+      set({
+        activeThemeRef: ref,
+        theme: slotToLegacyTheme(themeActiveSlot),
+      });
+    },
+
     loadSettings: async () => {
       const api = window.api;
       if (!api?.loadSettings) return { ok: false };
       try {
         const settings = await api.loadSettings();
-        const theme = settings?.theme === "light" ? "light" : "dark";
+        const migrated = migrateThemeSettings(settings);
         const language = settings?.language === "en" ? "en" : "es";
         const encodeProfile =
           settings?.encodeProfile === "fast" ||
@@ -83,52 +133,149 @@ export function createUiSlice(set, get) {
         const batchWorkersMode =
           settings?.batchWorkersMode === "conservative" ? "conservative" : "balanced";
         const batchRetryFailed = settings?.batchRetryFailed !== false;
-        applyThemeToDom(theme);
-        if (api?.setWindowTheme) {
-          try {
-            await api.setWindowTheme(theme);
-          } catch (e) {
-            swallow("setWindowTheme", e);
-          }
-        }
+
         set({
-          theme,
+          themeActiveSlot: migrated.themeActiveSlot,
+          themeSlot1: migrated.themeSlot1,
+          themeSlot2: migrated.themeSlot2,
+          customThemes: migrated.customThemes,
+          activeThemeRef: migrated.activeThemeRef,
+          theme: migrated.theme,
           language,
           encodeProfile,
           batchWorkers,
           batchWorkersMode,
           batchRetryFailed,
         });
+
+        await get().applyActiveTheme();
+
+        if (migrated.needsMigrationSave) {
+          await persistThemeSettings({
+            theme: migrated.theme,
+            themeActiveSlot: migrated.themeActiveSlot,
+            themeSlot1: migrated.themeSlot1,
+            themeSlot2: migrated.themeSlot2,
+            customThemes: migrated.customThemes,
+          });
+        }
+
         return { ok: true, settings };
       } catch (e) {
         return { ok: false, error: e.message };
       }
     },
 
+    setThemeActiveSlot: async (slot) => {
+      const next = slot === 1 ? 1 : 2;
+      set({ themeActiveSlot: next });
+      await get().applyActiveTheme();
+      await persistThemeSettings({
+        themeActiveSlot: next,
+        theme: slotToLegacyTheme(next),
+      });
+    },
+
     setTheme: async (theme) => {
-      const next = theme === "light" ? "light" : "dark";
-      applyThemeToDom(next);
-      set({ theme: next });
-      const api = window.api;
-      if (api?.setWindowTheme) {
-        try {
-          await api.setWindowTheme(next);
-        } catch (e) {
-          swallow("setWindowTheme", e);
-        }
-      }
-      if (api?.saveSettings) {
-        try {
-          await api.saveSettings({ theme: next });
-        } catch (e) {
-          swallow("saveSettings(theme)", e);
-        }
-      }
+      const slot = theme === "light" ? 1 : 2;
+      return get().setThemeActiveSlot(slot);
     },
 
     toggleTheme: () => {
-      const cur = get().theme;
-      return get().setTheme(cur === "light" ? "dark" : "light");
+      const { themeActiveSlot } = get();
+      return get().setThemeActiveSlot(themeActiveSlot === 1 ? 2 : 1);
+    },
+
+    assignThemeToSlot: async (slot, themeRef) => {
+      const key = slot === 1 ? "themeSlot1" : "themeSlot2";
+      const fallback = slot === 1 ? DEFAULT_SLOT1_PRESET : DEFAULT_SLOT2_PRESET;
+      const { customThemes } = get();
+      const resolved = resolveTheme(themeRef, customThemes);
+      const ref = resolved ? themeRef : fallback;
+
+      set({ [key]: ref });
+      const { themeActiveSlot } = get();
+      if ((slot === 1 && themeActiveSlot === 1) || (slot === 2 && themeActiveSlot === 2)) {
+        await get().applyActiveTheme();
+      }
+      await persistThemeSettings({ [key]: ref });
+    },
+
+    saveCustomTheme: async (theme) => {
+      const validation = validateThemeTokens(theme?.tokens);
+      if (!validation.ok) return { ok: false, error: validation.error };
+
+      const now = new Date().toISOString();
+      const entry = {
+        id: theme.id || createCustomTheme(theme.name).id,
+        name: theme.name?.trim() || "Custom theme",
+        tokens: { ...theme.tokens },
+        createdAt: theme.createdAt || now,
+        updatedAt: now,
+      };
+
+      const { customThemes } = get();
+      const idx = customThemes.findIndex((c) => c.id === entry.id);
+      const nextThemes =
+        idx >= 0
+          ? customThemes.map((c, i) => (i === idx ? entry : c))
+          : [...customThemes, entry];
+
+      set({ customThemes: nextThemes });
+      await persistThemeSettings({ customThemes: nextThemes });
+
+      const ref = toCustomThemeRef(entry.id);
+      const { themeSlot1, themeSlot2, themeActiveSlot } = get();
+      const activeRef = themeActiveSlot === 1 ? themeSlot1 : themeSlot2;
+      if (activeRef === ref) {
+        await get().applyActiveTheme();
+      }
+
+      return { ok: true, theme: entry, ref };
+    },
+
+    deleteCustomTheme: async (id) => {
+      const ref = toCustomThemeRef(id);
+      let { customThemes, themeSlot1, themeSlot2 } = get();
+      customThemes = customThemes.filter((c) => c.id !== id);
+
+      const patch = { customThemes };
+      if (themeSlot1 === ref) {
+        themeSlot1 = DEFAULT_SLOT1_PRESET;
+        patch.themeSlot1 = themeSlot1;
+        set({ themeSlot1 });
+      }
+      if (themeSlot2 === ref) {
+        themeSlot2 = DEFAULT_SLOT2_PRESET;
+        patch.themeSlot2 = themeSlot2;
+        set({ themeSlot2 });
+      }
+
+      set({ customThemes });
+      await persistThemeSettings(patch);
+      await get().applyActiveTheme();
+      return { ok: true };
+    },
+
+    createCustomThemeFromPreset: async (name, basePresetId) => {
+      const theme = createCustomTheme(name, basePresetId);
+      const res = await get().saveCustomTheme(theme);
+      if (!res.ok) return res;
+      return { ok: true, theme: res.theme, ref: toCustomThemeRef(res.theme.id) };
+    },
+
+    duplicateThemeAsCustom: async (themeRef) => {
+      const { customThemes } = get();
+      const dup = duplicateCustomTheme(themeRef, customThemes);
+      if (!dup) return { ok: false, error: "Theme not found" };
+      const res = await get().saveCustomTheme(dup);
+      if (!res.ok) return res;
+      return { ok: true, theme: res.theme, ref: toCustomThemeRef(res.theme.id) };
+    },
+
+    getResolvedTheme: (themeRef) => {
+      const { customThemes } = get();
+      return resolveTheme(themeRef, customThemes);
     },
 
     setLanguage: async (language) => {
@@ -162,8 +309,6 @@ export function createUiSlice(set, get) {
       try {
         const res = await api.addRecent({ path: filePath, name: name || "" });
         if (res?.success && Array.isArray(res.recent)) {
-          // The path was just picked/added, so it exists. listRecent re-checks
-          // server-side on next load via recent:list.
           set({ recent: res.recent.map((r) => ({ ...r, exists: true })) });
         }
       } catch (e) {
@@ -267,6 +412,7 @@ export function createUiSlice(set, get) {
 
     setShowShortcuts: (val) => set({ showShortcuts: val }),
     setShowSettings: (val) => set({ showSettings: val }),
+    setSettingsTab: (tab) => set({ settingsTab: tab }),
     setIsDragging: (val) => set({ isDragging: val }),
   };
 }
