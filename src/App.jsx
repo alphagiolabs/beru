@@ -11,7 +11,6 @@ import PropertiesPanel from "./components/PropertiesPanel";
 import LayerList from "./components/LayerList";
 import StatusFooter from "./components/StatusFooter";
 import DragOverlay from "./components/DragOverlay";
-import Landing from "./components/Landing";
 import AppToast from "./components/AppToast";
 import ConfirmDialog from "./components/ConfirmDialog";
 import { useT } from "./i18n/useT";
@@ -24,9 +23,7 @@ const WatermarkModal = lazy(() => import("./components/WatermarkModal"));
 const api = window.api;
 
 export default function App() {
-  const queueLength = useEditorStore((s) => s.queue.length);
   const isDragging = useEditorStore((s) => s.isDragging);
-  const hasSelection = useEditorStore((s) => s.selectedIdx >= 0 && s.selectedIdx < s.queue.length);
   const setIsDragging = useEditorStore((s) => s.setIsDragging);
   const addVideos = useEditorStore((s) => s.addVideos);
   const loadPresetsFromStorage = useEditorStore((s) => s.loadPresetsFromStorage);
@@ -67,7 +64,6 @@ export default function App() {
     return () => window.removeEventListener("dragend", resetDragState);
   }, [setIsDragging]);
 
-  /* ── Drag & drop ──────────────────────────────────────────────── */
   const onDragEnter = (e) => {
     e.preventDefault();
     dragDepthRef.current = Math.min(dragDepthRef.current + 1, DRAG_DEPTH_MAX);
@@ -126,24 +122,6 @@ export default function App() {
 
   const dropHandlers = { onDragEnter, onDragOver, onDragLeave, onDrop };
 
-  if (queueLength === 0) {
-    return (
-      <div ref={dropRef} {...dropHandlers} className="h-full flex flex-col">
-        <div
-          className="cap-titlebar-drag flex-shrink-0"
-          style={{
-            height: "env(titlebar-area-height, 0px)",
-            background: "var(--bg-app)",
-          }}
-        />
-        <Landing />
-        <StatusFooter />
-        <AppToast />
-        <ConfirmDialog />
-      </div>
-    );
-  }
-
   return (
     <div
       ref={dropRef}
@@ -158,15 +136,13 @@ export default function App() {
           <VideoPreview />
           <ToolBar />
         </div>
-        {hasSelection && (
-          <aside
-            className="w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l"
-            style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
-          >
-            <PropertiesPanel />
-            <LayerList />
-          </aside>
-        )}
+        <aside
+          className="w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l"
+          style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+        >
+          <PropertiesPanel />
+          <LayerList />
+        </aside>
       </div>
       <StatusFooter />
       <DragOverlay />

@@ -33,7 +33,7 @@ export default function Landing() {
 
   return (
     <div
-      className="h-full flex items-center justify-center"
+      className="flex-1 w-full h-full flex items-center justify-center min-h-0"
       style={{ background: "var(--bg-app)" }}
     >
       <div className="flex flex-col items-center gap-4 text-center max-w-sm">
