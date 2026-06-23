@@ -32,7 +32,12 @@ export default function SettingsModal() {
             <Settings size={16} />
             <h2 id="settings-modal-title">{t("settings.title")}</h2>
           </div>
-          <button type="button" className="cap-btn-secondary !p-1" onClick={close} title={t("common.close")}>
+          <button
+            type="button"
+            className="cap-btn-secondary !p-1"
+            onClick={close}
+            title={t("common.close")}
+          >
             <X size={14} />
           </button>
         </div>

@@ -126,7 +126,11 @@ export default function UserManagementPanel() {
             required
           />
           <button type="submit" className="cap-btn-primary text-[11px] !py-1.5" disabled={creating}>
-            {creating ? <Loader2 size={13} className="login-screen-spin" /> : <UserPlus size={13} />}
+            {creating ? (
+              <Loader2 size={13} className="login-screen-spin" />
+            ) : (
+              <UserPlus size={13} />
+            )}
             {t("auth.addUserBtn")}
           </button>
         </form>
@@ -150,12 +154,13 @@ export default function UserManagementPanel() {
             {users.map((u) => {
               const isSelf = u.id === user?.id;
               return (
-                <li key={u.id} className={`settings-users-row${u.is_active ? "" : " settings-users-row--disabled"}`}>
+                <li
+                  key={u.id}
+                  className={`settings-users-row${u.is_active ? "" : " settings-users-row--disabled"}`}
+                >
                   <div className="settings-users-row-info">
                     <span className="settings-users-row-email">{u.email}</span>
-                    {u.full_name && (
-                      <span className="settings-users-row-name">{u.full_name}</span>
-                    )}
+                    {u.full_name && <span className="settings-users-row-name">{u.full_name}</span>}
                     <span className="settings-users-row-meta">
                       {u.role === "admin" ? t("auth.roleAdmin") : t("auth.roleUser")}
                       {isSelf && ` · ${t("auth.you")}`}

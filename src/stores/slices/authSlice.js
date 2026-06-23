@@ -59,26 +59,26 @@ export function createAuthSlice(set, get) {
         if (!_authListenerRegistered) {
           _authListenerRegistered = true;
           supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-          if (!nextSession?.user) {
-            set({ authStatus: "unauthenticated", user: null, profile: null });
-            return;
-          }
-          try {
-            const nextProfile = await fetchProfile(supabase, nextSession.user.id);
-            if (!nextProfile?.is_active) {
-              await supabase.auth.signOut();
-              set({
-                authStatus: "unauthenticated",
-                user: null,
-                profile: null,
-                authError: "auth.accountDisabled",
-              });
+            if (!nextSession?.user) {
+              set({ authStatus: "unauthenticated", user: null, profile: null });
               return;
             }
-            set({ authStatus: "authenticated", user: nextSession.user, profile: nextProfile });
-          } catch {
-            set({ authStatus: "unauthenticated", user: null, profile: null });
-          }
+            try {
+              const nextProfile = await fetchProfile(supabase, nextSession.user.id);
+              if (!nextProfile?.is_active) {
+                await supabase.auth.signOut();
+                set({
+                  authStatus: "unauthenticated",
+                  user: null,
+                  profile: null,
+                  authError: "auth.accountDisabled",
+                });
+                return;
+              }
+              set({ authStatus: "authenticated", user: nextSession.user, profile: nextProfile });
+            } catch {
+              set({ authStatus: "unauthenticated", user: null, profile: null });
+            }
           });
         }
 
@@ -105,8 +105,9 @@ export function createAuthSlice(set, get) {
       });
 
       if (error) {
-        const code =
-          error.message?.toLowerCase().includes("invalid") ? "auth.invalidCredentials" : error.message;
+        const code = error.message?.toLowerCase().includes("invalid")
+          ? "auth.invalidCredentials"
+          : error.message;
         set({ authError: code });
         return { ok: false, error: code };
       }
