@@ -249,6 +249,12 @@ def _windows_registry_fonts():
                     font_path = Path(windir) / "Fonts" / filename
                 if not font_path.exists():
                     continue
+                # Skip non-renderable font files (e.g. legacy .fon). _resolve_font
+                # validates against FONT_EXTENSIONS and would otherwise raise,
+                # propagating out of build_drawtext and failing the whole job even
+                # when a usable .ttf/.otf/.ttc for the same family exists.
+                if font_path.suffix.lower() not in FONT_EXTENSIONS:
+                    continue
 
                 clean_name = re.sub(r"\s+\([^)]*\)\s*$", "", display_name).strip()
                 aliases = [clean_name]

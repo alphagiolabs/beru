@@ -158,9 +158,9 @@ def build():
     ws_v.cell(row=1, column=1, value="Resumen").font = Font(bold=True)
     ws_v.cell(row=1, column=2,
               value=(f'="Filas: "&COUNTA(Datos!A2:A{n+1})&"  |  OK: "'
-                     f'&COUNTIF(C3:C{n+1},"OK")&"  |  Duplicados: "'
-                     f'&COUNTIF(C3:C{n+1},"DUPLICADO")&"  |  Vacios: "'
-                     f'&COUNTIF(C3:C{n+1},"VACIO")'))
+                     f'&COUNTIF(C3:C{n+2},"OK")&"  |  Duplicados: "'
+                     f'&COUNTIF(C3:C{n+2},"DUPLICADO")&"  |  Vacios: "'
+                     f'&COUNTIF(C3:C{n+2},"VACIO")'))
     ws_v.merge_cells(start_row=1, start_column=2, end_row=1, end_column=5)
     ws_v.row_dimensions[1].height = 20
     # re-aplicar estilo de header en la fila 2 (que ahora es la de encabezados real)

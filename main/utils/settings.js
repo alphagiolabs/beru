@@ -69,7 +69,12 @@ export function readSettings() {
 
 export function writeSettings(obj) {
   const file = path.join(app.getPath("userData"), "settings.json");
-  fs.writeFileSync(file, JSON.stringify(obj, null, 2), "utf8");
+  // Atomic write: write to a sibling temp file then rename. A crash or power
+  // loss mid-write otherwise leaves a truncated settings.json, silently
+  // resetting the user to defaults on next read.
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), "utf8");
+  fs.renameSync(tmp, file);
   // Store a copy so external mutations after write do not corrupt the cache.
   if (settingsCacheEnabled()) settingsCache = { ...obj };
 }

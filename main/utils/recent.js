@@ -21,5 +21,9 @@ export function readRecent() {
 
 export function writeRecent(arr) {
   const file = path.join(app.getPath("userData"), "recent.json");
-  fs.writeFileSync(file, JSON.stringify(arr, null, 2), "utf8");
+  // Atomic write (sibling tmp + rename) so a crash mid-write cannot truncate
+  // recent.json and silently wipe the user's recent-projects list.
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(arr, null, 2), "utf8");
+  fs.renameSync(tmp, file);
 }

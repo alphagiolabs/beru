@@ -20,6 +20,9 @@ const MAX_BUFFER_SIZE = 100;
 let buffer = [];
 let flushTimer = null;
 let initialized = false;
+// Bound reference so init/disable always (un)register the same listener and we
+// don't accumulate a new before-quit handler on each disable→init cycle.
+const onBeforeQuitFlush = () => flush();
 
 function getTelemetryPath() {
   try {
@@ -69,18 +72,20 @@ export function initTelemetry() {
   initialized = true;
   flushTimer = setInterval(flush, FLUSH_INTERVAL_MS);
   flushTimer.unref();
-  // Flush on quit
-  app.on("before-quit", flush);
+  // Flush on quit (removed in disableTelemetry to avoid listener accumulation)
+  app.on("before-quit", onBeforeQuitFlush);
 }
 
 /**
  * Disable telemetry and flush any buffered events.
  */
 export function disableTelemetry() {
+  if (!initialized) return;
   initialized = false;
   if (flushTimer) {
     clearInterval(flushTimer);
     flushTimer = null;
   }
+  app.off("before-quit", onBeforeQuitFlush);
   flush();
 }

@@ -230,7 +230,18 @@ export async function cancelActiveProcessing() {
   if (proc?.pid) {
     const deathPromise = waitForProcessClose(proc);
     killProcessTree(proc);
-    await deathPromise;
+    const closed = await deathPromise;
+    if (!closed && process.platform !== "win32") {
+      // SIGTERM grace expired without the child exiting — escalate to SIGKILL so
+      // we don't proceed to setPythonProcess(null) while the processor is still
+      // alive (which would orphan it). Windows uses taskkill /F, so no escalation.
+      try {
+        proc.kill("SIGKILL");
+      } catch (e) {
+        console.error("[beru] SIGKILL error:", e.message);
+      }
+      await waitForProcessClose(proc, 3000);
+    }
   }
 
   setPythonProcess(null);
@@ -330,7 +341,15 @@ export function registerProcessHandlers(pathSecurity) {
       };
 
       const probeLimit = Math.max(1, Math.min(8, safeJobs.length, (os.cpus()?.length || 4) * 2));
-      const enrichedJobs = await runWithConcurrency(safeJobs, probeLimit, enrichJobVideoInfo);
+      // Stop spawning ffprobe probes once this run is cancelled, so a cancel
+      // during the probe phase doesn't keep probing the rest of the batch.
+      const enrichedJobs = await runWithConcurrency(
+        safeJobs,
+        probeLimit,
+        enrichJobVideoInfo,
+        undefined,
+        () => !isCurrentRun(),
+      );
 
       // The probe above can take seconds. If the user cancelled during the
       // probe, cancelActiveProcessing() already cleared our runId and tmpFile.
