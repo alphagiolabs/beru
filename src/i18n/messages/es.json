@@ -76,6 +76,7 @@
   "updater.errors.devBuild": "Las actualizaciones automáticas no están disponibles en modo desarrollo.",
   "updater.errors.missingModule": "El módulo de actualización no está instalado.",
   "updater.errors.notAvailable": "No hay ninguna actualización pendiente para descargar.",
+  "updater.errors.invalidSignature": "La descarga falló por verificación de firma (instalador sin certificado). Actualizá Beru manualmente desde GitHub o instalá la versión más reciente.",
 
   "footer.ready": "Listo",
   "footer.running": "Procesando",

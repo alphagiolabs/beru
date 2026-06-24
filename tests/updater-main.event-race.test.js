@@ -88,4 +88,10 @@ describe("main/updater.js event race guard", () => {
     harness.emit("update-downloaded", { version: "1.6.99" });
     expect(harness.events.at(-1).type).toBe("ready");
   });
+
+  it("disables Authenticode verification for unsigned NSIS builds", () => {
+    harness.init();
+    expect(harness.autoUpdater.verifyUpdateCodeSignature).toBeTypeOf("function");
+    return expect(harness.autoUpdater.verifyUpdateCodeSignature([], "fake.exe")).resolves.toBeNull();
+  });
 });

@@ -145,6 +145,9 @@ export function createUpdaterHarness() {
     resolveCheck,
     resolveDownload,
     rejectDownload,
+    get autoUpdater() {
+      return autoUpdater;
+    },
     init: () => updater.init(fakeWindow),
   };
 }

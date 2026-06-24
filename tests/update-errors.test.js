@@ -15,4 +15,10 @@ describe("formatUpdateError", () => {
     expect(formatUpdateError(t, "something weird")).toBe("something weird");
     expect(formatUpdateError(t, "x".repeat(250))).toBe("header.updateDownloadFailed");
   });
+
+  it("maps invalid signature updater errors", () => {
+    expect(formatUpdateError(t, "ERR_UPDATER_INVALID_SIGNATURE: not signed")).toBe(
+      "updater.errors.invalidSignature",
+    );
+  });
 });
