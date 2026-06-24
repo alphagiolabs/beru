@@ -261,8 +261,3 @@ export function rowGet(row, ...keys) {
   }
   return undefined;
 }
-
-export function detectContrastFromPixel(r, g, b) {
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.55 ? "black" : "white";
-}

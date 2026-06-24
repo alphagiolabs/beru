@@ -45,6 +45,7 @@ export default function TableEditor() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [seeking, setSeeking] = useState(false);
+  const seekingRef = useRef(false);
   const [, setLayoutTick] = useState(0);
   const focusedVideoDuration = queue[focused.videoIdx]?.duration;
   const firstRegionId = templateRegions[0]?.id ?? null;
@@ -64,7 +65,16 @@ export default function TableEditor() {
       setPlaying(false);
       tableRef.current?.focus();
     }
-  }, [showTableEditor, firstRegionId, templateRegions.length]);
+    // Only reset focus when the editor opens, not when templateRegions.length
+    // changes while open (which would silently yank the user's focused cell).
+  }, [showTableEditor, firstRegionId]);
+
+  // Mirror `seeking` into a ref so the video listener effect below does not
+  // depend on `seeking` — otherwise every scrub toggle tears down and re-adds
+  // all five listeners, dropping any timeupdate/play/pause in the gap.
+  useEffect(() => {
+    seekingRef.current = seeking;
+  }, [seeking]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -72,7 +82,7 @@ export default function TableEditor() {
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
     const onTimeUpdate = () => {
-      if (!seeking) setCurrentTime(v.currentTime);
+      if (!seekingRef.current) setCurrentTime(v.currentTime);
     };
     const onLoadedMeta = () => setDuration(resolvedDuration(v, focusedVideoDuration));
     const onEnded = () => setPlaying(false);
@@ -88,7 +98,7 @@ export default function TableEditor() {
       v.removeEventListener("loadedmetadata", onLoadedMeta);
       v.removeEventListener("ended", onEnded);
     };
-  }, [focused.videoIdx, focusedVideoDuration, seeking]);
+  }, [focused.videoIdx, focusedVideoDuration]);
 
   useEffect(() => {
     setPlaying(false);

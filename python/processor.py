@@ -249,6 +249,12 @@ def _windows_registry_fonts():
                     font_path = Path(windir) / "Fonts" / filename
                 if not font_path.exists():
                     continue
+                # Skip non-renderable font files (e.g. legacy .fon). _resolve_font
+                # validates against FONT_EXTENSIONS and would otherwise raise,
+                # propagating out of build_drawtext and failing the whole job even
+                # when a usable .ttf/.otf/.ttc for the same family exists.
+                if font_path.suffix.lower() not in FONT_EXTENSIONS:
+                    continue
 
                 clean_name = re.sub(r"\s+\([^)]*\)\s*$", "", display_name).strip()
                 aliases = [clean_name]
@@ -900,7 +906,7 @@ def find_ffprobe(ffmpeg_bin):
     found = shutil.which("ffprobe") or shutil.which(f"ffprobe{_exe}")
     if found:
         return found
-    return ffmpeg_bin.replace(f"ffmpeg{_exe}", f"ffprobe{_exe}").replace("ffmpeg", "ffprobe")
+    return ffmpeg_bin.replace(f"ffmpeg{_exe}", f"ffprobe{_exe}")
 
 
 def _safe_float(value, default=0.0):
@@ -1354,11 +1360,13 @@ def _build_watermark_filter(watermark, video_w, video_h):
             raise ValueError("fontFamily contains forbidden characters")
         # Resolve font
         font_key, font_val, is_fontfile = _resolve_font(font_family)
+        if is_fontfile:
+            font_val = f"'{font_val}'"
         escaped_text = _escape_drawtext_text(text)
         alpha = f"{opacity:.2f}"
         x_expr, y_expr = xy.split(":")
         dt_parts = [
-            f"{font_key}='{font_val}'",
+            f"{font_key}={font_val}",
             f"text='{escaped_text}'",
             f"fontsize={font_size}",
             f"fontcolor={font_color}@{alpha}",
@@ -1575,7 +1583,7 @@ def _check_cancelled():
     if _cancel_event.is_set():
         return True
     if _jobs_file:
-        cancel_file = _jobs_file.replace(".json", ".cancel")
+        cancel_file = os.path.splitext(_jobs_file)[0] + ".cancel"
         if os.path.exists(cancel_file):
             _cancel_event.set()
             return True
@@ -1610,16 +1618,22 @@ class StderrBuffer:
     so the char-cap check is O(1) per line instead of O(total buffered chars).
     """
 
-    __slots__ = ("_buf", "_chars", "_max_chars")
+    __slots__ = ("_buf", "_chars", "_max_chars", "_total")
 
     def __init__(self, max_lines=MAX_STDERR_LINES, max_chars=MAX_STDERR_CHARS):
         self._buf = deque(maxlen=max_lines)
         self._chars = 0
         self._max_chars = max_chars
+        # Unbounded, monotonically-increasing append counter. `len()` is capped
+        # at `max_lines` once the deque fills, so it cannot be used to detect
+        # ongoing activity (the stall detector would otherwise go blind and kill
+        # healthy long encodes). This counter always increases on append.
+        self._total = 0
 
     def append(self, line):
         self._buf.append(line)
         self._chars += len(line)
+        self._total += 1
         # Evict oldest until both caps are satisfied. deque(maxlen) already
         # handles the line cap; only the char cap needs manual eviction.
         while self._chars > self._max_chars and len(self._buf) > 1:
@@ -1628,6 +1642,11 @@ class StderrBuffer:
 
     def __len__(self):
         return len(self._buf)
+
+    def total_appended(self):
+        """Total lines ever appended (unbounded). Use this — not len() — to
+        detect ongoing stderr activity, since len() is capped at max_lines."""
+        return self._total
 
     def join(self):
         return "".join(self._buf)
@@ -1836,6 +1855,12 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
     # catch after a much longer wait.
     STALL_TIMEOUT_SEC = 120
     last_output_time = time.monotonic()
+    prev_total = 0
+    # Only enforce the stall check when progress output is expected. With
+    # -loglevel error (no duration / no job_id) a clean run may legitimately
+    # emit zero stderr lines (e.g. stream copy), so the detector would false-
+    # fire at STALL_TIMEOUT_SEC; for those paths we rely on the overall deadline.
+    stall_enabled = job_id is not None and duration_sec > 0
 
     while True:
         returncode = proc.poll()
@@ -1852,16 +1877,20 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
             reader_done.wait(timeout=1)
             _cleanup_ffmpeg_partial(cmd)
             return False, f"Timeout after {timeout_sec}s"
-        # Check for stall: compare current stderr line count to detect activity
-        with stderr_lock:
-            current_lines = len(stderr_lines)
-        if current_lines > 0:
-            last_output_time = now
-        elif now - last_output_time > STALL_TIMEOUT_SEC:
-            _kill_ffmpeg_process(proc)
-            reader_done.wait(timeout=1)
-            _cleanup_ffmpeg_partial(cmd)
-            return False, f"FFmpeg stalled (no output for {STALL_TIMEOUT_SEC}s)"
+        # Check for stall: compare the unbounded append counter delta to detect
+        # activity. len() is capped once the deque fills (256 lines) and cannot
+        # be used here — it would freeze the detector and kill healthy encodes.
+        if stall_enabled:
+            with stderr_lock:
+                current_total = stderr_lines.total_appended()
+            if current_total > prev_total:
+                last_output_time = now
+                prev_total = current_total
+            elif now - last_output_time > STALL_TIMEOUT_SEC:
+                _kill_ffmpeg_process(proc)
+                reader_done.wait(timeout=1)
+                _cleanup_ffmpeg_partial(cmd)
+                return False, f"FFmpeg stalled (no output for {STALL_TIMEOUT_SEC}s)"
         time.sleep(0.2)
 
     reader_done.wait(timeout=2)

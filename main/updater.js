@@ -8,17 +8,23 @@
 
 import { app } from "electron";
 import { createRequire } from "module";
+import { getMainWindow } from "./shared-state.js";
 
 const isDev = !app.isPackaged;
 const requireCJS = createRequire(import.meta.url);
 
 let autoUpdater = null;
 let initialized = false;
-let mainWindow = null;
 let lastSnapshot = null;
 let pendingVersion = null;
 let checkInProgress = false;
 let downloadInProgress = false;
+// True for the entire lifetime of a startDownload() call (including retry
+// backoff sleeps). Guards against a concurrent updater:download IPC call
+// slipping in while downloadInProgress is briefly false between attempts —
+// which would launch two concurrent downloadUpdate() calls on electron-updater
+// (not concurrency-safe).
+let downloadBusy = false;
 let quittingForUpdate = false;
 let updateDownloaded = false;
 let userInitiatedDownload = false;
@@ -37,9 +43,14 @@ const tryLoad = () => {
 
 const send = (payload) => {
   lastSnapshot = payload;
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  // Read the live window from shared-state instead of a once-captured ref: the
+  // window can be recreated (renderer crash / macOS activate) after init(), and
+  // a stale captured ref would point at a destroyed window and silently drop
+  // every updater:event (download-progress, ready, error).
+  const win = getMainWindow();
+  if (win && !win.isDestroyed()) {
     try {
-      mainWindow.webContents.send("updater:event", payload);
+      win.webContents.send("updater:event", payload);
     } catch {}
   }
 };
@@ -49,10 +60,9 @@ const releaseUrlFor = (version) => {
   return `https://github.com/alphagiolabs/beru/releases/tag/v${String(version).replace(/^v/i, "")}`;
 };
 
-const init = (win) => {
+const init = (_win) => {
   if (initialized) return;
   initialized = true;
-  mainWindow = win;
   if (isDev) {
     send({ type: "disabled", reason: "dev-build" });
     return;
@@ -218,7 +228,11 @@ const resolvePendingVersion = (hint) => {
 
 const startDownload = async (opts = {}) => {
   if (isDev) return { ok: false, reason: "dev-build" };
-  if (downloadInProgress) return { ok: true, reason: "already-downloading" };
+  // Hold the lock for the whole call (including retry backoff sleeps). Checking
+  // only downloadInProgress here would let a concurrent updater:download call
+  // slip through during the backoff window between attempts and launch a second
+  // downloadUpdate() concurrently.
+  if (downloadBusy) return { ok: true, reason: "already-downloading" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
 
@@ -255,6 +269,7 @@ const startDownload = async (opts = {}) => {
   }
 
   downloadInProgress = true;
+  downloadBusy = true;
   send({
     type: "downloading",
     version: pendingVersion,
@@ -265,12 +280,14 @@ const startDownload = async (opts = {}) => {
 
   // Auto-retry download with exponential backoff for transient network errors.
   // Up to 2 retries: 3s, then 6s delay. Only retries if the update is still
-  // pending and no new version was announced in the meantime.
+  // pending and no new version was announced in the meantime. downloadBusy stays
+  // true across the backoff sleep so no concurrent download can start.
   const MAX_DOWNLOAD_RETRIES = 2;
   const BASE_RETRY_DELAY_MS = 3000;
   for (let attempt = 0; attempt <= MAX_DOWNLOAD_RETRIES; attempt++) {
     try {
       await au.downloadUpdate();
+      downloadBusy = false;
       return { ok: true };
     } catch (e) {
       downloadInProgress = false;
@@ -282,6 +299,7 @@ const startDownload = async (opts = {}) => {
         });
         await new Promise((resolve) => setTimeout(resolve, delay));
         if (!pendingVersion || updateDownloaded) {
+          downloadBusy = false;
           userInitiatedDownload = false;
           return { ok: false, reason: "aborted" };
         }
@@ -289,11 +307,14 @@ const startDownload = async (opts = {}) => {
         send({ type: "downloading", version: pendingVersion, percent: 0 });
         continue;
       }
+      downloadBusy = false;
       userInitiatedDownload = false;
       // electron-updater emits "error" for download failures; avoid duplicate IPC.
       return { ok: false, error: e?.message };
     }
   }
+  downloadBusy = false;
+  downloadInProgress = false;
   userInitiatedDownload = false;
   return { ok: false, error: "download-failed" };
 };

@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import { Trash2, Copy, ChevronUp, ChevronDown } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
@@ -49,7 +49,7 @@ const LayerRow = memo(function LayerRow({
       />
       <button
         type="button"
-        onClick={onSelect}
+        onClick={() => onSelect(i)}
         className="flex-1 text-left text-[11px] font-medium min-w-0"
         style={{ color: "var(--text-primary)" }}
       >
@@ -60,7 +60,7 @@ const LayerRow = memo(function LayerRow({
       </button>
       <div className="flex items-center gap-0.5">
         <button
-          onClick={onMoveUp}
+          onClick={() => onMoveUp(i)}
           disabled={i === 0}
           className="text-[10px] p-0.5 rounded hover:bg-white/10"
           style={{ color: "var(--text-dim)" }}
@@ -70,7 +70,7 @@ const LayerRow = memo(function LayerRow({
           <ChevronUp size={12} />
         </button>
         <button
-          onClick={onMoveDown}
+          onClick={() => onMoveDown(i)}
           disabled={i === count - 1}
           className="text-[10px] p-0.5 rounded hover:bg-white/10"
           style={{ color: "var(--text-dim)" }}
@@ -80,7 +80,7 @@ const LayerRow = memo(function LayerRow({
           <ChevronDown size={12} />
         </button>
         <button
-          onClick={onDuplicate}
+          onClick={() => onDuplicate(i)}
           className="text-[10px] p-0.5 rounded hover:bg-white/10"
           style={{ color: "var(--text-dim)" }}
           title={duplicateTitle}
@@ -89,7 +89,7 @@ const LayerRow = memo(function LayerRow({
           <Copy size={12} />
         </button>
         <button
-          onClick={onRemove}
+          onClick={() => onRemove(i)}
           className="text-[10px] p-0.5 rounded hover:bg-red-500/20 hover:text-red-400"
           style={{ color: "var(--text-dim)" }}
           title={removeTitle}
@@ -116,6 +116,15 @@ export default function LayerList() {
   );
   const t = useT();
   const getState = useEditorStore.getState;
+  // Stable, index-parameterized callbacks. Defined once so their identities
+  // don't change on every LayerList render — otherwise the memo() on LayerRow
+  // is defeated and every row re-renders on each selection change. The row
+  // passes its own `i` when invoking them.
+  const handleSelect = useCallback((i) => getState().selectOperation(i), [getState]);
+  const handleMoveUp = useCallback((i) => getState().moveOperation(i, i - 1), [getState]);
+  const handleMoveDown = useCallback((i) => getState().moveOperation(i, i + 1), [getState]);
+  const handleDuplicate = useCallback((i) => getState().duplicateOperation(i), [getState]);
+  const handleRemove = useCallback((i) => getState().removeOperation(i), [getState]);
   const layerCount = ops?.length ?? 0;
 
   return (
@@ -142,11 +151,11 @@ export default function LayerList() {
               duplicateTitle={t("props.actions.duplicate")}
               removeTitle={t("props.actions.deleteLayer")}
               isSelected={selectedOperationIdx === i}
-              onSelect={() => getState().selectOperation(i)}
-              onMoveUp={() => getState().moveOperation(i, i - 1)}
-              onMoveDown={() => getState().moveOperation(i, i + 1)}
-              onDuplicate={() => getState().duplicateOperation(i)}
-              onRemove={() => getState().removeOperation(i)}
+              onSelect={handleSelect}
+              onMoveUp={handleMoveUp}
+              onMoveDown={handleMoveDown}
+              onDuplicate={handleDuplicate}
+              onRemove={handleRemove}
             />
           ))}
         </div>

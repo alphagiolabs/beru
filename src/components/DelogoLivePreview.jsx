@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import useEditorStore from "../stores/useEditorStore";
 import { regionToScreen } from "../utils/video-utils";
 import { PERF_FLAGS } from "../utils/perf-flags.js";
@@ -339,7 +339,7 @@ export default function DelogoLivePreview({ videoRef }) {
   const canvasRef = useRef(null);
   const labelRef = useRef(null);
   const cssRef = useRef(null);
-  const coverImgRef = useRef(null);
+  const [coverImgData, setCoverImgData] = useState(null);
   const workspaceRef = useRef(null);
   if (!workspaceRef.current) {
     workspaceRef.current = createPreviewWorkspace();
@@ -516,21 +516,21 @@ export default function DelogoLivePreview({ videoRef }) {
      overlay div so it scales with the region without a separate canvas. */
   useEffect(() => {
     if (!visible || delogoMethod !== "cover") {
-      coverImgRef.current = null;
+      setCoverImgData(null);
       return;
     }
     if (!delogoImagePath) {
-      coverImgRef.current = null;
+      setCoverImgData(null);
       return;
     }
     // Reuse the Electron-preloaded data URL cache when available (the image
     // op path uses the same cache); fall back to a raw file URL.
     const cached = useEditorStore.getState().imageDataCache?.[delogoImagePath];
     if (cached) {
-      coverImgRef.current = cached;
+      setCoverImgData(cached);
       return;
     }
-    coverImgRef.current = null;
+    setCoverImgData(null);
     let cancelled = false;
     const img = new Image();
     img.onload = () => {
@@ -540,9 +540,9 @@ export default function DelogoLivePreview({ videoRef }) {
       canvas.height = img.naturalHeight;
       canvas.getContext("2d").drawImage(img, 0, 0);
       try {
-        coverImgRef.current = canvas.toDataURL("image/png");
+        setCoverImgData(canvas.toDataURL("image/png"));
       } catch {
-        coverImgRef.current = null;
+        setCoverImgData(null);
       }
     };
     img.src = `beru://local/${encodeURIComponent(delogoImagePath)}`;
@@ -554,7 +554,7 @@ export default function DelogoLivePreview({ videoRef }) {
   if (!visible) return null;
 
   const isCover = delogoMethod === "cover";
-  const coverUrl = isCover ? coverImgRef.current : null;
+  const coverUrl = isCover ? coverImgData : null;
 
   return (
     <>

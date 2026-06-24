@@ -15,6 +15,7 @@ import {
   beginProcessingRun,
   clearProcessingRun,
   getProcessingRunId,
+  setProbePhaseActive,
   getLastProcessingError,
   setLastProcessingError,
 } from "../shared-state.js";
@@ -229,7 +230,18 @@ export async function cancelActiveProcessing() {
   if (proc?.pid) {
     const deathPromise = waitForProcessClose(proc);
     killProcessTree(proc);
-    await deathPromise;
+    const closed = await deathPromise;
+    if (!closed && process.platform !== "win32") {
+      // SIGTERM grace expired without the child exiting — escalate to SIGKILL so
+      // we don't proceed to setPythonProcess(null) while the processor is still
+      // alive (which would orphan it). Windows uses taskkill /F, so no escalation.
+      try {
+        proc.kill("SIGKILL");
+      } catch (e) {
+        console.error("[beru] SIGKILL error:", e.message);
+      }
+      await waitForProcessClose(proc, 3000);
+    }
   }
 
   setPythonProcess(null);
@@ -295,6 +307,10 @@ export function registerProcessHandlers(pathSecurity) {
     if (!beginProcessingRun(runId)) {
       return { success: false, error: "Ya hay un proceso en ejecución" };
     }
+    // Mark the probe phase active so the processing-lock watchdog rearms while
+    // ffprobe is enriching the batch (no processor child exists yet, so
+    // isPythonChildAlive() alone would let it fire mid-probe on large batches).
+    setProbePhaseActive(true);
 
     let tmpFile = null;
     let cancelFile = null;
@@ -325,7 +341,15 @@ export function registerProcessHandlers(pathSecurity) {
       };
 
       const probeLimit = Math.max(1, Math.min(8, safeJobs.length, (os.cpus()?.length || 4) * 2));
-      const enrichedJobs = await runWithConcurrency(safeJobs, probeLimit, enrichJobVideoInfo);
+      // Stop spawning ffprobe probes once this run is cancelled, so a cancel
+      // during the probe phase doesn't keep probing the rest of the batch.
+      const enrichedJobs = await runWithConcurrency(
+        safeJobs,
+        probeLimit,
+        enrichJobVideoInfo,
+        undefined,
+        () => !isCurrentRun(),
+      );
 
       // The probe above can take seconds. If the user cancelled during the
       // probe, cancelActiveProcessing() already cleared our runId and tmpFile.
@@ -336,6 +360,9 @@ export function registerProcessHandlers(pathSecurity) {
         cleanupRunArtifacts();
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
+      // Probe phase is over — the processor child is about to spawn, so the
+      // watchdog can now rely on isPythonChildAlive() to rearm.
+      setProbePhaseActive(false);
 
       await fs.promises.writeFile(
         tmpFile,

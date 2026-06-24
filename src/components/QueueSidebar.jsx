@@ -255,6 +255,7 @@ export default function QueueSidebar() {
   const excelMatchStatus = useEditorStore((s) => s.excelMatchStatus);
   const excelPath = useEditorStore((s) => s.excelPath);
   const isProcessing = useEditorStore((s) => s.isProcessing);
+  const outputDir = useEditorStore((s) => s.outputDir);
   const showToast = useEditorStore((s) => s.showToast);
   const get = useEditorStore.getState;
   const t = useT();
@@ -386,7 +387,7 @@ export default function QueueSidebar() {
     return out;
   }, [queue, excelPath, excelMatchStatus]);
 
-  const hasOutputDir = Boolean(get().outputDir);
+  const hasOutputDir = Boolean(outputDir);
 
   return (
     <aside

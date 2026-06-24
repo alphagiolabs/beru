@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 """Benchmark export on prueba.mp4 (run from repo root)."""
-import json
-import os
 import sys
 import time
 from pathlib import Path

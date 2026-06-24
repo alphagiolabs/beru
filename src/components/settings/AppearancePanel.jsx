@@ -552,8 +552,3 @@ export default function AppearancePanel() {
     </div>
   );
 }
-
-export function getActiveThemeDisplayName(state, t) {
-  const ref = state.themeActiveSlot === 1 ? state.themeSlot1 : state.themeSlot2;
-  return resolveThemeName(ref, state.customThemes, t);
-}

@@ -26,6 +26,7 @@ import { initTelemetry } from "./utils/telemetry.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 let quitCleanupStarted = false;
+let quitDisposalDone = false;
 
 const pathSecurity = createPathSecurity(app);
 
@@ -42,6 +43,21 @@ function cleanupTempFiles() {
         } catch {}
       }
     }
+  } catch {}
+}
+
+// Unconditional quit-time disposal. Runs on EVERY quit path (not just when a
+// processing run is active): the preview-frame worker is a separate long-lived
+// child that getPythonProcess() does not track, so gating on it orphaned the
+// worker on every normal quit while idle. Idempotent across before-quit/will-quit.
+function disposeOnQuit() {
+  if (quitDisposalDone) return;
+  quitDisposalDone = true;
+  try {
+    cleanupTempFiles();
+  } catch {}
+  try {
+    disposePreviewFrameWorker();
   } catch {}
 }
 
@@ -70,13 +86,10 @@ function onFatalError(err) {
 app.on("will-quit", (event) => {
   if (quitCleanupStarted) return;
   if (isQuittingForUpdate()) return;
+  disposeOnQuit();
   if (!getPythonProcess()) return;
   event.preventDefault();
   quitCleanupStarted = true;
-  if (!isQuittingForUpdate()) {
-    cleanupTempFiles();
-    disposePreviewFrameWorker();
-  }
   cancelActiveProcessing().finally(() => {
     app.quit();
   });
@@ -143,12 +156,10 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", (event) => {
   if (quitCleanupStarted || isQuittingForUpdate()) return;
+  disposeOnQuit();
   if (!getPythonProcess()) return;
   event.preventDefault();
   quitCleanupStarted = true;
-  if (!isQuittingForUpdate()) {
-    disposePreviewFrameWorker();
-  }
   cancelActiveProcessing().finally(() => app.quit());
 });
 

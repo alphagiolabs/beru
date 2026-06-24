@@ -33,12 +33,17 @@ export default function useCanvas(videoEl) {
     canvas.style.height = rect.height + "px";
   }, [videoEl]);
 
+  // Stable identity: read the live region/tool/method from the store on each
+  // call instead of closing over them. Otherwise currentRegion changes on every
+  // mousemove while drawing, producing a new redrawCanvas identity and causing
+  // the ResizeObserver effect below to disconnect/recreate the observer per move.
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const video = videoEl?.current;
     if (!canvas || !video) return;
-    drawRegionOnCanvas(canvas, video, currentRegion, activeTool, delogoMethod);
-  }, [videoEl, currentRegion, activeTool, delogoMethod]);
+    const { currentRegion: cr, activeTool: at, delogoMethod: dm } = get();
+    drawRegionOnCanvas(canvas, video, cr, at, dm);
+  }, [videoEl, get]);
 
   useEffect(() => {
     const video = videoEl?.current;
@@ -53,9 +58,11 @@ export default function useCanvas(videoEl) {
     return () => ro.disconnect();
   }, [videoEl, resizeCanvas, redrawCanvas]);
 
+  // Redraw when the region/tool/method change. redrawCanvas itself is now stable,
+  // so without these deps the canvas would never refresh on region edits.
   useEffect(() => {
     redrawCanvas();
-  }, [redrawCanvas]);
+  }, [redrawCanvas, currentRegion, activeTool, delogoMethod]);
 
   const getScreenRect = useCallback(() => {
     const r = currentRegion;
@@ -245,7 +252,7 @@ export default function useCanvas(videoEl) {
           } else if (currentRegion && hitTestRegion(e.clientX, e.clientY)) {
             canvas.style.cursor = "grab";
           } else {
-            canvas.style.cursor = currentRegion ? "crosshair" : "crosshair";
+            canvas.style.cursor = "crosshair";
           }
         }
       }

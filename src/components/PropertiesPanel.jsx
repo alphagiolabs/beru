@@ -538,7 +538,7 @@ export default function PropertiesPanel() {
                             get().cacheImageData(res.path, r.dataUrl);
                           }
                         } else if (res && !res.canceled) {
-                          get().showToast(res.error || "No se pudo cargar la imagen", "error");
+                          get().showToast({ kind: "err", text: res.error || "No se pudo cargar la imagen" });
                         }
                       }}
                       className="cap-btn-secondary !text-[10px] !px-2 flex items-center gap-1"

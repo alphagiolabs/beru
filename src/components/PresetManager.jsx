@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Save, Trash2 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 
@@ -9,6 +9,22 @@ export default function PresetManager() {
   const [deletingFilename, setDeletingFilename] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const getState = useEditorStore.getState;
+  // Track pending feedback-clear timers so they are cancelled on unmount
+  // (avoids setState-after-unmount / leaked timers if the component unmounts
+  // within the 2.5s feedback window — e.g. when the active tool changes).
+  const feedbackTimerRef = useRef(null);
+  const scheduleFeedbackClear = () => {
+    if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    feedbackTimerRef.current = setTimeout(() => {
+      feedbackTimerRef.current = null;
+      setFeedback(null);
+    }, 2500);
+  };
+  useEffect(() => {
+    return () => {
+      if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);
+    };
+  }, []);
 
   const handleSave = async () => {
     const cleanName = name.trim();
@@ -23,13 +39,13 @@ export default function PresetManager() {
     } else {
       setFeedback({ kind: "err", text: res?.error || "No se pudo guardar el preset" });
     }
-    setTimeout(() => setFeedback(null), 2500);
+    scheduleFeedbackClear();
   };
 
   const handleDelete = async (preset) => {
     if (preset.source === "bundled") {
       setFeedback({ kind: "err", text: "Los presets incluidos no se pueden eliminar" });
-      setTimeout(() => setFeedback(null), 2500);
+      scheduleFeedbackClear();
       return;
     }
     if (deletingFilename) return;
@@ -42,7 +58,7 @@ export default function PresetManager() {
     } else {
       setFeedback({ kind: "err", text: res?.error || "No se pudo eliminar el preset" });
     }
-    setTimeout(() => setFeedback(null), 2500);
+    scheduleFeedbackClear();
   };
 
   return (
