@@ -43,8 +43,10 @@ export default function useUpdater(api) {
     if (!recentlyChecked && api.checkForUpdates) {
       timerId = setTimeout(async () => {
         if (cancelled) return;
-        await checkForUpdates();
-        if (!cancelled) safeStorage.set(LAST_CHECK_KEY, String(Date.now()));
+        try {
+          await checkForUpdates();
+          if (!cancelled) safeStorage.set(LAST_CHECK_KEY, String(Date.now()));
+        } catch {}
       }, UPDATE_CHECK_DELAY_MS);
     }
 
