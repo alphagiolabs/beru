@@ -900,7 +900,7 @@ def find_ffprobe(ffmpeg_bin):
     found = shutil.which("ffprobe") or shutil.which(f"ffprobe{_exe}")
     if found:
         return found
-    return ffmpeg_bin.replace(f"ffmpeg{_exe}", f"ffprobe{_exe}").replace("ffmpeg", "ffprobe")
+    return ffmpeg_bin.replace(f"ffmpeg{_exe}", f"ffprobe{_exe}")
 
 
 def _safe_float(value, default=0.0):
@@ -1354,11 +1354,13 @@ def _build_watermark_filter(watermark, video_w, video_h):
             raise ValueError("fontFamily contains forbidden characters")
         # Resolve font
         font_key, font_val, is_fontfile = _resolve_font(font_family)
+        if is_fontfile:
+            font_val = f"'{font_val}'"
         escaped_text = _escape_drawtext_text(text)
         alpha = f"{opacity:.2f}"
         x_expr, y_expr = xy.split(":")
         dt_parts = [
-            f"{font_key}='{font_val}'",
+            f"{font_key}={font_val}",
             f"text='{escaped_text}'",
             f"fontsize={font_size}",
             f"fontcolor={font_color}@{alpha}",
@@ -1575,7 +1577,7 @@ def _check_cancelled():
     if _cancel_event.is_set():
         return True
     if _jobs_file:
-        cancel_file = _jobs_file.replace(".json", ".cancel")
+        cancel_file = os.path.splitext(_jobs_file)[0] + ".cancel"
         if os.path.exists(cancel_file):
             _cancel_event.set()
             return True
@@ -1836,6 +1838,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
     # catch after a much longer wait.
     STALL_TIMEOUT_SEC = 120
     last_output_time = time.monotonic()
+    prev_lines = 0
 
     while True:
         returncode = proc.poll()
@@ -1852,11 +1855,12 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
             reader_done.wait(timeout=1)
             _cleanup_ffmpeg_partial(cmd)
             return False, f"Timeout after {timeout_sec}s"
-        # Check for stall: compare current stderr line count to detect activity
+        # Check for stall: compare stderr line count delta to detect activity
         with stderr_lock:
             current_lines = len(stderr_lines)
-        if current_lines > 0:
+        if current_lines > prev_lines:
             last_output_time = now
+            prev_lines = current_lines
         elif now - last_output_time > STALL_TIMEOUT_SEC:
             _kill_ffmpeg_process(proc)
             reader_done.wait(timeout=1)
