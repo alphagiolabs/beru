@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { X, FileSpreadsheet, ArrowRight, RotateCcw } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
-import { stripExt, rowGet, normalizeMatchId } from "../utils/video-utils";
+import { rowGet, normalizeMatchId } from "../utils/video-utils";
 import { useT } from "../i18n/useT";
 
 const PREVIEW_ROWS = 5;

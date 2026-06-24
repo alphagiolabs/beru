@@ -33,8 +33,6 @@ HDR_FILL = PatternFill("solid", fgColor="1F2937")
 HDR_FONT = Font(bold=True, color="FFFFFF")
 ID_FILL = PatternFill("solid", fgColor="FEF3C7")
 INPUT_FILL = PatternFill("solid", fgColor="ECFDF5")
-ERR_FILL = PatternFill("solid", fgColor="FEE2E2")
-OK_FILL = PatternFill("solid", fgColor="DCFCE7")
 
 
 def style_header(ws, row, cols):

@@ -56,13 +56,3 @@ export const PERF_FLAGS = {
   /** Coalesce `appendLog` calls in `useProcessing` into 50ms batches. */
   logBatch: flagBool("VITE_BERU_LOG_BATCH", true),
 };
-
-/** Re-read flags (mainly for tests that mutate `import.meta.env`). */
-export function reloadPerfFlags() {
-  PERF_FLAGS.progressMap = flagBool("VITE_BERU_RENDER_PROGRESS_MAP", true);
-  PERF_FLAGS.virtualize = flagBool("VITE_BERU_RENDER_VIRTUALIZE", false);
-  PERF_FLAGS.virtualizeThreshold = flagNumber("VITE_BERU_RENDER_VIRTUALIZE_THRESHOLD", 100);
-  PERF_FLAGS.delogoThrottleFps = flagNumber("VITE_BERU_DELGO_THROTTLE_FPS", 30);
-  PERF_FLAGS.delogoQuickselect = flagBool("VITE_BERU_DELGO_QUICKSELECT", false);
-  PERF_FLAGS.logBatch = flagBool("VITE_BERU_LOG_BATCH", true);
-}

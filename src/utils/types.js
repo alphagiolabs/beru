@@ -493,19 +493,7 @@ export const TEXT_STYLE_PRESETS = [
   },
 ];
 
-export const MODE_META = {
-  blur: { label: "Difuminar", color: "text-[#00f0ea]" },
-  crop: { label: "Recortar", color: "text-amber-400" },
-  text: { label: "Texto", color: "text-purple-400" },
-  delogo: { label: "Remover", color: "text-rose-400" },
-  image: { label: "Imagen", color: "text-emerald-400" },
-};
-
 /* ── Plain objects / shapes (no classes) ───────────────────────────── */
-
-export function createRegion(x = 0, y = 0, w = 0, h = 0) {
-  return { x, y, w, h };
-}
 
 export function createOperation(overrides = {}) {
   return {
@@ -552,16 +540,6 @@ export function createQueueItem(overrides = {}) {
     error: null,
     customOutputName: "",
     thumbnail: null,
-    ...overrides,
-  };
-}
-
-export function createPreset(overrides = {}) {
-  return {
-    id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36),
-    name: "New Preset",
-    fontFamily: "Arial",
-    ...TEXT_STYLE_DEFAULTS,
     ...overrides,
   };
 }
