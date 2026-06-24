@@ -100,6 +100,16 @@ jobs:
         run: npm run test:python
 
       - name: Build renderer
+        # Inject Supabase credentials so the login gate and user-management
+        # panel are compiled into the shipped renderer. Vite bakes VITE_*
+        # env vars at build time; without these, isSupabaseConfigured is false
+        # and BeruRoot boots straight into the editor (no login screen). The
+        # .env file is gitignored so it is never present on the runner — these
+        # secrets are the only source. If a secret is missing the build still
+        # succeeds but ships without auth (graceful fallback).
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npx vite build
 
       - name: Package & publish

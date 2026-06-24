@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.40] - 2026-06-24
+
+### Fixed
+
+- **Supabase auth now compiled into the shipped installer** — `.github/workflows/ci-release.yml`'s `Build renderer` step ran `vite build` without `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, and `.env` is gitignored so it is absent on the runner. Vite bakes `VITE_*` at build time, so `isSupabaseConfigured` was `false` in every published build since v1.6.38 and `BeruRoot` booted straight into the editor with no login screen or user-management panel. The step now injects the Supabase secrets, so the login gate and admin `UserManagementPanel` ship in the renderer.
+
 ## [1.6.39] - 2026-06-24
 
 ### Fixed
