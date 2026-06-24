@@ -61,6 +61,14 @@ export function filePathFromBeruUrl(requestUrl) {
   if (/^\/[A-Za-z]:[\\/]/.test(decoded)) {
     return decoded.slice(1);
   }
+  // Backslash UNC: the URL pathname root adds a leading "/", so an encoded
+  // \\server\share\... path decodes to "/\\server\share\...". Without stripping
+  // that "/", path.resolve on win32 turns it into "<currentDrive>:\server\share"
+  // and destroys the UNC — the file is never found. Forward-slash UNC
+  // (//server/share) is handled by the next branch.
+  if (/^\/\\\\/.test(decoded)) {
+    return decoded.slice(1);
+  }
   if (decoded.startsWith("//")) {
     return decoded.slice(1);
   }

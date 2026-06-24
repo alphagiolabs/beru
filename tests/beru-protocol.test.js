@@ -21,6 +21,18 @@ describe("beru protocol path parsing", () => {
     );
   });
 
+  it("preserves backslash UNC paths without a spurious leading slash", () => {
+    // \\server\share\clip.mp4 — the URL pathname root adds a leading "/", which
+    // must be stripped or path.resolve on win32 destroys the UNC.
+    const unc = "\\\\server\\share\\clip.mp4";
+    expect(filePathFromBeruUrl(`beru://local/${encodeURIComponent(unc)}`)).toBe(unc);
+  });
+
+  it("preserves forward-slash UNC paths", () => {
+    const unc = "//server/share/clip.mp4";
+    expect(filePathFromBeruUrl(`beru://local/${encodeURIComponent(unc)}`)).toBe(unc);
+  });
+
   it("rejects non-local beru hosts", () => {
     expect(filePathFromBeruUrl("beru://remote/%2Fhome%2Fuser%2Fclip.mp4")).toBeNull();
   });
