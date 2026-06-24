@@ -13,6 +13,11 @@ export function formatUpdateError(t, error) {
   if (!error) return null;
   const key = ERROR_KEYS[error];
   if (key) return t(key);
-  if (typeof error === "string" && error.length > 0 && error.length < 200) return error;
+  if (typeof error === "string") {
+    if (error.includes("ERR_UPDATER_INVALID_SIGNATURE")) {
+      return t("updater.errors.invalidSignature");
+    }
+    if (error.length > 0 && error.length < 200) return error;
+  }
   return t("header.updateDownloadFailed");
 }

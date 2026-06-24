@@ -118,9 +118,7 @@
           ]
         }
       ],
-      "signtoolOptions": {
-        "publisherName": "Beru"
-      }
+      "verifyUpdateCodeSignature": false
     },
     "beforeBuild": "scripts/build-processor.hook.cjs",
     "nsis": {

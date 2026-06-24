@@ -74,7 +74,22 @@ const init = (_win) => {
   }
   au.autoDownload = false;
   au.autoInstallOnAppQuit = false;
-  au.logger = null;
+  // electron-updater expects a logger object with info/warn/error methods.
+  // Setting null causes TypeError on internal this._logger.info() calls in
+  // NsisUpdater/verifySignature, which can mask the real error (e.g.
+  // ERR_UPDATER_INVALID_SIGNATURE). Use a console wrapper instead.
+  au.logger = {
+    info: (...args) => console.log("[updater]", ...args),
+    warn: (...args) => console.warn("[updater]", ...args),
+    error: (...args) => console.error("[updater]", ...args),
+    debug: (...args) => console.debug("[updater]", ...args),
+  };
+  // Installed builds ≤1.6.40 baked publisherName into app-update.yml, which
+  // forces Authenticode verification on every downloaded installer. Our CI
+  // ships unsigned NSIS builds, so verification always fails with
+  // ERR_UPDATER_INVALID_SIGNATURE. Override at runtime so already-installed
+  // apps can update without a manual reinstall.
+  au.verifyUpdateCodeSignature = async () => null;
 
   au.on("checking-for-update", () => send({ type: "checking" }));
   au.on("update-available", (info) => {
