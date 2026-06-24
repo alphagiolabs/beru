@@ -28,12 +28,16 @@ export default function LoginScreen() {
     }
 
     setSubmitting(true);
-    const res = await signIn(email, password);
-    setSubmitting(false);
-
-    if (!res.ok) {
-      const key = res.error?.startsWith("auth.") ? res.error : null;
-      setLocalError(key ? t(key) : res.error || t("auth.loginFailed"));
+    try {
+      const res = await signIn(email, password);
+      if (!res.ok) {
+        const key = res.error?.startsWith("auth.") ? res.error : null;
+        setLocalError(key ? t(key) : res.error || t("auth.loginFailed"));
+      }
+    } catch {
+      setLocalError(t("auth.loginFailed"));
+    } finally {
+      setSubmitting(false);
     }
   };
 
