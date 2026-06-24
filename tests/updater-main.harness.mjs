@@ -22,6 +22,15 @@ function buildSource() {
     'import { createRequire } from "module";',
     "const createRequire = globalThis.__mockCreateRequire;",
   );
+  // The updater reads the live window from shared-state instead of a captured
+  // ref (so it survives window recreation). Inject a mock getter that returns
+  // the test's fake window. Wrapped in a function so the lookup happens at call
+  // time (fakeWindow is created after runInContext, so binding the value at
+  // module top-level would capture undefined).
+  src = src.replace(
+    'import { getMainWindow } from "./shared-state.js";',
+    "const getMainWindow = () => globalThis.__mockGetMainWindow && globalThis.__mockGetMainWindow();",
+  );
   // The source uses import.meta.url for createRequire. Replace with a fixed URL.
   src = src.replace(/import\.meta\.url/g, '"file:///test/updater.js"');
   // Convert ESM export to CommonJS module.exports so vm.runInContext can return it.
@@ -104,6 +113,9 @@ export function createUpdaterHarness() {
       send: (_channel, payload) => events.push(payload),
     },
   };
+  // shared-state.getMainWindow() mock — returns the test's fake window so send()
+  // (which now reads the live window instead of a captured ref) targets it.
+  context.__mockGetMainWindow = () => fakeWindow;
 
   function emit(event, ...args) {
     const cb = handlers.get(event);
