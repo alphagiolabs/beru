@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.39] - 2026-06-24
+
+### Fixed
+
+- **FFmpeg stall detector no longer kills healthy long encodes** — `python/processor.py`'s stall detector compared `len(stderr_lines)`, but `StderrBuffer` is a `deque(maxlen=256)`; once full, `len()` capped and the delta froze, killing any encode longer than ~2 min 120 s later with "FFmpeg stalled". Added an unbounded `total_appended()` counter and compare that. The detector is also now gated to progress-emitting paths only (`job_id != null and duration_sec > 0`), so stream-copy and unknown-duration jobs (which use `-loglevel error` and emit zero stderr) no longer false-fire — they rely on the overall deadline.
+- **Preview-frame worker no longer orphaned on quit** — `main/main.js`'s `will-quit`/`before-quit` gated all cleanup behind `getPythonProcess()`, which doesn't track the long-lived preview-frame worker. On idle quit the worker was orphaned every session and `cleanupTempFiles()` never ran. Added an idempotent `disposeOnQuit()` called on every quit path.
+- **Delogo cover image now displays immediately** — `src/components/DelogoLivePreview.jsx` stored the cover data URL in a ref (no re-render), so it stayed blank until an unrelated re-render. Moved to `useState`.
+- **Updater events survive window recreation + no concurrent downloads** — `main/updater.js`'s `send()` used a once-captured `mainWindow` that went stale after window recreation, dropping every `updater:event`. It now reads `getMainWindow()` from shared-state. Also `downloadInProgress` was released during retry backoff, allowing two concurrent `downloadUpdate()` calls; added a `downloadBusy` flag held for the whole call.
+- **Backslash-UNC `beru://` paths fixed** — `main/utils/beru-protocol.js` decoded `\\server\share\…` to `/\\server\share\…` (spurious leading `/`), which `path.win32.resolve` collapsed to `<drive>:\server\share`, destroying the UNC. Added a branch to strip the leading `/`. Forward-slash UNC already worked. Added regression tests.
+- **Processing-lock watchdog no longer fires mid-probe** — `main/shared-state.js`'s watchdog only rearmed while the processor child was alive, but during the ffprobe phase no child exists yet; large batches could trip the 5-min lock timeout mid-probe. Added a `_probePhaseActive` flag so the watchdog rearms during probing.
+- **Frontend performance/stability fixes** — `src/components/LayerList.jsx`'s `memo(LayerRow)` was defeated by inline handler props (every row re-rendered on each selection); hoisted stable `useCallback` handlers. `src/components/TableEditor.jsx`'s video listeners no longer tear down on every scrub (`seekingRef`), and focus no longer resets when region count changes. `src/hooks/useCanvas.js`'s `redrawCanvas` is now stable so the ResizeObserver isn't recreated per mousemove. `src/components/PresetManager.jsx` clears feedback timers on unmount.
+- **Lower-severity cleanups** — telemetry `before-quit` listener no longer accumulates across enable/disable cycles; atomic writes (tmp + rename) for settings/history/recent so a crash mid-write can't wipe user state; `SIGKILL` escalation on non-Windows cancel so the processor can't be orphaned; ffprobe probes stop spawning after a cancel; Excel template KPI `COUNTIF` off-by-one fixed after `insert_rows`; non-`.ttf/.otf/.ttc` Windows registry fonts are skipped instead of crashing the job.
+
 ## [1.6.38] - 2026-06-23
 
 ### Added
