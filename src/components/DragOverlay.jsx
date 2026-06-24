@@ -20,12 +20,12 @@ export default function DragOverlay() {
       const files = Array.from(e.dataTransfer.files || []);
       const paths = files.map((f) => f.path).filter(Boolean);
       const videoCount = files.filter((f) => VIDEO_EXT.test(f.name)).length;
-      const folderCount = paths.length - videoCount;
+      const otherCount = paths.length - videoCount;
       if (cancelled) return;
       setPreview({
         total: files.length,
         videos: videoCount,
-        others: Math.max(0, folderCount),
+        others: Math.max(0, otherCount),
       });
     };
     window.addEventListener("dragover", handler);

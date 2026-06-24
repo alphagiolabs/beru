@@ -245,7 +245,7 @@ export default function useCanvas(videoEl) {
           } else if (currentRegion && hitTestRegion(e.clientX, e.clientY)) {
             canvas.style.cursor = "grab";
           } else {
-            canvas.style.cursor = currentRegion ? "crosshair" : "crosshair";
+            canvas.style.cursor = "crosshair";
           }
         }
       }
