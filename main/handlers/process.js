@@ -15,6 +15,7 @@ import {
   beginProcessingRun,
   clearProcessingRun,
   getProcessingRunId,
+  setProbePhaseActive,
   getLastProcessingError,
   setLastProcessingError,
 } from "../shared-state.js";
@@ -295,6 +296,10 @@ export function registerProcessHandlers(pathSecurity) {
     if (!beginProcessingRun(runId)) {
       return { success: false, error: "Ya hay un proceso en ejecución" };
     }
+    // Mark the probe phase active so the processing-lock watchdog rearms while
+    // ffprobe is enriching the batch (no processor child exists yet, so
+    // isPythonChildAlive() alone would let it fire mid-probe on large batches).
+    setProbePhaseActive(true);
 
     let tmpFile = null;
     let cancelFile = null;
@@ -336,6 +341,9 @@ export function registerProcessHandlers(pathSecurity) {
         cleanupRunArtifacts();
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
+      // Probe phase is over — the processor child is about to spawn, so the
+      // watchdog can now rely on isPythonChildAlive() to rearm.
+      setProbePhaseActive(false);
 
       await fs.promises.writeFile(
         tmpFile,

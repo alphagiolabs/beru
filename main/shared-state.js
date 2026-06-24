@@ -40,6 +40,15 @@ export const PROCESSING_LOCK_MAX_MS = 5 * 60 * 1000;
 
 let _processingLock = false;
 let _processingWatchdog = null;
+// True during the pre-spawn probe phase (enrichJobVideoInfo / ffprobe of the
+// batch). The processor child does not exist yet, so isPythonChildAlive() is
+// false and the watchdog would otherwise fire mid-probe on large batches and
+// force-release the lock. While this is set, the watchdog rearms instead.
+let _probePhaseActive = false;
+export const getProbePhaseActive = () => _probePhaseActive;
+export const setProbePhaseActive = (active) => {
+  _probePhaseActive = Boolean(active);
+};
 
 function isPythonChildAlive(proc) {
   return Boolean(proc && proc.exitCode == null && proc.signalCode == null && !proc.killed);
@@ -53,8 +62,9 @@ function armProcessingWatchdog(runId) {
     if (_processingRunId !== runId) return;
 
     // Long batches legitimately exceed PROCESSING_LOCK_MAX_MS — keep checking
-    // while the processor child is still alive.
-    if (isPythonChildAlive(_pythonProcess)) {
+    // while the processor child is still alive OR we are still in the probe
+    // phase (no child yet, but ffprobe work is in progress).
+    if (isPythonChildAlive(_pythonProcess) || _probePhaseActive) {
       armProcessingWatchdog(runId);
       return;
     }
@@ -63,6 +73,7 @@ function armProcessingWatchdog(runId) {
     _processingRunId = null;
     _processingLock = false;
     _processingWatchdog = null;
+    _probePhaseActive = false;
     console.error(
       `[beru] Processing lock watchdog fired for run ${runId} — ` +
         `force-releasing after ${PROCESSING_LOCK_MAX_MS}ms`,
@@ -89,6 +100,7 @@ export const clearProcessingRun = (runId) => {
   _isProcessing = false;
   _processingRunId = null;
   _processingLock = false;
+  _probePhaseActive = false;
   return true;
 };
 
