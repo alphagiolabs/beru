@@ -92,6 +92,8 @@ describe("main/updater.js event race guard", () => {
   it("disables Authenticode verification for unsigned NSIS builds", () => {
     harness.init();
     expect(harness.autoUpdater.verifyUpdateCodeSignature).toBeTypeOf("function");
-    return expect(harness.autoUpdater.verifyUpdateCodeSignature([], "fake.exe")).resolves.toBeNull();
+    return expect(
+      harness.autoUpdater.verifyUpdateCodeSignature([], "fake.exe"),
+    ).resolves.toBeNull();
   });
 });
