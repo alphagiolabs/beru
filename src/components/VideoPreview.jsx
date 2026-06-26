@@ -808,6 +808,7 @@ export default function VideoPreview() {
               const isSelected = selectedTemplateRegionId === tr.id;
               const isDragging =
                 draggingBatchText?.videoIdx === selectedIdx && draggingBatchText.regionId === tr.id;
+              const batchOverlayInteractive = !currentRegion;
               return (
                 <TextOverlay
                   key={tr.id}
@@ -817,10 +818,12 @@ export default function VideoPreview() {
                   isFocused={isSelected}
                   showOutline
                   label={tr.label}
-                  interactive
-                  cursor={isDragging ? "grabbing" : "grab"}
+                  interactive={batchOverlayInteractive}
+                  cursor={batchOverlayInteractive ? (isDragging ? "grabbing" : "grab") : undefined}
                   zIndex={20}
-                  onMouseDown={(e) => handleBatchTextDragStart(tr, e)}
+                  onMouseDown={
+                    batchOverlayInteractive ? (e) => handleBatchTextDragStart(tr, e) : undefined
+                  }
                 />
               );
             })}
@@ -945,11 +948,14 @@ export default function VideoPreview() {
           {/* Live preview of the in-progress delogo effect (under the selection handles) */}
           <DelogoLivePreview videoRef={videoRef} />
 
-          {/* Drawing canvas */}
+          {/* Drawing canvas — above batch text overlays so resize handles receive clicks */}
           <canvas
             ref={canvasRef}
             className="absolute top-0 left-0"
-            style={{ cursor: activeTool === "pan" && zoom > 1 ? "grab" : undefined }}
+            style={{
+              cursor: activeTool === "pan" && zoom > 1 ? "grab" : undefined,
+              zIndex: 30,
+            }}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}

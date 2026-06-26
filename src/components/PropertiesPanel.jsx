@@ -686,7 +686,10 @@ export default function PropertiesPanel() {
             </button>
           )}
           <button
-            onClick={() => get().setCurrentRegion(null)}
+            onClick={() => {
+              if (sidebarMode === "batch") get().cancelBatchRegionSelection();
+              else get().setCurrentRegion(null);
+            }}
             className="text-[10px] hover:underline block mx-auto mb-3"
             style={{ color: "var(--text-muted)" }}
           >

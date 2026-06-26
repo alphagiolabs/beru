@@ -79,10 +79,21 @@ export function createBatchSlice(set, get) {
       const style = tr?.style
         ? mergeTextStyles(getGlobalTextStyleFromState(get()), tr.style)
         : null;
+      let region = tr?.region ? { ...tr.region } : null;
+      const { queue, selectedIdx } = get();
+      if (region && selectedIdx >= 0 && selectedIdx < queue.length) {
+        const { op } = findTextOpForRegion(queue[selectedIdx].operations, tr.region, tr.id);
+        if (op?.region) region = { ...op.region };
+      }
       set({
         selectedTemplateRegionId: id,
+        currentRegion: region,
         ...(style ? patchToGlobalState(style) : {}),
       });
+    },
+
+    cancelBatchRegionSelection: () => {
+      set({ currentRegion: null, selectedTemplateRegionId: null });
     },
 
     updateTemplateRegion: (id, patch) => {
