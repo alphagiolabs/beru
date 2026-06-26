@@ -87,8 +87,6 @@ export default function UpdateModal({
           </>
         ) : status === "downloading" ? (
           <>
-            <p className="status-footer-update-subtitle">{t("footer.updateWait")}</p>
-            <p className="status-footer-update-warning">{t("footer.updateReadyHint")}</p>
             <div className="status-footer-update-progress">
               <div
                 className="status-footer-update-progress-fill"

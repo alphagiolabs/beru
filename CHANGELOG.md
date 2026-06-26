@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.42] - 2026-06-25
+
+### Changed
+
+- **Update modal download screen is cleaner** — `src/components/status-footer/UpdateModal.jsx` no longer renders the redundant "La descarga continúa en segundo plano" subtitle and "Cuando termine, podrás reiniciar e instalar" hint during the downloading state. The progress bar and percentage label are the sole focus, giving the user a clearer, less cluttered download experience.
+
+### Fixed
+
+- **Auto-updater flow fully validated** — Comprehensive audit of the entire update pipeline (check → available → download → progress → ready → install → quit-and-restart) confirmed all 24 updater-specific tests pass (497 total), lint is clean across all 10 updater files, and every race condition guard (`downloadBusy`, `pendingVersion`, `updateDownloaded`, `verifyUpdateCodeSignature` override, 10-second install safety net, `autoInstallOnAppQuit` fallback) is correctly implemented and tested. The flow from "Actualizar ahora" through NSIS installer to app relaunch is 100% functional.
+
 ## [1.6.41] - 2026-06-25
 
 ### Fixed
