@@ -819,14 +819,10 @@ export default function VideoPreview() {
                   showOutline
                   label={tr.label}
                   interactive={batchOverlayInteractive}
-                  cursor={
-                    batchOverlayInteractive ? (isDragging ? "grabbing" : "grab") : undefined
-                  }
+                  cursor={batchOverlayInteractive ? (isDragging ? "grabbing" : "grab") : undefined}
                   zIndex={20}
                   onMouseDown={
-                    batchOverlayInteractive
-                      ? (e) => handleBatchTextDragStart(tr, e)
-                      : undefined
+                    batchOverlayInteractive ? (e) => handleBatchTextDragStart(tr, e) : undefined
                   }
                 />
               );

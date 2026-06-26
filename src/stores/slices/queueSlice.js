@@ -330,7 +330,11 @@ export function createQueueSlice(set, get) {
       const { sidebarMode, selectedTemplateRegionId } = get();
       if (sidebarMode === "batch" && selectedTemplateRegionId != null) {
         if (isFreshDraw) {
-          set({ selectedTemplateRegionId: null, currentRegion: clamped, selectedOperationIdx: null });
+          set({
+            selectedTemplateRegionId: null,
+            currentRegion: clamped,
+            selectedOperationIdx: null,
+          });
           return;
         }
         get().updateTemplateRegion(selectedTemplateRegionId, { region: clamped });
