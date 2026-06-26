@@ -322,8 +322,23 @@ export function createQueueSlice(set, get) {
       const bounds = get().videoBounds();
       const w = bounds?.width || 1920;
       const h = bounds?.height || 1080;
+      const isFreshDraw = region.w === 0 && region.h === 0;
       const safe = ensureNormalized(region, w, h);
-      set({ currentRegion: clampRegionToVideo(safe), selectedOperationIdx: null });
+      const clamped = clampRegionToVideo(safe);
+      if (!clamped) return;
+
+      const { sidebarMode, selectedTemplateRegionId } = get();
+      if (sidebarMode === "batch" && selectedTemplateRegionId != null) {
+        if (isFreshDraw) {
+          set({ selectedTemplateRegionId: null, currentRegion: clamped, selectedOperationIdx: null });
+          return;
+        }
+        get().updateTemplateRegion(selectedTemplateRegionId, { region: clamped });
+        set({ currentRegion: clamped, selectedOperationIdx: null });
+        return;
+      }
+
+      set({ currentRegion: clamped, selectedOperationIdx: null });
     },
 
     updateRegionValue: (key, value) => {
@@ -331,7 +346,14 @@ export function createQueueSlice(set, get) {
       if (!r) return;
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) return;
-      set({ currentRegion: clampRegionToVideo({ ...r, [key]: parsed }) });
+      const next = clampRegionToVideo({ ...r, [key]: parsed });
+      if (!next) return;
+
+      const { sidebarMode, selectedTemplateRegionId } = get();
+      if (sidebarMode === "batch" && selectedTemplateRegionId != null) {
+        get().updateTemplateRegion(selectedTemplateRegionId, { region: next });
+      }
+      set({ currentRegion: next });
     },
 
     /* ── Operations ─────────────────────────────────────────────────── */

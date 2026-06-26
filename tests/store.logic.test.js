@@ -481,6 +481,134 @@ describe("useEditorStore logic regressions", () => {
     );
   });
 
+  it("setSelectedTemplateRegion loads the template region into currentRegion", () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region, style: { fontSize: 32 } }],
+      selectedTemplateRegionId: null,
+      currentRegion: null,
+    });
+
+    useEditorStore.getState().setSelectedTemplateRegion("region-1");
+    const state = useEditorStore.getState();
+
+    expect(state.selectedTemplateRegionId).toBe("region-1");
+    expect(state.currentRegion).toEqual(region);
+  });
+
+  it("setCurrentRegion in batch mode syncs resize to template region and queue ops", () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const resized = { x: 0.12, y: 0.22, w: 0.5, h: 0.16 };
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      selectedTemplateRegionId: "region-1",
+      currentRegion: { ...region },
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region, style: { fontSize: 32 } }],
+      queue: [
+        queueItem({
+          width: 1920,
+          height: 1080,
+          operations: [
+            {
+              id: "op-1",
+              mode: "text",
+              batchRegionId: "region-1",
+              region: { ...region },
+              text: "A",
+            },
+          ],
+        }),
+      ],
+    });
+
+    useEditorStore.getState().setCurrentRegion(resized);
+    const state = useEditorStore.getState();
+
+    expect(state.currentRegion).toEqual(resized);
+    expect(state.templateRegions[0].region).toEqual(resized);
+    expect(state.queue[0].operations[0].region).toEqual(resized);
+  });
+
+  it("setCurrentRegion(null) in batch mode keeps selectedTemplateRegionId", () => {
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      selectedTemplateRegionId: "region-1",
+      currentRegion: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 },
+      templateRegions: [
+        { id: "region-1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
+      ],
+    });
+
+    useEditorStore.getState().setCurrentRegion(null);
+    const state = useEditorStore.getState();
+
+    expect(state.currentRegion).toBeNull();
+    expect(state.selectedTemplateRegionId).toBe("region-1");
+  });
+
+  it("cancelBatchRegionSelection clears currentRegion and selectedTemplateRegionId", () => {
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      selectedTemplateRegionId: "region-1",
+      currentRegion: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 },
+      templateRegions: [
+        { id: "region-1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
+      ],
+    });
+
+    useEditorStore.getState().cancelBatchRegionSelection();
+    const state = useEditorStore.getState();
+
+    expect(state.currentRegion).toBeNull();
+    expect(state.selectedTemplateRegionId).toBeNull();
+  });
+
+  it("setSelectedTemplateRegion uses per-video moved region for canvas handles", () => {
+    const templateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const movedRegion = { x: 0.35, y: 0.28, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      selectedIdx: 0,
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region: templateRegion }],
+      queue: [
+        queueItem({
+          operations: [
+            {
+              id: "op-1",
+              mode: "text",
+              batchRegionId: "region-1",
+              region: movedRegion,
+              text: "Hola",
+            },
+          ],
+        }),
+      ],
+    });
+
+    useEditorStore.getState().setSelectedTemplateRegion("region-1");
+    expect(useEditorStore.getState().currentRegion).toEqual(movedRegion);
+  });
+
+  it("starting a fresh canvas draw in batch mode deselects the template region", () => {
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      selectedTemplateRegionId: "region-1",
+      currentRegion: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 },
+      templateRegions: [
+        { id: "region-1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
+      ],
+    });
+
+    useEditorStore.getState().setCurrentRegion({ x: 0.4, y: 0.5, w: 0, h: 0 });
+    const state = useEditorStore.getState();
+
+    expect(state.selectedTemplateRegionId).toBeNull();
+    expect(state.currentRegion).toEqual(
+      expect.objectContaining({ x: 0.4, y: 0.5, w: 0.01, h: 0.01 }),
+    );
+  });
+
   it("reapplying Excel preserves an individually moved batch text region", () => {
     const templateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     const movedRegion = { x: 0.35, y: 0.28, w: 0.3, h: 0.1 };

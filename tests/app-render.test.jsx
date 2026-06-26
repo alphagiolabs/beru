@@ -281,4 +281,42 @@ describe("App render", () => {
     expect(document.body.textContent).toMatch(/Cuadro de texto/i);
     expect(document.body.textContent).toMatch(/Ajuste de línea/i);
   });
+
+  it("renders the selection canvas above batch text overlays in batch mode", async () => {
+    useEditorStore.setState({
+      queue: [
+        createQueueItem({
+          path: "C:\\videos\\demo.mp4",
+          src: "beru://local/C%3A%5Cvideos%5Cdemo.mp4",
+          filename: "demo.mp4",
+          width: 1920,
+          height: 1080,
+          duration: 10,
+        }),
+      ],
+      selectedIdx: 0,
+      sidebarMode: "batch",
+      activeTool: "text",
+      currentRegion: { x: 0.1, y: 0.1, w: 0.3, h: 0.12 },
+      templateRegions: [
+        {
+          id: "region-1",
+          label: "TEXT_1",
+          region: { x: 0.1, y: 0.1, w: 0.3, h: 0.12 },
+          style: { fontSize: 32, textWrap: true, truncate: "none" },
+        },
+      ],
+      selectedTemplateRegionId: "region-1",
+    });
+
+    root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(<App />);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    const canvas = document.querySelector("canvas");
+    expect(canvas).toBeTruthy();
+    expect(Number(canvas.style.zIndex)).toBeGreaterThan(20);
+  });
 });
