@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.41] - 2026-06-25
+
+### Fixed
+
+- **Auto-updater no longer fails on unsigned Windows installers** — Installed builds ≤1.6.40 baked `publisherName` into `app-update.yml`, which forced Authenticode verification on every downloaded update. CI ships unsigned NSIS builds, so every download failed with `ERR_UPDATER_INVALID_SIGNATURE`. `main/updater.js` now skips signature verification at runtime (`verifyUpdateCodeSignature`), and `package.json`'s `build.win` sets `verifyUpdateCodeSignature: false` so new installs no longer embed the check. Added i18n strings for the error path and regression tests.
+
 ## [1.6.40] - 2026-06-24
 
 ### Fixed
