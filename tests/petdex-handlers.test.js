@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map(),
   userData: "",
   appPath: "",
+  homeDir: "",
   packaged: false,
 }));
 
@@ -26,6 +27,14 @@ vi.mock("electron", () => ({
   },
 }));
 
+vi.mock("os", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    homedir: () => mocks.homeDir,
+  };
+});
+
 describe("petdex handlers", () => {
   let tempDirectory;
   let repoRoot;
@@ -35,6 +44,7 @@ describe("petdex handlers", () => {
     tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "beru-petdex-"));
     repoRoot = path.resolve(".");
     mocks.userData = tempDirectory;
+    mocks.homeDir = tempDirectory;
     mocks.appPath = repoRoot;
     mocks.packaged = false;
   });
@@ -62,15 +72,42 @@ describe("petdex handlers", () => {
     const listHandler = mocks.handlers.get("petdex:listInstalled");
     await expect(listHandler()).resolves.toMatchObject({
       success: true,
-      pets: [{ slug: "boba", displayName: "Boba", spritesheetUrl: "https://x.test/s.webp" }],
+      pets: [
+        {
+          slug: "boba",
+          displayName: "Boba",
+          spritesheetUrl: "https://x.test/s.webp",
+          source: "beru",
+        },
+      ],
     });
   });
 
-  it("returns spritesheet data URLs for installed pets", async () => {
+  it("lists pets installed via Codex CLI in ~/.codex/pets", async () => {
+    const petDir = path.join(tempDirectory, ".codex", "pets", "kebo");
+    fs.mkdirSync(petDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(petDir, "pet.json"),
+      JSON.stringify({ id: "kebo", displayName: "Kebo" }),
+    );
+    fs.writeFileSync(path.join(petDir, "spritesheet.webp"), "webp");
+
+    const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
+    registerPetdexHandlers();
+
+    const listHandler = mocks.handlers.get("petdex:listInstalled");
+    await expect(listHandler()).resolves.toMatchObject({
+      success: true,
+      pets: [{ slug: "kebo", displayName: "Kebo", source: "codex" }],
+    });
+  });
+
+  it("returns spritesheet file paths for installed pets", async () => {
     const petDir = path.join(tempDirectory, "pets", "boba");
     fs.mkdirSync(petDir, { recursive: true });
     fs.writeFileSync(path.join(petDir, "pet.json"), JSON.stringify({ id: "boba" }));
-    fs.writeFileSync(path.join(petDir, "spritesheet.webp"), Buffer.from("abc"));
+    const spritesheetPath = path.join(petDir, "spritesheet.webp");
+    fs.writeFileSync(spritesheetPath, Buffer.from("abc"));
 
     const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
     registerPetdexHandlers();
@@ -78,7 +115,7 @@ describe("petdex handlers", () => {
     const spritesheetHandler = mocks.handlers.get("petdex:getSpritesheet");
     const res = await spritesheetHandler({}, "boba");
     expect(res.success).toBe(true);
-    expect(res.dataUrl).toMatch(/^data:image\/webp;base64,/);
+    expect(res.path).toBe(spritesheetPath);
   });
 
   it("installs bundled boba without network", async () => {
@@ -115,7 +152,7 @@ describe("petdex handlers", () => {
     const bundledHandler = mocks.handlers.get("petdex:getBundledSpritesheet");
     const res = await bundledHandler({}, "boba");
     expect(res.success).toBe(true);
-    expect(res.dataUrl).toMatch(/^data:image\/webp;base64,/);
+    expect(res.path).toMatch(/spritesheet\.webp$/);
   });
 
   it("exposes bundled catalog and boba assets in the repo", async () => {

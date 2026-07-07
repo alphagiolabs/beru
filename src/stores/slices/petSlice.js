@@ -1,8 +1,17 @@
 import { swallow } from "../../utils/swallow.js";
-import bundledPetCatalog from "../../data/pets-catalog.json";
+import { beruLocalUrl } from "../../utils/pet-url.js";
 
 const FEATURED_SLUGS = ["boba", "doraemon", "wangcai", "eve", "mallow", "noir-webling"];
-const DEFAULT_PET_MANIFEST = bundledPetCatalog;
+const EMPTY_MANIFEST = { total: 0, pets: [] };
+export const PET_SCALE_MIN = 0.3;
+export const PET_SCALE_MAX = 1;
+export const PET_SCALE_DEFAULT = 0.55;
+
+function clampPetScale(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return PET_SCALE_DEFAULT;
+  return Math.min(PET_SCALE_MAX, Math.max(PET_SCALE_MIN, Math.round(n * 100) / 100));
+}
 
 async function persistPetSettings(partial) {
   const api = window.api;
@@ -20,8 +29,10 @@ export function createPetSlice(set, get) {
     petEnabled: false,
     petActiveSlug: null,
     petPosition: null,
+    petScale: PET_SCALE_DEFAULT,
     petSpritesheet: null,
-    petManifest: DEFAULT_PET_MANIFEST,
+    petSpritesheetLoading: false,
+    petManifest: EMPTY_MANIFEST,
     petManifestError: null,
     petManifestLoading: false,
     petInstalled: [],
@@ -45,6 +56,7 @@ export function createPetSlice(set, get) {
                 y: Math.max(0, Math.floor(settings.petPosition.y)),
               }
             : null,
+        petScale: clampPetScale(settings?.petScale ?? PET_SCALE_DEFAULT),
       });
     },
 
@@ -56,8 +68,14 @@ export function createPetSlice(set, get) {
         const { petActiveSlug } = get();
         if (petActiveSlug) get().loadPetSpritesheet(petActiveSlug);
       } else {
-        set({ petSpritesheet: null });
+        set({ petSpritesheet: null, petSpritesheetLoading: false });
       }
+    },
+
+    setPetScale: async (scale) => {
+      const next = clampPetScale(scale);
+      set({ petScale: next });
+      await persistPetSettings({ petScale: next });
     },
 
     setPetPosition: async (position) => {
@@ -91,12 +109,18 @@ export function createPetSlice(set, get) {
       if (!api?.getPetSpritesheet) return { ok: false, error: "api-missing" };
       const safeSlug = String(slug || "").trim();
       if (!safeSlug) return { ok: false, error: "invalid-slug" };
+
+      set({ petSpritesheetLoading: true });
       try {
         const res = await api.getPetSpritesheet(safeSlug);
-        if (!res?.success || !res.dataUrl) return { ok: false, error: res?.error || "load-failed" };
-        set({ petSpritesheet: res.dataUrl });
+        if (!res?.success || !res.path) {
+          set({ petSpritesheet: null, petSpritesheetLoading: false });
+          return { ok: false, error: res?.error || "load-failed" };
+        }
+        set({ petSpritesheet: beruLocalUrl(res.path), petSpritesheetLoading: false });
         return { ok: true };
       } catch (e) {
+        set({ petSpritesheet: null, petSpritesheetLoading: false });
         return { ok: false, error: e?.message || String(e) };
       }
     },
@@ -130,10 +154,7 @@ export function createPetSlice(set, get) {
     fetchPetManifest: async ({ background = false } = {}) => {
       const api = window.api;
       if (!api?.fetchPetManifest) {
-        set({
-          petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
-          petManifestError: null,
-        });
+        set({ petManifest: EMPTY_MANIFEST, petManifestError: null });
         return { ok: true };
       }
 
@@ -144,28 +165,41 @@ export function createPetSlice(set, get) {
       try {
         const res = await api.fetchPetManifest();
         if (!res?.success || !res.manifest?.pets?.length) {
+          const fallback = get().petManifest?.pets?.length ? get().petManifest : EMPTY_MANIFEST;
+          const hasFallback = fallback.pets.length > 0;
           set({
-            petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
+            petManifest: fallback,
+            petManifestError: hasFallback ? null : res?.error || "fetch-failed",
             petManifestLoading: false,
-            petManifestError: res?.error || "fetch-failed",
           });
-          return { ok: false, error: res?.error || "fetch-failed" };
+          return { ok: hasFallback, error: hasFallback ? null : res?.error || "fetch-failed" };
         }
 
         set({
           petManifest: res.manifest,
-          petManifestLoading: false,
           petManifestError: null,
+          petManifestLoading: false,
         });
         return { ok: true };
       } catch (e) {
+        const fallback = get().petManifest?.pets?.length ? get().petManifest : EMPTY_MANIFEST;
+        const hasFallback = fallback.pets.length > 0;
         const error = e?.message || String(e);
         set({
-          petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
+          petManifest: fallback,
+          petManifestError: hasFallback ? null : error,
           petManifestLoading: false,
-          petManifestError: error,
         });
-        return { ok: false, error };
+        return { ok: hasFallback, error: hasFallback ? null : error };
+      }
+    },
+
+    initPets: async () => {
+      await get().fetchPetManifest({ background: true });
+      await get().loadInstalledPets();
+      const { petEnabled, petActiveSlug } = get();
+      if (petEnabled && petActiveSlug) {
+        await get().loadPetSpritesheet(petActiveSlug);
       }
     },
 
@@ -190,6 +224,12 @@ export function createPetSlice(set, get) {
     uninstallPetEntry: async (slug) => {
       const api = window.api;
       if (!api?.uninstallPet || !slug) return { ok: false, error: "invalid-slug" };
+
+      const installed = get().petInstalled.find((pet) => pet.slug === slug);
+      if (installed?.source === "codex") {
+        return { ok: false, error: "codex-pet" };
+      }
+
       set({ petUninstallingSlug: slug });
       try {
         const res = await api.uninstallPet(slug);
@@ -208,11 +248,33 @@ export function createPetSlice(set, get) {
       }
     },
 
-    getFeaturedPets: () => {
-      const manifest = get().petManifest;
-      if (!manifest?.pets) return [];
-      const bySlug = new Map(manifest.pets.map((pet) => [pet.slug, pet]));
-      return FEATURED_SLUGS.map((slug) => bySlug.get(slug)).filter(Boolean);
+    getGalleryPets: () => {
+      const manifestPets = get().petManifest?.pets || [];
+      const installed = get().petInstalled;
+      const featured = new Set(FEATURED_SLUGS);
+      const bySlug = new Map(manifestPets.map((pet) => [pet.slug, pet]));
+
+      for (const pet of installed) {
+        if (!bySlug.has(pet.slug)) {
+          bySlug.set(pet.slug, {
+            slug: pet.slug,
+            displayName: pet.displayName,
+            spritesheetUrl: pet.spritesheetUrl || "",
+            kind: pet.kind || "creature",
+            source: pet.source,
+          });
+        }
+      }
+
+      return [...bySlug.values()].sort((a, b) => {
+        const aInstalled = installed.some((pet) => pet.slug === a.slug) ? 0 : 1;
+        const bInstalled = installed.some((pet) => pet.slug === b.slug) ? 0 : 1;
+        if (aInstalled !== bInstalled) return aInstalled - bInstalled;
+        const aFeatured = featured.has(a.slug) ? 0 : 1;
+        const bFeatured = featured.has(b.slug) ? 0 : 1;
+        if (aFeatured !== bFeatured) return aFeatured - bFeatured;
+        return (a.displayName || a.slug).localeCompare(b.displayName || b.slug);
+      });
     },
   };
 }

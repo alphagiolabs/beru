@@ -1330,6 +1330,28 @@ label {
   @apply flex items-center justify-between gap-3 mt-3 mb-3;
 }
 
+.settings-petdex-size-control {
+  @apply flex flex-col gap-2 mt-2;
+}
+
+.settings-petdex-size-presets {
+  @apply flex flex-wrap gap-1.5;
+}
+
+.settings-petdex-size-preset {
+  @apply px-2 py-0.5 text-[10px];
+}
+
+.settings-petdex-size-preset--active {
+  color: var(--accent-brand);
+  border-color: color-mix(in srgb, var(--accent-brand) 35%, transparent);
+}
+
+.settings-petdex-size-slider {
+  @apply w-full;
+  accent-color: var(--accent-brand);
+}
+
 .settings-petdex-active-label {
   @apply text-[10px] uppercase tracking-wide font-medium;
   color: var(--text-dim);

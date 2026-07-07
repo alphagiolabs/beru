@@ -3,8 +3,6 @@ import useEditorStore from "../../stores/useEditorStore";
 import { useT } from "../../i18n/useT";
 import PetSprite from "./PetSprite.jsx";
 
-const DRAG_SCALE = 0.55;
-
 function defaultCornerPosition() {
   if (typeof window === "undefined") return { x: 24, y: 24 };
   return {
@@ -18,7 +16,9 @@ export default function DesktopPet() {
   const petEnabled = useEditorStore((s) => s.petEnabled);
   const petActiveSlug = useEditorStore((s) => s.petActiveSlug);
   const petPosition = useEditorStore((s) => s.petPosition);
+  const petScale = useEditorStore((s) => s.petScale);
   const petSpritesheet = useEditorStore((s) => s.petSpritesheet);
+  const petSpritesheetLoading = useEditorStore((s) => s.petSpritesheetLoading);
   const loadPetSpritesheet = useEditorStore((s) => s.loadPetSpritesheet);
   const setPetPosition = useEditorStore((s) => s.setPetPosition);
   const setPetEnabled = useEditorStore((s) => s.setPetEnabled);
@@ -33,9 +33,9 @@ export default function DesktopPet() {
   const wasProcessingRef = useRef(false);
 
   useEffect(() => {
-    if (!petEnabled || !petActiveSlug) return;
+    if (!petEnabled || !petActiveSlug || petSpritesheet) return;
     loadPetSpritesheet(petActiveSlug);
-  }, [petEnabled, petActiveSlug, loadPetSpritesheet]);
+  }, [petEnabled, petActiveSlug, petSpritesheet, loadPetSpritesheet]);
 
   useEffect(() => {
     if (isProcessing) {
@@ -98,7 +98,9 @@ export default function DesktopPet() {
     [dragPosition, setPetPosition],
   );
 
-  if (!petEnabled || !petActiveSlug || !petSpritesheet || showSettings) return null;
+  if (!petEnabled || !petActiveSlug || !petSpritesheet || petSpritesheetLoading || showSettings) {
+    return null;
+  }
 
   return (
     <div
@@ -115,7 +117,7 @@ export default function DesktopPet() {
       }}
       title={t("settings.petdex.hidePetHint")}
     >
-      <PetSprite src={petSpritesheet} state={petState} scale={DRAG_SCALE} />
+      <PetSprite src={petSpritesheet} state={petState} scale={petScale} />
     </div>
   );
 }

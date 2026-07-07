@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { beruLocalUrl } from "../../utils/pet-url.js";
 import StaticPetSprite from "./StaticPetSprite.jsx";
 
 /**
@@ -27,15 +28,15 @@ export default function PetPreviewSprite({
 
       if (installed) {
         const res = await window.api?.getPetSpritesheet?.(slug);
-        if (!cancelled && res?.success && res.dataUrl) {
-          setSrc(res.dataUrl);
+        if (!cancelled && res?.success && res.path) {
+          setSrc(beruLocalUrl(res.path));
         }
         return;
       }
 
       const bundled = await window.api?.getBundledSpritesheet?.(slug);
-      if (!cancelled && bundled?.success && bundled.dataUrl) {
-        setSrc(bundled.dataUrl);
+      if (!cancelled && bundled?.success && bundled.path) {
+        setSrc(beruLocalUrl(bundled.path));
         return;
       }
 

@@ -439,6 +439,12 @@
   "settings.petdex.galleryError": "No se pudo cargar la galería. Puedes instalar Boba sin conexión.",
   "settings.petdex.retryGallery": "Reintentar",
   "settings.petdex.noResults": "No hay mascotas que coincidan con la búsqueda.",
+  "settings.petdex.size": "Tamaño",
+  "settings.petdex.sizeSmall": "Pequeño",
+  "settings.petdex.sizeMedium": "Mediano",
+  "settings.petdex.sizeLarge": "Grande",
+  "settings.petdex.codexPet": "instalada con Codex",
+  "settings.petdex.codexUninstallHint": "Esta mascota está en ~/.codex/pets. Desinstálala con petdex CLI.",
 
   "settings.appearance.title": "Tema y apariencia",
   "settings.appearance.subtitle": "Elige temas para el modo claro (Tema 1) y oscuro (Tema 2). El botón del header alterna entre ambos.",

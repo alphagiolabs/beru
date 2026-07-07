@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Check,
   Download,
@@ -11,12 +11,17 @@ import {
   Trash2,
 } from "lucide-react";
 import useEditorStore from "../../stores/useEditorStore";
+import { PET_SCALE_DEFAULT, PET_SCALE_MAX, PET_SCALE_MIN } from "../../stores/slices/petSlice";
 import { useT } from "../../i18n/useT";
-import bundledPetCatalog from "../../data/pets-catalog.json";
 import PetPreviewSprite from "../pets/PetPreviewSprite.jsx";
 import PetSprite from "../pets/PetSprite.jsx";
 
 const PAGE_SIZE = 24;
+const SCALE_PRESETS = [
+  { id: "small", value: 0.35 },
+  { id: "medium", value: PET_SCALE_DEFAULT },
+  { id: "large", value: 0.75 },
+];
 
 function PetCard({
   pet,
@@ -24,6 +29,7 @@ function PetCard({
   active,
   installing,
   uninstalling,
+  codexOnly,
   t,
   onInstall,
   onSelect,
@@ -47,7 +53,7 @@ function PetCard({
       <div className="settings-petdex-card-meta">
         <span className="settings-petdex-card-name">{pet.displayName}</span>
         <span className="settings-petdex-card-kind">
-          {pet.kind || t("settings.petdex.kindPet")}
+          {codexOnly ? t("settings.petdex.codexPet") : pet.kind || t("settings.petdex.kindPet")}
         </span>
       </div>
       <div className="settings-petdex-card-actions">
@@ -61,19 +67,21 @@ function PetCard({
               {isActive ? <Check size={12} /> : null}
               {isActive ? t("settings.petdex.activePet") : t("settings.petdex.selectPet")}
             </button>
-            <button
-              type="button"
-              className="settings-petdex-uninstall-btn"
-              disabled={uninstalling === pet.slug}
-              onClick={() => onUninstall(pet.slug)}
-              title={t("settings.petdex.uninstallPet")}
-            >
-              {uninstalling === pet.slug ? (
-                <Loader2 size={12} className="animate-spin" />
-              ) : (
-                <Trash2 size={12} />
-              )}
-            </button>
+            {!codexOnly ? (
+              <button
+                type="button"
+                className="settings-petdex-uninstall-btn"
+                disabled={uninstalling === pet.slug}
+                onClick={() => onUninstall(pet.slug)}
+                title={t("settings.petdex.uninstallPet")}
+              >
+                {uninstalling === pet.slug ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Trash2 size={12} />
+                )}
+              </button>
+            ) : null}
           </>
         ) : (
           <button
@@ -100,7 +108,9 @@ export default function PetdexPanel() {
   const showToast = useEditorStore((s) => s.showToast);
   const petEnabled = useEditorStore((s) => s.petEnabled);
   const petActiveSlug = useEditorStore((s) => s.petActiveSlug);
+  const petScale = useEditorStore((s) => s.petScale);
   const petSpritesheet = useEditorStore((s) => s.petSpritesheet);
+  const petSpritesheetLoading = useEditorStore((s) => s.petSpritesheetLoading);
   const petManifest = useEditorStore((s) => s.petManifest);
   const petManifestError = useEditorStore((s) => s.petManifestError);
   const petManifestLoading = useEditorStore((s) => s.petManifestLoading);
@@ -109,43 +119,42 @@ export default function PetdexPanel() {
   const petInstallingSlug = useEditorStore((s) => s.petInstallingSlug);
   const petUninstallingSlug = useEditorStore((s) => s.petUninstallingSlug);
   const fetchPetManifest = useEditorStore((s) => s.fetchPetManifest);
-  const loadInstalledPets = useEditorStore((s) => s.loadInstalledPets);
   const installPetEntry = useEditorStore((s) => s.installPetEntry);
   const uninstallPetEntry = useEditorStore((s) => s.uninstallPetEntry);
   const selectPet = useEditorStore((s) => s.selectPet);
   const setPetEnabled = useEditorStore((s) => s.setPetEnabled);
-  const getFeaturedPets = useEditorStore((s) => s.getFeaturedPets);
+  const setPetScale = useEditorStore((s) => s.setPetScale);
+  const getGalleryPets = useEditorStore((s) => s.getGalleryPets);
 
   const [query, setQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  useEffect(() => {
-    void loadInstalledPets();
-    void fetchPetManifest({ background: true });
-  }, [fetchPetManifest, loadInstalledPets]);
-
   const galleryLoading =
     (petManifestLoading && !(petManifest?.pets?.length > 0)) || petInstalledLoading;
-  const galleryPets = petManifest?.pets?.length ? petManifest.pets : bundledPetCatalog.pets;
+
+  const galleryPets = useMemo(() => getGalleryPets(), [getGalleryPets, petManifest, petInstalled]);
 
   const installedSlugs = useMemo(
     () => new Set(petInstalled.map((pet) => pet.slug)),
     [petInstalled],
   );
 
-  const featuredPets = useMemo(() => getFeaturedPets(), [getFeaturedPets, petManifest]);
+  const codexOnlySlugs = useMemo(
+    () => new Set(petInstalled.filter((pet) => pet.source === "codex").map((pet) => pet.slug)),
+    [petInstalled],
+  );
 
   const filteredPets = useMemo(() => {
-    const pets = galleryPets;
     const needle = query.trim().toLowerCase();
-    if (!needle) return pets;
-    return pets.filter(
+    if (!needle) return galleryPets;
+    return galleryPets.filter(
       (pet) =>
         pet.displayName?.toLowerCase().includes(needle) || pet.slug?.toLowerCase().includes(needle),
     );
   }, [galleryPets, query]);
 
   const visiblePets = filteredPets.slice(0, visibleCount);
+  const previewScale = Math.min(0.5, petScale);
 
   const handleInstall = useCallback(
     async (entry) => {
@@ -181,6 +190,10 @@ export default function PetdexPanel() {
         showToast({ kind: "ok", text: t("settings.petdex.uninstalled") });
         return;
       }
+      if (res.error === "codex-pet") {
+        showToast({ kind: "err", text: t("settings.petdex.codexUninstallHint") });
+        return;
+      }
       showToast({ kind: "err", text: res.error || t("settings.petdex.uninstallFailed") });
     },
     [uninstallPetEntry, showToast, t],
@@ -209,8 +222,12 @@ export default function PetdexPanel() {
         <div className="settings-petdex-active-body">
           <div className="settings-petdex-active-layout">
             <div className="settings-petdex-live-preview">
-              {petSpritesheet && petActiveSlug ? (
-                <PetSprite src={petSpritesheet} state="idle" scale={0.38} />
+              {petSpritesheetLoading ? (
+                <div className="settings-petdex-loading">
+                  <Loader2 size={16} className="animate-spin" />
+                </div>
+              ) : petSpritesheet && petActiveSlug ? (
+                <PetSprite src={petSpritesheet} state="idle" scale={previewScale} />
               ) : (
                 <div className="settings-petdex-live-preview-empty">
                   {t("settings.petdex.previewEmpty")}
@@ -230,6 +247,31 @@ export default function PetdexPanel() {
                     : t("settings.petdex.noneSelected")}
                 </span>
               </div>
+              <div className="settings-petdex-size-control">
+                <span className="settings-petdex-active-label">{t("settings.petdex.size")}</span>
+                <div className="settings-petdex-size-presets">
+                  {SCALE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`cap-btn-secondary settings-petdex-size-preset${Math.abs(petScale - preset.value) < 0.01 ? " settings-petdex-size-preset--active" : ""}`}
+                      onClick={() => setPetScale(preset.value)}
+                    >
+                      {t(`settings.petdex.size${preset.id[0].toUpperCase()}${preset.id.slice(1)}`)}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="range"
+                  className="settings-petdex-size-slider"
+                  min={PET_SCALE_MIN}
+                  max={PET_SCALE_MAX}
+                  step={0.05}
+                  value={petScale}
+                  onChange={(event) => setPetScale(Number(event.target.value))}
+                  aria-label={t("settings.petdex.size")}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -242,7 +284,7 @@ export default function PetdexPanel() {
             <span>{t("settings.petdex.gallery")}</span>
           </div>
           <div className="settings-petdex-gallery-head-tools">
-            <span className="settings-users-count">{petManifest?.total || 0}</span>
+            <span className="settings-users-count">{petManifest?.total || galleryPets.length}</span>
             <button
               type="button"
               className="settings-petdex-retry-btn"
@@ -283,99 +325,38 @@ export default function PetdexPanel() {
               <Loader2 size={16} className="animate-spin" />
               <span>{t("settings.petdex.loading")}</span>
             </div>
+          ) : visiblePets.length === 0 ? (
+            <p className="settings-petdex-empty">{t("settings.petdex.noResults")}</p>
           ) : (
             <>
-              {!query && featuredPets.length > 0 && (
-                <div className="settings-petdex-section">
-                  <h3 className="settings-petdex-section-title">{t("settings.petdex.featured")}</h3>
-                  <div className="settings-petdex-grid">
-                    {featuredPets.map((pet) => (
-                      <PetCard
-                        key={`featured-${pet.slug}`}
-                        pet={pet}
-                        installed={installedSlugs}
-                        active={petActiveSlug}
-                        installing={petInstallingSlug}
-                        uninstalling={petUninstallingSlug}
-                        t={t}
-                        onInstall={handleInstall}
-                        onSelect={handleSelect}
-                        onUninstall={handleUninstall}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {petInstalled.length > 0 && (
-                <div className="settings-petdex-section">
-                  <h3 className="settings-petdex-section-title">
-                    {t("settings.petdex.installedTitle")}
-                  </h3>
-                  <div className="settings-petdex-grid">
-                    {petInstalled.map((pet) => {
-                      const manifestPet = petManifest?.pets?.find((item) => item.slug === pet.slug);
-                      const cardPet = manifestPet || {
-                        slug: pet.slug,
-                        displayName: pet.displayName,
-                        spritesheetUrl: pet.spritesheetUrl || "",
-                        kind: pet.kind || "creature",
-                      };
-                      return (
-                        <PetCard
-                          key={`installed-${pet.slug}`}
-                          pet={cardPet}
-                          installed={installedSlugs}
-                          active={petActiveSlug}
-                          installing={petInstallingSlug}
-                          uninstalling={petUninstallingSlug}
-                          t={t}
-                          onInstall={handleInstall}
-                          onSelect={handleSelect}
-                          onUninstall={handleUninstall}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <div className="settings-petdex-section">
-                <h3 className="settings-petdex-section-title">
-                  {query ? t("settings.petdex.searchResults") : t("settings.petdex.browse")}
-                </h3>
-                {visiblePets.length === 0 ? (
-                  <p className="settings-petdex-empty">{t("settings.petdex.noResults")}</p>
-                ) : (
-                  <div className="settings-petdex-grid">
-                    {visiblePets.map((pet) => (
-                      <PetCard
-                        key={pet.slug}
-                        pet={pet}
-                        installed={installedSlugs}
-                        active={petActiveSlug}
-                        installing={petInstallingSlug}
-                        uninstalling={petUninstallingSlug}
-                        t={t}
-                        onInstall={handleInstall}
-                        onSelect={handleSelect}
-                        onUninstall={handleUninstall}
-                      />
-                    ))}
-                  </div>
-                )}
-                {visibleCount < filteredPets.length && (
-                  <div className="settings-petdex-more">
-                    <button
-                      type="button"
-                      className="cap-btn-secondary"
-                      onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
-                    >
-                      {t("settings.petdex.loadMore")}
-                    </button>
-                  </div>
-                )}
+              <div className="settings-petdex-grid">
+                {visiblePets.map((pet) => (
+                  <PetCard
+                    key={pet.slug}
+                    pet={pet}
+                    installed={installedSlugs}
+                    active={petActiveSlug}
+                    installing={petInstallingSlug}
+                    uninstalling={petUninstallingSlug}
+                    codexOnly={codexOnlySlugs.has(pet.slug)}
+                    t={t}
+                    onInstall={handleInstall}
+                    onSelect={handleSelect}
+                    onUninstall={handleUninstall}
+                  />
+                ))}
               </div>
+              {visibleCount < filteredPets.length && (
+                <div className="settings-petdex-more">
+                  <button
+                    type="button"
+                    className="cap-btn-secondary"
+                    onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                  >
+                    {t("settings.petdex.loadMore")}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>

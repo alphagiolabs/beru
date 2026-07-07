@@ -3,8 +3,8 @@ import {
   fetchPetManifest,
   installPet,
   listInstalledPets,
-  readBundledSpritesheetDataUrl,
-  readPetSpritesheetDataUrl,
+  resolveBundledSpritesheetPath,
+  resolvePetSpritesheetPath,
   uninstallPet,
 } from "../utils/petdex.js";
 
@@ -46,8 +46,8 @@ export function registerPetdexHandlers() {
 
   ipcMain.handle("petdex:getSpritesheet", async (_event, slug) => {
     try {
-      const dataUrl = readPetSpritesheetDataUrl(slug);
-      return { success: true, dataUrl };
+      const filePath = resolvePetSpritesheetPath(slug);
+      return { success: true, path: filePath };
     } catch (e) {
       return { success: false, error: e?.message || String(e) };
     }
@@ -55,8 +55,8 @@ export function registerPetdexHandlers() {
 
   ipcMain.handle("petdex:getBundledSpritesheet", async (_event, slug) => {
     try {
-      const dataUrl = readBundledSpritesheetDataUrl(slug);
-      return { success: true, dataUrl };
+      const filePath = resolveBundledSpritesheetPath(slug);
+      return { success: true, path: filePath };
     } catch (e) {
       return { success: false, error: e?.message || String(e) };
     }

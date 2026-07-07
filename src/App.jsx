@@ -27,8 +27,7 @@ export default function App() {
   const loadSettings = useEditorStore((s) => s.loadSettings);
   const loadRecents = useEditorStore((s) => s.loadRecents);
   const loadExecutionHistory = useEditorStore((s) => s.loadExecutionHistory);
-  const loadInstalledPets = useEditorStore((s) => s.loadInstalledPets);
-  const fetchPetManifest = useEditorStore((s) => s.fetchPetManifest);
+  const initPets = useEditorStore((s) => s.initPets);
   const showToast = useEditorStore((s) => s.showToast);
   const t = useT();
   const dropRef = useRef(null);
@@ -43,16 +42,8 @@ export default function App() {
     loadSettings();
     loadRecents();
     loadExecutionHistory();
-    void loadInstalledPets();
-    void fetchPetManifest({ background: true });
-  }, [
-    loadPresetsFromStorage,
-    loadSettings,
-    loadRecents,
-    loadExecutionHistory,
-    loadInstalledPets,
-    fetchPetManifest,
-  ]);
+    void initPets();
+  }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory, initPets]);
 
   useEffect(() => {
     const resetDragState = () => {

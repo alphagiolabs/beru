@@ -439,6 +439,12 @@
   "settings.petdex.galleryError": "Could not load the gallery. You can still install Boba offline.",
   "settings.petdex.retryGallery": "Retry",
   "settings.petdex.noResults": "No pets match your search.",
+  "settings.petdex.size": "Size",
+  "settings.petdex.sizeSmall": "Small",
+  "settings.petdex.sizeMedium": "Medium",
+  "settings.petdex.sizeLarge": "Large",
+  "settings.petdex.codexPet": "installed via Codex",
+  "settings.petdex.codexUninstallHint": "This pet lives in ~/.codex/pets. Remove it with the petdex CLI.",
 
   "settings.appearance.title": "Theme & appearance",
   "settings.appearance.subtitle": "Choose themes for light mode (Theme 1) and dark mode (Theme 2). The header button toggles between them.",

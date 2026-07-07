@@ -19,6 +19,7 @@ export const ALLOWED_SETTINGS_KEYS = new Set([
   "petEnabled",
   "petActiveSlug",
   "petPosition",
+  "petScale",
 ]);
 
 const SETTINGS_DEFAULTS = {
@@ -35,6 +36,7 @@ const SETTINGS_DEFAULTS = {
   petEnabled: false,
   petActiveSlug: null,
   petPosition: null,
+  petScale: 0.55,
 };
 
 let cachedHwEncoder = null;

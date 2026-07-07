@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import SettingsModal from "../src/components/SettingsModal.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
-import bundledPetCatalog from "../src/data/pets-catalog.json";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -15,6 +14,8 @@ const bobaEntry = {
   spritesheetUrl: "https://assets.petdex.dev/curated/boba/spritesheet.webp",
   petJsonUrl: "https://assets.petdex.dev/curated/boba/pet.json",
 };
+
+const bobaSpritesheetPath = "C:\\pets\\boba\\spritesheet.webp";
 
 let root = null;
 let installedPets = [];
@@ -36,6 +37,7 @@ describe("SettingsModal pets", () => {
           displayName: "Boba",
           spritesheetUrl: bobaEntry.spritesheetUrl,
           kind: "creature",
+          source: "beru",
         };
         installedPets = [pet];
         return { success: true, pet };
@@ -43,12 +45,10 @@ describe("SettingsModal pets", () => {
       uninstallPet: vi.fn(async () => ({ success: true, pet: { slug: "boba" } })),
       getPetSpritesheet: vi.fn(async () => ({
         success: true,
-        dataUrl: "data:image/webp;base64,abc",
+        path: bobaSpritesheetPath,
       })),
       getBundledSpritesheet: vi.fn(async (slug) =>
-        slug === "boba"
-          ? { success: true, dataUrl: "data:image/webp;base64,Ym9iYQ==" }
-          : { success: false },
+        slug === "boba" ? { success: true, path: bobaSpritesheetPath } : { success: false },
       ),
       saveSettings: vi.fn(async () => ({ success: true, settings: {} })),
     };
@@ -60,8 +60,9 @@ describe("SettingsModal pets", () => {
       profile: { email: "user@test.com", role: "user" },
       petEnabled: false,
       petActiveSlug: null,
+      petScale: 0.55,
       petInstalled: [],
-      petManifest: bundledPetCatalog,
+      petManifest: { total: 1, pets: [bobaEntry] },
       petManifestLoading: false,
       petInstalledLoading: false,
     });
@@ -95,6 +96,8 @@ describe("SettingsModal pets", () => {
     expect(window.api.installPet).toHaveBeenCalledWith(bobaEntry);
     expect(useEditorStore.getState().petActiveSlug).toBe("boba");
     expect(useEditorStore.getState().petEnabled).toBe(true);
-    expect(useEditorStore.getState().petSpritesheet).toContain("data:image/webp");
+    expect(useEditorStore.getState().petSpritesheet).toBe(
+      "beru://local/C%3A%5Cpets%5Cboba%5Cspritesheet.webp",
+    );
   });
 });
