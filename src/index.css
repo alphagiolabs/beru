@@ -1232,11 +1232,292 @@ label {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 18%, transparent);
 }
 
+/* Petdex panel */
+.settings-petdex {
+  @apply grid gap-3 h-full min-h-0 overflow-hidden;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.settings-petdex-active-card {
+  align-self: start;
+}
+
+.settings-petdex-gallery-card {
+  @apply flex flex-col min-h-0 overflow-hidden;
+}
+
+.settings-petdex-active-body,
+.settings-petdex-gallery-tools {
+  @apply p-3.5;
+}
+
+.settings-petdex-active-layout {
+  @apply flex items-center gap-4;
+}
+
+.settings-petdex-live-preview {
+  @apply flex items-center justify-center rounded-xl flex-shrink-0 overflow-hidden;
+  width: 108px;
+  height: 108px;
+  background: radial-gradient(
+    circle at 50% 38%,
+    color-mix(in srgb, var(--bg-surface) 95%, white) 0%,
+    color-mix(in srgb, var(--bg-app) 70%, transparent) 70%
+  );
+  border: 1px solid var(--border);
+}
+
+.settings-petdex-live-preview-empty {
+  @apply text-[10px] text-center px-2 leading-snug;
+  color: var(--text-dim);
+}
+
+.settings-petdex-active-copy {
+  @apply flex flex-col gap-2 min-w-0 flex-1;
+}
+
+.settings-petdex-gallery-head-tools {
+  @apply flex items-center gap-2;
+}
+
+.settings-petdex-retry-btn,
+.settings-petdex-uninstall-btn {
+  @apply inline-flex items-center justify-center rounded-md border transition-colors;
+  width: 28px;
+  height: 28px;
+  color: var(--text-secondary);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-app) 60%, transparent);
+}
+
+.settings-petdex-retry-btn:hover:not(:disabled),
+.settings-petdex-uninstall-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--text-dim));
+}
+
+.settings-petdex-uninstall-btn {
+  @apply mt-1.5 w-full;
+}
+
+.settings-petdex-card-preview-empty {
+  width: calc(192px * 0.42);
+  height: calc(208px * 0.42);
+}
+
+.settings-petdex-error,
+.settings-petdex-empty {
+  @apply text-[12px] leading-relaxed;
+  color: var(--text-secondary);
+}
+
+.settings-petdex-error {
+  @apply flex flex-col items-start gap-3 py-6;
+}
+
+.settings-petdex-gallery-tools {
+  @apply pt-0 border-b flex-shrink-0;
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.settings-petdex-description {
+  @apply text-[12px] leading-relaxed m-0;
+  color: var(--text-secondary);
+}
+
+.settings-petdex-active-meta {
+  @apply flex items-center justify-between gap-3 mt-3 mb-3;
+}
+
+.settings-petdex-active-label {
+  @apply text-[10px] uppercase tracking-wide font-medium;
+  color: var(--text-dim);
+}
+
+.settings-petdex-active-value {
+  @apply text-[12px] font-medium;
+  color: var(--text-primary);
+}
+
+.settings-petdex-toggle {
+  @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[10px] font-semibold border transition-colors;
+  color: var(--text-secondary);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--bg-app) 60%, transparent);
+}
+
+.settings-petdex-toggle--on {
+  color: var(--accent-brand);
+  border-color: color-mix(in srgb, var(--accent-brand) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-brand) 12%, transparent);
+}
+
+.settings-petdex-toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.settings-petdex-search {
+  @apply flex items-center gap-2 w-full;
+}
+
+.settings-petdex-search svg {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.settings-petdex-search input {
+  @apply flex-1 min-w-0;
+}
+
+.settings-petdex-gallery-scroll {
+  @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3.5;
+  scrollbar-gutter: stable;
+}
+
+.settings-petdex-loading {
+  @apply flex items-center justify-center gap-2 py-10 text-[12px];
+  color: var(--text-dim);
+}
+
+.settings-petdex-section + .settings-petdex-section {
+  @apply mt-4;
+}
+
+.settings-petdex-section-title {
+  @apply text-[10px] font-semibold uppercase tracking-wider m-0 mb-2;
+  color: var(--text-dim);
+}
+
+.settings-petdex-grid {
+  @apply grid gap-2.5;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+
+.settings-petdex-card-item {
+  @apply rounded-xl overflow-hidden flex flex-col min-w-0;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-app) 55%, var(--bg-surface));
+}
+
+.settings-petdex-card-item--active {
+  border-color: color-mix(in srgb, var(--accent-brand) 45%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 18%, transparent);
+}
+
+.settings-petdex-card-preview {
+  @apply flex items-center justify-center overflow-hidden;
+  min-height: 92px;
+  background: radial-gradient(
+    circle at 50% 38%,
+    color-mix(in srgb, var(--bg-surface) 95%, white) 0%,
+    color-mix(in srgb, var(--bg-app) 70%, transparent) 70%
+  );
+}
+
+.settings-petdex-card-meta {
+  @apply px-2.5 py-2 flex flex-col gap-0.5 min-w-0;
+}
+
+.settings-petdex-card-name {
+  @apply text-[11px] font-semibold truncate;
+  color: var(--text-primary);
+}
+
+.settings-petdex-card-kind {
+  @apply text-[9px] uppercase tracking-wide truncate;
+  color: var(--text-dim);
+}
+
+.settings-petdex-card-actions {
+  @apply px-2.5 pb-2.5 mt-auto flex flex-col gap-0;
+}
+
+.settings-petdex-install-btn,
+.settings-petdex-select-btn {
+  @apply w-full inline-flex items-center justify-center gap-1.5 text-[10px];
+}
+
+.settings-petdex-select-btn--active {
+  color: var(--accent-brand);
+}
+
+.settings-petdex-more {
+  @apply flex justify-center pt-3;
+}
+
+/* Pet sprites (Petdex format) */
+.pet-sprite-frame {
+  --pet-scale: 1;
+  width: calc(192px * var(--pet-scale));
+  height: calc(208px * var(--pet-scale));
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.pet-sprite {
+  --sprite-row: 0;
+  --sprite-frames: 6;
+  --sprite-duration: 1100ms;
+  --sprite-sheet-width: 1536px;
+  --sprite-sheet-height: 1872px;
+  --sprite-y: calc(var(--sprite-row) * -208px);
+  width: 192px;
+  height: 208px;
+  background-image: var(--sprite-url);
+  background-repeat: no-repeat;
+  background-size: var(--sprite-sheet-width) var(--sprite-sheet-height);
+  image-rendering: pixelated;
+  transform: scale(var(--pet-scale)) translateZ(0);
+  transform-origin: top left;
+  will-change: background-position;
+  animation: pet-state var(--sprite-duration) steps(var(--sprite-frames)) infinite;
+}
+
+@keyframes pet-state {
+  from {
+    background-position: 0 var(--sprite-y);
+  }
+
+  to {
+    background-position: calc(var(--sprite-frames) * -192px) var(--sprite-y);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-sprite {
+    animation: none;
+  }
+}
+
+.pet-sprite-static {
+  --sprite-row: 0;
+  --sprite-y: calc(var(--sprite-row) * -208px);
+  width: 192px;
+  height: 208px;
+  background-image: var(--sprite-url);
+  background-repeat: no-repeat;
+  background-size: var(--sprite-sheet-width) var(--sprite-sheet-height);
+  background-position: 0 var(--sprite-y);
+  image-rendering: pixelated;
+  transform: scale(var(--pet-scale, 1));
+  transform-origin: top left;
+}
+
+.desktop-pet {
+  @apply fixed z-[90] select-none touch-none;
+  cursor: grab;
+}
+
+.desktop-pet--dragging {
+  cursor: grabbing;
+}
+
 /* Appearance panel */
 .settings-appearance {
   @apply grid gap-3 h-full min-h-0;
   grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   align-content: stretch;
 }
 
@@ -1261,27 +1542,63 @@ label {
   align-self: stretch;
 }
 
-.settings-library-hint {
-  @apply text-[10px] leading-snug m-0 px-3.5 pb-2;
+.settings-appearance-library-toolbar {
+  @apply flex-shrink-0 px-3 py-2 border-b;
+  border-color: color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.settings-appearance-search {
+  @apply flex items-center gap-2 w-full;
+}
+
+.settings-appearance-search svg {
   color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.settings-appearance-search input {
+  @apply flex-1 min-w-0 text-[11px];
+}
+
+.settings-appearance-icon-btn {
+  @apply inline-flex items-center justify-center rounded-lg transition-colors;
+  width: 28px;
+  height: 28px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-app) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.settings-appearance-icon-btn:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-brand) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent-brand) 6%, var(--bg-app));
+}
+
+.settings-appearance-create-btn {
+  @apply inline-flex items-center gap-1;
 }
 
 .settings-appearance-library-scroll {
-  @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3.5 pb-3.5;
+  @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-2.5;
   scrollbar-gutter: stable;
 }
 
 .settings-appearance-slots {
-  @apply flex flex-col gap-3 p-3.5;
+  @apply flex flex-col gap-2.5 p-3;
 }
 
 .settings-appearance-slot {
-  @apply flex flex-col gap-2.5 p-3 rounded-xl relative overflow-hidden;
-  background: var(--bg-app);
-  border: 1px solid var(--border);
+  @apply flex flex-col gap-2 p-2.5 rounded-xl relative overflow-hidden;
+  background: color-mix(in srgb, var(--bg-app) 80%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+.settings-appearance-slot-main {
+  @apply flex items-start justify-between gap-2;
 }
 
 .settings-appearance-slot::before {
@@ -1366,203 +1683,216 @@ label {
   @apply flex items-center gap-2 flex-shrink-0;
 }
 
-.settings-appearance-section-tools .cap-btn-secondary,
 .settings-appearance-section-tools .cap-btn-primary {
   @apply text-[10px] px-2.5 py-1.5;
 }
 
-.settings-appearance-grid {
-  @apply grid gap-2.5;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.settings-theme-table {
+  --theme-col-thumb: 30px;
+  --theme-col-slot: 26px;
+  --theme-col-actions: 92px;
+  @apply rounded-lg overflow-hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-app) 65%, var(--bg-surface));
 }
 
-@media (min-width: 1000px) {
-  .settings-appearance-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+.settings-theme-table-head,
+.settings-theme-row {
+  display: grid;
+  grid-template-columns: var(--theme-col-thumb) minmax(0, 1fr) var(--theme-col-slot) var(
+      --theme-col-slot
+    );
+  align-items: center;
+  column-gap: 8px;
 }
 
-.settings-library-card {
-  @apply flex flex-col rounded-xl overflow-hidden transition-all;
-  background: color-mix(in srgb, var(--bg-app) 55%, var(--bg-surface));
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+.settings-theme-table-head--actions,
+.settings-theme-row--actions {
+  grid-template-columns:
+    var(--theme-col-thumb) minmax(0, 1fr) var(--theme-col-slot) var(--theme-col-slot)
+    var(--theme-col-actions);
 }
 
-.settings-library-card:hover {
+.settings-theme-table-head {
+  @apply px-2 py-1.5 text-[8px] font-semibold uppercase tracking-wider;
+  color: var(--text-dim);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 45%, var(--bg-elevated));
+}
+
+.settings-theme-table-head span:nth-child(n + 3) {
+  @apply text-center;
+}
+
+.settings-theme-section + .settings-theme-section {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.settings-theme-section-title {
+  @apply m-0 px-2.5 py-1.5 text-[9px] font-semibold uppercase tracking-wider;
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--border) 12%, transparent);
+}
+
+.settings-theme-section-rows {
+  @apply flex flex-col;
+}
+
+.settings-theme-empty {
+  @apply m-0 px-3 py-6 text-center text-[11px];
+  color: var(--text-dim);
+}
+
+.settings-theme-thumb {
+  @apply relative flex-shrink-0 rounded-md overflow-hidden;
+  width: 26px;
+  height: 26px;
+  border: 1px solid;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--bg-app) 50%, transparent);
+}
+
+.settings-theme-thumb--empty {
+  background: color-mix(in srgb, var(--border) 25%, transparent);
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.settings-theme-thumb-surface {
+  @apply absolute rounded-sm;
+  left: 4px;
+  right: 4px;
+  top: 4px;
+  height: 8px;
+  border: 1px solid;
+  border-color: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.settings-theme-thumb-accent {
+  @apply absolute rounded-full;
+  right: 4px;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg-app) 40%, transparent);
+}
+
+.settings-theme-row {
+  @apply px-2 py-1 transition-colors;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
+}
+
+.settings-theme-section-rows .settings-theme-row:last-child {
+  border-bottom: none;
+}
+
+.settings-theme-row:hover {
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+}
+
+.settings-theme-row--active {
+  background: color-mix(in srgb, var(--accent-brand) 7%, transparent);
+}
+
+.settings-theme-row--active .settings-theme-row-name {
+  color: var(--accent-brand);
+}
+
+.settings-theme-row-info {
+  @apply flex items-center gap-1.5 min-w-0;
+}
+
+.settings-theme-row-name {
+  @apply text-[11px] font-medium truncate;
+  color: var(--text-primary);
+}
+
+.settings-theme-row-badge {
+  @apply rounded-full px-1.5 py-px text-[8px] font-semibold flex-shrink-0 uppercase tracking-wide;
+  background: color-mix(in srgb, var(--accent-brand) 12%, transparent);
+  color: var(--accent-brand);
+}
+
+.settings-theme-slot-chip {
+  @apply inline-flex items-center justify-center rounded-md text-[9px] font-bold transition-colors justify-self-center;
+  width: 22px;
+  height: 20px;
+  background: color-mix(in srgb, var(--bg-app) 80%, transparent);
+  color: var(--text-dim);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+.settings-theme-slot-chip:hover {
+  color: var(--text-primary);
   border-color: color-mix(in srgb, var(--accent-brand) 30%, var(--border));
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--bg-app) 40%, transparent);
-  transform: translateY(-1px);
 }
 
-.settings-library-card--assigned {
-  border-color: color-mix(in srgb, var(--accent-brand) 42%, var(--border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 12%, transparent);
-}
-
-.settings-library-card-preview {
-  @apply p-2.5 pb-2;
-}
-
-.settings-library-card-thumb {
-  @apply w-full;
-}
-
-.settings-library-card-swatches {
-  @apply flex gap-1 mt-2;
-}
-
-.settings-library-card-swatch {
-  @apply flex-1 rounded-full;
-  height: 5px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.settings-library-card-footer {
-  @apply flex flex-col gap-2 p-2.5 border-t;
-  border-color: color-mix(in srgb, var(--border) 75%, transparent);
-  background: color-mix(in srgb, var(--bg-surface) 50%, var(--bg-elevated));
-}
-
-.settings-library-card-meta {
-  @apply flex items-center justify-between gap-2 min-w-0;
-}
-
-.settings-library-card-name {
-  @apply text-[11px] font-semibold truncate;
-  color: var(--text-primary);
-}
-
-.settings-library-card-tone {
-  @apply rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide flex-shrink-0;
-}
-
-.settings-library-card-tone--dark {
-  background: color-mix(in srgb, var(--border) 40%, transparent);
-  color: var(--text-secondary);
-}
-
-.settings-library-card-tone--light {
-  background: color-mix(in srgb, var(--amber) 14%, transparent);
-  color: var(--amber);
-}
-
-.settings-library-card-actions {
-  @apply grid grid-cols-2 gap-1.5;
-}
-
-.settings-library-slot-btn {
-  @apply inline-flex items-center justify-center rounded-md px-2 py-1.5 text-[9px] font-semibold transition-colors;
-  background: var(--bg-app);
-  color: var(--text-secondary);
-  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
-}
-
-.settings-library-slot-btn:hover {
-  color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent-brand) 35%, var(--border));
-  background: color-mix(in srgb, var(--accent-brand) 8%, var(--bg-app));
-}
-
-.settings-library-slot-btn--active {
-  background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
+.settings-theme-slot-chip--active {
+  background: color-mix(in srgb, var(--accent-brand) 16%, transparent);
   color: var(--accent-brand);
   border-color: color-mix(in srgb, var(--accent-brand) 35%, transparent);
 }
 
-.settings-appearance-custom--full {
-  grid-column: 1 / -1;
+.settings-theme-row-actions {
+  @apply flex items-center justify-end;
 }
 
-.settings-appearance-custom--collapsed .settings-card-head {
-  border-bottom-color: transparent;
-}
-
-.settings-card-collapse-trigger {
-  @apply flex items-center justify-between gap-3 w-full p-0 bg-transparent border-0 cursor-pointer;
-  color: inherit;
-  font: inherit;
-}
-
-.settings-card-collapse-trigger:hover .settings-card-collapse-icon {
-  color: var(--text-secondary);
-}
-
-.settings-card-collapse-tools {
-  @apply flex items-center gap-2 flex-shrink-0;
-}
-
-.settings-card-collapse-icon {
-  @apply flex-shrink-0 transition-transform duration-200;
-  color: var(--text-dim);
-}
-
-.settings-card-collapse-icon--collapsed {
-  transform: rotate(-90deg);
-}
-
-.settings-custom-grid {
-  @apply grid gap-2.5 p-3.5 pt-0;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-}
-
-.settings-custom-card {
-  @apply flex flex-col rounded-xl overflow-hidden transition-all;
-  background: color-mix(in srgb, var(--bg-app) 55%, var(--bg-surface));
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-}
-
-.settings-custom-card:hover {
-  border-color: color-mix(in srgb, var(--accent-brand) 30%, var(--border));
-}
-
-.settings-custom-card--assigned {
-  border-color: color-mix(in srgb, var(--accent-brand) 42%, var(--border));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 12%, transparent);
-}
-
-.settings-custom-card-preview {
-  @apply p-2.5 pb-2;
-}
-
-.settings-custom-card-footer {
-  @apply flex flex-col gap-2 p-2.5 border-t;
-  border-color: color-mix(in srgb, var(--border) 75%, transparent);
-  background: color-mix(in srgb, var(--bg-surface) 50%, var(--bg-elevated));
-}
-
-.settings-custom-card-meta {
-  @apply flex items-center justify-between gap-2 min-w-0;
-}
-
-.settings-custom-card-badge {
-  @apply rounded-full px-1.5 py-0.5 text-[8px] font-semibold flex-shrink-0;
-  background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
-  color: var(--accent-brand);
-  border: 1px solid color-mix(in srgb, var(--accent-brand) 24%, transparent);
-}
-
-.settings-custom-toolbar {
-  @apply flex items-center justify-center gap-0.5 pt-0.5 border-t;
-  border-color: color-mix(in srgb, var(--border) 70%, transparent);
-}
-
-.settings-custom-tool-btn {
-  @apply inline-flex items-center justify-center rounded-md transition-colors;
-  width: 28px;
-  height: 28px;
+.settings-theme-action-btn {
+  @apply inline-flex items-center justify-center rounded transition-colors;
+  width: 22px;
+  height: 22px;
   color: var(--text-dim);
   background: transparent;
   border: none;
 }
 
-.settings-custom-tool-btn:hover {
+.settings-theme-action-btn:hover {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--border) 30%, transparent);
+  background: color-mix(in srgb, var(--border) 28%, transparent);
 }
 
-.settings-custom-tool-btn--danger:hover {
+.settings-theme-action-btn--danger:hover {
   color: var(--rose);
-  background: color-mix(in srgb, var(--rose) 12%, transparent);
+  background: color-mix(in srgb, var(--rose) 10%, transparent);
+}
+
+.settings-custom-section {
+  @apply mt-3 pt-2;
+}
+
+.settings-theme-table--custom {
+  @apply mt-1.5;
+}
+
+.settings-custom-section-trigger {
+  @apply flex items-center justify-between gap-2 w-full py-1 bg-transparent border-0 cursor-pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.settings-custom-section-trigger:hover .settings-custom-section-label {
+  color: var(--text-primary);
+}
+
+.settings-custom-section-label {
+  @apply inline-flex items-center gap-1.5 text-[10px] font-semibold transition-colors;
+  color: var(--text-secondary);
+}
+
+.settings-custom-section-count {
+  @apply inline-flex items-center justify-center rounded-full text-[9px] font-semibold tabular-nums;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: color-mix(in srgb, var(--border) 35%, transparent);
+  color: var(--text-dim);
+}
+
+.settings-custom-section-chevron {
+  @apply flex-shrink-0 transition-transform duration-200;
+  color: var(--text-dim);
+}
+
+.settings-custom-section-chevron--collapsed {
+  transform: rotate(-90deg);
 }
 
 /* Theme preview card */

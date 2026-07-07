@@ -151,6 +151,11 @@ export function createUiSlice(set, get) {
 
         await get().applyActiveTheme();
 
+        get().hydratePetSettings?.(settings);
+        if (settings?.petEnabled && settings?.petActiveSlug) {
+          void get().loadPetSpritesheet?.(settings.petActiveSlug);
+        }
+
         if (migrated.needsMigrationSave) {
           await persistThemeSettings({
             theme: migrated.theme,

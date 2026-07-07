@@ -33,6 +33,11 @@ contextBridge.exposeInMainWorld("api", {
   installUpdate: () => ipcRenderer.invoke("updater:install"),
   getUpdaterSnapshot: () => ipcRenderer.invoke("updater:getSnapshot"),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
+  fetchPetManifest: () => ipcRenderer.invoke("petdex:fetchManifest"),
+  listInstalledPets: () => ipcRenderer.invoke("petdex:listInstalled"),
+  installPet: (entry) => ipcRenderer.invoke("petdex:install", entry),
+  uninstallPet: (slug) => ipcRenderer.invoke("petdex:uninstall", slug),
+  getPetSpritesheet: (slug) => ipcRenderer.invoke("petdex:getSpritesheet", slug),
   onUpdaterEvent: (cb) => {
     const handler = (_e, payload) => cb(payload);
     ipcRenderer.on("updater:event", handler);

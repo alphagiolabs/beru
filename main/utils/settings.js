@@ -16,6 +16,9 @@ export const ALLOWED_SETTINGS_KEYS = new Set([
   "batchWorkers",
   "batchWorkersMode",
   "batchRetryFailed",
+  "petEnabled",
+  "petActiveSlug",
+  "petPosition",
 ]);
 
 const SETTINGS_DEFAULTS = {
@@ -29,6 +32,9 @@ const SETTINGS_DEFAULTS = {
   batchWorkers: 0,
   batchWorkersMode: "balanced",
   batchRetryFailed: true,
+  petEnabled: false,
+  petActiveSlug: null,
+  petPosition: null,
 };
 
 let cachedHwEncoder = null;

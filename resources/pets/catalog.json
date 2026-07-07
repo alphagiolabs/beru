@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-07-07T20:57:13.178Z",
+  "total": 6,
+  "pets": [
+    {
+      "slug": "mallow",
+      "displayName": "Mallow",
+      "kind": "creature",
+      "submittedBy": "Aidil",
+      "spritesheetUrl": "https://assets.petdex.dev/pets/mallow-e2413d735bce/sprite.webp",
+      "petJsonUrl": "https://assets.petdex.dev/pets/mallow-e2413d735bce/petjson.json",
+      "zipUrl": "https://assets.petdex.dev/pets/mallow-e2413d735bce/zip.zip"
+    },
+    {
+      "slug": "boba",
+      "displayName": "Boba",
+      "kind": "creature",
+      "submittedBy": "railly",
+      "spritesheetUrl": "https://assets.petdex.dev/curated/boba/spritesheet.webp",
+      "petJsonUrl": "https://assets.petdex.dev/curated/boba/pet.json",
+      "zipUrl": "https://assets.petdex.dev/curated/boba/boba.zip"
+    },
+    {
+      "slug": "eve",
+      "displayName": "EVE",
+      "kind": "character",
+      "submittedBy": "Michael Z.",
+      "spritesheetUrl": "https://assets.petdex.dev/pets/eve-743f1e0e6b0d/sprite.webp",
+      "petJsonUrl": "https://assets.petdex.dev/pets/eve-743f1e0e6b0d/petjson.json",
+      "zipUrl": "https://assets.petdex.dev/pets/eve-743f1e0e6b0d/zip.zip"
+    },
+    {
+      "slug": "wangcai",
+      "displayName": "Wangcai",
+      "kind": "creature",
+      "submittedBy": "boxu-openai",
+      "spritesheetUrl": "https://assets.petdex.dev/pets/wangcai-4745956f417b/sprite.webp",
+      "petJsonUrl": "https://assets.petdex.dev/pets/wangcai-4745956f417b/petjson.json",
+      "zipUrl": "https://assets.petdex.dev/pets/wangcai-4745956f417b/zip.zip"
+    },
+    {
+      "slug": "doraemon",
+      "displayName": "Doraemon",
+      "kind": "character",
+      "submittedBy": "korkyzer",
+      "spritesheetUrl": "https://assets.petdex.dev/pets/doraemon-58b12a5012e0/sprite.webp",
+      "petJsonUrl": "https://assets.petdex.dev/pets/doraemon-58b12a5012e0/petjson.json",
+      "zipUrl": "https://assets.petdex.dev/pets/doraemon-58b12a5012e0/zip.zip"
+    },
+    {
+      "slug": "noir-webling",
+      "displayName": "Noir Webling",
+      "kind": "creature",
+      "submittedBy": "railly",
+      "spritesheetUrl": "https://assets.petdex.dev/curated/noir-webling/spritesheet.webp",
+      "petJsonUrl": "https://assets.petdex.dev/curated/noir-webling/pet.json",
+      "zipUrl": "https://assets.petdex.dev/curated/noir-webling/noir-webling.zip"
+    }
+  ]
+}

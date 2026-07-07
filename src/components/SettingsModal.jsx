@@ -1,9 +1,10 @@
 import { useMemo } from "react";
-import { X, Settings, Palette, Users } from "lucide-react";
+import { X, Settings, Palette, Users, PawPrint } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import UserManagementPanel from "./settings/UserManagementPanel";
 import AppearancePanel from "./settings/AppearancePanel";
+import PetdexPanel from "./settings/PetdexPanel";
 
 function accountInitial(email) {
   const ch = email?.trim()?.[0];
@@ -22,6 +23,7 @@ export default function SettingsModal() {
 
   const subtitle = useMemo(() => {
     if (settingsTab === "users") return t("settings.subtitleUsers");
+    if (settingsTab === "pets") return t("settings.subtitlePets");
     return t("settings.subtitleAppearance");
   }, [settingsTab, t]);
 
@@ -94,11 +96,25 @@ export default function SettingsModal() {
                   {t("settings.nav.users")}
                 </button>
               )}
+              <button
+                type="button"
+                className={`settings-modal-nav-item ${settingsTab === "pets" ? "settings-modal-nav-item--active" : ""}`}
+                onClick={() => setSettingsTab("pets")}
+              >
+                <PawPrint size={14} />
+                {t("settings.nav.pets")}
+              </button>
             </nav>
           </aside>
 
           <div className="settings-modal-main">
-            {settingsTab === "users" && isAdmin ? <UserManagementPanel /> : <AppearancePanel />}
+            {settingsTab === "users" && isAdmin ? (
+              <UserManagementPanel />
+            ) : settingsTab === "pets" ? (
+              <PetdexPanel />
+            ) : (
+              <AppearancePanel />
+            )}
           </div>
         </div>
       </div>

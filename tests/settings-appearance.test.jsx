@@ -69,4 +69,26 @@ describe("SettingsModal appearance", () => {
     expect(useEditorStore.getState().settingsTab).toBe("users");
     expect(document.body.textContent).toContain("Usuarios");
   });
+
+  it("switches to pets tab and shows companion settings", async () => {
+    const container = document.getElementById("root");
+    root = createRoot(container);
+
+    await act(async () => {
+      root.render(<SettingsModal />);
+    });
+
+    const petsTab = Array.from(document.querySelectorAll(".settings-modal-nav-item")).find((el) =>
+      el.textContent.includes("Mascotas"),
+    );
+    expect(petsTab).toBeTruthy();
+
+    await act(async () => {
+      petsTab.click();
+    });
+
+    expect(useEditorStore.getState().settingsTab).toBe("pets");
+    expect(document.body.textContent).toContain("Galería de mascotas");
+    expect(document.body.textContent).toContain("Compañero animado");
+  });
 });
