@@ -468,6 +468,7 @@
   "settings.appearance.useAsTheme1": "Theme 1",
   "settings.appearance.useAsTheme2": "Theme 2",
   "settings.appearance.inUse": "In use",
+  "settings.appearance.moreActions": "More actions",
   "settings.appearance.duplicate": "Duplicate",
   "settings.appearance.export": "Export",
   "settings.appearance.import": "Import",

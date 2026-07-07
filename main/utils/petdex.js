@@ -1,8 +1,11 @@
 import { app } from "electron";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { request as httpsRequest } from "https";
 import { request as httpRequest } from "http";
+
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export const PETDEX_MANIFEST_URL = "https://assets.petdex.dev/manifests/petdex-v1.json";
 const PETDEX_REFERER = "https://petdex.dev/";
@@ -21,11 +24,17 @@ export function getManifestCachePath() {
 }
 
 export function getBundledPetsRoot() {
-  if (app.isPackaged && process.resourcesPath) {
-    const extra = path.join(process.resourcesPath, "pets");
-    if (fs.existsSync(extra)) return extra;
+  const candidates = [
+    path.join(MODULE_DIR, "..", "..", "resources", "pets"),
+    app.isPackaged && process.resourcesPath ? path.join(process.resourcesPath, "pets") : null,
+    path.join(app.getAppPath(), "resources", "pets"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, "catalog.json"))) return candidate;
   }
-  return path.join(app.getAppPath(), "resources", "pets");
+
+  return candidates[0];
 }
 
 export function readBundledCatalog() {
@@ -247,13 +256,7 @@ export function uninstallPet(slug) {
   return { slug: safeSlug };
 }
 
-export function readPetSpritesheetDataUrl(slug) {
-  const safeSlug = path.basename(String(slug || ""));
-  if (!safeSlug || safeSlug !== slug) {
-    throw new Error("Slug de mascota inválido");
-  }
-
-  const petDir = path.join(getPetsRoot(), safeSlug);
+function readSpritesheetDataUrlFromDir(petDir) {
   const spritesheetPath = resolveSpritesheetFile(petDir);
   if (!spritesheetPath) {
     throw new Error("Spritesheet no encontrado");
@@ -267,6 +270,26 @@ export function readPetSpritesheetDataUrl(slug) {
 
   const data = fs.readFileSync(spritesheetPath);
   return `data:${mime};base64,${data.toString("base64")}`;
+}
+
+export function readBundledSpritesheetDataUrl(slug) {
+  const safeSlug = path.basename(String(slug || ""));
+  if (!safeSlug || safeSlug !== slug) {
+    throw new Error("Slug de mascota inválido");
+  }
+
+  const bundledDir = path.join(getBundledPetsRoot(), safeSlug);
+  return readSpritesheetDataUrlFromDir(bundledDir);
+}
+
+export function readPetSpritesheetDataUrl(slug) {
+  const safeSlug = path.basename(String(slug || ""));
+  if (!safeSlug || safeSlug !== slug) {
+    throw new Error("Slug de mascota inválido");
+  }
+
+  const petDir = path.join(getPetsRoot(), safeSlug);
+  return readSpritesheetDataUrlFromDir(petDir);
 }
 
 export function isBundledPetAvailable(slug) {

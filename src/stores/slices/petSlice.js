@@ -1,6 +1,8 @@
 import { swallow } from "../../utils/swallow.js";
+import bundledPetCatalog from "../../data/pets-catalog.json";
 
 const FEATURED_SLUGS = ["boba", "doraemon", "wangcai", "eve", "mallow", "noir-webling"];
+const DEFAULT_PET_MANIFEST = bundledPetCatalog;
 
 async function persistPetSettings(partial) {
   const api = window.api;
@@ -19,8 +21,8 @@ export function createPetSlice(set, get) {
     petActiveSlug: null,
     petPosition: null,
     petSpritesheet: null,
-    petManifest: null,
-    petManifestSource: null,
+    petManifest: DEFAULT_PET_MANIFEST,
+    petManifestSource: "bundled",
     petManifestError: null,
     petManifestLoading: false,
     petInstalled: [],
@@ -126,26 +128,48 @@ export function createPetSlice(set, get) {
       }
     },
 
-    fetchPetManifest: async () => {
+    fetchPetManifest: async ({ background = false } = {}) => {
       const api = window.api;
-      if (!api?.fetchPetManifest) return { ok: false, error: "api-missing" };
-      set({ petManifestLoading: true, petManifestError: null });
+      if (!api?.fetchPetManifest) {
+        set({
+          petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
+          petManifestSource: "bundled",
+          petManifestError: null,
+        });
+        return { ok: true, source: "bundled" };
+      }
+
+      if (!background || !get().petManifest?.pets?.length) {
+        set({ petManifestLoading: true, petManifestError: null });
+      }
+
       try {
         const res = await api.fetchPetManifest();
-        if (!res?.success) {
-          set({ petManifestLoading: false, petManifestError: res?.error || "fetch-failed" });
-          return { ok: false, error: res?.error };
+        if (!res?.success || !res.manifest?.pets?.length) {
+          set({
+            petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
+            petManifestSource: get().petManifestSource || "bundled",
+            petManifestLoading: false,
+            petManifestError: res?.error || null,
+          });
+          return { ok: true, source: get().petManifestSource || "bundled" };
         }
+
         set({
           petManifest: res.manifest,
-          petManifestSource: res.source || null,
+          petManifestSource: res.source || "remote",
           petManifestLoading: false,
           petManifestError: null,
         });
         return { ok: true, source: res.source };
       } catch (e) {
-        set({ petManifestLoading: false, petManifestError: e?.message || String(e) });
-        return { ok: false, error: e?.message || String(e) };
+        set({
+          petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
+          petManifestSource: get().petManifestSource || "bundled",
+          petManifestLoading: false,
+          petManifestError: e?.message || String(e),
+        });
+        return { ok: true, source: get().petManifestSource || "bundled" };
       }
     },
 

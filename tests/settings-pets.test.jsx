@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import SettingsModal from "../src/components/SettingsModal.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
+import bundledPetCatalog from "../src/data/pets-catalog.json";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -44,6 +45,11 @@ describe("SettingsModal pets", () => {
         success: true,
         dataUrl: "data:image/webp;base64,abc",
       })),
+      getBundledSpritesheet: vi.fn(async (slug) =>
+        slug === "boba"
+          ? { success: true, dataUrl: "data:image/webp;base64,Ym9iYQ==" }
+          : { success: false },
+      ),
       saveSettings: vi.fn(async () => ({ success: true, settings: {} })),
     };
 
@@ -55,7 +61,7 @@ describe("SettingsModal pets", () => {
       petEnabled: false,
       petActiveSlug: null,
       petInstalled: [],
-      petManifest: null,
+      petManifest: bundledPetCatalog,
       petManifestLoading: false,
       petInstalledLoading: false,
     });

@@ -17,18 +17,31 @@ export default function PetPreviewSprite({
   scale = 0.42,
   label,
 }) {
-  const [localSrc, setLocalSrc] = useState("");
+  const [src, setSrc] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    setLocalSrc("");
-
-    if (!installed || remoteSrc) return undefined;
 
     const load = async () => {
-      const res = await window.api?.getPetSpritesheet?.(slug);
-      if (cancelled || !res?.success || !res.dataUrl) return;
-      setLocalSrc(res.dataUrl);
+      setSrc("");
+
+      if (installed) {
+        const res = await window.api?.getPetSpritesheet?.(slug);
+        if (!cancelled && res?.success && res.dataUrl) {
+          setSrc(res.dataUrl);
+        }
+        return;
+      }
+
+      const bundled = await window.api?.getBundledSpritesheet?.(slug);
+      if (!cancelled && bundled?.success && bundled.dataUrl) {
+        setSrc(bundled.dataUrl);
+        return;
+      }
+
+      if (!cancelled && remoteSrc) {
+        setSrc(remoteSrc);
+      }
     };
 
     void load();
@@ -37,7 +50,6 @@ export default function PetPreviewSprite({
     };
   }, [slug, installed, remoteSrc]);
 
-  const src = remoteSrc || localSrc;
   if (!src) {
     return <div className="settings-petdex-card-preview-empty" aria-hidden="true" />;
   }

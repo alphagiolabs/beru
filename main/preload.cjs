@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld("api", {
   installPet: (entry) => ipcRenderer.invoke("petdex:install", entry),
   uninstallPet: (slug) => ipcRenderer.invoke("petdex:uninstall", slug),
   getPetSpritesheet: (slug) => ipcRenderer.invoke("petdex:getSpritesheet", slug),
+  getBundledSpritesheet: (slug) => ipcRenderer.invoke("petdex:getBundledSpritesheet", slug),
   onUpdaterEvent: (cb) => {
     const handler = (_e, payload) => cb(payload);
     ipcRenderer.on("updater:event", handler);

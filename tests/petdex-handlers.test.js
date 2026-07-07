@@ -108,6 +108,16 @@ describe("petdex handlers", () => {
     expect(fs.existsSync(petDir)).toBe(false);
   });
 
+  it("returns bundled spritesheet previews", async () => {
+    const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
+    registerPetdexHandlers();
+
+    const bundledHandler = mocks.handlers.get("petdex:getBundledSpritesheet");
+    const res = await bundledHandler({}, "boba");
+    expect(res.success).toBe(true);
+    expect(res.dataUrl).toMatch(/^data:image\/webp;base64,/);
+  });
+
   it("exposes bundled catalog and boba assets in the repo", async () => {
     const { readBundledCatalog, isBundledPetAvailable } = await import("../main/utils/petdex.js");
     const bundled = readBundledCatalog();

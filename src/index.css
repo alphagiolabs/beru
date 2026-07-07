@@ -919,8 +919,9 @@ label {
 }
 
 .settings-modal-rail {
-  @apply flex flex-col gap-3 flex-shrink-0 self-stretch min-h-0;
+  @apply flex flex-col gap-3 flex-shrink-0 self-stretch min-h-0 overflow-y-auto overflow-x-hidden;
   width: 196px;
+  scrollbar-gutter: stable;
 }
 
 .settings-modal-main {
@@ -1542,13 +1543,16 @@ label {
   align-self: stretch;
 }
 
-.settings-appearance-library-toolbar {
-  @apply flex-shrink-0 px-3 py-2 border-b;
-  border-color: color-mix(in srgb, var(--border) 65%, transparent);
+.settings-appearance-library-head {
+  @apply gap-2;
 }
 
 .settings-appearance-search {
-  @apply flex items-center gap-2 w-full;
+  @apply flex items-center gap-1.5 min-w-0;
+}
+
+.settings-appearance-search--inline {
+  @apply flex-1;
 }
 
 .settings-appearance-search svg {
@@ -1557,13 +1561,13 @@ label {
 }
 
 .settings-appearance-search input {
-  @apply flex-1 min-w-0 text-[11px];
+  @apply flex-1 min-w-0 text-[10px] py-1;
 }
 
 .settings-appearance-icon-btn {
-  @apply inline-flex items-center justify-center rounded-lg transition-colors;
-  width: 28px;
-  height: 28px;
+  @apply inline-flex items-center justify-center rounded-md transition-colors flex-shrink-0;
+  width: 24px;
+  height: 24px;
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--bg-app) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
@@ -1575,21 +1579,27 @@ label {
   background: color-mix(in srgb, var(--accent-brand) 6%, var(--bg-app));
 }
 
-.settings-appearance-create-btn {
-  @apply inline-flex items-center gap-1;
+.settings-appearance-icon-btn--primary {
+  color: var(--accent-brand);
+  border-color: color-mix(in srgb, var(--accent-brand) 30%, transparent);
+  background: color-mix(in srgb, var(--accent-brand) 10%, transparent);
+}
+
+.settings-appearance-icon-btn--primary:hover {
+  background: color-mix(in srgb, var(--accent-brand) 16%, transparent);
 }
 
 .settings-appearance-library-scroll {
-  @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-3 py-2.5;
+  @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2.5 py-2;
   scrollbar-gutter: stable;
 }
 
 .settings-appearance-slots {
-  @apply flex flex-col gap-2.5 p-3;
+  @apply flex flex-col gap-2 p-2.5;
 }
 
 .settings-appearance-slot {
-  @apply flex flex-col gap-2 p-2.5 rounded-xl relative overflow-hidden;
+  @apply flex flex-col gap-1.5 p-2 rounded-lg relative overflow-hidden;
   background: color-mix(in srgb, var(--bg-app) 80%, var(--bg-surface));
   border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
   transition:
@@ -1627,9 +1637,9 @@ label {
 }
 
 .settings-appearance-slot-icon {
-  @apply flex items-center justify-center flex-shrink-0 rounded-lg;
-  width: 28px;
-  height: 28px;
+  @apply flex items-center justify-center flex-shrink-0 rounded-md;
+  width: 24px;
+  height: 24px;
   background: color-mix(in srgb, var(--border) 30%, transparent);
   color: var(--text-secondary);
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
@@ -1646,22 +1656,17 @@ label {
 }
 
 .settings-appearance-slot-label {
-  @apply block text-[11px] font-semibold leading-tight;
+  @apply block text-[10px] font-semibold leading-tight;
   color: var(--text-primary);
 }
 
-.settings-appearance-slot-hint {
-  @apply block text-[9px] leading-snug;
+.settings-appearance-slot-theme {
+  @apply block text-[9px] font-medium truncate;
   color: var(--text-dim);
 }
 
-.settings-appearance-slot-theme {
-  @apply block text-[10px] font-medium truncate mt-0.5;
-  color: var(--text-secondary);
-}
-
 .settings-appearance-slot-badge {
-  @apply inline-flex items-center gap-1 flex-shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold;
+  @apply inline-flex items-center gap-0.5 flex-shrink-0 rounded-full px-1.5 py-px text-[8px] font-semibold;
   background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
   color: var(--accent-brand);
   border: 1px solid color-mix(in srgb, var(--accent-brand) 24%, transparent);
@@ -1672,56 +1677,39 @@ label {
 }
 
 .settings-appearance-slot-actions {
-  @apply flex flex-wrap gap-2 pt-0.5;
+  @apply flex flex-wrap gap-1.5;
 }
 
 .settings-appearance-slot-actions .cap-btn-secondary {
-  @apply text-[10px] px-2.5 py-1.5;
+  @apply text-[9px] px-2 py-1;
 }
 
 .settings-appearance-section-tools {
-  @apply flex items-center gap-2 flex-shrink-0;
-}
-
-.settings-appearance-section-tools .cap-btn-primary {
-  @apply text-[10px] px-2.5 py-1.5;
+  @apply flex items-center gap-1 flex-shrink-0;
 }
 
 .settings-theme-table {
-  --theme-col-thumb: 30px;
-  --theme-col-slot: 26px;
-  --theme-col-actions: 92px;
-  @apply rounded-lg overflow-hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: color-mix(in srgb, var(--bg-app) 65%, var(--bg-surface));
+  --theme-col-thumb: 22px;
+  --theme-col-slot: 22px;
+  --theme-col-actions: 24px;
+  @apply rounded-md overflow-hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-app) 70%, var(--bg-surface));
 }
 
-.settings-theme-table-head,
 .settings-theme-row {
   display: grid;
   grid-template-columns: var(--theme-col-thumb) minmax(0, 1fr) var(--theme-col-slot) var(
       --theme-col-slot
     );
   align-items: center;
-  column-gap: 8px;
+  column-gap: 6px;
 }
 
-.settings-theme-table-head--actions,
 .settings-theme-row--actions {
   grid-template-columns:
     var(--theme-col-thumb) minmax(0, 1fr) var(--theme-col-slot) var(--theme-col-slot)
     var(--theme-col-actions);
-}
-
-.settings-theme-table-head {
-  @apply px-2 py-1.5 text-[8px] font-semibold uppercase tracking-wider;
-  color: var(--text-dim);
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  background: color-mix(in srgb, var(--bg-surface) 45%, var(--bg-elevated));
-}
-
-.settings-theme-table-head span:nth-child(n + 3) {
-  @apply text-center;
 }
 
 .settings-theme-section + .settings-theme-section {
@@ -1729,9 +1717,9 @@ label {
 }
 
 .settings-theme-section-title {
-  @apply m-0 px-2.5 py-1.5 text-[9px] font-semibold uppercase tracking-wider;
+  @apply m-0 px-2 py-1 text-[8px] font-semibold uppercase tracking-wider;
   color: var(--text-dim);
-  background: color-mix(in srgb, var(--border) 12%, transparent);
+  background: color-mix(in srgb, var(--border) 10%, transparent);
 }
 
 .settings-theme-section-rows {
@@ -1739,16 +1727,15 @@ label {
 }
 
 .settings-theme-empty {
-  @apply m-0 px-3 py-6 text-center text-[11px];
+  @apply m-0 px-2 py-4 text-center text-[10px];
   color: var(--text-dim);
 }
 
 .settings-theme-thumb {
-  @apply relative flex-shrink-0 rounded-md overflow-hidden;
-  width: 26px;
-  height: 26px;
+  @apply relative flex-shrink-0 rounded overflow-hidden;
+  width: 20px;
+  height: 20px;
   border: 1px solid;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--bg-app) 50%, transparent);
 }
 
 .settings-theme-thumb--empty {
@@ -1758,26 +1745,25 @@ label {
 
 .settings-theme-thumb-surface {
   @apply absolute rounded-sm;
-  left: 4px;
-  right: 4px;
-  top: 4px;
-  height: 8px;
+  left: 3px;
+  right: 3px;
+  top: 3px;
+  height: 6px;
   border: 1px solid;
   border-color: color-mix(in srgb, currentColor 8%, transparent);
 }
 
 .settings-theme-thumb-accent {
   @apply absolute rounded-full;
-  right: 4px;
-  bottom: 4px;
-  width: 7px;
-  height: 7px;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg-app) 40%, transparent);
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
 }
 
 .settings-theme-row {
-  @apply px-2 py-1 transition-colors;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
+  @apply px-1.5 py-0.5 transition-colors;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
 }
 
 .settings-theme-section-rows .settings-theme-row:last-child {
@@ -1801,20 +1787,20 @@ label {
 }
 
 .settings-theme-row-name {
-  @apply text-[11px] font-medium truncate;
+  @apply text-[10px] font-medium truncate;
   color: var(--text-primary);
 }
 
 .settings-theme-row-badge {
-  @apply rounded-full px-1.5 py-px text-[8px] font-semibold flex-shrink-0 uppercase tracking-wide;
+  @apply rounded px-1 py-px text-[7px] font-semibold flex-shrink-0 uppercase tracking-wide;
   background: color-mix(in srgb, var(--accent-brand) 12%, transparent);
   color: var(--accent-brand);
 }
 
 .settings-theme-slot-chip {
-  @apply inline-flex items-center justify-center rounded-md text-[9px] font-bold transition-colors justify-self-center;
-  width: 22px;
-  height: 20px;
+  @apply inline-flex items-center justify-center rounded text-[8px] font-bold transition-colors justify-self-center;
+  width: 20px;
+  height: 18px;
   background: color-mix(in srgb, var(--bg-app) 80%, transparent);
   color: var(--text-dim);
   border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
@@ -1837,11 +1823,12 @@ label {
 
 .settings-theme-action-btn {
   @apply inline-flex items-center justify-center rounded transition-colors;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   color: var(--text-dim);
   background: transparent;
   border: none;
+  list-style: none;
 }
 
 .settings-theme-action-btn:hover {
@@ -1854,45 +1841,81 @@ label {
   background: color-mix(in srgb, var(--rose) 10%, transparent);
 }
 
-.settings-custom-section {
-  @apply mt-3 pt-2;
-}
-
-.settings-theme-table--custom {
-  @apply mt-1.5;
-}
-
-.settings-custom-section-trigger {
-  @apply flex items-center justify-between gap-2 w-full py-1 bg-transparent border-0 cursor-pointer;
+.settings-theme-fold {
+  @apply flex items-center justify-between gap-2 w-full px-2 py-1 bg-transparent border-0 cursor-pointer;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
   color: inherit;
   font: inherit;
 }
 
-.settings-custom-section-trigger:hover .settings-custom-section-label {
+.settings-theme-fold:hover .settings-theme-fold-label {
   color: var(--text-primary);
 }
 
-.settings-custom-section-label {
-  @apply inline-flex items-center gap-1.5 text-[10px] font-semibold transition-colors;
+.settings-theme-fold-label {
+  @apply inline-flex items-center gap-1 text-[9px] font-semibold transition-colors;
   color: var(--text-secondary);
 }
 
-.settings-custom-section-count {
-  @apply inline-flex items-center justify-center rounded-full text-[9px] font-semibold tabular-nums;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  background: color-mix(in srgb, var(--border) 35%, transparent);
+.settings-theme-fold-count {
+  @apply inline-flex items-center justify-center rounded text-[8px] font-semibold tabular-nums;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  background: color-mix(in srgb, var(--border) 30%, transparent);
   color: var(--text-dim);
 }
 
-.settings-custom-section-chevron {
+.settings-theme-fold-chevron {
   @apply flex-shrink-0 transition-transform duration-200;
   color: var(--text-dim);
 }
 
-.settings-custom-section-chevron--collapsed {
+.settings-theme-fold-chevron--collapsed {
   transform: rotate(-90deg);
+}
+
+.settings-theme-custom-rows .settings-theme-row:last-child {
+  border-bottom: none;
+}
+
+.settings-theme-row-menu {
+  @apply relative;
+}
+
+.settings-theme-row-menu > summary {
+  cursor: pointer;
+}
+
+.settings-theme-row-menu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-theme-row-menu-panel {
+  @apply absolute right-0 top-full z-20 mt-0.5 flex flex-col rounded-md py-0.5 min-w-[128px];
+  background: var(--bg-elevated);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--bg-app) 55%, transparent);
+}
+
+.settings-theme-row-menu:not([open]) .settings-theme-row-menu-panel {
+  display: none;
+}
+
+.settings-theme-row-menu-panel button {
+  @apply inline-flex items-center gap-1.5 w-full px-2 py-1 text-left text-[10px] transition-colors;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+}
+
+.settings-theme-row-menu-panel button:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--border) 25%, transparent);
+}
+
+.settings-theme-row-menu-danger {
+  color: var(--rose) !important;
 }
 
 /* Theme preview card */

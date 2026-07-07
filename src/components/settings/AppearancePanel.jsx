@@ -29,6 +29,8 @@ import {
 import { DEFAULT_SLOT1_PRESET, DEFAULT_SLOT2_PRESET } from "../../theme/tokens.js";
 import ThemeEditor from "./ThemeEditor.jsx";
 
+const PREVIEW_SWATCH_KEYS = ["accentBrand", "bgSurface", "amber", "purple"];
+
 function isDarkBackground(hex) {
   if (!hex || !hex.startsWith("#") || hex.length < 7) return true;
   const r = parseInt(hex.slice(1, 3), 16);
@@ -37,21 +39,61 @@ function isDarkBackground(hex) {
   return (r * 299 + g * 587 + b * 114) / 1000 < 140;
 }
 
-function ThemeColorThumb({ tokens }) {
+function ThemeColorThumb({ tokens, compact = false }) {
   if (!tokens)
     return <span className="settings-theme-thumb settings-theme-thumb--empty" aria-hidden="true" />;
 
+  if (compact) {
+    return (
+      <div
+        className="settings-theme-thumb settings-theme-thumb--compact"
+        style={{ background: tokens.bgApp, borderColor: tokens.border }}
+        aria-hidden="true"
+      >
+        <span
+          className="settings-theme-thumb-surface"
+          style={{ background: tokens.bgSurface, borderColor: tokens.border }}
+        />
+        <span className="settings-theme-thumb-accent" style={{ background: tokens.accentBrand }} />
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="settings-theme-thumb"
-      style={{ background: tokens.bgApp, borderColor: tokens.border }}
-      aria-hidden="true"
-    >
-      <span
-        className="settings-theme-thumb-surface"
-        style={{ background: tokens.bgSurface, borderColor: tokens.border }}
-      />
-      <span className="settings-theme-thumb-accent" style={{ background: tokens.accentBrand }} />
+    <div className="settings-theme-preview" aria-hidden="true">
+      <div
+        className="settings-theme-preview-card"
+        style={{ background: tokens.bgApp, borderColor: tokens.border }}
+      >
+        <span
+          className="settings-theme-preview-bar"
+          style={{ background: tokens.bgElevated, borderColor: tokens.border }}
+        />
+        <span
+          className="settings-theme-preview-accent"
+          style={{ background: tokens.accentBrand }}
+        />
+      </div>
+      <div className="settings-theme-preview-swatches">
+        {PREVIEW_SWATCH_KEYS.map((key) => (
+          <span key={key} style={{ background: tokens[key] }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ThemeListHeader({ t }) {
+  return (
+    <div className="settings-theme-table-head" aria-hidden="true">
+      <span />
+      <span>{t("settings.appearance.themeColumn")}</span>
+      <span className="settings-theme-table-slot-label" title={t("settings.appearance.useAsTheme1")}>
+        <Sun size={10} strokeWidth={2.25} />
+      </span>
+      <span className="settings-theme-table-slot-label" title={t("settings.appearance.useAsTheme2")}>
+        <Moon size={10} strokeWidth={2.25} />
+      </span>
     </div>
   );
 }
@@ -82,21 +124,21 @@ function ThemeAssignRow({
       </div>
       <button
         type="button"
-        className={`settings-theme-slot-chip${inSlot1 ? " settings-theme-slot-chip--active" : ""}`}
+        className={`settings-theme-slot-btn${inSlot1 ? " settings-theme-slot-btn--active" : ""}`}
         title={t("settings.appearance.useAsTheme1")}
         aria-label={t("settings.appearance.useAsTheme1")}
         onClick={() => onAssign(1, themeRef)}
       >
-        1
+        <Sun size={11} strokeWidth={2.25} />
       </button>
       <button
         type="button"
-        className={`settings-theme-slot-chip${inSlot2 ? " settings-theme-slot-chip--active" : ""}`}
+        className={`settings-theme-slot-btn${inSlot2 ? " settings-theme-slot-btn--active" : ""}`}
         title={t("settings.appearance.useAsTheme2")}
         aria-label={t("settings.appearance.useAsTheme2")}
         onClick={() => onAssign(2, themeRef)}
       >
-        2
+        <Moon size={11} strokeWidth={2.25} />
       </button>
       {actions ? <div className="settings-theme-row-actions">{actions}</div> : null}
     </div>
@@ -179,11 +221,15 @@ function CustomThemeRow({
   );
 }
 
-function ThemeSection({ title, children }) {
+function ThemeLibraryColumn({ icon: Icon, title, count, children }) {
   return (
-    <section className="settings-theme-section">
-      <h3 className="settings-theme-section-title">{title}</h3>
-      <div className="settings-theme-section-rows">{children}</div>
+    <section className="settings-library-column">
+      <header className="settings-library-column-head">
+        <Icon size={12} strokeWidth={2.25} aria-hidden="true" />
+        <span>{title}</span>
+        <span className="settings-library-column-count">{count}</span>
+      </header>
+      <div className="settings-theme-table">{children}</div>
     </section>
   );
 }
@@ -245,7 +291,7 @@ function ThemeSlot({
             </span>
           )}
         </div>
-        <ThemeColorThumb tokens={resolved?.tokens} />
+        <ThemeColorThumb tokens={resolved?.tokens} compact />
       </div>
       <ThemeRefSelect value={themeRef} customThemes={customThemes} t={t} onChange={onAssign} />
       <div className="settings-appearance-slot-actions">
@@ -467,13 +513,38 @@ export default function AppearancePanel() {
 
       <section className="settings-card settings-appearance-library-card">
         <header className="settings-card-head settings-appearance-library-head">
-          <div className="settings-card-head-left">
+          <div className="settings-appearance-library-title">
             <LayoutGrid size={14} strokeWidth={2.25} />
             <span>{t("settings.appearance.library")}</span>
             <span className="settings-users-count">{groupedPresets.total}</span>
           </div>
-          <label className="settings-appearance-search settings-appearance-search--inline">
-            <Search size={11} aria-hidden="true" />
+          <div className="settings-appearance-section-tools">
+            <button
+              type="button"
+              className="settings-appearance-tool-btn"
+              title={t("settings.appearance.import")}
+              aria-label={t("settings.appearance.import")}
+              onClick={handleImport}
+            >
+              <Upload size={12} />
+              <span>{t("settings.appearance.import")}</span>
+            </button>
+            <button
+              type="button"
+              className="settings-appearance-tool-btn settings-appearance-tool-btn--primary"
+              title={t("settings.appearance.createTheme")}
+              aria-label={t("settings.appearance.createTheme")}
+              onClick={handleCreateTheme}
+            >
+              <Plus size={12} />
+              <span>{t("settings.appearance.createTheme")}</span>
+            </button>
+          </div>
+        </header>
+
+        <div className="settings-appearance-library-toolbar">
+          <label className="settings-appearance-search">
+            <Search size={12} aria-hidden="true" />
             <input
               type="search"
               className="cap-input"
@@ -482,38 +553,23 @@ export default function AppearancePanel() {
               onChange={(e) => setLibraryQuery(e.target.value)}
             />
           </label>
-          <div className="settings-appearance-section-tools">
-            <button
-              type="button"
-              className="settings-appearance-icon-btn"
-              title={t("settings.appearance.import")}
-              aria-label={t("settings.appearance.import")}
-              onClick={handleImport}
-            >
-              <Upload size={12} />
-            </button>
-            <button
-              type="button"
-              className="settings-appearance-icon-btn settings-appearance-icon-btn--primary"
-              title={t("settings.appearance.createTheme")}
-              aria-label={t("settings.appearance.createTheme")}
-              onClick={handleCreateTheme}
-            >
-              <Plus size={12} />
-            </button>
-          </div>
-        </header>
+        </div>
 
         <div className="settings-appearance-library-scroll">
-          <div
-            className={`settings-theme-table${customThemesExpanded && customThemes.length > 0 ? " settings-theme-table--custom-open" : ""}`}
-          >
-            {groupedPresets.total === 0 ? (
-              <p className="settings-theme-empty">{t("settings.appearance.noThemesFound")}</p>
-            ) : (
-              <>
-                {groupedPresets.light.length > 0 && (
-                  <ThemeSection title={t("settings.appearance.lightThemes")}>
+          {groupedPresets.total === 0 ? (
+            <p className="settings-theme-empty">{t("settings.appearance.noThemesFound")}</p>
+          ) : (
+            <div
+              className={`settings-library-columns${groupedPresets.light.length > 0 && groupedPresets.dark.length > 0 ? "" : " settings-library-columns--single"}`}
+            >
+              {groupedPresets.light.length > 0 && (
+                <ThemeLibraryColumn
+                  icon={Sun}
+                  title={t("settings.appearance.lightThemes")}
+                  count={groupedPresets.light.length}
+                >
+                  <ThemeListHeader t={t} />
+                  <div className="settings-theme-section-rows">
                     {groupedPresets.light.map((preset) => (
                       <ThemeLibraryRow
                         key={preset.id}
@@ -524,10 +580,17 @@ export default function AppearancePanel() {
                         onAssign={assignThemeToSlot}
                       />
                     ))}
-                  </ThemeSection>
-                )}
-                {groupedPresets.dark.length > 0 && (
-                  <ThemeSection title={t("settings.appearance.darkThemes")}>
+                  </div>
+                </ThemeLibraryColumn>
+              )}
+              {groupedPresets.dark.length > 0 && (
+                <ThemeLibraryColumn
+                  icon={Moon}
+                  title={t("settings.appearance.darkThemes")}
+                  count={groupedPresets.dark.length}
+                >
+                  <ThemeListHeader t={t} />
+                  <div className="settings-theme-section-rows">
                     {groupedPresets.dark.map((preset) => (
                       <ThemeLibraryRow
                         key={preset.id}
@@ -538,38 +601,42 @@ export default function AppearancePanel() {
                         onAssign={assignThemeToSlot}
                       />
                     ))}
-                  </ThemeSection>
-                )}
-              </>
-            )}
+                  </div>
+                </ThemeLibraryColumn>
+              )}
+            </div>
+          )}
 
-            {customThemes.length > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="settings-theme-fold"
-                  onClick={() => setCustomThemesExpanded((open) => !open)}
-                  aria-expanded={customThemesExpanded}
-                  aria-controls="settings-custom-themes-panel"
-                  aria-label={
-                    customThemesExpanded
-                      ? t("settings.appearance.collapseCustomThemes")
-                      : t("settings.appearance.expandCustomThemes")
-                  }
-                >
-                  <span className="settings-theme-fold-label">
-                    {t("settings.appearance.customThemes")}
-                    <span className="settings-theme-fold-count">{customThemes.length}</span>
-                  </span>
-                  <ChevronDown
-                    size={11}
-                    strokeWidth={2.25}
-                    className={`settings-theme-fold-chevron${customThemesExpanded ? "" : " settings-theme-fold-chevron--collapsed"}`}
-                    aria-hidden="true"
-                  />
-                </button>
-                {customThemesExpanded && (
-                  <div id="settings-custom-themes-panel" className="settings-theme-custom-rows">
+          {customThemes.length > 0 && (
+            <div className="settings-theme-custom-block">
+              <button
+                type="button"
+                className="settings-theme-fold"
+                onClick={() => setCustomThemesExpanded((open) => !open)}
+                aria-expanded={customThemesExpanded}
+                aria-controls="settings-custom-themes-panel"
+                aria-label={
+                  customThemesExpanded
+                    ? t("settings.appearance.collapseCustomThemes")
+                    : t("settings.appearance.expandCustomThemes")
+                }
+              >
+                <span className="settings-theme-fold-label">
+                  <Pencil size={11} strokeWidth={2.25} aria-hidden="true" />
+                  {t("settings.appearance.customThemes")}
+                  <span className="settings-theme-fold-count">{customThemes.length}</span>
+                </span>
+                <ChevronDown
+                  size={12}
+                  strokeWidth={2.25}
+                  className={`settings-theme-fold-chevron${customThemesExpanded ? "" : " settings-theme-fold-chevron--collapsed"}`}
+                  aria-hidden="true"
+                />
+              </button>
+              {customThemesExpanded && (
+                <div id="settings-custom-themes-panel" className="settings-theme-table">
+                  <ThemeListHeader t={t} />
+                  <div className="settings-theme-section-rows">
                     {customThemes.map((custom) => {
                       const ref = toCustomThemeRef(custom.id);
                       return (
@@ -602,10 +669,10 @@ export default function AppearancePanel() {
                       );
                     })}
                   </div>
-                )}
-              </>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </section>
     </div>

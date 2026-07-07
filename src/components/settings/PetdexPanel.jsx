@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import useEditorStore from "../../stores/useEditorStore";
 import { useT } from "../../i18n/useT";
+import bundledPetCatalog from "../../data/pets-catalog.json";
 import PetPreviewSprite from "../pets/PetPreviewSprite.jsx";
 import PetSprite from "../pets/PetSprite.jsx";
 
@@ -101,7 +102,6 @@ export default function PetdexPanel() {
   const petActiveSlug = useEditorStore((s) => s.petActiveSlug);
   const petSpritesheet = useEditorStore((s) => s.petSpritesheet);
   const petManifest = useEditorStore((s) => s.petManifest);
-  const petManifestError = useEditorStore((s) => s.petManifestError);
   const petManifestLoading = useEditorStore((s) => s.petManifestLoading);
   const petInstalled = useEditorStore((s) => s.petInstalled);
   const petInstalledLoading = useEditorStore((s) => s.petInstalledLoading);
@@ -119,9 +119,13 @@ export default function PetdexPanel() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
-    void fetchPetManifest();
     void loadInstalledPets();
+    void fetchPetManifest({ background: true });
   }, [fetchPetManifest, loadInstalledPets]);
+
+  const galleryLoading =
+    (petManifestLoading && !(petManifest?.pets?.length > 0)) || petInstalledLoading;
+  const galleryPets = petManifest?.pets?.length ? petManifest.pets : bundledPetCatalog.pets;
 
   const installedSlugs = useMemo(
     () => new Set(petInstalled.map((pet) => pet.slug)),
@@ -131,14 +135,14 @@ export default function PetdexPanel() {
   const featuredPets = useMemo(() => getFeaturedPets(), [getFeaturedPets, petManifest]);
 
   const filteredPets = useMemo(() => {
-    const pets = petManifest?.pets || [];
+    const pets = galleryPets;
     const needle = query.trim().toLowerCase();
     if (!needle) return pets;
     return pets.filter(
       (pet) =>
         pet.displayName?.toLowerCase().includes(needle) || pet.slug?.toLowerCase().includes(needle),
     );
-  }, [petManifest, query]);
+  }, [galleryPets, query]);
 
   const visiblePets = filteredPets.slice(0, visibleCount);
 
@@ -241,7 +245,7 @@ export default function PetdexPanel() {
             <button
               type="button"
               className="settings-petdex-retry-btn"
-              onClick={() => fetchPetManifest()}
+              onClick={() => fetchPetManifest({ background: false })}
               disabled={petManifestLoading}
               title={t("settings.petdex.retryGallery")}
             >
@@ -267,18 +271,7 @@ export default function PetdexPanel() {
         </div>
 
         <div className="settings-petdex-gallery-scroll">
-          {petManifestError && !petManifest?.pets?.length ? (
-            <div className="settings-petdex-error">
-              <p>{t("settings.petdex.galleryError")}</p>
-              <button
-                type="button"
-                className="cap-btn-secondary"
-                onClick={() => fetchPetManifest()}
-              >
-                {t("settings.petdex.retryGallery")}
-              </button>
-            </div>
-          ) : petManifestLoading || petInstalledLoading ? (
+          {galleryLoading ? (
             <div className="settings-petdex-loading">
               <Loader2 size={16} className="animate-spin" />
               <span>{t("settings.petdex.loading")}</span>
