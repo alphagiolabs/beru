@@ -164,27 +164,8 @@ const init = (_win) => {
   // best-effort.
   checkForUpdates().catch(() => {});
 
-  // KILL-SWITCH: Check if the current running version has been marked as bad.
-  // This allows forcing a downgrade by publishing a kill-switch file that
-  // blocks the current version from auto-updating to itself. The check is
-  // best-effort and silently fails if the endpoint is unreachable.
-  // Future: implement a remote endpoint at https://beru.app/api/kill-switch.json
-  // that returns { "bad_versions": ["1.6.35"], "force_downgrade": "1.6.34" }
-  checkKillSwitch().catch(() => {});
-};
-
-/**
- * Best-effort kill-switch check. Fetches a remote JSON that can mark the
- * current version as bad, forcing the user to manually downgrade.
- * Currently a stub — the endpoint is not yet deployed.
- */
-const checkKillSwitch = async () => {
-  if (isDev) return;
-  try {
-    // Future: fetch https://beru.app/api/kill-switch.json when the endpoint is deployed.
-  } catch {
-    // Kill-switch check is best-effort — never block the app
-  }
+  // Future kill-switch: fetch https://beru.app/api/kill-switch.json when deployed.
+  // Expected shape: { "bad_versions": ["1.6.35"], "force_downgrade": "1.6.34" }
 };
 
 const checkForUpdates = async () => {

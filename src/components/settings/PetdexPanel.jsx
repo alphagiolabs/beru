@@ -102,6 +102,7 @@ export default function PetdexPanel() {
   const petActiveSlug = useEditorStore((s) => s.petActiveSlug);
   const petSpritesheet = useEditorStore((s) => s.petSpritesheet);
   const petManifest = useEditorStore((s) => s.petManifest);
+  const petManifestError = useEditorStore((s) => s.petManifestError);
   const petManifestLoading = useEditorStore((s) => s.petManifestLoading);
   const petInstalled = useEditorStore((s) => s.petInstalled);
   const petInstalledLoading = useEditorStore((s) => s.petInstalledLoading);
@@ -269,6 +270,12 @@ export default function PetdexPanel() {
             />
           </label>
         </div>
+
+        {petManifestError ? (
+          <p className="settings-petdex-error" role="alert">
+            {t("settings.petdex.galleryError")}
+          </p>
+        ) : null}
 
         <div className="settings-petdex-gallery-scroll">
           {galleryLoading ? (

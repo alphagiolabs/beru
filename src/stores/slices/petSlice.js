@@ -22,7 +22,6 @@ export function createPetSlice(set, get) {
     petPosition: null,
     petSpritesheet: null,
     petManifest: DEFAULT_PET_MANIFEST,
-    petManifestSource: "bundled",
     petManifestError: null,
     petManifestLoading: false,
     petInstalled: [],
@@ -133,10 +132,9 @@ export function createPetSlice(set, get) {
       if (!api?.fetchPetManifest) {
         set({
           petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
-          petManifestSource: "bundled",
           petManifestError: null,
         });
-        return { ok: true, source: "bundled" };
+        return { ok: true };
       }
 
       if (!background || !get().petManifest?.pets?.length) {
@@ -148,28 +146,26 @@ export function createPetSlice(set, get) {
         if (!res?.success || !res.manifest?.pets?.length) {
           set({
             petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
-            petManifestSource: get().petManifestSource || "bundled",
             petManifestLoading: false,
-            petManifestError: res?.error || null,
+            petManifestError: res?.error || "fetch-failed",
           });
-          return { ok: true, source: get().petManifestSource || "bundled" };
+          return { ok: false, error: res?.error || "fetch-failed" };
         }
 
         set({
           petManifest: res.manifest,
-          petManifestSource: res.source || "remote",
           petManifestLoading: false,
           petManifestError: null,
         });
-        return { ok: true, source: res.source };
+        return { ok: true };
       } catch (e) {
+        const error = e?.message || String(e);
         set({
           petManifest: get().petManifest || DEFAULT_PET_MANIFEST,
-          petManifestSource: get().petManifestSource || "bundled",
           petManifestLoading: false,
-          petManifestError: e?.message || String(e),
+          petManifestError: error,
         });
-        return { ok: true, source: get().petManifestSource || "bundled" };
+        return { ok: false, error };
       }
     },
 
