@@ -8,6 +8,8 @@ import {
   Moon,
   Pencil,
   Plus,
+  MoreHorizontal,
+  Search,
   Sun,
   Trash2,
   Upload,
@@ -25,10 +27,9 @@ import {
   validateThemeTokens,
 } from "../../theme/engine.js";
 import { DEFAULT_SLOT1_PRESET, DEFAULT_SLOT2_PRESET } from "../../theme/tokens.js";
-import ThemePreviewCard from "./ThemePreviewCard.jsx";
 import ThemeEditor from "./ThemeEditor.jsx";
 
-const LIBRARY_SWATCH_KEYS = ["accentBrand", "bgSurface", "amber", "rose", "purple"];
+const PREVIEW_SWATCH_KEYS = ["accentBrand", "bgSurface", "amber", "purple"];
 
 function isDarkBackground(hex) {
   if (!hex || !hex.startsWith("#") || hex.length < 7) return true;
@@ -38,58 +39,137 @@ function isDarkBackground(hex) {
   return (r * 299 + g * 587 + b * 114) / 1000 < 140;
 }
 
-function ThemeLibraryCard({ preset, themeSlot1, themeSlot2, t, onAssign }) {
-  const inSlot1 = themeSlot1 === preset.id;
-  const inSlot2 = themeSlot2 === preset.id;
-  const isDark = isDarkBackground(preset.tokens.bgApp);
+function ThemeColorThumb({ tokens, compact = false }) {
+  if (!tokens)
+    return <span className="settings-theme-thumb settings-theme-thumb--empty" aria-hidden="true" />;
+
+  if (compact) {
+    return (
+      <div
+        className="settings-theme-thumb settings-theme-thumb--compact"
+        style={{ background: tokens.bgApp, borderColor: tokens.border }}
+        aria-hidden="true"
+      >
+        <span
+          className="settings-theme-thumb-surface"
+          style={{ background: tokens.bgSurface, borderColor: tokens.border }}
+        />
+        <span className="settings-theme-thumb-accent" style={{ background: tokens.accentBrand }} />
+      </div>
+    );
+  }
 
   return (
-    <article
-      className={`settings-library-card${inSlot1 || inSlot2 ? " settings-library-card--assigned" : ""}`}
-    >
-      <div className="settings-library-card-preview" style={{ background: preset.tokens.bgApp }}>
-        <ThemePreviewCard tokens={preset.tokens} compact className="settings-library-card-thumb" />
-        <div className="settings-library-card-swatches" aria-hidden="true">
-          {LIBRARY_SWATCH_KEYS.map((key) => (
-            <span
-              key={key}
-              className="settings-library-card-swatch"
-              style={{ background: preset.tokens[key] }}
-            />
-          ))}
-        </div>
+    <div className="settings-theme-preview" aria-hidden="true">
+      <div
+        className="settings-theme-preview-card"
+        style={{ background: tokens.bgApp, borderColor: tokens.border }}
+      >
+        <span
+          className="settings-theme-preview-bar"
+          style={{ background: tokens.bgElevated, borderColor: tokens.border }}
+        />
+        <span
+          className="settings-theme-preview-accent"
+          style={{ background: tokens.accentBrand }}
+        />
       </div>
-      <div className="settings-library-card-footer">
-        <div className="settings-library-card-meta">
-          <span className="settings-library-card-name">{t(preset.nameKey)}</span>
-          <span
-            className={`settings-library-card-tone ${isDark ? "settings-library-card-tone--dark" : "settings-library-card-tone--light"}`}
-          >
-            {isDark ? t("settings.appearance.toneDark") : t("settings.appearance.toneLight")}
-          </span>
-        </div>
-        <div className="settings-library-card-actions">
-          <button
-            type="button"
-            className={`settings-library-slot-btn${inSlot1 ? " settings-library-slot-btn--active" : ""}`}
-            onClick={() => onAssign(1, preset.id)}
-          >
-            {t("settings.appearance.useAsTheme1")}
-          </button>
-          <button
-            type="button"
-            className={`settings-library-slot-btn${inSlot2 ? " settings-library-slot-btn--active" : ""}`}
-            onClick={() => onAssign(2, preset.id)}
-          >
-            {t("settings.appearance.useAsTheme2")}
-          </button>
-        </div>
+      <div className="settings-theme-preview-swatches">
+        {PREVIEW_SWATCH_KEYS.map((key) => (
+          <span key={key} style={{ background: tokens[key] }} />
+        ))}
       </div>
-    </article>
+    </div>
   );
 }
 
-function CustomThemeCard({
+function ThemeListHeader({ t, withActions = false }) {
+  return (
+    <div
+      className={`settings-theme-table-head${withActions ? " settings-theme-table-head--actions" : ""}`}
+      aria-hidden="true"
+    >
+      <span />
+      <span>{t("settings.appearance.themeColumn")}</span>
+      <span
+        className="settings-theme-table-slot-label"
+        title={t("settings.appearance.useAsTheme1")}
+      >
+        <Sun size={10} strokeWidth={2.25} />
+      </span>
+      <span
+        className="settings-theme-table-slot-label"
+        title={t("settings.appearance.useAsTheme2")}
+      >
+        <Moon size={10} strokeWidth={2.25} />
+      </span>
+      {withActions ? <span /> : null}
+    </div>
+  );
+}
+
+function ThemeAssignRow({
+  tokens,
+  name,
+  badge,
+  themeRef,
+  themeSlot1,
+  themeSlot2,
+  t,
+  onAssign,
+  actions,
+}) {
+  const inSlot1 = themeSlot1 === themeRef;
+  const inSlot2 = themeSlot2 === themeRef;
+  const isActive = inSlot1 || inSlot2;
+
+  return (
+    <div
+      className={`settings-theme-row${isActive ? " settings-theme-row--active" : ""}${actions ? " settings-theme-row--actions" : ""}`}
+    >
+      <ThemeColorThumb tokens={tokens} />
+      <div className="settings-theme-row-info">
+        <span className="settings-theme-row-name">{name}</span>
+        {badge}
+      </div>
+      <button
+        type="button"
+        className={`settings-theme-slot-btn${inSlot1 ? " settings-theme-slot-btn--active" : ""}`}
+        title={t("settings.appearance.useAsTheme1")}
+        aria-label={t("settings.appearance.useAsTheme1")}
+        onClick={() => onAssign(1, themeRef)}
+      >
+        <Sun size={11} strokeWidth={2.25} />
+      </button>
+      <button
+        type="button"
+        className={`settings-theme-slot-btn${inSlot2 ? " settings-theme-slot-btn--active" : ""}`}
+        title={t("settings.appearance.useAsTheme2")}
+        aria-label={t("settings.appearance.useAsTheme2")}
+        onClick={() => onAssign(2, themeRef)}
+      >
+        <Moon size={11} strokeWidth={2.25} />
+      </button>
+      {actions ? <div className="settings-theme-row-actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+function ThemeLibraryRow({ preset, themeSlot1, themeSlot2, t, onAssign }) {
+  return (
+    <ThemeAssignRow
+      tokens={preset.tokens}
+      name={t(preset.nameKey)}
+      themeRef={preset.id}
+      themeSlot1={themeSlot1}
+      themeSlot2={themeSlot2}
+      t={t}
+      onAssign={onAssign}
+    />
+  );
+}
+
+function CustomThemeRow({
   custom,
   themeRef,
   themeSlot1,
@@ -106,78 +186,61 @@ function CustomThemeCard({
   const isActive = inSlot1 || inSlot2;
 
   return (
-    <article className={`settings-custom-card${isActive ? " settings-custom-card--assigned" : ""}`}>
-      <div className="settings-custom-card-preview" style={{ background: custom.tokens.bgApp }}>
-        <ThemePreviewCard tokens={custom.tokens} compact className="settings-library-card-thumb" />
-        <div className="settings-library-card-swatches" aria-hidden="true">
-          {LIBRARY_SWATCH_KEYS.map((key) => (
-            <span
-              key={key}
-              className="settings-library-card-swatch"
-              style={{ background: custom.tokens[key] }}
-            />
-          ))}
-        </div>
-      </div>
-      <div className="settings-custom-card-footer">
-        <div className="settings-custom-card-meta">
-          <span className="settings-library-card-name">{custom.name}</span>
-          {isActive && (
-            <span className="settings-custom-card-badge">{t("settings.appearance.inUse")}</span>
-          )}
-        </div>
-        <div className="settings-library-card-actions">
-          <button
-            type="button"
-            className={`settings-library-slot-btn${inSlot1 ? " settings-library-slot-btn--active" : ""}`}
-            onClick={() => onAssign(1, themeRef)}
+    <ThemeAssignRow
+      tokens={custom.tokens}
+      name={custom.name}
+      badge={
+        isActive ? (
+          <span className="settings-theme-row-badge">{t("settings.appearance.inUse")}</span>
+        ) : null
+      }
+      themeRef={themeRef}
+      themeSlot1={themeSlot1}
+      themeSlot2={themeSlot2}
+      t={t}
+      onAssign={onAssign}
+      actions={
+        <details className="settings-theme-row-menu">
+          <summary
+            className="settings-theme-action-btn"
+            aria-label={t("settings.appearance.moreActions")}
           >
-            {t("settings.appearance.useAsTheme1")}
-          </button>
-          <button
-            type="button"
-            className={`settings-library-slot-btn${inSlot2 ? " settings-library-slot-btn--active" : ""}`}
-            onClick={() => onAssign(2, themeRef)}
-          >
-            {t("settings.appearance.useAsTheme2")}
-          </button>
-        </div>
-        <div className="settings-custom-toolbar">
-          <button
-            type="button"
-            className="settings-custom-tool-btn"
-            title={t("settings.appearance.editColors")}
-            onClick={onEdit}
-          >
-            <Pencil size={12} />
-          </button>
-          <button
-            type="button"
-            className="settings-custom-tool-btn"
-            title={t("settings.appearance.duplicate")}
-            onClick={onDuplicate}
-          >
-            <Copy size={12} />
-          </button>
-          <button
-            type="button"
-            className="settings-custom-tool-btn"
-            title={t("settings.appearance.export")}
-            onClick={onExport}
-          >
-            <Download size={12} />
-          </button>
-          <button
-            type="button"
-            className="settings-custom-tool-btn settings-custom-tool-btn--danger"
-            title={t("common.delete")}
-            onClick={onDelete}
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      </div>
-    </article>
+            <MoreHorizontal size={11} />
+          </summary>
+          <div className="settings-theme-row-menu-panel">
+            <button type="button" onClick={onEdit}>
+              <Pencil size={11} />
+              {t("settings.appearance.editColors")}
+            </button>
+            <button type="button" onClick={onDuplicate}>
+              <Copy size={11} />
+              {t("settings.appearance.duplicate")}
+            </button>
+            <button type="button" onClick={onExport}>
+              <Download size={11} />
+              {t("settings.appearance.export")}
+            </button>
+            <button type="button" className="settings-theme-row-menu-danger" onClick={onDelete}>
+              <Trash2 size={11} />
+              {t("common.delete")}
+            </button>
+          </div>
+        </details>
+      }
+    />
+  );
+}
+
+function ThemeLibraryColumn({ icon: Icon, title, count, children }) {
+  return (
+    <section className="settings-library-column">
+      <header className="settings-library-column-head">
+        <Icon size={12} strokeWidth={2.25} aria-hidden="true" />
+        <span>{title}</span>
+        <span className="settings-library-column-count">{count}</span>
+      </header>
+      <div className="settings-theme-table">{children}</div>
+    </section>
   );
 }
 
@@ -207,7 +270,6 @@ function ThemeRefSelect({ value, customThemes, onChange, t }) {
 function ThemeSlot({
   icon: Icon,
   label,
-  hint,
   themeRef,
   resolved,
   isActive,
@@ -221,25 +283,26 @@ function ThemeSlot({
     <div
       className={`settings-appearance-slot ${isActive ? "settings-appearance-slot--active" : ""}`}
     >
-      <div className="settings-appearance-slot-head">
-        <div className="settings-appearance-slot-icon" aria-hidden="true">
-          <Icon size={14} strokeWidth={2.25} />
+      <div className="settings-appearance-slot-main">
+        <div className="settings-appearance-slot-head">
+          <div className="settings-appearance-slot-icon" aria-hidden="true">
+            <Icon size={14} strokeWidth={2.25} />
+          </div>
+          <div className="settings-appearance-slot-meta">
+            <span className="settings-appearance-slot-label">{label}</span>
+            <span className="settings-appearance-slot-theme">
+              {resolveThemeName(themeRef, customThemes, t)}
+            </span>
+          </div>
+          {isActive && (
+            <span className="settings-appearance-slot-badge">
+              <Check size={10} />
+              {t("settings.appearance.active")}
+            </span>
+          )}
         </div>
-        <div className="settings-appearance-slot-meta">
-          <span className="settings-appearance-slot-label">{label}</span>
-          <span className="settings-appearance-slot-hint">{hint}</span>
-          <span className="settings-appearance-slot-theme">
-            {resolveThemeName(themeRef, customThemes, t)}
-          </span>
-        </div>
-        {isActive && (
-          <span className="settings-appearance-slot-badge">
-            <Check size={10} />
-            {t("settings.appearance.active")}
-          </span>
-        )}
+        <ThemeColorThumb tokens={resolved?.tokens} compact />
       </div>
-      <ThemePreviewCard tokens={resolved?.tokens} compact />
       <ThemeRefSelect value={themeRef} customThemes={customThemes} t={t} onChange={onAssign} />
       <div className="settings-appearance-slot-actions">
         <button type="button" className="cap-btn-secondary" onClick={onEdit}>
@@ -272,7 +335,8 @@ export default function AppearancePanel() {
   const requestConfirm = useEditorStore((s) => s.requestConfirm);
 
   const [editorState, setEditorState] = useState(null);
-  const [customThemesExpanded, setCustomThemesExpanded] = useState(true);
+  const [customThemesExpanded, setCustomThemesExpanded] = useState(false);
+  const [libraryQuery, setLibraryQuery] = useState("");
 
   const slot1Resolved = useMemo(
     () => resolveTheme(themeSlot1, customThemes) || resolveTheme(DEFAULT_SLOT1_PRESET, []),
@@ -282,6 +346,20 @@ export default function AppearancePanel() {
     () => resolveTheme(themeSlot2, customThemes) || resolveTheme(DEFAULT_SLOT2_PRESET, []),
     [themeSlot2, customThemes],
   );
+
+  const groupedPresets = useMemo(() => {
+    const q = libraryQuery.trim().toLowerCase();
+    const light = [];
+    const dark = [];
+
+    for (const preset of THEME_PRESETS) {
+      const name = t(preset.nameKey).toLowerCase();
+      if (q && !name.includes(q) && !preset.id.toLowerCase().includes(q)) continue;
+      (isDarkBackground(preset.tokens.bgApp) ? dark : light).push(preset);
+    }
+
+    return { light, dark, total: light.length + dark.length };
+  }, [libraryQuery, t]);
 
   const openEditorForRef = async (themeRef, slot) => {
     const basePresetId = slot === 1 ? DEFAULT_SLOT1_PRESET : DEFAULT_SLOT2_PRESET;
@@ -418,7 +496,6 @@ export default function AppearancePanel() {
             <ThemeSlot
               icon={Sun}
               label={t("settings.appearance.theme1")}
-              hint={t("settings.appearance.theme1Hint")}
               themeRef={themeSlot1}
               resolved={slot1Resolved}
               isActive={themeActiveSlot === 1}
@@ -431,7 +508,6 @@ export default function AppearancePanel() {
             <ThemeSlot
               icon={Moon}
               label={t("settings.appearance.theme2")}
-              hint={t("settings.appearance.theme2Hint")}
               themeRef={themeSlot2}
               resolved={slot2Resolved}
               isActive={themeActiveSlot === 2}
@@ -446,109 +522,169 @@ export default function AppearancePanel() {
       </section>
 
       <section className="settings-card settings-appearance-library-card">
-        <header className="settings-card-head">
-          <div className="settings-card-head-left">
+        <header className="settings-card-head settings-appearance-library-head">
+          <div className="settings-appearance-library-title">
             <LayoutGrid size={14} strokeWidth={2.25} />
             <span>{t("settings.appearance.library")}</span>
+            <span className="settings-users-count">{groupedPresets.total}</span>
           </div>
           <div className="settings-appearance-section-tools">
-            <span className="settings-users-count">{THEME_PRESETS.length}</span>
-            <button type="button" className="cap-btn-secondary" onClick={handleImport}>
+            <button
+              type="button"
+              className="settings-appearance-tool-btn"
+              title={t("settings.appearance.import")}
+              aria-label={t("settings.appearance.import")}
+              onClick={handleImport}
+            >
               <Upload size={12} />
-              {t("settings.appearance.import")}
+              <span>{t("settings.appearance.import")}</span>
             </button>
-            <button type="button" className="cap-btn-primary" onClick={handleCreateTheme}>
+            <button
+              type="button"
+              className="settings-appearance-tool-btn settings-appearance-tool-btn--primary"
+              title={t("settings.appearance.createTheme")}
+              aria-label={t("settings.appearance.createTheme")}
+              onClick={handleCreateTheme}
+            >
               <Plus size={12} />
-              {t("settings.appearance.createTheme")}
+              <span>{t("settings.appearance.createTheme")}</span>
             </button>
           </div>
         </header>
-        <p className="settings-library-hint">{t("settings.appearance.libraryHint")}</p>
-        <div className="settings-appearance-library-scroll">
-          <div className="settings-appearance-grid">
-            {THEME_PRESETS.map((preset) => (
-              <ThemeLibraryCard
-                key={preset.id}
-                preset={preset}
-                themeSlot1={themeSlot1}
-                themeSlot2={themeSlot2}
-                t={t}
-                onAssign={assignThemeToSlot}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {customThemes.length > 0 && (
-        <section
-          className={`settings-card settings-appearance-custom--full${customThemesExpanded ? "" : " settings-appearance-custom--collapsed"}`}
-        >
-          <header className="settings-card-head">
-            <button
-              type="button"
-              className="settings-card-collapse-trigger"
-              onClick={() => setCustomThemesExpanded((open) => !open)}
-              aria-expanded={customThemesExpanded}
-              aria-controls="settings-custom-themes-panel"
-              aria-label={
-                customThemesExpanded
-                  ? t("settings.appearance.collapseCustomThemes")
-                  : t("settings.appearance.expandCustomThemes")
-              }
+        <div className="settings-appearance-library-toolbar">
+          <label className="settings-appearance-search">
+            <Search size={12} aria-hidden="true" />
+            <input
+              type="search"
+              className="cap-input"
+              value={libraryQuery}
+              placeholder={t("settings.appearance.searchThemes")}
+              onChange={(e) => setLibraryQuery(e.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="settings-appearance-library-scroll">
+          {groupedPresets.total === 0 ? (
+            <p className="settings-theme-empty">{t("settings.appearance.noThemesFound")}</p>
+          ) : (
+            <div
+              className={`settings-library-columns${groupedPresets.light.length > 0 && groupedPresets.dark.length > 0 ? "" : " settings-library-columns--single"}`}
             >
-              <div className="settings-card-head-left">
-                <Pencil size={14} strokeWidth={2.25} />
-                <span>{t("settings.appearance.customThemes")}</span>
-              </div>
-              <span className="settings-card-collapse-tools">
-                <span className="settings-users-count">{customThemes.length}</span>
-                <ChevronDown
-                  size={14}
-                  strokeWidth={2.25}
-                  className={`settings-card-collapse-icon${customThemesExpanded ? "" : " settings-card-collapse-icon--collapsed"}`}
-                  aria-hidden="true"
-                />
-              </span>
-            </button>
-          </header>
-          {customThemesExpanded && (
-            <div id="settings-custom-themes-panel" className="settings-custom-grid">
-              {customThemes.map((custom) => {
-                const ref = toCustomThemeRef(custom.id);
-                return (
-                  <CustomThemeCard
-                    key={custom.id}
-                    custom={custom}
-                    themeRef={ref}
-                    themeSlot1={themeSlot1}
-                    themeSlot2={themeSlot2}
-                    t={t}
-                    onAssign={assignThemeToSlot}
-                    onEdit={() =>
-                      setEditorState({
-                        mode: "edit",
-                        themeRef: ref,
-                        id: custom.id,
-                        name: custom.name,
-                        tokens: custom.tokens,
-                        basePresetId: DEFAULT_SLOT2_PRESET,
-                      })
-                    }
-                    onDuplicate={async () => {
-                      const res = await duplicateThemeAsCustom(ref);
-                      if (res.ok)
-                        showToast({ kind: "ok", text: t("settings.appearance.duplicated") });
-                    }}
-                    onExport={() => handleExport(custom)}
-                    onDelete={() => handleDeleteCustom(custom.id)}
-                  />
-                );
-              })}
+              {groupedPresets.light.length > 0 && (
+                <ThemeLibraryColumn
+                  icon={Sun}
+                  title={t("settings.appearance.lightThemes")}
+                  count={groupedPresets.light.length}
+                >
+                  <ThemeListHeader t={t} />
+                  <div className="settings-theme-section-rows">
+                    {groupedPresets.light.map((preset) => (
+                      <ThemeLibraryRow
+                        key={preset.id}
+                        preset={preset}
+                        themeSlot1={themeSlot1}
+                        themeSlot2={themeSlot2}
+                        t={t}
+                        onAssign={assignThemeToSlot}
+                      />
+                    ))}
+                  </div>
+                </ThemeLibraryColumn>
+              )}
+              {groupedPresets.dark.length > 0 && (
+                <ThemeLibraryColumn
+                  icon={Moon}
+                  title={t("settings.appearance.darkThemes")}
+                  count={groupedPresets.dark.length}
+                >
+                  <ThemeListHeader t={t} />
+                  <div className="settings-theme-section-rows">
+                    {groupedPresets.dark.map((preset) => (
+                      <ThemeLibraryRow
+                        key={preset.id}
+                        preset={preset}
+                        themeSlot1={themeSlot1}
+                        themeSlot2={themeSlot2}
+                        t={t}
+                        onAssign={assignThemeToSlot}
+                      />
+                    ))}
+                  </div>
+                </ThemeLibraryColumn>
+              )}
             </div>
           )}
-        </section>
-      )}
+
+          {customThemes.length > 0 && (
+            <div className="settings-theme-custom-block">
+              <button
+                type="button"
+                className="settings-theme-fold"
+                onClick={() => setCustomThemesExpanded((open) => !open)}
+                aria-expanded={customThemesExpanded}
+                aria-controls="settings-custom-themes-panel"
+                aria-label={
+                  customThemesExpanded
+                    ? t("settings.appearance.collapseCustomThemes")
+                    : t("settings.appearance.expandCustomThemes")
+                }
+              >
+                <span className="settings-theme-fold-label">
+                  <Pencil size={11} strokeWidth={2.25} aria-hidden="true" />
+                  {t("settings.appearance.customThemes")}
+                  <span className="settings-theme-fold-count">{customThemes.length}</span>
+                </span>
+                <ChevronDown
+                  size={12}
+                  strokeWidth={2.25}
+                  className={`settings-theme-fold-chevron${customThemesExpanded ? "" : " settings-theme-fold-chevron--collapsed"}`}
+                  aria-hidden="true"
+                />
+              </button>
+              {customThemesExpanded && (
+                <div id="settings-custom-themes-panel" className="settings-theme-table">
+                  <ThemeListHeader t={t} withActions />
+                  <div className="settings-theme-section-rows">
+                    {customThemes.map((custom) => {
+                      const ref = toCustomThemeRef(custom.id);
+                      return (
+                        <CustomThemeRow
+                          key={custom.id}
+                          custom={custom}
+                          themeRef={ref}
+                          themeSlot1={themeSlot1}
+                          themeSlot2={themeSlot2}
+                          t={t}
+                          onAssign={assignThemeToSlot}
+                          onEdit={() =>
+                            setEditorState({
+                              mode: "edit",
+                              themeRef: ref,
+                              id: custom.id,
+                              name: custom.name,
+                              tokens: custom.tokens,
+                              basePresetId: DEFAULT_SLOT2_PRESET,
+                            })
+                          }
+                          onDuplicate={async () => {
+                            const res = await duplicateThemeAsCustom(ref);
+                            if (res.ok)
+                              showToast({ kind: "ok", text: t("settings.appearance.duplicated") });
+                          }}
+                          onExport={() => handleExport(custom)}
+                          onDelete={() => handleDeleteCustom(custom.id)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

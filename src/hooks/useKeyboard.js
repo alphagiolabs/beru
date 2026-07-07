@@ -25,6 +25,10 @@ export default function useKeyboard() {
       const cmd = ctrlKey || metaKey;
 
       if (key === "Escape") {
+        if (store.showPetPalette) {
+          store.setShowPetPalette(false);
+          return;
+        }
         if (store.showShortcuts) {
           store.setShowShortcuts(false);
           return;
@@ -50,13 +54,40 @@ export default function useKeyboard() {
         return;
       }
 
-      if (store.showShortcuts || store.showTableEditor || store.showMappingModal) {
+      if (
+        store.showShortcuts ||
+        store.showPetPalette ||
+        store.showTableEditor ||
+        store.showMappingModal
+      ) {
+        return;
+      }
+
+      if (cmd && key.toLowerCase() === "k") {
+        e.preventDefault();
+        store.setShowPetPalette(true);
         return;
       }
 
       if (key === "?" && !cmd) {
         e.preventDefault();
         store.setShowShortcuts(!store.showShortcuts);
+        return;
+      }
+
+      if (cmd && shiftKey && key.toLowerCase() === "p") {
+        e.preventDefault();
+        const { petActiveSlug, petEnabled, setPetEnabled, selectPet } = store;
+        if (!petEnabled) {
+          if (petActiveSlug) {
+            void setPetEnabled(true);
+          } else {
+            const first = store.petInstalled?.[0]?.slug;
+            if (first) void selectPet(first);
+          }
+          return;
+        }
+        void setPetEnabled(false);
         return;
       }
 

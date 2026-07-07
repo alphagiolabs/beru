@@ -33,6 +33,30 @@ contextBridge.exposeInMainWorld("api", {
   installUpdate: () => ipcRenderer.invoke("updater:install"),
   getUpdaterSnapshot: () => ipcRenderer.invoke("updater:getSnapshot"),
   openExternal: (url) => ipcRenderer.invoke("shell:openExternal", url),
+  fetchPetManifest: () => ipcRenderer.invoke("petdex:fetchManifest"),
+  listInstalledPets: () => ipcRenderer.invoke("petdex:listInstalled"),
+  installPet: (entry) => ipcRenderer.invoke("petdex:install", entry),
+  uninstallPet: (slug) => ipcRenderer.invoke("petdex:uninstall", slug),
+  getPetSpritesheet: (slug) => ipcRenderer.invoke("petdex:getSpritesheet", slug),
+  getBundledSpritesheet: (slug) => ipcRenderer.invoke("petdex:getBundledSpritesheet", slug),
+  openPetOverlay: (position) => ipcRenderer.invoke("petOverlay:open", position),
+  closePetOverlay: () => ipcRenderer.invoke("petOverlay:close"),
+  togglePetOverlay: (position) => ipcRenderer.invoke("petOverlay:toggle", position),
+  syncPetOverlayState: (state) => ipcRenderer.invoke("petOverlay:sync", state),
+  getPetOverlayState: () => ipcRenderer.invoke("petOverlay:getState"),
+  popInPetOverlay: () => ipcRenderer.invoke("petOverlay:popIn"),
+  movePetOverlay: (position) => ipcRenderer.invoke("petOverlay:move", position),
+  dragPetOverlayBy: (delta) => ipcRenderer.invoke("petOverlay:dragBy", delta),
+  onPetOverlayState: (cb) => {
+    const handler = (_e, payload) => cb(payload);
+    ipcRenderer.on("petOverlay:state", handler);
+    return () => ipcRenderer.removeListener("petOverlay:state", handler);
+  },
+  onPetOverlayEvent: (cb) => {
+    const handler = (_e, payload) => cb(payload);
+    ipcRenderer.on("petOverlay:event", handler);
+    return () => ipcRenderer.removeListener("petOverlay:event", handler);
+  },
   onUpdaterEvent: (cb) => {
     const handler = (_e, payload) => cb(payload);
     ipcRenderer.on("updater:event", handler);

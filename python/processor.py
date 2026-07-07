@@ -363,7 +363,7 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
     if result is None:
         # Try partial match — same existence check.
         key = _font_name_key(font_family)
-        for fkey, (fpath, fstem) in fonts.items():
+        for fkey, (fpath, _) in fonts.items():
             normalized_key = _font_name_key(fkey)
             if key in normalized_key or normalized_key in key:
                 if os.path.isfile(fpath):
@@ -1652,23 +1652,6 @@ class StderrBuffer:
         return "".join(self._buf)
 
 
-def _stderr_buffer_append(buffer, line):
-    """Keep stderr bounded while streaming FFmpeg output.
-
-    Backwards-compatible shim: accepts either a legacy list (legacy path) or a
-    StderrBuffer (new path). New call sites use StderrBuffer directly.
-    """
-    if isinstance(buffer, StderrBuffer):
-        buffer.append(line)
-        return
-    buffer.append(line)
-    while buffer and (
-        len(buffer) > MAX_STDERR_LINES
-        or len("".join(buffer)) > MAX_STDERR_CHARS
-    ):
-        buffer.pop(0)
-
-
 def _retry_failed_enabled():
     flag = (os.environ.get("BERU_RETRY_FAILED") or "1").strip().lower()
     return flag not in ("0", "false", "no", "off")
@@ -2028,7 +2011,6 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         return _job_failed_result(job_id, err, max_workers=_BATCH_ACTIVE_WORKERS)
 
     src_pix_fmt = job.get("pix_fmt") or info.get("pix_fmt", "yuv420p")
-    src_frame_rate = job.get("frame_rate") or info.get("frame_rate", 0)
     src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
     # Use the batch-level pre-flight encoder if provided; otherwise detect locally.

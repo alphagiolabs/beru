@@ -21,11 +21,6 @@ function processorSpawnCacheEnabled() {
   return process.env.BERU_PROCESSOR_SPAWN_CACHE === "1";
 }
 
-export function invalidateProcessorSpawnCache() {
-  systemPythonCache = { resolved: false, value: null };
-  bundledProcessorCache = { resolved: false, value: null };
-}
-
 const WINDOWS_CANDIDATES = [
   { command: "py", args: ["-3"] },
   { command: "python", args: [] },
@@ -143,23 +138,7 @@ export function validateProcessorAvailable() {
   return { ok: true, ...resolved };
 }
 
-/** @deprecated Use validateProcessorAvailable — kept for existing tests. */
-export function resolvePythonSpawn() {
-  return resolveSystemPythonSpawn();
-}
-
-/** @deprecated Use validateProcessorAvailable — kept for existing tests. */
-export function validatePythonAvailable() {
-  const check = validateProcessorAvailable();
-  if (!check.ok) return check;
-  if (check.mode === "bundled") {
-    return { ok: true, command: check.command, args: [] };
-  }
-  const py = resolveSystemPythonSpawn();
-  return py ? { ok: true, ...py } : { ok: false, error: check.error || "Python no disponible" };
-}
-
-export function getEncodeProfilesPath() {
+function getEncodeProfilesPath() {
   if (!isDev && process.resourcesPath) {
     const packaged = path.join(process.resourcesPath, "encode-profiles.json");
     if (fs.existsSync(packaged)) return packaged;

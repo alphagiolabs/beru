@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
-
-const VIDEO_EXT = /\.(mp4|mov|avi|mkv|webm|flv|wmv|m4v|mpg|mpeg)$/i;
+import { VIDEO_EXT } from "../../shared/video-extensions.js";
 
 export default function DragOverlay() {
   const isDragging = useEditorStore((s) => s.isDragging);

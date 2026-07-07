@@ -8,9 +8,7 @@
 
 import { app } from "electron";
 import { createRequire } from "module";
-import { getMainWindow } from "./shared-state.js";
-
-const isDev = !app.isPackaged;
+import { getMainWindow, isDev } from "./shared-state.js";
 const requireCJS = createRequire(import.meta.url);
 
 let autoUpdater = null;
@@ -166,33 +164,8 @@ const init = (_win) => {
   // best-effort.
   checkForUpdates().catch(() => {});
 
-  // KILL-SWITCH: Check if the current running version has been marked as bad.
-  // This allows forcing a downgrade by publishing a kill-switch file that
-  // blocks the current version from auto-updating to itself. The check is
-  // best-effort and silently fails if the endpoint is unreachable.
-  // Future: implement a remote endpoint at https://beru.app/api/kill-switch.json
-  // that returns { "bad_versions": ["1.6.35"], "force_downgrade": "1.6.34" }
-  checkKillSwitch().catch(() => {});
-};
-
-/**
- * Best-effort kill-switch check. Fetches a remote JSON that can mark the
- * current version as bad, forcing the user to manually downgrade.
- * Currently a stub — the endpoint is not yet deployed.
- */
-const checkKillSwitch = async () => {
-  if (isDev) return;
-  try {
-    const currentVersion = app.getVersion();
-    // Future: fetch from https://beru.app/api/kill-switch.json
-    // const resp = await fetch("https://beru.app/api/kill-switch.json");
-    // const data = await resp.json();
-    // if (data.bad_versions?.includes(currentVersion)) {
-    //   send({ type: "error", message: `Version ${currentVersion} has been recalled. Please downgrade to ${data.force_downgrade || "a previous version"}.` });
-    // }
-  } catch {
-    // Kill-switch check is best-effort — never block the app
-  }
+  // Future kill-switch: fetch https://beru.app/api/kill-switch.json when deployed.
+  // Expected shape: { "bad_versions": ["1.6.35"], "force_downgrade": "1.6.34" }
 };
 
 const checkForUpdates = async () => {
@@ -394,4 +367,4 @@ const install = () => {
 
 const isQuittingForUpdate = () => quittingForUpdate;
 
-export { init, checkForUpdates, startDownload, install, getSnapshot, isQuittingForUpdate, isDev };
+export { init, checkForUpdates, startDownload, install, getSnapshot, isQuittingForUpdate };

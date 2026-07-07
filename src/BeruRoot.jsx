@@ -4,6 +4,8 @@ import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConfirmDialog from "./components/ConfirmDialog";
 import SettingsModal from "./components/SettingsModal";
+import DesktopPet from "./components/pets/DesktopPet";
+import PetPaletteModal from "./components/pets/PetPaletteModal";
 import AppToast from "./components/AppToast";
 import UpdatePrompt from "./components/UpdatePrompt";
 import useUpdater from "./hooks/useUpdater";
@@ -41,6 +43,8 @@ export default function BeruRoot() {
       <AppToast />
       <ConfirmDialog />
       <SettingsModal />
+      <DesktopPet />
+      <PetPaletteModal />
     </ErrorBoundary>
   );
 }

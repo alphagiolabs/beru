@@ -1,18 +1,11 @@
 /** Delogo operation sanitization (no UI). Used before FFmpeg job export. */
 
 import { clampNum } from "./clamp";
+import { DELOGO_METHODS, MIRROR_SIDES as MIRROR_SIDES_UI } from "./types";
 
-export const VALID_DELOGO_METHODS = new Set([
-  "temporal",
-  "mirror",
-  "mosaic",
-  "inpaint",
-  "blur",
-  "fill",
-  "cover",
-]);
+export const VALID_DELOGO_METHODS = new Set(DELOGO_METHODS.map((m) => m.id));
 
-export const MIRROR_SIDES = ["left", "right", "top", "bottom"];
+const MIRROR_SIDE_IDS = MIRROR_SIDES_UI.map((s) => s.id);
 
 /**
  * Single source of truth for delogo field bounds and defaults.
@@ -26,14 +19,14 @@ export const DELOGO_FIELD_BOUNDS = {
   blurStrength: { min: 1, max: 100, default: 20 },
 };
 
-export function sanitizeDelogoMethod(method) {
+function sanitizeDelogoMethod(method) {
   const m = String(method || "temporal").toLowerCase();
   return VALID_DELOGO_METHODS.has(m) ? m : "temporal";
 }
 
 export function sanitizeMirrorSide(side) {
   const s = String(side || "right").toLowerCase();
-  return MIRROR_SIDES.includes(s) ? s : "right";
+  return MIRROR_SIDE_IDS.includes(s) ? s : "right";
 }
 
 export function sanitizeOperation(op) {

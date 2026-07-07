@@ -27,6 +27,7 @@ export default function App() {
   const loadSettings = useEditorStore((s) => s.loadSettings);
   const loadRecents = useEditorStore((s) => s.loadRecents);
   const loadExecutionHistory = useEditorStore((s) => s.loadExecutionHistory);
+  const initPets = useEditorStore((s) => s.initPets);
   const showToast = useEditorStore((s) => s.showToast);
   const t = useT();
   const dropRef = useRef(null);
@@ -38,10 +39,14 @@ export default function App() {
 
   useEffect(() => {
     loadPresetsFromStorage();
-    loadSettings();
+    const settingsReady = loadSettings();
     loadRecents();
     loadExecutionHistory();
-  }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory]);
+    void (async () => {
+      await settingsReady;
+      await initPets();
+    })();
+  }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory, initPets]);
 
   useEffect(() => {
     const resetDragState = () => {

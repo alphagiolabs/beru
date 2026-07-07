@@ -79,7 +79,7 @@ export function binarySearchAutoFitFontSize(measureFits, { minPx, maxPx }) {
 }
 
 /** Rough char width for export-side wrapping (matches processor.py heuristic). */
-export function estimateCharWidthPx(fontSizePx) {
+function estimateCharWidthPx(fontSizePx) {
   return Math.max(4, fontSizePx * 0.55);
 }
 

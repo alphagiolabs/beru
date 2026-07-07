@@ -45,23 +45,36 @@ export function createPathSecurity(app) {
     if (_cachedTrustedRoots && now - _trustedRootsCacheTime < TRUSTED_ROOTS_TTL_MS) {
       return _cachedTrustedRoots;
     }
-    const roots = [
-      app.getPath("userData"),
-      app.getPath("temp"),
-      app.getPath("home"),
-      app.getPath("documents"),
-      app.getPath("downloads"),
-      app.getPath("desktop"),
-      app.getPath("videos"),
-      app.getPath("music"),
-      app.getPath("pictures"),
+    const roots = [];
+    const names = [
+      "userData",
+      "temp",
+      "home",
+      "documents",
+      "downloads",
+      "desktop",
+      "videos",
+      "music",
+      "pictures",
     ];
+    for (const name of names) {
+      try {
+        const p = app.getPath(name);
+        if (p) roots.push(p);
+      } catch (e) {
+        console.warn(`[beru][security] Failed to get path for ${name}:`, e?.message || e);
+      }
+    }
     if (app.isPackaged && process.resourcesPath) {
       roots.push(process.resourcesPath);
     } else {
       roots.push(app.getAppPath());
     }
-    _cachedTrustedRoots = roots.filter(Boolean).map((r) => normalizeKey(path.resolve(r)));
+    _cachedTrustedRoots = roots
+      .filter(Boolean)
+      .map((r) => resolveSafe(r))
+      .filter(Boolean)
+      .map((r) => normalizeKey(r));
     _trustedRootsCacheTime = now;
     return _cachedTrustedRoots;
   };

@@ -4,6 +4,20 @@ import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import { isSupabaseConfigured } from "../lib/supabaseClient";
 
+const VIDEO_URL = "https://res.cloudinary.com/dzhp64paw/video/upload/v1782516787/login.mp4";
+
+function BeruLogo({ className = "h-8 md:h-10" }) {
+  return (
+    <svg viewBox="0 0 300 400" className={className} aria-hidden="true">
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M0 0L140 0C260 0 260 195 140 195L165 195C295 195 295 400 165 400L0 400ZM60 50L120 50C195 50 195 145 120 145L60 145ZM60 240L140 240C225 240 225 350 140 350L60 350ZM100 168L195 195L100 222Z"
+      />
+    </svg>
+  );
+}
+
 export default function LoginScreen() {
   const t = useT();
   const authStatus = useEditorStore((s) => s.authStatus);
@@ -44,110 +58,113 @@ export default function LoginScreen() {
   const displayError = localError || (authError ? t(authError) : "");
 
   return (
-    <div className="login-screen">
-      <div className="login-screen-bg" aria-hidden="true">
-        <div className="login-screen-glow login-screen-glow--1" />
-        <div className="login-screen-glow login-screen-glow--2" />
-        <div className="login-screen-grid" />
-      </div>
+    <div className="login-cinematic relative flex flex-col h-full overflow-hidden bg-black text-white">
+      <video
+        className="login-cinematic-video"
+        src={VIDEO_URL}
+        autoPlay
+        loop
+        muted
+        playsInline
+        aria-hidden="true"
+      />
+
+      <div className="login-cinematic-blur-overlay" aria-hidden="true" />
 
       <div
-        className="cap-titlebar-drag flex-shrink-0"
+        className="cap-titlebar-drag flex-shrink-0 relative z-50"
         style={{ height: "env(titlebar-area-height, 0px)" }}
       />
 
-      <div className="login-screen-body">
-        <div className="login-screen-card">
-          <div className="login-screen-brand">
-            <div className="login-screen-logo">
-              <svg viewBox="0 0 300 400" width="36" height="48" aria-hidden="true">
-                <path
-                  fill="currentColor"
-                  fillRule="evenodd"
-                  d="M0 0L140 0C260 0 260 195 140 195L165 195C295 195 295 400 165 400L0 400ZM60 50L120 50C195 50 195 145 120 145L60 145ZM60 240L140 240C225 240 225 350 140 350L60 350ZM100 168L195 195L100 222Z"
-                />
-              </svg>
-            </div>
-            <div>
-              <h1 className="login-screen-title">{t("auth.title")}</h1>
-              <p className="login-screen-subtitle">{t("auth.subtitle")}</p>
-            </div>
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 sm:px-6 md:px-12 py-6 min-h-0 overflow-hidden">
+        <div className="w-full max-w-[420px] flex flex-col items-center">
+          <div
+            className="animate-blur-fade-up flex items-center gap-3 mb-6"
+            style={{ animationDelay: "300ms" }}
+          >
+            <BeruLogo className="h-10 md:h-12 w-auto text-white" />
+            <span className="text-2xl md:text-3xl font-semibold tracking-tight">BERU</span>
           </div>
 
-          {!isSupabaseConfigured ? (
-            <div className="login-screen-alert login-screen-alert--warn">
-              <p>{t("auth.notConfigured")}</p>
-              <p className="login-screen-hint">{t("auth.notConfiguredHint")}</p>
-            </div>
-          ) : loading ? (
-            <div className="login-screen-loading">
-              <Loader2 size={28} className="login-screen-spin" />
-              <span>{t("auth.checkingSession")}</span>
-            </div>
-          ) : (
-            <form className="login-screen-form" onSubmit={handleSubmit} noValidate>
-              {displayError && (
-                <div className="login-screen-alert login-screen-alert--error" role="alert">
-                  {displayError}
-                </div>
-              )}
+          <div
+            className="login-cinematic-form-card liquid-glass animate-blur-fade-up w-full"
+            style={{ animationDelay: "400ms" }}
+          >
+            <p className="text-center text-sm text-gray-400 mb-5 m-0">{t("auth.subtitle")}</p>
 
-              <label className="login-screen-field">
-                <span>{t("auth.email")}</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="usuario@empresa.com"
-                  autoComplete="email"
-                  disabled={submitting}
-                  required
-                />
-              </label>
+            {!isSupabaseConfigured ? (
+              <div className="login-cinematic-alert login-cinematic-alert--warn">
+                <p>{t("auth.notConfigured")}</p>
+                <p className="login-cinematic-hint">{t("auth.notConfiguredHint")}</p>
+              </div>
+            ) : loading ? (
+              <div className="login-cinematic-loading">
+                <Loader2 size={28} className="login-cinematic-spin" />
+                <span>{t("auth.checkingSession")}</span>
+              </div>
+            ) : (
+              <form className="login-cinematic-form" onSubmit={handleSubmit} noValidate>
+                {displayError && (
+                  <div className="login-cinematic-alert login-cinematic-alert--error" role="alert">
+                    {displayError}
+                  </div>
+                )}
 
-              <label className="login-screen-field">
-                <span>{t("auth.password")}</span>
-                <div className="login-screen-password-wrap">
+                <label className="login-cinematic-field">
+                  <span>{t("auth.email")}</span>
                   <input
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="usuario@empresa.com"
+                    autoComplete="email"
                     disabled={submitting}
                     required
                   />
-                  <button
-                    type="button"
-                    className="login-screen-password-toggle"
-                    onClick={() => setShowPassword((v) => !v)}
-                    tabIndex={-1}
-                    aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </label>
+                </label>
 
-              <button type="submit" className="login-screen-submit" disabled={submitting}>
-                {submitting ? (
-                  <>
-                    <Loader2 size={16} className="login-screen-spin" />
-                    {t("auth.signingIn")}
-                  </>
-                ) : (
-                  <>
-                    <LogIn size={16} />
-                    {t("auth.signIn")}
-                  </>
-                )}
-              </button>
-            </form>
-          )}
+                <label className="login-cinematic-field">
+                  <span>{t("auth.password")}</span>
+                  <div className="login-cinematic-password-wrap">
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      disabled={submitting}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="login-cinematic-password-toggle"
+                      onClick={() => setShowPassword((v) => !v)}
+                      tabIndex={-1}
+                      aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </label>
+
+                <button type="submit" className="login-cinematic-submit" disabled={submitting}>
+                  {submitting ? (
+                    <>
+                      <Loader2 size={16} className="login-cinematic-spin" />
+                      {t("auth.signingIn")}
+                    </>
+                  ) : (
+                    <>
+                      <LogIn size={16} />
+                      {t("auth.signIn")}
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
         </div>
-
-        <p className="login-screen-footer">{t("auth.footer")}</p>
-      </div>
+      </main>
     </div>
   );
 }

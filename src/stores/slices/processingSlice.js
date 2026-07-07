@@ -473,9 +473,7 @@ export function createProcessingSlice(set, get) {
       set({ queue: updated });
 
       try {
-        const result = await api.startProcessing(
-          createJobManifest([job], { profile: get().encodeProfile }),
-        );
+        const result = await api.startProcessing(createJobManifest([job]));
         const itemError = get().queue[videoIdx]?.error;
         return {
           ok: !!result?.success,

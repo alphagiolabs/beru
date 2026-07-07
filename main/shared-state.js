@@ -45,7 +45,6 @@ let _processingWatchdog = null;
 // false and the watchdog would otherwise fire mid-probe on large batches and
 // force-release the lock. While this is set, the watchdog rearms instead.
 let _probePhaseActive = false;
-export const getProbePhaseActive = () => _probePhaseActive;
 export const setProbePhaseActive = (active) => {
   _probePhaseActive = Boolean(active);
 };

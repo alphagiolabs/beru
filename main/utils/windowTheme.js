@@ -1,5 +1,5 @@
 /** Window chrome colors — derived from theme tokens at runtime. */
-export const WINDOW_THEME = {
+const WINDOW_THEME = {
   dark: {
     background: "#0a0a0a",
     symbols: "#ffffff",

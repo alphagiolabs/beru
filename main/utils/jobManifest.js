@@ -1,5 +1,5 @@
-export const JOB_MANIFEST_TYPE = "beru-job-manifest";
-export const JOB_MANIFEST_VERSION = 1;
+const JOB_MANIFEST_TYPE = "beru-job-manifest";
+const JOB_MANIFEST_VERSION = 1;
 
 export function unwrapJobManifest(payload) {
   if (Array.isArray(payload)) {

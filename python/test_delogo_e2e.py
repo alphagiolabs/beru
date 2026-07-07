@@ -109,7 +109,6 @@ def main():
 
     truth = tmp / "truth.mp4"
     with_logo = tmp / "with_logo.mp4"
-    processed = tmp / "processed.mp4"
 
     # Try each method and verify the pipeline runs end-to-end without
     # crashing. Visual quality depends on the method's suitability for

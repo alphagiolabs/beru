@@ -1145,10 +1145,10 @@ print(json.dumps(seen))
   it("bounds stderr buffer while streaming progress", () => {
     const code = `
 import processor
-buf = []
+buf = processor.StderrBuffer()
 for i in range(500):
-    processor._stderr_buffer_append(buf, "x" * 200 + "\\n")
-print(len(buf), sum(len(x) for x in buf))
+    buf.append("x" * 200 + "\\n")
+print(len(buf), len(buf.join()))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
     expect(r.status).toBe(0);

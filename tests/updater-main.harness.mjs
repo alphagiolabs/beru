@@ -28,8 +28,11 @@ function buildSource() {
   // time (fakeWindow is created after runInContext, so binding the value at
   // module top-level would capture undefined).
   src = src.replace(
-    'import { getMainWindow } from "./shared-state.js";',
-    "const getMainWindow = () => globalThis.__mockGetMainWindow && globalThis.__mockGetMainWindow();",
+    /import\s*\{\s*getMainWindow\s*,\s*isDev\s*\}\s*from\s*["']\.\/shared-state\.js["'];?/,
+    [
+      "const getMainWindow = () => globalThis.__mockGetMainWindow && globalThis.__mockGetMainWindow();",
+      "const isDev = !globalThis.__mockElectronApp.isPackaged;",
+    ].join("\n"),
   );
   // The source uses import.meta.url for createRequire. Replace with a fixed URL.
   src = src.replace(/import\.meta\.url/g, '"file:///test/updater.js"');

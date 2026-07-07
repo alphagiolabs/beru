@@ -51,6 +51,15 @@ const VIDEO_CONTENT_TYPES = {
   ".mpeg": "video/mpeg",
 };
 
+const IMAGE_CONTENT_TYPES = {
+  ".webp": "image/webp",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+};
+
 export function filePathFromBeruUrl(requestUrl) {
   const url = new URL(requestUrl);
   if (url.protocol !== "beru:" || url.hostname !== "local") return null;
@@ -82,7 +91,8 @@ export function validateBeruRequestPath(pathSecurity, requestUrl) {
 }
 
 function contentTypeFor(filePath) {
-  return VIDEO_CONTENT_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+  const ext = path.extname(filePath).toLowerCase();
+  return IMAGE_CONTENT_TYPES[ext] || VIDEO_CONTENT_TYPES[ext] || "application/octet-stream";
 }
 
 function parseRangeHeader(rangeHeader, size) {

@@ -2,7 +2,7 @@
 
 import { clampNum } from "./clamp";
 
-export const TEXT_STYLE_KEYS = [
+const TEXT_STYLE_KEYS = [
   "fontSize",
   "fontColor",
   "fontFamily",

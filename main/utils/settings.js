@@ -16,9 +16,17 @@ export const ALLOWED_SETTINGS_KEYS = new Set([
   "batchWorkers",
   "batchWorkersMode",
   "batchRetryFailed",
+  "petEnabled",
+  "petActiveSlug",
+  "petPosition",
+  "petPopoutPosition",
+  "petPoppedOut",
+  "petScale",
+  "petOpacity",
+  "petMovement",
 ]);
 
-export const SETTINGS_DEFAULTS = {
+const SETTINGS_DEFAULTS = {
   theme: "dark",
   themeActiveSlot: 2,
   themeSlot1: "beru-light",
@@ -29,6 +37,14 @@ export const SETTINGS_DEFAULTS = {
   batchWorkers: 0,
   batchWorkersMode: "balanced",
   batchRetryFailed: true,
+  petEnabled: false,
+  petActiveSlug: null,
+  petPosition: null,
+  petPopoutPosition: null,
+  petPoppedOut: false,
+  petScale: 0.33,
+  petOpacity: 1.0,
+  petMovement: "fijo",
 };
 
 let cachedHwEncoder = null;
@@ -42,10 +58,6 @@ let settingsCache = null;
 
 function settingsCacheEnabled() {
   return process.env.BERU_SETTINGS_CACHE === "1";
-}
-
-export function invalidateSettingsCache() {
-  settingsCache = null;
 }
 
 export function readSettings() {

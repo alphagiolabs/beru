@@ -2,6 +2,7 @@ import { ipcMain, shell, dialog } from "electron";
 import fs from "fs";
 import path from "path";
 import { getMainWindow } from "../shared-state.js";
+import { OUTPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
 
 const IMAGE_MIMES = {
   ".png": "image/png",
@@ -11,7 +12,6 @@ const IMAGE_MIMES = {
   ".gif": "image/gif",
   ".bmp": "image/bmp",
 };
-const OUTPUT_VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv", ".avi", ".webm"]);
 
 export function registerFileHandlers(pathSecurity) {
   ipcMain.handle("fs:readExcel", async (_event, filePath) => {
