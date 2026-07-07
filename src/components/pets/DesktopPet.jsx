@@ -1,123 +1,73 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect } from "react";
 import useEditorStore from "../../stores/useEditorStore";
 import { useT } from "../../i18n/useT";
-import PetSprite from "./PetSprite.jsx";
-
-function defaultCornerPosition() {
-  if (typeof window === "undefined") return { x: 24, y: 24 };
-  return {
-    x: Math.max(16, window.innerWidth - 132),
-    y: Math.max(16, window.innerHeight - 132),
-  };
-}
+import usePetState from "../../hooks/usePetState";
+import usePetOverlaySync from "../../hooks/usePetOverlaySync";
+import PetSurface from "./PetSurface.jsx";
 
 export default function DesktopPet() {
   const t = useT();
+  const petState = usePetState();
+  usePetOverlaySync();
+
   const petEnabled = useEditorStore((s) => s.petEnabled);
   const petActiveSlug = useEditorStore((s) => s.petActiveSlug);
   const petPosition = useEditorStore((s) => s.petPosition);
+  const petPoppedOut = useEditorStore((s) => s.petPoppedOut);
   const petScale = useEditorStore((s) => s.petScale);
+  const petOpacity = useEditorStore((s) => s.petOpacity);
+  const petMovement = useEditorStore((s) => s.petMovement);
   const petSpritesheet = useEditorStore((s) => s.petSpritesheet);
   const petSpritesheetLoading = useEditorStore((s) => s.petSpritesheetLoading);
+  const showSettings = useEditorStore((s) => s.showSettings);
+  const showPetPalette = useEditorStore((s) => s.showPetPalette);
   const loadPetSpritesheet = useEditorStore((s) => s.loadPetSpritesheet);
   const setPetPosition = useEditorStore((s) => s.setPetPosition);
   const setPetEnabled = useEditorStore((s) => s.setPetEnabled);
-  const isProcessing = useEditorStore((s) => s.isProcessing);
-  const showSettings = useEditorStore((s) => s.showSettings);
-
-  const [dragging, setDragging] = useState(false);
-  const [dragPosition, setDragPosition] = useState(null);
-  const [petState, setPetState] = useState("idle");
-  const dragOffset = useRef({ x: 0, y: 0 });
-  const nodeRef = useRef(null);
-  const wasProcessingRef = useRef(false);
+  const togglePetPopout = useEditorStore((s) => s.togglePetPopout);
+  const syncPetOverlay = useEditorStore((s) => s.syncPetOverlay);
 
   useEffect(() => {
-    if (!petEnabled || !petActiveSlug || petSpritesheet) return;
-    loadPetSpritesheet(petActiveSlug);
-  }, [petEnabled, petActiveSlug, petSpritesheet, loadPetSpritesheet]);
+    if (!petEnabled || !petActiveSlug || petSpritesheet || petSpritesheetLoading) return;
+    void loadPetSpritesheet(petActiveSlug);
+  }, [petEnabled, petActiveSlug, petSpritesheet, petSpritesheetLoading, loadPetSpritesheet]);
 
-  useEffect(() => {
-    if (isProcessing) {
-      setPetState("running");
-      wasProcessingRef.current = true;
-      return undefined;
-    }
-
-    if (wasProcessingRef.current) {
-      wasProcessingRef.current = false;
-      setPetState("waving");
-      const timer = setTimeout(() => setPetState("idle"), 2200);
-      return () => clearTimeout(timer);
-    }
-
-    setPetState("idle");
-    return undefined;
-  }, [isProcessing]);
-
-  const position = dragPosition ?? petPosition ?? defaultCornerPosition();
-
-  const onPointerDown = useCallback(
-    (event) => {
-      if (event.button !== 0) return;
-      const node = nodeRef.current;
-      if (!node) return;
-      const rect = node.getBoundingClientRect();
-      dragOffset.current = {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-      };
-      setDragging(true);
-      setDragPosition(position);
-      node.setPointerCapture(event.pointerId);
-      event.preventDefault();
+  const handlePositionChange = useCallback(
+    (position) => {
+      void setPetPosition(position);
     },
-    [position],
+    [setPetPosition],
   );
 
-  const onPointerMove = useCallback(
-    (event) => {
-      if (!dragging) return;
-      setDragPosition({
-        x: Math.max(0, event.clientX - dragOffset.current.x),
-        y: Math.max(0, event.clientY - dragOffset.current.y),
-      });
-    },
-    [dragging],
-  );
+  const handleShiftClick = useCallback(() => {
+    void togglePetPopout().then(() => syncPetOverlay(petState));
+  }, [togglePetPopout, syncPetOverlay, petState]);
 
-  const onPointerUp = useCallback(
-    (event) => {
-      if (dragPosition) {
-        void setPetPosition(dragPosition);
-      }
-      setDragging(false);
-      setDragPosition(null);
-      nodeRef.current?.releasePointerCapture(event.pointerId);
-    },
-    [dragPosition, setPetPosition],
-  );
-
-  if (!petEnabled || !petActiveSlug || !petSpritesheet || petSpritesheetLoading || showSettings) {
+  if (
+    !petEnabled ||
+    !petActiveSlug ||
+    !petSpritesheet ||
+    petSpritesheetLoading ||
+    showSettings ||
+    showPetPalette ||
+    petPoppedOut
+  ) {
     return null;
   }
 
   return (
-    <div
-      ref={nodeRef}
-      className={`desktop-pet${dragging ? " desktop-pet--dragging" : ""}`}
-      style={{ left: position.x, top: position.y }}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        setPetEnabled(false);
-      }}
-      title={t("settings.petdex.hidePetHint")}
-    >
-      <PetSprite src={petSpritesheet} state={petState} scale={petScale} />
-    </div>
+    <PetSurface
+      className="desktop-pet"
+      state={petState}
+      spritesheet={petSpritesheet}
+      scale={petScale}
+      opacity={petOpacity}
+      movement={petMovement}
+      position={petPosition}
+      onPositionChange={handlePositionChange}
+      onShiftClick={handleShiftClick}
+      onContextMenu={() => setPetEnabled(false)}
+      title={t("settings.petdex.popOutHint")}
+    />
   );
 }

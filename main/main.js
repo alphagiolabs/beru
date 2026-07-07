@@ -21,6 +21,8 @@ import { registerExecutionHistoryHandlers } from "./handlers/execution-history.j
 import { registerSystemHandlers } from "./handlers/system.js";
 import { registerUpdaterHandlers } from "./handlers/updater.js";
 import { registerPetdexHandlers } from "./handlers/petdex.js";
+import { registerPetOverlayHandlers } from "./handlers/pet-overlay.js";
+import { closePetOverlayWindow } from "./utils/pet-overlay.js";
 import { isQuittingForUpdate } from "./updater.js";
 import { initTelemetry } from "./utils/telemetry.js";
 
@@ -58,6 +60,9 @@ function disposeOnQuit() {
   } catch {}
   try {
     disposePreviewFrameWorker();
+  } catch {}
+  try {
+    closePetOverlayWindow();
   } catch {}
 }
 
@@ -182,3 +187,4 @@ registerExecutionHistoryHandlers();
 registerSystemHandlers();
 registerUpdaterHandlers();
 registerPetdexHandlers();
+registerPetOverlayHandlers();

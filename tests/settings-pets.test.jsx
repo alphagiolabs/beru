@@ -84,13 +84,13 @@ describe("SettingsModal pets", () => {
       root.render(<SettingsModal />);
     });
 
-    const installButton = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent.includes("Instalar"),
+    const petCard = Array.from(document.querySelectorAll(".settings-petdex-card-item")).find((el) =>
+      el.textContent.includes("Boba"),
     );
-    expect(installButton).toBeTruthy();
+    expect(petCard).toBeTruthy();
 
     await act(async () => {
-      installButton.click();
+      petCard.click();
     });
 
     expect(window.api.installPet).toHaveBeenCalledWith(bobaEntry);

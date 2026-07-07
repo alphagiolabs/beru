@@ -12,6 +12,13 @@ let root = null;
 describe("SettingsModal appearance", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
+    window.api = {
+      setWindowTheme: vi.fn(),
+      saveSettings: vi.fn(async () => ({})),
+      loadSettings: vi.fn(async () => ({})),
+      fetchPetManifest: vi.fn(async () => ({ success: true, manifest: { total: 0, pets: [] } })),
+      listInstalledPets: vi.fn(async () => ({ success: true, pets: [] })),
+    };
     useEditorStore.setState({
       showSettings: true,
       settingsTab: "appearance",
@@ -21,6 +28,10 @@ describe("SettingsModal appearance", () => {
       customThemes: [],
       profile: { email: "admin@test.com", role: "admin" },
       language: "es",
+      petEnabled: false,
+      petActiveSlug: null,
+      petInstalled: [],
+      petSpritesheet: null,
     });
   });
 
@@ -30,6 +41,7 @@ describe("SettingsModal appearance", () => {
       root = null;
     });
     document.body.innerHTML = "";
+    delete window.api;
   });
 
   it("renders appearance panel with theme slots and library", async () => {
@@ -88,7 +100,7 @@ describe("SettingsModal appearance", () => {
     });
 
     expect(useEditorStore.getState().settingsTab).toBe("pets");
-    expect(document.body.textContent).toContain("Galería de mascotas");
-    expect(document.body.textContent).toContain("Compañero animado");
+    expect(document.body.textContent).toContain("Sincronizado");
+    expect(document.body.textContent).toContain("Activa");
   });
 });

@@ -61,6 +61,15 @@ export default function ShortcutsModal() {
         ["?", t("modal.shortcuts.shortcutsList")],
       ],
     },
+    {
+      titleKey: "modal.shortcuts.pets",
+      items: [
+        ["Ctrl + K", t("modal.shortcuts.petPalette")],
+        ["Ctrl + Shift + P", t("settings.petdex.toggleShortcut")],
+        ["Mayús + clic", t("modal.shortcuts.petPopout")],
+        [t("modal.shortcuts.rightClick"), t("settings.petdex.hidePetHint")],
+      ],
+    },
   ];
 
   return (

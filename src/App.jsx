@@ -39,10 +39,13 @@ export default function App() {
 
   useEffect(() => {
     loadPresetsFromStorage();
-    loadSettings();
+    const settingsReady = loadSettings();
     loadRecents();
     loadExecutionHistory();
-    void initPets();
+    void (async () => {
+      await settingsReady;
+      await initPets();
+    })();
   }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory, initPets]);
 
   useEffect(() => {

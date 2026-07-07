@@ -31,6 +31,10 @@ export default defineConfig({
     outDir: "build",
     emptyOutDir: true,
     rollupOptions: {
+      input: {
+        main: path.resolve("index.html"),
+        petOverlay: path.resolve("pet-overlay.html"),
+      },
       output: {
         manualChunks: {
           xlsx: ["xlsx"],

@@ -2,5 +2,7 @@ build
 dist-installer
 dist-electron
 node_modules
+terminals
+agent-tools
 .pytest_cache
 package-lock.json

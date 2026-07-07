@@ -3,9 +3,9 @@ import { beruLocalUrl } from "../../utils/pet-url.js";
 
 const FEATURED_SLUGS = ["boba", "doraemon", "wangcai", "eve", "mallow", "noir-webling"];
 const EMPTY_MANIFEST = { total: 0, pets: [] };
-export const PET_SCALE_MIN = 0.3;
-export const PET_SCALE_MAX = 1;
-export const PET_SCALE_DEFAULT = 0.55;
+export const PET_SCALE_MIN = 0.1;
+export const PET_SCALE_MAX = 3;
+export const PET_SCALE_DEFAULT = 0.33;
 
 function clampPetScale(value) {
   const n = Number(value);
@@ -29,7 +29,11 @@ export function createPetSlice(set, get) {
     petEnabled: false,
     petActiveSlug: null,
     petPosition: null,
+    petPopoutPosition: null,
+    petPoppedOut: false,
     petScale: PET_SCALE_DEFAULT,
+    petOpacity: 1.0,
+    petMovement: "fijo",
     petSpritesheet: null,
     petSpritesheetLoading: false,
     petManifest: EMPTY_MANIFEST,
@@ -56,7 +60,22 @@ export function createPetSlice(set, get) {
                 y: Math.max(0, Math.floor(settings.petPosition.y)),
               }
             : null,
+        petPopoutPosition:
+          settings?.petPopoutPosition &&
+          Number.isFinite(settings.petPopoutPosition.x) &&
+          Number.isFinite(settings.petPopoutPosition.y)
+            ? {
+                x: Math.max(0, Math.floor(settings.petPopoutPosition.x)),
+                y: Math.max(0, Math.floor(settings.petPopoutPosition.y)),
+              }
+            : null,
+        petPoppedOut: settings?.petPoppedOut === true,
         petScale: clampPetScale(settings?.petScale ?? PET_SCALE_DEFAULT),
+        petOpacity:
+          typeof settings?.petOpacity === "number"
+            ? Math.min(1, Math.max(0.1, settings.petOpacity))
+            : 1.0,
+        petMovement: typeof settings?.petMovement === "string" ? settings.petMovement : "fijo",
       });
     },
 
@@ -66,9 +85,18 @@ export function createPetSlice(set, get) {
       await persistPetSettings({ petEnabled: next });
       if (next) {
         const { petActiveSlug } = get();
-        if (petActiveSlug) get().loadPetSpritesheet(petActiveSlug);
+        if (petActiveSlug) await get().loadPetSpritesheet(petActiveSlug);
+        if (get().petPoppedOut) await get().syncPetOverlay("idle");
       } else {
         set({ petSpritesheet: null, petSpritesheetLoading: false });
+        if (get().petPoppedOut) {
+          try {
+            await window.api?.closePetOverlay?.();
+          } catch (e) {
+            swallow("closePetOverlay", e);
+          }
+          await get().setPetPoppedOut(false);
+        }
       }
     },
 
@@ -76,6 +104,27 @@ export function createPetSlice(set, get) {
       const next = clampPetScale(scale);
       set({ petScale: next });
       await persistPetSettings({ petScale: next });
+      if (get().petPoppedOut) {
+        await get().syncPetOverlay("idle");
+      }
+    },
+
+    setPetOpacity: async (opacity) => {
+      const next = typeof opacity === "number" ? Math.min(1, Math.max(0.1, opacity)) : 1.0;
+      set({ petOpacity: next });
+      await persistPetSettings({ petOpacity: next });
+      if (get().petPoppedOut) {
+        await get().syncPetOverlay("idle");
+      }
+    },
+
+    setPetMovement: async (movement) => {
+      const next = movement === "caminar" ? "caminar" : "fijo";
+      set({ petMovement: next });
+      await persistPetSettings({ petMovement: next });
+      if (get().petPoppedOut) {
+        await get().syncPetOverlay("idle");
+      }
     },
 
     setPetPosition: async (position) => {
@@ -88,6 +137,59 @@ export function createPetSlice(set, get) {
           : null;
       set({ petPosition: next });
       await persistPetSettings({ petPosition: next });
+    },
+
+    setPetPopoutPosition: async (position) => {
+      const next =
+        position && Number.isFinite(position.x) && Number.isFinite(position.y)
+          ? {
+              x: Math.max(0, Math.floor(position.x)),
+              y: Math.max(0, Math.floor(position.y)),
+            }
+          : null;
+      set({ petPopoutPosition: next });
+      await persistPetSettings({ petPopoutPosition: next });
+    },
+
+    setPetPoppedOut: async (poppedOut) => {
+      const next = !!poppedOut;
+      set({ petPoppedOut: next });
+      await persistPetSettings({ petPoppedOut: next });
+    },
+
+    togglePetPopout: async () => {
+      const api = window.api;
+      const { petPoppedOut, petPopoutPosition, petPosition } = get();
+      const next = !petPoppedOut;
+      const anchor = petPopoutPosition || petPosition || null;
+
+      if (api?.togglePetOverlay) {
+        try {
+          await api.togglePetOverlay(anchor);
+        } catch (e) {
+          swallow("togglePetOverlay", e);
+          return { ok: false, error: e?.message || String(e) };
+        }
+      } else if (next && api?.openPetOverlay) {
+        try {
+          await api.openPetOverlay(anchor);
+        } catch (e) {
+          swallow("openPetOverlay", e);
+          return { ok: false, error: e?.message || String(e) };
+        }
+      } else if (!next && api?.closePetOverlay) {
+        try {
+          await api.closePetOverlay();
+        } catch (e) {
+          swallow("closePetOverlay", e);
+        }
+      }
+
+      await get().setPetPoppedOut(next);
+      if (next) {
+        await get().syncPetOverlay("idle");
+      }
+      return { ok: true, poppedOut: next };
     },
 
     selectPet: async (slug) => {
@@ -110,6 +212,8 @@ export function createPetSlice(set, get) {
       const safeSlug = String(slug || "").trim();
       if (!safeSlug) return { ok: false, error: "invalid-slug" };
 
+      if (get().petSpritesheetLoading) return { ok: false, error: "already-loading" };
+
       set({ petSpritesheetLoading: true });
       try {
         const res = await api.getPetSpritesheet(safeSlug);
@@ -118,6 +222,9 @@ export function createPetSlice(set, get) {
           return { ok: false, error: res?.error || "load-failed" };
         }
         set({ petSpritesheet: beruLocalUrl(res.path), petSpritesheetLoading: false });
+        if (get().petPoppedOut) {
+          await get().syncPetOverlay("idle");
+        }
         return { ok: true };
       } catch (e) {
         set({ petSpritesheet: null, petSpritesheetLoading: false });
@@ -194,12 +301,62 @@ export function createPetSlice(set, get) {
       }
     },
 
+    syncPets: async ({ background = false } = {}) => {
+      const [manifestRes, installedRes] = await Promise.all([
+        get().fetchPetManifest({ background }),
+        get().loadInstalledPets(),
+      ]);
+      return {
+        ok: manifestRes.ok && installedRes.ok,
+        manifest: manifestRes,
+        installed: installedRes,
+      };
+    },
+
     initPets: async () => {
-      await get().fetchPetManifest({ background: true });
-      await get().loadInstalledPets();
-      const { petEnabled, petActiveSlug } = get();
+      await get().syncPets({ background: true });
+      const { petEnabled, petActiveSlug, petPoppedOut, petPopoutPosition, petPosition } = get();
       if (petEnabled && petActiveSlug) {
         await get().loadPetSpritesheet(petActiveSlug);
+      }
+      if (petEnabled && petPoppedOut && petActiveSlug && window.api?.openPetOverlay) {
+        try {
+          await window.api.openPetOverlay(petPopoutPosition || petPosition);
+        } catch (e) {
+          swallow("openPetOverlay(init)", e);
+        }
+      }
+    },
+
+    buildPetOverlayPayload: (petState) => {
+      const {
+        petEnabled,
+        petActiveSlug,
+        petSpritesheet,
+        petScale,
+        petOpacity,
+        petMovement,
+        language,
+      } = get();
+      return {
+        enabled: petEnabled,
+        slug: petActiveSlug,
+        spritesheet: petSpritesheet,
+        scale: petScale,
+        opacity: petOpacity,
+        movement: petMovement,
+        state: petState || "idle",
+        language: language || "es",
+      };
+    },
+
+    syncPetOverlay: async (petState) => {
+      const api = window.api;
+      if (!api?.syncPetOverlayState) return;
+      try {
+        await api.syncPetOverlayState(get().buildPetOverlayPayload(petState));
+      } catch (e) {
+        swallow("syncPetOverlayState", e);
       }
     },
 
@@ -261,6 +418,7 @@ export function createPetSlice(set, get) {
             displayName: pet.displayName,
             spritesheetUrl: pet.spritesheetUrl || "",
             kind: pet.kind || "creature",
+            submittedBy: pet.submittedBy || "",
             source: pet.source,
           });
         }

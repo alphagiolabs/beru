@@ -57,6 +57,7 @@ export function createUiSlice(set, get) {
     },
 
     showShortcuts: false,
+    showPetPalette: false,
     showSettings: false,
     settingsTab: "appearance",
     updateModalOpen: false,
@@ -152,9 +153,6 @@ export function createUiSlice(set, get) {
         await get().applyActiveTheme();
 
         get().hydratePetSettings?.(settings);
-        if (settings?.petEnabled && settings?.petActiveSlug) {
-          void get().loadPetSpritesheet?.(settings.petActiveSlug);
-        }
 
         if (migrated.needsMigrationSave) {
           await persistThemeSettings({
@@ -421,8 +419,11 @@ export function createUiSlice(set, get) {
     },
 
     setShowShortcuts: (val) => set({ showShortcuts: val }),
+    setShowPetPalette: (val) => set({ showPetPalette: val }),
     setShowSettings: (val) => set({ showSettings: val }),
     setSettingsTab: (tab) => set({ settingsTab: tab }),
+    openSettingsTab: (tab = "appearance") =>
+      set({ showSettings: true, settingsTab: tab, showPetPalette: false }),
     setUpdateModalOpen: (val) => set({ updateModalOpen: val }),
     setIsDragging: (val) => set({ isDragging: val }),
   };

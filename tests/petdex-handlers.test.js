@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   handlers: new Map(),
   userData: "",
   appPath: "",
-  homeDir: "",
+  codexPetsRoot: "",
   packaged: false,
 }));
 
@@ -27,29 +27,24 @@ vi.mock("electron", () => ({
   },
 }));
 
-vi.mock("os", async (importOriginal) => {
-  const actual = await importOriginal();
-  return {
-    ...actual,
-    homedir: () => mocks.homeDir,
-  };
-});
-
 describe("petdex handlers", () => {
   let tempDirectory;
   let repoRoot;
 
   beforeEach(() => {
+    vi.resetModules();
     mocks.handlers.clear();
     tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "beru-petdex-"));
     repoRoot = path.resolve(".");
     mocks.userData = tempDirectory;
-    mocks.homeDir = tempDirectory;
+    mocks.codexPetsRoot = path.join(tempDirectory, "codex-pets");
     mocks.appPath = repoRoot;
     mocks.packaged = false;
+    process.env.BERU_CODEX_PETS_ROOT = mocks.codexPetsRoot;
   });
 
   afterEach(() => {
+    delete process.env.BERU_CODEX_PETS_ROOT;
     fs.rmSync(tempDirectory, { recursive: true, force: true });
   });
 
@@ -83,8 +78,8 @@ describe("petdex handlers", () => {
     });
   });
 
-  it("lists pets installed via Codex CLI in ~/.codex/pets", async () => {
-    const petDir = path.join(tempDirectory, ".codex", "pets", "kebo");
+  it("lists pets installed via Codex CLI", async () => {
+    const petDir = path.join(mocks.codexPetsRoot, "kebo");
     fs.mkdirSync(petDir, { recursive: true });
     fs.writeFileSync(
       path.join(petDir, "pet.json"),
@@ -99,6 +94,25 @@ describe("petdex handlers", () => {
     await expect(listHandler()).resolves.toMatchObject({
       success: true,
       pets: [{ slug: "kebo", displayName: "Kebo", source: "codex" }],
+    });
+  });
+
+  it("lists pets installed via petjson.json", async () => {
+    const petDir = path.join(mocks.codexPetsRoot, "mallow");
+    fs.mkdirSync(petDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(petDir, "petjson.json"),
+      JSON.stringify({ id: "mallow", displayName: "Mallow" }),
+    );
+    fs.writeFileSync(path.join(petDir, "sprite.webp"), "webp");
+
+    const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
+    registerPetdexHandlers();
+
+    const listHandler = mocks.handlers.get("petdex:listInstalled");
+    await expect(listHandler()).resolves.toMatchObject({
+      success: true,
+      pets: [{ slug: "mallow", displayName: "Mallow", source: "codex" }],
     });
   });
 
@@ -161,5 +175,34 @@ describe("petdex handlers", () => {
     expect(bundled?.pets?.length).toBeGreaterThan(0);
     expect(bundled.pets.some((pet) => pet.slug === "boba")).toBe(true);
     expect(isBundledPetAvailable("boba")).toBe(true);
+  });
+
+  it("normalizes remote manifest entries", async () => {
+    const { normalizeManifest } = await import("../main/utils/petdex.js");
+    const normalized = normalizeManifest({
+      total: 2,
+      pets: [
+        {
+          slug: "boba",
+          displayName: "Boba",
+          spritesheetUrl: "https://assets.petdex.dev/curated/boba/spritesheet.webp",
+          petJsonUrl: "https://assets.petdex.dev/curated/boba/pet.json",
+        },
+        { slug: "broken", displayName: "Broken" },
+      ],
+    });
+
+    expect(normalized.total).toBe(1);
+    expect(normalized.pets).toHaveLength(1);
+    expect(normalized.pets[0].slug).toBe("boba");
+  });
+
+  it("fetches the remote pet manifest", async () => {
+    const { fetchPetManifest } = await import("../main/utils/petdex.js");
+    const result = await fetchPetManifest();
+    console.log("Real fetchPetManifest result source:", result.source);
+    console.log("Real fetchPetManifest result pets count:", result.manifest.pets.length);
+    expect(result.source).toBe("remote");
+    expect(result.manifest.pets.length).toBeGreaterThan(0);
   });
 });

@@ -19,7 +19,11 @@ export const ALLOWED_SETTINGS_KEYS = new Set([
   "petEnabled",
   "petActiveSlug",
   "petPosition",
+  "petPopoutPosition",
+  "petPoppedOut",
   "petScale",
+  "petOpacity",
+  "petMovement",
 ]);
 
 const SETTINGS_DEFAULTS = {
@@ -36,7 +40,11 @@ const SETTINGS_DEFAULTS = {
   petEnabled: false,
   petActiveSlug: null,
   petPosition: null,
-  petScale: 0.55,
+  petPopoutPosition: null,
+  petPoppedOut: false,
+  petScale: 0.33,
+  petOpacity: 1.0,
+  petMovement: "fijo",
 };
 
 let cachedHwEncoder = null;

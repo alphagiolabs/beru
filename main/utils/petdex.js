@@ -1,6 +1,6 @@
 import { app } from "electron";
 import fs from "fs";
-import os from "os";
+import { homedir } from "node:os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { request as httpsRequest } from "https";
@@ -16,7 +16,34 @@ export function getPetsRoot() {
 }
 
 export function getCodexPetsRoot() {
-  return path.join(os.homedir(), ".codex", "pets");
+  if (process.env.BERU_CODEX_PETS_ROOT) {
+    return process.env.BERU_CODEX_PETS_ROOT;
+  }
+  return path.join(homedir(), ".codex", "pets");
+}
+
+export function normalizeManifest(manifest) {
+  if (!manifest || !Array.isArray(manifest.pets)) {
+    return { total: 0, pets: [] };
+  }
+
+  const pets = manifest.pets
+    .map((entry) => ({
+      slug: String(entry?.slug || "").trim(),
+      displayName: String(entry?.displayName || entry?.slug || "").trim(),
+      kind: String(entry?.kind || "creature").trim() || "creature",
+      submittedBy: String(entry?.submittedBy || "").trim(),
+      spritesheetUrl: String(entry?.spritesheetUrl || "").trim(),
+      petJsonUrl: String(entry?.petJsonUrl || "").trim(),
+      zipUrl: String(entry?.zipUrl || "").trim(),
+    }))
+    .filter((entry) => entry.slug && entry.spritesheetUrl && entry.petJsonUrl);
+
+  return {
+    generatedAt: manifest.generatedAt || null,
+    total: pets.length,
+    pets,
+  };
 }
 
 export function getManifestCachePath() {
@@ -88,6 +115,7 @@ function fetchBuffer(url, redirects = 0) {
       },
     );
     req.on("error", reject);
+    req.end();
   });
 }
 
@@ -103,6 +131,10 @@ function readCachedManifest() {
   }
 }
 
+function writeManifestCache(manifest) {
+  fs.writeFileSync(getManifestCachePath(), JSON.stringify(manifest));
+}
+
 export async function fetchPetManifest() {
   try {
     const raw = await fetchBuffer(PETDEX_MANIFEST_URL);
@@ -110,13 +142,17 @@ export async function fetchPetManifest() {
     if (!parsed || !Array.isArray(parsed.pets)) {
       throw new Error("Manifiesto de mascotas inválido");
     }
-    fs.writeFileSync(getManifestCachePath(), raw);
-    return { manifest: parsed, source: "remote" };
+    const manifest = normalizeManifest(parsed);
+    if (!manifest.pets.length) {
+      throw new Error("Manifiesto de mascotas vacío");
+    }
+    writeManifestCache(manifest);
+    return { manifest, source: "remote" };
   } catch (error) {
     const cached = readCachedManifest();
-    if (cached) return { manifest: cached, source: "cache" };
+    if (cached) return { manifest: normalizeManifest(cached), source: "cache" };
     const bundled = readBundledCatalog();
-    if (bundled) return { manifest: bundled, source: "bundled" };
+    if (bundled) return { manifest: normalizeManifest(bundled), source: "bundled" };
     throw error;
   }
 }
@@ -131,9 +167,17 @@ function resolveSpritesheetFile(petDir) {
   return files.length > 0 ? path.join(petDir, files[0]) : null;
 }
 
+function resolvePetJsonFile(petDir) {
+  for (const name of ["pet.json", "petjson.json"]) {
+    const candidate = path.join(petDir, name);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 function readPetFromDir(petDir, slug, source) {
-  const petJsonPath = path.join(petDir, "pet.json");
-  if (!fs.existsSync(petJsonPath)) return null;
+  const petJsonPath = resolvePetJsonFile(petDir);
+  if (!petJsonPath) return null;
 
   let meta = {};
   let installMeta = {};
@@ -161,6 +205,7 @@ function readPetFromDir(petDir, slug, source) {
     description: meta.description || "",
     spritesheetUrl: installMeta.spritesheetUrl || "",
     kind: installMeta.kind || "creature",
+    submittedBy: installMeta.submittedBy || meta.submittedBy || "",
     bundled: installMeta.bundled === true,
     source,
     spritesheetPath,
@@ -213,6 +258,9 @@ export async function installPet(entry) {
     throw new Error("Entrada de mascota inválida");
   }
 
+  const alreadyInstalled = listInstalledPets().find((pet) => pet.slug === entry.slug);
+  if (alreadyInstalled) return alreadyInstalled;
+
   if (copyBundledPet(entry.slug)) {
     const installed = listInstalledPets().find((pet) => pet.slug === entry.slug);
     if (installed) return installed;
@@ -238,6 +286,7 @@ export async function installPet(entry) {
       displayName: entry.displayName || entry.slug,
       spritesheetUrl: entry.spritesheetUrl,
       kind: entry.kind || "creature",
+      submittedBy: entry.submittedBy || "",
     }),
   );
 
@@ -247,6 +296,7 @@ export async function installPet(entry) {
     description: entry.description || "",
     spritesheetUrl: entry.spritesheetUrl,
     kind: entry.kind || "creature",
+    submittedBy: entry.submittedBy || "",
     source: "beru",
     spritesheetPath: path.join(petDir, `spritesheet${ext}`),
   };
