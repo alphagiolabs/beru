@@ -43,11 +43,6 @@ function classifyReleaseNoteLine(line, activeSection) {
   return { kind: "item", section: "whatsNew", text: line };
 }
 
-/** Strip HTML/markdown noise and return bullet-ready lines. */
-export function parseReleaseNotes(notes, maxItems = 6) {
-  return normalizeReleaseNoteLines(notes).slice(0, maxItems);
-}
-
 /** Group release notes into Hermes-style changelog sections. */
 export function parseReleaseNotesSections(notes, maxPerSection = 4) {
   const buckets = { whatsNew: [], fixed: [] };

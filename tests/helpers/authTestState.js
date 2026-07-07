@@ -25,17 +25,5 @@ export async function seedAuthenticatedAuth(overrides = {}) {
   return useEditorStore;
 }
 
-/** Sync variant when the store module is already loaded (no resetModules). */
-export function seedAuthenticatedAuthSync(overrides = {}) {
-  return import("../../src/stores/useEditorStore.js").then(({ default: useEditorStore }) => {
-    useEditorStore.setState({
-      authStatus: "authenticated",
-      user: TEST_USER,
-      profile: TEST_PROFILE,
-      authError: null,
-      initAuth: async () => ({ ok: true }),
-      ...overrides,
-    });
-    return useEditorStore;
-  });
-}
+/** @deprecated Use seedAuthenticatedAuth — kept for existing test imports. */
+export const seedAuthenticatedAuthSync = seedAuthenticatedAuth;

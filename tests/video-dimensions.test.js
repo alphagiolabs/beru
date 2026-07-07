@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  getLockedDimensions,
-  hasLockedDimensions,
-  mergeProbeIntoQueueItem,
-} from "../src/utils/video-dimensions.js";
+import { getLockedDimensions, mergeProbeIntoQueueItem } from "../src/utils/video-dimensions.js";
 
 describe("video-dimensions", () => {
   describe("mergeProbeIntoQueueItem", () => {
@@ -80,20 +76,11 @@ describe("video-dimensions", () => {
       expect(getLockedDimensions(null)).toEqual({ width: 0, height: 0 });
       expect(getLockedDimensions(undefined)).toEqual({ width: 0, height: 0 });
     });
-  });
 
-  describe("hasLockedDimensions", () => {
-    it("returns true when dimensions are positive", () => {
-      expect(hasLockedDimensions({ sourceWidth: 1920, sourceHeight: 1080 })).toBe(true);
-    });
-
-    it("returns false when dimensions are zero", () => {
-      expect(hasLockedDimensions({ sourceWidth: 0, sourceHeight: 0 })).toBe(false);
-      expect(hasLockedDimensions({ width: 0, height: 0 })).toBe(false);
-    });
-
-    it("returns false for null item", () => {
-      expect(hasLockedDimensions(null)).toBe(false);
+    it("returns positive dimensions when source is locked", () => {
+      const { width, height } = getLockedDimensions({ sourceWidth: 1920, sourceHeight: 1080 });
+      expect(width).toBeGreaterThan(0);
+      expect(height).toBeGreaterThan(0);
     });
   });
 });

@@ -6,11 +6,6 @@ export function getLockedDimensions(item) {
   return { width, height };
 }
 
-export function hasLockedDimensions(item) {
-  const { width, height } = getLockedDimensions(item);
-  return width > 0 && height > 0;
-}
-
 /** Apply probe result; source* is set once and never overwritten. */
 export function mergeProbeIntoQueueItem(item, info = {}) {
   const w = Number(info.width || 0);
