@@ -83,17 +83,27 @@ function ThemeColorThumb({ tokens, compact = false }) {
   );
 }
 
-function ThemeListHeader({ t }) {
+function ThemeListHeader({ t, withActions = false }) {
   return (
-    <div className="settings-theme-table-head" aria-hidden="true">
+    <div
+      className={`settings-theme-table-head${withActions ? " settings-theme-table-head--actions" : ""}`}
+      aria-hidden="true"
+    >
       <span />
       <span>{t("settings.appearance.themeColumn")}</span>
-      <span className="settings-theme-table-slot-label" title={t("settings.appearance.useAsTheme1")}>
+      <span
+        className="settings-theme-table-slot-label"
+        title={t("settings.appearance.useAsTheme1")}
+      >
         <Sun size={10} strokeWidth={2.25} />
       </span>
-      <span className="settings-theme-table-slot-label" title={t("settings.appearance.useAsTheme2")}>
+      <span
+        className="settings-theme-table-slot-label"
+        title={t("settings.appearance.useAsTheme2")}
+      >
         <Moon size={10} strokeWidth={2.25} />
       </span>
+      {withActions ? <span /> : null}
     </div>
   );
 }
@@ -635,7 +645,7 @@ export default function AppearancePanel() {
               </button>
               {customThemesExpanded && (
                 <div id="settings-custom-themes-panel" className="settings-theme-table">
-                  <ThemeListHeader t={t} />
+                  <ThemeListHeader t={t} withActions />
                   <div className="settings-theme-section-rows">
                     {customThemes.map((custom) => {
                       const ref = toCustomThemeRef(custom.id);

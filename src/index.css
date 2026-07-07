@@ -1544,15 +1544,29 @@ label {
 }
 
 .settings-appearance-library-head {
-  @apply gap-2;
+  @apply gap-3;
+}
+
+.settings-appearance-library-title {
+  @apply flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wider;
+  color: var(--text-secondary);
+}
+
+.settings-appearance-library-toolbar {
+  @apply flex-shrink-0 px-3 py-2 border-b;
+  border-color: color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 30%, transparent);
 }
 
 .settings-appearance-search {
-  @apply flex items-center gap-1.5 min-w-0;
+  @apply flex items-center gap-2 w-full rounded-lg px-2.5 py-1.5;
+  background: var(--bg-app);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
 }
 
-.settings-appearance-search--inline {
-  @apply flex-1;
+.settings-appearance-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent-brand) 35%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 12%, transparent);
 }
 
 .settings-appearance-search svg {
@@ -1561,37 +1575,72 @@ label {
 }
 
 .settings-appearance-search input {
-  @apply flex-1 min-w-0 text-[10px] py-1;
+  @apply flex-1 min-w-0 text-[11px] py-0 bg-transparent border-0 shadow-none;
 }
 
-.settings-appearance-icon-btn {
-  @apply inline-flex items-center justify-center rounded-md transition-colors flex-shrink-0;
-  width: 24px;
-  height: 24px;
+.settings-appearance-tool-btn {
+  @apply inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors flex-shrink-0;
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--bg-app) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
 }
 
-.settings-appearance-icon-btn:hover {
+.settings-appearance-tool-btn:hover {
   color: var(--text-primary);
   border-color: color-mix(in srgb, var(--accent-brand) 28%, var(--border));
-  background: color-mix(in srgb, var(--accent-brand) 6%, var(--bg-app));
 }
 
-.settings-appearance-icon-btn--primary {
+.settings-appearance-tool-btn--primary {
   color: var(--accent-brand);
-  border-color: color-mix(in srgb, var(--accent-brand) 30%, transparent);
+  border-color: color-mix(in srgb, var(--accent-brand) 32%, transparent);
   background: color-mix(in srgb, var(--accent-brand) 10%, transparent);
 }
 
-.settings-appearance-icon-btn--primary:hover {
+.settings-appearance-tool-btn--primary:hover {
   background: color-mix(in srgb, var(--accent-brand) 16%, transparent);
 }
 
 .settings-appearance-library-scroll {
-  @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-2.5 py-2;
+  @apply flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3;
   scrollbar-gutter: stable;
+}
+
+.settings-library-columns {
+  @apply grid gap-3;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-library-columns--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 820px) {
+  .settings-library-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.settings-library-column {
+  @apply flex flex-col gap-2 min-w-0;
+}
+
+.settings-library-column-head {
+  @apply flex items-center gap-1.5 px-0.5 text-[10px] font-semibold;
+  color: var(--text-secondary);
+}
+
+.settings-library-column-head svg {
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.settings-library-column-count {
+  @apply ml-auto inline-flex items-center justify-center rounded-full text-[9px] font-semibold tabular-nums;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: color-mix(in srgb, var(--border) 35%, transparent);
+  color: var(--text-dim);
 }
 
 .settings-appearance-slots {
@@ -1689,37 +1738,41 @@ label {
 }
 
 .settings-theme-table {
-  --theme-col-thumb: 22px;
-  --theme-col-slot: 22px;
-  --theme-col-actions: 24px;
-  @apply rounded-md overflow-hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
-  background: color-mix(in srgb, var(--bg-app) 70%, var(--bg-surface));
+  --theme-col-preview: 52px;
+  --theme-col-slot: 30px;
+  --theme-col-actions: 28px;
+  @apply rounded-xl overflow-hidden flex flex-col;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-app) 55%, var(--bg-surface));
 }
 
+.settings-theme-table-head,
 .settings-theme-row {
   display: grid;
-  grid-template-columns: var(--theme-col-thumb) minmax(0, 1fr) var(--theme-col-slot) var(
+  grid-template-columns: var(--theme-col-preview) minmax(0, 1fr) var(--theme-col-slot) var(
       --theme-col-slot
     );
   align-items: center;
-  column-gap: 6px;
+  column-gap: 10px;
 }
 
+.settings-theme-table-head--actions,
 .settings-theme-row--actions {
   grid-template-columns:
-    var(--theme-col-thumb) minmax(0, 1fr) var(--theme-col-slot) var(--theme-col-slot)
+    var(--theme-col-preview) minmax(0, 1fr) var(--theme-col-slot) var(--theme-col-slot)
     var(--theme-col-actions);
 }
 
-.settings-theme-section + .settings-theme-section {
-  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+.settings-theme-table-head {
+  @apply px-2.5 py-2 text-[9px] font-semibold uppercase tracking-wider flex-shrink-0;
+  color: var(--text-dim);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 40%, var(--bg-elevated));
 }
 
-.settings-theme-section-title {
-  @apply m-0 px-2 py-1 text-[8px] font-semibold uppercase tracking-wider;
+.settings-theme-table-slot-label {
+  @apply inline-flex items-center justify-center justify-self-center;
   color: var(--text-dim);
-  background: color-mix(in srgb, var(--border) 10%, transparent);
 }
 
 .settings-theme-section-rows {
@@ -1727,15 +1780,61 @@ label {
 }
 
 .settings-theme-empty {
-  @apply m-0 px-2 py-4 text-center text-[10px];
+  @apply m-0 px-3 py-10 text-center text-[11px] rounded-xl;
   color: var(--text-dim);
+  border: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 25%, transparent);
+}
+
+.settings-theme-preview {
+  @apply flex flex-col gap-1 flex-shrink-0;
+  width: var(--theme-col-preview);
+}
+
+.settings-theme-preview-card {
+  @apply relative rounded-md overflow-hidden;
+  height: 28px;
+  border: 1px solid;
+}
+
+.settings-theme-preview-bar {
+  @apply absolute rounded-sm;
+  left: 4px;
+  right: 4px;
+  top: 4px;
+  height: 8px;
+  border: 1px solid;
+  border-color: color-mix(in srgb, currentColor 8%, transparent);
+}
+
+.settings-theme-preview-accent {
+  @apply absolute rounded-full;
+  right: 4px;
+  bottom: 4px;
+  width: 7px;
+  height: 7px;
+}
+
+.settings-theme-preview-swatches {
+  @apply flex gap-0.5;
+}
+
+.settings-theme-preview-swatches span {
+  @apply flex-1 rounded-full;
+  height: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .settings-theme-thumb {
-  @apply relative flex-shrink-0 rounded overflow-hidden;
-  width: 20px;
-  height: 20px;
+  @apply relative flex-shrink-0 rounded-md overflow-hidden;
+  width: 28px;
+  height: 28px;
   border: 1px solid;
+}
+
+.settings-theme-thumb--compact {
+  width: 24px;
+  height: 24px;
 }
 
 .settings-theme-thumb--empty {
@@ -1762,24 +1861,40 @@ label {
 }
 
 .settings-theme-row {
-  @apply px-1.5 py-0.5 transition-colors;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+  @apply px-2.5 py-2 transition-colors relative;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
 }
 
 .settings-theme-section-rows .settings-theme-row:last-child {
   border-bottom: none;
 }
 
+.settings-theme-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
 .settings-theme-row:hover {
-  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 50%, transparent);
 }
 
 .settings-theme-row--active {
-  background: color-mix(in srgb, var(--accent-brand) 7%, transparent);
+  background: color-mix(in srgb, var(--accent-brand) 6%, transparent);
+}
+
+.settings-theme-row--active::before {
+  background: var(--accent-brand);
 }
 
 .settings-theme-row--active .settings-theme-row-name {
-  color: var(--accent-brand);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .settings-theme-row-info {
@@ -1787,34 +1902,35 @@ label {
 }
 
 .settings-theme-row-name {
-  @apply text-[10px] font-medium truncate;
+  @apply text-[11px] font-medium truncate;
   color: var(--text-primary);
 }
 
 .settings-theme-row-badge {
-  @apply rounded px-1 py-px text-[7px] font-semibold flex-shrink-0 uppercase tracking-wide;
+  @apply rounded-full px-1.5 py-px text-[8px] font-semibold flex-shrink-0 uppercase tracking-wide;
   background: color-mix(in srgb, var(--accent-brand) 12%, transparent);
   color: var(--accent-brand);
 }
 
-.settings-theme-slot-chip {
-  @apply inline-flex items-center justify-center rounded text-[8px] font-bold transition-colors justify-self-center;
-  width: 20px;
-  height: 18px;
-  background: color-mix(in srgb, var(--bg-app) 80%, transparent);
+.settings-theme-slot-btn {
+  @apply inline-flex items-center justify-center rounded-lg transition-colors justify-self-center;
+  width: 28px;
+  height: 26px;
   color: var(--text-dim);
+  background: color-mix(in srgb, var(--bg-app) 75%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
 }
 
-.settings-theme-slot-chip:hover {
+.settings-theme-slot-btn:hover {
   color: var(--text-primary);
   border-color: color-mix(in srgb, var(--accent-brand) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent-brand) 6%, var(--bg-app));
 }
 
-.settings-theme-slot-chip--active {
-  background: color-mix(in srgb, var(--accent-brand) 16%, transparent);
+.settings-theme-slot-btn--active {
   color: var(--accent-brand);
-  border-color: color-mix(in srgb, var(--accent-brand) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent-brand) 38%, transparent);
 }
 
 .settings-theme-row-actions {
@@ -1822,9 +1938,9 @@ label {
 }
 
 .settings-theme-action-btn {
-  @apply inline-flex items-center justify-center rounded transition-colors;
-  width: 18px;
-  height: 18px;
+  @apply inline-flex items-center justify-center rounded-md transition-colors;
+  width: 24px;
+  height: 24px;
   color: var(--text-dim);
   background: transparent;
   border: none;
@@ -1841,11 +1957,21 @@ label {
   background: color-mix(in srgb, var(--rose) 10%, transparent);
 }
 
+.settings-theme-custom-block {
+  @apply mt-3 flex flex-col gap-2;
+}
+
 .settings-theme-fold {
-  @apply flex items-center justify-between gap-2 w-full px-2 py-1 bg-transparent border-0 cursor-pointer;
-  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  @apply flex items-center justify-between gap-2 w-full px-3 py-2 rounded-xl bg-transparent cursor-pointer;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-surface) 35%, transparent);
   color: inherit;
   font: inherit;
+}
+
+.settings-theme-fold:hover {
+  border-color: color-mix(in srgb, var(--accent-brand) 25%, var(--border));
+  background: color-mix(in srgb, var(--bg-surface) 55%, transparent);
 }
 
 .settings-theme-fold:hover .settings-theme-fold-label {
@@ -1853,16 +1979,16 @@ label {
 }
 
 .settings-theme-fold-label {
-  @apply inline-flex items-center gap-1 text-[9px] font-semibold transition-colors;
+  @apply inline-flex items-center gap-1.5 text-[10px] font-semibold transition-colors;
   color: var(--text-secondary);
 }
 
 .settings-theme-fold-count {
-  @apply inline-flex items-center justify-center rounded text-[8px] font-semibold tabular-nums;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  background: color-mix(in srgb, var(--border) 30%, transparent);
+  @apply inline-flex items-center justify-center rounded-full text-[9px] font-semibold tabular-nums;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: color-mix(in srgb, var(--border) 35%, transparent);
   color: var(--text-dim);
 }
 
