@@ -1,7 +1,8 @@
 import path from "path";
 import fs from "fs";
+import { VIDEO_EXT } from "../../shared/video-extensions.js";
 
-export const VIDEO_EXT = /\.(mp4|mov|avi|mkv|webm|flv|wmv|m4v|mpg|mpeg)$/i;
+export { VIDEO_EXT };
 const MAX_FOLDER_DEPTH = 8;
 const MAX_FILES_PER_DROP = 500;
 

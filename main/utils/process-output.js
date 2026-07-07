@@ -1,6 +1,5 @@
 import path from "path";
-
-const OUTPUT_EXTENSIONS = new Set([".mp4", ".mov", ".mkv", ".avi", ".webm"]);
+import { OUTPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
 const CONTROL_CHARACTERS = /[\x00-\x1f\x7f]/;
 
 export function deriveOutputPath(selectedDirectory, rendererOutputPath) {
@@ -21,7 +20,7 @@ export function deriveOutputPath(selectedDirectory, rendererOutputPath) {
 
   const filename = pathSegments.at(-1);
   const extension = path.extname(filename).toLowerCase();
-  if (!filename || filename === "." || !OUTPUT_EXTENSIONS.has(extension)) {
+  if (!filename || filename === "." || !OUTPUT_VIDEO_EXTENSIONS.has(extension)) {
     throw new Error(`Extensión de salida no permitida: ${extension || "(sin extensión)"}`);
   }
 
