@@ -3,7 +3,7 @@ import fs from "fs";
 
 const DEFAULT_PIX_FMT = "yuv420p";
 
-export function emptyVideoInfo(overrides = {}) {
+function emptyVideoInfo(overrides = {}) {
   return {
     exists: true,
     width: 0,
@@ -22,7 +22,7 @@ export function hasVideoDimensions(info) {
   return Number(info?.width || 0) > 0 && Number(info?.height || 0) > 0;
 }
 
-export function parseFrameRate(rateStr) {
+function parseFrameRate(rateStr) {
   if (!rateStr) return 0;
   try {
     if (rateStr.includes("/")) {

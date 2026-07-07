@@ -1,9 +1,9 @@
-export const TEST_USER = {
+const TEST_USER = {
   id: "00000000-0000-0000-0000-000000000001",
   email: "test@beru.app",
 };
 
-export const TEST_PROFILE = {
+const TEST_PROFILE = {
   id: TEST_USER.id,
   email: TEST_USER.email,
   full_name: "Test User",

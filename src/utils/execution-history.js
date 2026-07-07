@@ -1,5 +1,5 @@
-export const MAX_EXECUTION_RUNS = 40;
-export const MAX_LINES_PER_RUN = 200;
+const MAX_EXECUTION_RUNS = 40;
+const MAX_LINES_PER_RUN = 200;
 
 export function createExecutionRun({ kind = "batch", jobCount = 0, startedAt = new Date() } = {}) {
   const ts = startedAt instanceof Date ? startedAt : new Date(startedAt);
@@ -93,7 +93,7 @@ export function flattenExecutionHistory(history) {
   return lines.filter((line, idx, arr) => line !== "" || arr[idx - 1] !== "");
 }
 
-export function formatRunHeader(run) {
+function formatRunHeader(run) {
   const started = formatHistoryTimestamp(run.startedAt);
   const kindLabel = run.kind === "single" ? "Prueba" : "Lote";
   const jobs = run.jobCount > 0 ? `${run.jobCount} job${run.jobCount === 1 ? "" : "s"}` : kindLabel;

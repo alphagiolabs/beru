@@ -12,7 +12,7 @@ export const VALID_DELOGO_METHODS = new Set([
   "cover",
 ]);
 
-export const MIRROR_SIDES = ["left", "right", "top", "bottom"];
+const MIRROR_SIDES = ["left", "right", "top", "bottom"];
 
 /**
  * Single source of truth for delogo field bounds and defaults.
@@ -26,7 +26,7 @@ export const DELOGO_FIELD_BOUNDS = {
   blurStrength: { min: 1, max: 100, default: 20 },
 };
 
-export function sanitizeDelogoMethod(method) {
+function sanitizeDelogoMethod(method) {
   const m = String(method || "temporal").toLowerCase();
   return VALID_DELOGO_METHODS.has(m) ? m : "temporal";
 }

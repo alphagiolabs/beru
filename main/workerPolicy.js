@@ -5,7 +5,7 @@ import {
   getEffectiveHwEncoder,
 } from "./encodeProfiles.js";
 
-export const MAX_BATCH_WORKERS = 16;
+const MAX_BATCH_WORKERS = 16;
 export const AUTO_TARGET_WORKERS = 5;
 
 const ENCODER_CAPS = {

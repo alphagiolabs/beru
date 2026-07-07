@@ -3,7 +3,7 @@
 /* Regions are stored NORMALIZED (0..1) where 1.0 = full video dimension.
  * This lets a single region be reused across videos of any resolution. */
 
-export const MIN_REGION_SIZE = 0.01;
+const MIN_REGION_SIZE = 0.01;
 
 export function isRegionUsable(region, minSize = MIN_REGION_SIZE) {
   return (
@@ -62,21 +62,6 @@ export function contentRect(videoEl) {
     oy = 0;
   }
   return { dw, dh, ox, oy, br };
-}
-
-export function toVideoCoords(videoEl, cx, cy) {
-  const c = contentRect(videoEl);
-  if (!c || !videoEl) return null;
-  return {
-    x: Math.max(
-      0,
-      Math.min((cx - c.br.left - c.ox) * (videoEl.videoWidth / c.dw), videoEl.videoWidth),
-    ),
-    y: Math.max(
-      0,
-      Math.min((cy - c.br.top - c.oy) * (videoEl.videoHeight / c.dh), videoEl.videoHeight),
-    ),
-  };
 }
 
 export function toVideoCoordsNormalized(videoEl, cx, cy) {

@@ -729,7 +729,7 @@ export const THEME_PRESETS = [
 ];
 
 /** @type {Map<string, ThemePreset>} */
-export const PRESET_BY_ID = new Map(THEME_PRESETS.map((p) => [p.id, p]));
+const PRESET_BY_ID = new Map(THEME_PRESETS.map((p) => [p.id, p]));
 
 export function getPresetById(id) {
   return PRESET_BY_ID.get(id) ?? null;

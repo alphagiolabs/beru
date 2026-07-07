@@ -12,7 +12,7 @@ export function presetMatches(preset, currentStyle) {
   return Object.entries(style).every(([key, value]) => samePresetValue(currentStyle[key], value));
 }
 
-export function presetTextShadow(preset) {
+function presetTextShadow(preset) {
   if (!preset.textShadowEnabled) return "none";
   const x = Math.max(-4, Math.min(4, Number(preset.textShadowOffsetX ?? 2)));
   const y = Math.max(-4, Math.min(4, Number(preset.textShadowOffsetY ?? 2)));

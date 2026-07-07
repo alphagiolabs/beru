@@ -23,7 +23,7 @@ export function toCustomThemeRef(id) {
   return `${CUSTOM_THEME_PREFIX}${id}`;
 }
 
-export function generateThemeId() {
+function generateThemeId() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
   }
@@ -123,7 +123,7 @@ export function slotToLegacyTheme(slot) {
   return slot === 1 ? "light" : "dark";
 }
 
-export function legacyThemeToSlot(theme) {
+function legacyThemeToSlot(theme) {
   return theme === "light" ? 1 : 2;
 }
 

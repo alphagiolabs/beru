@@ -18,7 +18,7 @@ export const ALLOWED_SETTINGS_KEYS = new Set([
   "batchRetryFailed",
 ]);
 
-export const SETTINGS_DEFAULTS = {
+const SETTINGS_DEFAULTS = {
   theme: "dark",
   themeActiveSlot: 2,
   themeSlot1: "beru-light",
@@ -42,10 +42,6 @@ let settingsCache = null;
 
 function settingsCacheEnabled() {
   return process.env.BERU_SETTINGS_CACHE === "1";
-}
-
-export function invalidateSettingsCache() {
-  settingsCache = null;
 }
 
 export function readSettings() {

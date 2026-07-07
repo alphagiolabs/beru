@@ -7,7 +7,7 @@ import {
   validatePythonAvailable,
   resolvePythonSpawn,
   getBundledProcessorPath,
-} from "../main/utils/python-spawn.js";
+} from "../main/utils/processor-spawn.js";
 import { getFfmpegPath, getFfprobePath, validateMediaBinaries } from "../main/utils/paths.js";
 import { translateProcessorErrorMessage } from "../main/utils/process-input-validation.js";
 
