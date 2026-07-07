@@ -8,9 +8,7 @@
 
 import { app } from "electron";
 import { createRequire } from "module";
-import { getMainWindow } from "./shared-state.js";
-
-const isDev = !app.isPackaged;
+import { getMainWindow, isDev } from "./shared-state.js";
 const requireCJS = createRequire(import.meta.url);
 
 let autoUpdater = null;
@@ -183,13 +181,7 @@ const init = (_win) => {
 const checkKillSwitch = async () => {
   if (isDev) return;
   try {
-    const currentVersion = app.getVersion();
-    // Future: fetch from https://beru.app/api/kill-switch.json
-    // const resp = await fetch("https://beru.app/api/kill-switch.json");
-    // const data = await resp.json();
-    // if (data.bad_versions?.includes(currentVersion)) {
-    //   send({ type: "error", message: `Version ${currentVersion} has been recalled. Please downgrade to ${data.force_downgrade || "a previous version"}.` });
-    // }
+    // Future: fetch https://beru.app/api/kill-switch.json when the endpoint is deployed.
   } catch {
     // Kill-switch check is best-effort — never block the app
   }

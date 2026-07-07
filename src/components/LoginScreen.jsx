@@ -1,16 +1,10 @@
 import { useState } from "react";
-import {
-  Eye,
-  EyeOff,
-  Loader2,
-  LogIn,
-} from "lucide-react";
+import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import { isSupabaseConfigured } from "../lib/supabaseClient";
 
-const VIDEO_URL =
-  "https://res.cloudinary.com/dzhp64paw/video/upload/v1782516787/login.mp4";
+const VIDEO_URL = "https://res.cloudinary.com/dzhp64paw/video/upload/v1782516787/login.mp4";
 
 function BeruLogo({ className = "h-8 md:h-10" }) {
   return (
@@ -111,10 +105,7 @@ export default function LoginScreen() {
             ) : (
               <form className="login-cinematic-form" onSubmit={handleSubmit} noValidate>
                 {displayError && (
-                  <div
-                    className="login-cinematic-alert login-cinematic-alert--error"
-                    role="alert"
-                  >
+                  <div className="login-cinematic-alert login-cinematic-alert--error" role="alert">
                     {displayError}
                   </div>
                 )}
@@ -149,20 +140,14 @@ export default function LoginScreen() {
                       className="login-cinematic-password-toggle"
                       onClick={() => setShowPassword((v) => !v)}
                       tabIndex={-1}
-                      aria-label={
-                        showPassword ? t("auth.hidePassword") : t("auth.showPassword")
-                      }
+                      aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
                 </label>
 
-                <button
-                  type="submit"
-                  className="login-cinematic-submit"
-                  disabled={submitting}
-                >
+                <button type="submit" className="login-cinematic-submit" disabled={submitting}>
                   {submitting ? (
                     <>
                       <Loader2 size={16} className="login-cinematic-spin" />
