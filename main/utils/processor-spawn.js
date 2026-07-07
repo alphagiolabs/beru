@@ -138,22 +138,6 @@ export function validateProcessorAvailable() {
   return { ok: true, ...resolved };
 }
 
-/** @deprecated Use validateProcessorAvailable — kept for existing tests. */
-export function resolvePythonSpawn() {
-  return resolveSystemPythonSpawn();
-}
-
-/** @deprecated Use validateProcessorAvailable — kept for existing tests. */
-export function validatePythonAvailable() {
-  const check = validateProcessorAvailable();
-  if (!check.ok) return check;
-  if (check.mode === "bundled") {
-    return { ok: true, command: check.command, args: [] };
-  }
-  const py = resolveSystemPythonSpawn();
-  return py ? { ok: true, ...py } : { ok: false, error: check.error || "Python no disponible" };
-}
-
 function getEncodeProfilesPath() {
   if (!isDev && process.resourcesPath) {
     const packaged = path.join(process.resourcesPath, "encode-profiles.json");

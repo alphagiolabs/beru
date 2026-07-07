@@ -4,8 +4,8 @@ import fs from "fs";
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
 
 import {
-  validatePythonAvailable,
-  resolvePythonSpawn,
+  validateProcessorAvailable,
+  resolveProcessorSpawn,
   getBundledProcessorPath,
 } from "../main/utils/processor-spawn.js";
 import { getFfmpegPath, getFfprobePath, validateMediaBinaries } from "../main/utils/paths.js";
@@ -21,19 +21,20 @@ import { translateProcessorErrorMessage } from "../main/utils/process-input-vali
  * path: if the dependency is missing, we assert the helper reports a
  * helpful `ok: false` instead of throwing or returning undefined.
  */
-describe("python-spawn", () => {
-  it("resolvePythonSpawn returns a command or null (never throws)", () => {
-    const resolved = resolvePythonSpawn();
+describe("processor-spawn", () => {
+  it("resolveProcessorSpawn returns a spawn spec or null (never throws)", () => {
+    const resolved = resolveProcessorSpawn([]);
     if (resolved === null) {
       // Valid on machines without Python — the app surfaces a clear error.
       return;
     }
     expect(resolved.command).toBeTruthy();
     expect(Array.isArray(resolved.args)).toBe(true);
+    expect(["bundled", "script"]).toContain(resolved.mode);
   });
 
-  it("validatePythonAvailable reports ok:true or a helpful error", () => {
-    const check = validatePythonAvailable();
+  it("validateProcessorAvailable reports ok:true or a helpful error", () => {
+    const check = validateProcessorAvailable();
     if (check.ok) {
       expect(check.command).toBeTruthy();
       return;
