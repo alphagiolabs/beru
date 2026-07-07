@@ -220,8 +220,6 @@ export default function Header() {
       const dir = await api.selectOutputDir();
       if (dir) {
         get().setOutputDir(dir);
-      } else {
-        console.log("[beru] Output directory selection canceled or returned null");
       }
     } catch (err) {
       console.error("[beru] Error selecting output directory:", err);
@@ -317,7 +315,7 @@ export default function Header() {
     });
 
     api
-      .startProcessing(createJobManifest(jobs, { profile: get().encodeProfile }))
+      .startProcessing(createJobManifest(jobs))
       .then((result) => {
         if (!result.success) {
           // Runtime failures are toasted via useProcessing → onError; only pre-spawn errors here.
