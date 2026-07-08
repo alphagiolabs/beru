@@ -952,9 +952,13 @@ export default function VideoPreview() {
               if (!video) return null;
               const vw = video.videoWidth || 1;
               const vh = video.videoHeight || 1;
-              const rect = video.getBoundingClientRect();
-              const sx = rect.width / vw;
-              const sy = rect.height / vh;
+              // Use layout size (pre-zoom), same basis as regionToScreen /
+              // contentRectLayout — getBoundingClientRect grows with CSS zoom
+              // and would double-scale the watermark inside the zoom layer.
+              const layoutW = video.offsetWidth || 1;
+              const layoutH = video.offsetHeight || 1;
+              const sx = layoutW / vw;
+              const sy = layoutH / vh;
               const margin = 10;
               const pos = watermark.position || "bottom-right";
               const posMap = {
@@ -980,15 +984,12 @@ export default function VideoPreview() {
               // alternative (removing +60) hides the watermark behind controls
               // in preview, which is worse UX. Left as-is to preserve UI.
               const posStyle = posMap[pos] || posMap["bottom-right"];
-              /* Wrapper sized to the video's rendered (post-zoom) box so that
-               * right/bottom-anchored positions stay aligned with the visible
-               * video area at any zoom level. */
               const boxStyle = {
                 position: "absolute",
                 left: 0,
                 top: 0,
-                width: rect.width,
-                height: rect.height,
+                width: layoutW,
+                height: layoutH,
                 pointerEvents: "none",
                 zIndex: 20,
               };

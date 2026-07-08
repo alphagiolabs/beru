@@ -40,6 +40,21 @@ def test_error_word_takes_precedence():
     assert "Error: bad codec" == result
 
 
+def test_prefer_invalid_over_generic_error_while():
+    stderr = (
+        "Error while filtering: Invalid argument\n"
+        "[Parsed_crop_0 @ 0x1] Invalid too big or non positive size for width '200' or height '100'\n"
+    )
+    result = _extract_error_line(stderr)
+    assert "Invalid too big" in result
+
+
+def test_prefer_no_such_file():
+    stderr = "Error while opening encoder\nNo such file or directory\n"
+    result = _extract_error_line(stderr)
+    assert "No such file" in result
+
+
 def test_empty_stderr():
     assert _extract_error_line("") == ""
 
@@ -53,6 +68,8 @@ if __name__ == "__main__":
     test_no_error_word_without_trailing_newline()
     test_no_error_word_single_line_no_newline()
     test_error_word_takes_precedence()
+    test_prefer_invalid_over_generic_error_while()
+    test_prefer_no_such_file()
     test_empty_stderr()
     test_only_whitespace()
     print("OK: _extract_error_line returns last non-empty line")

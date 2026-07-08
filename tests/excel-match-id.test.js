@@ -12,6 +12,11 @@ describe("normalizeMatchId", () => {
     expect(normalizeMatchId("clip.mp4")).toBe("clip");
     expect(normalizeMatchId("  Intro_001  ")).toBe("intro_001");
   });
+
+  it("formats large numeric Excel IDs without scientific notation", () => {
+    expect(normalizeMatchId(123456789012345)).toBe("123456789012345");
+    expect(normalizeMatchId("1.23456789012345e+14")).toBe("123456789012345");
+  });
 });
 
 describe("rowGet", () => {

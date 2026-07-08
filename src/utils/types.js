@@ -25,9 +25,46 @@ export function denormalizeRegion(region, videoWidth, videoHeight) {
   };
 }
 
+const NORM_EPS = 1e-6;
+
 export function isNormalizedRegion(region) {
   if (!region) return false;
+  // Epsilon on edge sums so float noise near the frame border (e.g. 0.81+0.2)
+  // is still treated as normalized 0..1 coords, not mis-detected as pixels.
   return (
+    region.x >= -NORM_EPS &&
+    region.y >= -NORM_EPS &&
+    region.w >= 0 &&
+    region.h >= 0 &&
+    region.x <= 1 + NORM_EPS &&
+    region.y <= 1 + NORM_EPS &&
+    region.w <= 1 + NORM_EPS &&
+    region.h <= 1 + NORM_EPS &&
+    region.x + region.w <= 1 + NORM_EPS &&
+    region.y + region.h <= 1 + NORM_EPS
+  );
+}
+
+function clampUnitRegion(region) {
+  return {
+    x: Math.min(1, Math.max(0, region.x)),
+    y: Math.min(1, Math.max(0, region.y)),
+    w: Math.min(1, Math.max(0, region.w)),
+    h: Math.min(1, Math.max(0, region.h)),
+  };
+}
+
+export function ensureNormalized(region, videoWidth, videoHeight) {
+  if (!region) return null;
+  if (isNormalizedRegion(region)) {
+    // Preserve identity when already a clean unit square; clamp float edge noise.
+    const clean =
+      region.x >= 0 && region.y >= 0 && region.x + region.w <= 1 && region.y + region.h <= 1;
+    return clean ? region : clampUnitRegion(region);
+  }
+  // Ambiguous 0..1-looking coords that failed the sum check: clamp as
+  // normalized instead of dividing by video size (which collapses the box).
+  const maybeNorm =
     region.x >= 0 &&
     region.y >= 0 &&
     region.w >= 0 &&
@@ -35,15 +72,10 @@ export function isNormalizedRegion(region) {
     region.x <= 1 &&
     region.y <= 1 &&
     region.w <= 1 &&
-    region.h <= 1 &&
-    region.x + region.w <= 1 &&
-    region.y + region.h <= 1
-  );
-}
-
-export function ensureNormalized(region, videoWidth, videoHeight) {
-  if (!region) return null;
-  if (isNormalizedRegion(region)) return region;
+    region.h <= 1;
+  if (maybeNorm) {
+    return clampUnitRegion(region);
+  }
   return normalizeRegion(region, videoWidth, videoHeight);
 }
 

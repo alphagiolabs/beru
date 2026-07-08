@@ -75,19 +75,20 @@ describe("process:start input path validation (regression: ENOENT for cloud plac
     expect(issues[0].inputPath).toBe(bad);
   });
 
-  it("translates raw ENOENT into an actionable message", () => {
+  it("translates generic ENOENT into a missing-file message (not cloud)", () => {
     const msg = translateProcessorErrorMessage(
       "Process exited with code 1: ffmpeg error: ENOENT: no such file or directory",
     );
-    expect(msg).toMatch(/no está disponible localmente/);
-    expect(msg).toMatch(/OneDrive|Google Drive|Dropbox/);
+    expect(msg).toMatch(/No se encontró un archivo/i);
+    expect(msg).not.toMatch(/OneDrive|Google Drive|Dropbox/);
   });
 
-  it("translates 'No such file or directory' into an actionable message", () => {
+  it("translates cloud-path ENOENT into OneDrive guidance", () => {
     const msg = translateProcessorErrorMessage(
       "ffmpeg: error: No such file or directory: 'C:\\Users\\me\\OneDrive\\Videos\\video.mp4'",
     );
     expect(msg).toMatch(/no está disponible localmente/);
+    expect(msg).toMatch(/OneDrive|Google Drive|Dropbox/);
   });
 
   it("passes unrelated errors through unchanged", () => {

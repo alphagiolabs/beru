@@ -15,6 +15,11 @@ import { clampRegionToVideo, isRegionUsable } from "../../utils/video-utils";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { sanitizeOperation } from "../../utils/delogo-ops";
 import { buildIdTextOutputName } from "../../utils/batch-process";
+import {
+  getGlobalTextStyleFromState,
+  mergeTextStyles,
+  pickTextStyle,
+} from "../../utils/text-style";
 
 const MAX_UNDO_STACK = 50;
 const IMAGE_DATA_CACHE_MAX = 50;
@@ -60,10 +65,10 @@ export function createQueueSlice(set, get) {
       return getLockedDimensions(s);
     },
 
-    /* Compute the output file path for a queue item. */
-    outputPathFor: (item) => {
+    /* Desired basename for a queue item (before batch collision suffixes). */
+    _desiredOutputNameFor: (item) => {
       if (!item) return null;
-      const { outputDir, exportFormat, templateRegions } = get();
+      const { exportFormat, templateRegions } = get();
       const filename = item.path.split(/[\\/]/).pop();
       const stem = filename.replace(/\.[^.]+$/, "");
       let outputName = item.customOutputName;
@@ -87,7 +92,26 @@ export function createQueueSlice(set, get) {
         const text = textFor(firstTextRegion);
         outputName = buildIdTextOutputName(id, text, exportFormat);
       }
-      outputName = outputName || `${stem}_beru.${exportFormat}`;
+      return outputName || `${stem}_beru.${exportFormat}`;
+    },
+
+    /* Compute the output file path for a queue item. */
+    outputPathFor: (item) => {
+      if (!item) return null;
+      const { outputDir, queue } = get();
+      let outputName = get()._desiredOutputNameFor(item);
+      // When several queue items share the same basename, keep the first and
+      // suffix later ones (__2, __3, ...) so batch export does not overwrite.
+      const sameName = queue.filter((q) => get()._desiredOutputNameFor(q) === outputName);
+      if (sameName.length > 1) {
+        const rank = sameName.findIndex((q) => q === item || q.path === item.path);
+        if (rank > 0) {
+          const dot = outputName.lastIndexOf(".");
+          const stem = dot > 0 ? outputName.slice(0, dot) : outputName;
+          const ext = dot > 0 ? outputName.slice(dot) : "";
+          outputName = `${stem}__${rank + 1}${ext}`;
+        }
+      }
       const outDir = outputDir || item.path.replace(/[\\/][^\\/]*$/, "");
       const base = outDir.replace(/[\\/]+$/, "");
       const sep = base.includes("\\") ? "\\" : "/";
@@ -575,56 +599,18 @@ export function createQueueSlice(set, get) {
     },
 
     createTextOpForRegion: (videoIdx, regionId) => {
-      const {
-        queue,
-        templateRegions,
-        textFontSize,
-        textFontColor,
-        fontFamily,
-        fontWeight,
-        letterSpacing,
-        textAlign,
-        textOpacity,
-        bold,
-        italic,
-        bgEnabled,
-        bgColor,
-        bgOpacity,
-        boxBorderWidth,
-        borderWidth,
-        borderColor,
-        textShadowEnabled,
-        textShadowColor,
-        textShadowOffsetX,
-        textShadowOffsetY,
-      } = get();
+      const { queue, templateRegions } = get();
       if (videoIdx < 0 || videoIdx >= queue.length) return -1;
       const tr = templateRegions.find((r) => r.id === regionId);
       if (!tr) return -1;
+      // Match materializeBatchTextOps / _reapplyExcel: global + template style.
+      const style = mergeTextStyles(getGlobalTextStyleFromState(get()), tr.style);
       const op = createOperation({
         mode: "text",
         batchRegionId: tr.id,
         region: { ...tr.region },
         text: "",
-        fontSize: textFontSize,
-        fontColor: textFontColor,
-        fontFamily,
-        fontWeight,
-        letterSpacing,
-        textAlign,
-        textOpacity,
-        bold,
-        italic,
-        bgEnabled,
-        bgColor,
-        bgOpacity,
-        boxBorderWidth,
-        borderWidth,
-        borderColor,
-        textShadowEnabled,
-        textShadowColor,
-        textShadowOffsetX,
-        textShadowOffsetY,
+        ...pickTextStyle(style),
       });
       if (videoIdx === get().selectedIdx) get()._saveUndo();
       const updated = [...queue];

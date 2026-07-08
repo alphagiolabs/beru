@@ -89,5 +89,15 @@ describe("region type helpers", () => {
     it("returns null for null input", () => {
       expect(ensureNormalized(null, 1920, 1080)).toBe(null);
     });
+
+    it("does not collapse near-edge normalized regions via pixel reinterpretation", () => {
+      // Float noise can make x+w slightly > 1; must stay near the original box.
+      const region = { x: 0.81, y: 0.81, w: 0.2, h: 0.2 };
+      const result = ensureNormalized(region, 1920, 1080);
+      expect(result.x).toBeCloseTo(0.81, 5);
+      expect(result.w).toBeCloseTo(0.2, 5);
+      // Must not become ~0.81/1920
+      expect(result.x).toBeGreaterThan(0.5);
+    });
   });
 });

@@ -1188,4 +1188,21 @@ describe("useEditorStore logic regressions", () => {
     expect(state.jobProgress[0]).toBe(100);
     expect(state.jobProgress[1]).toBe(30);
   });
+
+  it("outputPathFor suffixes colliding basenames in the same batch", () => {
+    useEditorStore.setState({
+      outputDir: "C:\\out",
+      exportFormat: "mp4",
+      templateRegions: [],
+      queue: [
+        queueItem({ path: "C:\\videos\\a\\clip.mp4", filename: "clip.mp4" }),
+        queueItem({ path: "C:\\videos\\b\\clip.mp4", filename: "clip.mp4" }),
+        queueItem({ path: "C:\\videos\\c\\other.mp4", filename: "other.mp4" }),
+      ],
+    });
+    const get = useEditorStore.getState();
+    expect(get.outputPathFor(get.queue[0])).toBe("C:\\out\\clip_beru.mp4");
+    expect(get.outputPathFor(get.queue[1])).toBe("C:\\out\\clip_beru__2.mp4");
+    expect(get.outputPathFor(get.queue[2])).toBe("C:\\out\\other_beru.mp4");
+  });
 });
