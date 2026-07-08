@@ -25,18 +25,34 @@ function defineBox(el, box) {
   });
 }
 
-function Harness({ panToolActive = false }) {
+function Harness({
+  panToolActive = false,
+  outerWidth = 500,
+  outerHeight = 360,
+  wrapperWidth = 600,
+  wrapperHeight = 360,
+  initialZoom = 2,
+}) {
   const videoRef = useRef(null);
   const { outerRef, wrapperRef, pan, setZoomBoth, onPanMouseDown } = useZoomPan(videoRef, false, {
     panToolActive,
   });
 
   useEffect(() => {
-    defineBox(outerRef.current, { width: 500, height: 360 });
-    defineBox(wrapperRef.current, { width: 600, height: 360 });
-    defineBox(videoRef.current, { width: 600, height: 360 });
-    setZoomBoth(2);
-  }, [outerRef, wrapperRef, setZoomBoth]);
+    defineBox(outerRef.current, { width: outerWidth, height: outerHeight });
+    defineBox(wrapperRef.current, { width: wrapperWidth, height: wrapperHeight });
+    defineBox(videoRef.current, { width: wrapperWidth, height: wrapperHeight });
+    setZoomBoth(initialZoom);
+  }, [
+    outerRef,
+    wrapperRef,
+    setZoomBoth,
+    outerWidth,
+    outerHeight,
+    wrapperWidth,
+    wrapperHeight,
+    initialZoom,
+  ]);
 
   return (
     <div ref={outerRef} data-testid="outer" onMouseDown={onPanMouseDown}>
@@ -50,11 +66,27 @@ function Harness({ panToolActive = false }) {
   );
 }
 
-async function renderHarness(panToolActive) {
+async function renderHarness(
+  panToolActive,
+  outerWidth,
+  outerHeight,
+  wrapperWidth,
+  wrapperHeight,
+  initialZoom,
+) {
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
   await act(async () => {
-    root.render(<Harness panToolActive={panToolActive} />);
+    root.render(
+      <Harness
+        panToolActive={panToolActive}
+        outerWidth={outerWidth}
+        outerHeight={outerHeight}
+        wrapperWidth={wrapperWidth}
+        wrapperHeight={wrapperHeight}
+        initialZoom={initialZoom}
+      />,
+    );
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
@@ -95,7 +127,7 @@ describe("useZoomPan", () => {
     await renderHarness(true);
     await dragLeft({ x: 100, y: 100 }, { x: 220, y: 140 });
 
-    expect(document.querySelector('[data-testid="pan"]').textContent).toBe("120,40");
+    expect(document.querySelector('[data-testid="pan"]').textContent).toBe("50,0");
   });
 
   it("does not pan with the primary button when the pan tool is inactive", async () => {
@@ -103,5 +135,12 @@ describe("useZoomPan", () => {
     await dragLeft({ x: 100, y: 100 }, { x: 220, y: 140 });
 
     expect(document.querySelector('[data-testid="pan"]').textContent).toBe("0,0");
+  });
+
+  it("keeps the video centered when zoom is low and video is narrower than outer", async () => {
+    await renderHarness(true, 800, 500, 600, 360, 1.1);
+    await dragLeft({ x: 100, y: 100 }, { x: 220, y: 140 });
+
+    expect(document.querySelector('[data-testid="pan"]').textContent).toBe("-30,-18");
   });
 });

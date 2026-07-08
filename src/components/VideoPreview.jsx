@@ -8,10 +8,13 @@ import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import useCanvas from "../hooks/useCanvas";
-import { regionToScreen, fmtTime } from "../utils/video-utils";
+import useRegionGesture from "../hooks/useRegionGesture";
+import { regionToScreen, fmtTime, isRegionUsable } from "../utils/video-utils";
+import { getContentPx } from "../utils/region-interaction";
 import DelogoLivePreview from "./DelogoLivePreview";
 import Landing from "./Landing";
 import TextOverlay from "./TextOverlay";
+import TextRegionFrame from "./TextRegionFrame";
 import { useT } from "../i18n/useT";
 import { findTextOpForRegion, getGlobalTextStyleFromState } from "../utils/text-style";
 import {
@@ -198,6 +201,41 @@ export default function VideoPreview() {
   const showFfmpegOverlay =
     showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "ffmpeg";
 
+  // DOM resize/move frame whenever there is a usable text region (batch draft,
+  // selected template, or logo text tool). Previously required selectedTemplateRegionId
+  // which left draft regions with canvas outline only and NO resize handles.
+  const textSelectionActive =
+    !!currentRegion &&
+    isRegionUsable(currentRegion) &&
+    !showFfmpegOverlay &&
+    activeTool !== "pan" &&
+    (sidebarMode === "batch" || activeTool === "text");
+
+  // Live drag: only touch currentRegion (cheap). Commit on pointerup fans out to
+  // template/ops once — updateTemplateRegion on every mousemove was freezing the UI.
+  const previewTextRegion = useCallback((region) => {
+    useEditorStore.setState({ currentRegion: region });
+  }, []);
+  const commitTextRegion = useCallback((region) => {
+    useEditorStore.getState().setCurrentRegion(region);
+  }, []);
+  const textRegionGesture = useRegionGesture({
+    videoEl: videoRef,
+    enabled: textSelectionActive,
+    onChange: previewTextRegion,
+    onCommit: commitTextRegion,
+  });
+  const textSelectionScreen = useMemo(() => {
+    if (!textSelectionActive) return null;
+    return regionToScreen(currentRegion, videoRef.current);
+    // layoutTick invalidates when the video element resizes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textSelectionActive, currentRegion, layoutTick]);
+  const textSelectionLabel =
+    sidebarMode === "batch" && selectedTemplateRegionId != null
+      ? templateRegions?.find((tr) => tr.id === selectedTemplateRegionId)?.label
+      : undefined;
+
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -288,31 +326,28 @@ export default function VideoPreview() {
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
-    const rect = video.getBoundingClientRect();
+    const content = getContentPx(video);
+    if (!content) return;
+    // One undo snapshot for the whole drag — not one per mousemove.
+    useEditorStore.getState()._saveUndo?.();
     setDraggingOp({ op, opIdx });
     setDragStart({
       mouseX: e.clientX,
       mouseY: e.clientY,
       regionX: op.region.x,
       regionY: op.region.y,
-      videoWidth: rect.width,
-      videoHeight: rect.height,
+      contentW: content.width,
+      contentH: content.height,
     });
   };
 
   const handleImageDragMove = useCallback(
     (e) => {
       if (!draggingOp || !dragStart) return;
-      const video = videoRef.current;
-      if (!video) return;
-
-      const deltaX = e.clientX - dragStart.mouseX;
-      const deltaY = e.clientY - dragStart.mouseY;
-
-      // Convert pixel delta to normalized coordinates
-      const rect = video.getBoundingClientRect();
-      const normalizedDeltaX = deltaX / rect.width;
-      const normalizedDeltaY = deltaY / rect.height;
+      const contentW = dragStart.contentW || 1;
+      const contentH = dragStart.contentH || 1;
+      const normalizedDeltaX = (e.clientX - dragStart.mouseX) / contentW;
+      const normalizedDeltaY = (e.clientY - dragStart.mouseY) / contentH;
 
       const newX = Math.max(
         0,
@@ -323,13 +358,15 @@ export default function VideoPreview() {
         Math.min(1 - draggingOp.op.region.h, dragStart.regionY + normalizedDeltaY),
       );
 
-      const updatedRegion = {
-        ...draggingOp.op.region,
-        x: newX,
-        y: newY,
-      };
-
-      updateOperationRegion(draggingOp.opIdx, updatedRegion);
+      updateOperationRegion(
+        draggingOp.opIdx,
+        {
+          ...draggingOp.op.region,
+          x: newX,
+          y: newY,
+        },
+        { recordHistory: false },
+      );
     },
     [draggingOp, dragStart, updateOperationRegion],
   );
@@ -364,32 +401,47 @@ export default function VideoPreview() {
     }
     if (!op?.region) return;
 
+    const content = getContentPx(video);
+    if (!content) return;
+
+    // One undo snapshot for the whole drag — not one per mousemove.
+    useEditorStore.getState()._saveUndo?.();
     setDraggingBatchText({ videoIdx, opIdx, regionId: tr.id });
     setBatchTextDragStart({
       mouseX: e.clientX,
       mouseY: e.clientY,
       region: { ...op.region },
+      contentW: content.width,
+      contentH: content.height,
     });
   };
 
   const handleBatchTextDragMove = useCallback(
     (e) => {
       if (!draggingBatchText || !batchTextDragStart) return;
-      const video = videoRef.current;
-      if (!video) return;
-      const rect = video.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
+      const contentW = batchTextDragStart.contentW || 1;
+      const contentH = batchTextDragStart.contentH || 1;
 
       const startRegion = batchTextDragStart.region;
-      const deltaX = (e.clientX - batchTextDragStart.mouseX) / rect.width;
-      const deltaY = (e.clientY - batchTextDragStart.mouseY) / rect.height;
+      const deltaX = (e.clientX - batchTextDragStart.mouseX) / contentW;
+      const deltaY = (e.clientY - batchTextDragStart.mouseY) / contentH;
       const nextRegion = {
         ...startRegion,
         x: Math.max(0, Math.min(1 - startRegion.w, startRegion.x + deltaX)),
         y: Math.max(0, Math.min(1 - startRegion.h, startRegion.y + deltaY)),
       };
 
-      useEditorStore.getState().setCurrentRegion(nextRegion);
+      useEditorStore
+        .getState()
+        .updateOperation(
+          draggingBatchText.videoIdx,
+          draggingBatchText.opIdx,
+          { region: nextRegion },
+          { recordHistory: false },
+        );
+      // Direct setState: avoid setCurrentRegion which would rewrite the template
+      // for all videos. Free drag is per-video only.
+      useEditorStore.setState({ currentRegion: nextRegion });
     },
     [draggingBatchText, batchTextDragStart],
   );
@@ -407,16 +459,13 @@ export default function VideoPreview() {
 
   useEffect(() => {
     const onMouseMove = (e) => {
-      const image = draggingRef.current.image;
-      const batch = draggingRef.current.batch;
-      if (image) image.move(e);
-      if (batch) batch.move(e);
+      // Only run the active free-drag path (handlers early-return when idle).
+      draggingRef.current.image?.move(e);
+      draggingRef.current.batch?.move(e);
     };
     const onMouseUp = () => {
-      const image = draggingRef.current.image;
-      const batch = draggingRef.current.batch;
-      if (image) image.end();
-      if (batch) batch.end();
+      draggingRef.current.image?.end();
+      draggingRef.current.batch?.end();
     };
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
@@ -519,7 +568,16 @@ export default function VideoPreview() {
               }
         }
       >
-        <div className={isSplitCompare ? "relative flex-1 min-w-0 self-center" : "contents"}>
+        {/* Shared zoom layer: video + overlays + canvas + text frame must share
+            the same CSS scale so DOM handles stay aligned with the picture. */}
+        <div
+          className={
+            isSplitCompare ? "relative flex-1 min-w-0 self-center" : "relative inline-block"
+          }
+          style={
+            isSplitCompare ? undefined : { transform: `scale(${zoom})`, transformOrigin: "0 0" }
+          }
+        >
           {isSplitCompare && (
             <div
               className="absolute top-2 left-2 z-[26] px-2 py-1 rounded text-[9px] font-medium pointer-events-none"
@@ -532,7 +590,7 @@ export default function VideoPreview() {
             ref={videoRef}
             src={sel.src || null}
             className="max-h-[calc(100vh-200px)] max-w-full block object-contain rounded"
-            style={{ imageRendering: "auto", transform: `scale(${zoom})`, transformOrigin: "0 0" }}
+            style={{ imageRendering: "auto" }}
             preload="metadata"
             playsInline
             disablePictureInPicture
@@ -552,10 +610,7 @@ export default function VideoPreview() {
           />
 
           {showFfmpegOverlay && (
-            <div
-              className="absolute inset-0 z-[25]"
-              style={{ transform: `scale(${zoom})`, transformOrigin: "0 0" }}
-            >
+            <div className="absolute inset-0 z-[25]">
               <img
                 src={ffmpegPreviewUrl}
                 alt="Preview FFmpeg renderizado"
@@ -735,8 +790,24 @@ export default function VideoPreview() {
               );
             }
             if (op.mode === "text" && op.text && sidebarMode !== "batch" && !showFfmpegOverlay) {
+              // Same stacking rule as batch: free → above canvas for drag; editing
+              // a new region (currentRegion set) → under canvas so handles work.
+              const textInteractive = !currentRegion;
+              const isDragging = draggingOp?.opIdx === opIdx;
               return (
-                <TextOverlay key={op.id} screen={s} text={op.text} style={op} showOutline={false} />
+                <TextOverlay
+                  key={op.id}
+                  screen={s}
+                  text={op.text}
+                  style={op}
+                  showOutline={textInteractive}
+                  interactive={textInteractive}
+                  cursor={textInteractive ? (isDragging ? "grabbing" : "grab") : undefined}
+                  zIndex={textInteractive ? 40 : 20}
+                  onMouseDown={
+                    textInteractive ? (e) => handleImageDragStart(op, opIdx, e) : undefined
+                  }
+                />
               );
             }
             return null;
@@ -778,20 +849,34 @@ export default function VideoPreview() {
               );
             })()}
 
-          {/* Live text preview while configuring (logo mode) */}
+          {/* Live text preview while configuring (logo mode). Always show a
+              placeholder if Contenedo is empty — otherwise the user only sees
+              an empty selection box over the video burn-in (date/NIS) and thinks
+              the overlay "disappeared". zIndex above canvas (30). */}
           {sidebarMode === "logo" &&
             activeTool === "text" &&
             currentRegion &&
-            textInput &&
+            isRegionUsable(currentRegion) &&
             (() => {
               const s = regionToScreen(currentRegion, videoRef.current);
               if (!s) return null;
+              const draftText = String(textInput ?? "").trim() || "Escribe el texto en el panel…";
               return (
                 <TextOverlay
                   screen={s}
-                  text={textInput}
-                  style={globalTextStyle}
+                  text={draftText}
+                  style={{
+                    ...globalTextStyle,
+                    // Skip autoFit measure thrash while rubber-banding
+                    autoFit: false,
+                    // Dim placeholder so real content is obvious once typed
+                    textOpacity: String(textInput ?? "").trim()
+                      ? (globalTextStyle.textOpacity ?? 1)
+                      : 0.55,
+                  }}
                   showOutline={false}
+                  showOverflowWarning={false}
+                  zIndex={35}
                 />
               );
             })()}
@@ -800,24 +885,37 @@ export default function VideoPreview() {
           {sidebarMode === "batch" &&
             selectedIdx >= 0 &&
             !showFfmpegOverlay &&
-            batchRegionPreviews.map(({ tr, payload, screen: s }) => {
-              if (!s) return null;
+            batchRegionPreviews.map(({ tr, payload, screen: baseScreen }) => {
               const isSelected = selectedTemplateRegionId === tr.id;
+              // Follow live currentRegion while the DOM frame is dragging (preview only).
+              const screen =
+                isSelected && currentRegion
+                  ? regionToScreen(currentRegion, videoRef.current) || baseScreen
+                  : baseScreen;
+              if (!screen) return null;
               const isDragging =
                 draggingBatchText?.videoIdx === selectedIdx && draggingBatchText.regionId === tr.id;
-              const batchOverlayInteractive = !currentRegion;
+              // Selected region with currentRegion is owned by TextRegionFrame (DOM
+              // handles at z=50). Other regions stay interactive so the user can
+              // click/drag them without the canvas stealing events.
+              const underDomFrame = textSelectionActive && isSelected;
+              const batchOverlayInteractive = !underDomFrame;
+              const previewText =
+                String(payload.text ?? "").trim() || tr.label || "Texto de ejemplo";
               return (
                 <TextOverlay
                   key={tr.id}
-                  screen={s}
-                  text={payload.text}
+                  screen={screen}
+                  text={previewText}
                   style={payload.style}
                   isFocused={isSelected}
-                  showOutline
+                  showOutline={!underDomFrame}
                   label={tr.label}
                   interactive={batchOverlayInteractive}
                   cursor={batchOverlayInteractive ? (isDragging ? "grabbing" : "grab") : undefined}
-                  zIndex={40}
+                  // Always above canvas (z=30) so text is never hidden under the rubber-band
+                  zIndex={underDomFrame ? 45 : 40}
+                  showOverflowWarning={!textRegionGesture.active}
                   onMouseDown={
                     batchOverlayInteractive ? (e) => handleBatchTextDragStart(tr, e) : undefined
                   }
@@ -825,10 +923,11 @@ export default function VideoPreview() {
               );
             })}
 
-          {/* Batch: preview while drawing a new region */}
+          {/* Batch: draft region before "Agregar región" — show sample text above canvas */}
           {sidebarMode === "batch" &&
             currentRegion &&
             !selectedTemplateRegionId &&
+            isRegionUsable(currentRegion) &&
             !showFfmpegOverlay &&
             (() => {
               const s = regionToScreen(currentRegion, videoRef.current);
@@ -837,9 +936,11 @@ export default function VideoPreview() {
                 <TextOverlay
                   screen={s}
                   text="Texto de ejemplo"
-                  style={globalTextStyle}
+                  style={{ ...globalTextStyle, autoFit: false }}
                   isFocused
-                  showOutline
+                  showOutline={false}
+                  showOverflowWarning={false}
+                  zIndex={35}
                 />
               );
             })()}
@@ -947,7 +1048,8 @@ export default function VideoPreview() {
           {/* Live preview of the in-progress delogo effect (under the selection handles) */}
           {!showFfmpegOverlay && <DelogoLivePreview videoRef={videoRef} />}
 
-          {/* Drawing canvas — above batch text overlays so resize handles receive clicks */}
+          {/* Drawing canvas — used to draw new regions / non-text tools.
+              Text selection chrome is DOM (TextRegionFrame) above this layer. */}
           <canvas
             ref={canvasRef}
             className="absolute top-0 left-0"
@@ -960,8 +1062,21 @@ export default function VideoPreview() {
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
           />
+
+          {/* Clean Figma-style DOM handles for the active text region */}
+          {textSelectionActive && textSelectionScreen && (
+            <TextRegionFrame
+              screen={textSelectionScreen}
+              region={currentRegion}
+              gesture={textRegionGesture}
+              label={textSelectionLabel}
+              color={
+                sidebarMode === "batch" ? "var(--purple, #a855f7)" : "var(--accent-brand, #00b4b0)"
+              }
+              zIndex={50}
+            />
+          )}
         </div>
 
         {isSplitCompare && (

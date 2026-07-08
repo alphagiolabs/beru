@@ -317,6 +317,13 @@ describe("App render", () => {
 
     const canvas = document.querySelector("canvas");
     expect(canvas).toBeTruthy();
-    expect(Number(canvas.style.zIndex)).toBeGreaterThan(20);
+    // Canvas remains above free batch overlays (z=20); DOM TextRegionFrame is z=50.
+    expect(Number(canvas.style.zIndex)).toBeGreaterThanOrEqual(30);
+
+    // When jsdom can resolve video layout, the DOM selection chrome mounts above the canvas.
+    const frame = document.querySelector("[data-text-region-frame]");
+    if (frame) {
+      expect(Number(frame.style.zIndex)).toBeGreaterThanOrEqual(50);
+    }
   });
 });

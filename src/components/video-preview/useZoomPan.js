@@ -45,11 +45,20 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     if (!v || !outer || z <= 1) return { x: 0, y: 0 };
     const baseW = v.offsetWidth || 1;
     const baseH = v.offsetHeight || 1;
-    const maxPanX = Math.max(0, (baseW * z - outer.clientWidth) / 2);
-    const maxPanY = Math.max(0, (baseH * z - outer.clientHeight) / 2);
+
+    const centerPanX = (baseW * (1 - z)) / 2;
+    const halfRangeX = (baseW * z - outer.clientWidth) / 2;
+    const minX = centerPanX - Math.max(0, halfRangeX);
+    const maxX = centerPanX + Math.max(0, halfRangeX);
+
+    const centerPanY = (baseH * (1 - z)) / 2;
+    const halfRangeY = (baseH * z - outer.clientHeight) / 2;
+    const minY = centerPanY - Math.max(0, halfRangeY);
+    const maxY = centerPanY + Math.max(0, halfRangeY);
+
     return {
-      x: Math.max(-maxPanX, Math.min(maxPanX, px)),
-      y: Math.max(-maxPanY, Math.min(maxPanY, py)),
+      x: Math.round(Math.max(minX, Math.min(maxX, px)) * 10000) / 10000,
+      y: Math.round(Math.max(minY, Math.min(maxY, py)) * 10000) / 10000,
     };
   }, []);
 
