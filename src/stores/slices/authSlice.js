@@ -12,6 +12,34 @@ async function fetchProfile(supabase, userId) {
   return data;
 }
 
+/** Register once so cold-start (no session) still receives later sign-in / sign-out events. */
+function ensureAuthListener(supabase, set) {
+  if (_authListenerRegistered || !supabase) return;
+  _authListenerRegistered = true;
+  supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    if (!nextSession?.user) {
+      set({ authStatus: "unauthenticated", user: null, profile: null });
+      return;
+    }
+    try {
+      const nextProfile = await fetchProfile(supabase, nextSession.user.id);
+      if (!nextProfile?.is_active) {
+        await supabase.auth.signOut();
+        set({
+          authStatus: "unauthenticated",
+          user: null,
+          profile: null,
+          authError: "auth.accountDisabled",
+        });
+        return;
+      }
+      set({ authStatus: "authenticated", user: nextSession.user, profile: nextProfile });
+    } catch {
+      set({ authStatus: "unauthenticated", user: null, profile: null });
+    }
+  });
+}
+
 /** Supabase auth session and admin user management. */
 export function createAuthSlice(set, get) {
   return {
@@ -27,6 +55,9 @@ export function createAuthSlice(set, get) {
       }
 
       const supabase = getSupabase();
+      // Always register, including cold start without a session.
+      ensureAuthListener(supabase, set);
+
       try {
         const {
           data: { session },
@@ -55,32 +86,6 @@ export function createAuthSlice(set, get) {
           profile,
           authError: null,
         });
-
-        if (!_authListenerRegistered) {
-          _authListenerRegistered = true;
-          supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-            if (!nextSession?.user) {
-              set({ authStatus: "unauthenticated", user: null, profile: null });
-              return;
-            }
-            try {
-              const nextProfile = await fetchProfile(supabase, nextSession.user.id);
-              if (!nextProfile?.is_active) {
-                await supabase.auth.signOut();
-                set({
-                  authStatus: "unauthenticated",
-                  user: null,
-                  profile: null,
-                  authError: "auth.accountDisabled",
-                });
-                return;
-              }
-              set({ authStatus: "authenticated", user: nextSession.user, profile: nextProfile });
-            } catch {
-              set({ authStatus: "unauthenticated", user: null, profile: null });
-            }
-          });
-        }
 
         return { ok: true };
       } catch (err) {
@@ -118,6 +123,9 @@ export function createAuthSlice(set, get) {
         set({ authError: "auth.accountDisabled" });
         return { ok: false, error: "auth.accountDisabled" };
       }
+
+      // Safety net if initAuth never ran (or failed before ensureAuthListener).
+      ensureAuthListener(supabase, set);
 
       set({
         authStatus: "authenticated",

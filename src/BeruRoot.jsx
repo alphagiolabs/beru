@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import App from "./App";
 import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -11,11 +12,37 @@ import UpdatePrompt from "./components/UpdatePrompt";
 import useUpdater from "./hooks/useUpdater";
 import useEditorStore from "./stores/useEditorStore";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
+import { useT } from "./i18n/useT";
 
 const api = window.api;
 
-export default function BeruRoot() {
+/** Neutral boot screen while the persisted session is restored — not the login UI. */
+function AuthSessionLoading() {
+  const t = useT();
+  return (
+    <div
+      className="h-screen flex flex-col items-center justify-center gap-3"
+      style={{ background: "var(--bg-app)", color: "var(--text-secondary)" }}
+      role="status"
+      aria-live="polite"
+      data-testid="auth-session-loading"
+    >
+      <Loader2 size={28} className="login-cinematic-spin" aria-hidden="true" />
+      <span>{t("auth.checkingSession")}</span>
+    </div>
+  );
+}
+
+function AuthGate() {
   const authStatus = useEditorStore((s) => s.authStatus);
+
+  if (!isSupabaseConfigured) return <App />;
+  if (authStatus === "loading") return <AuthSessionLoading />;
+  if (authStatus === "authenticated") return <App />;
+  return <LoginScreen />;
+}
+
+export default function BeruRoot() {
   const initAuth = useEditorStore((s) => s.initAuth);
   const appToast = useEditorStore((s) => s.appToast);
   const clearAppToast = useEditorStore((s) => s.clearAppToast);
@@ -34,11 +61,9 @@ export default function BeruRoot() {
     return () => clearTimeout(timer);
   }, [appToast, clearAppToast]);
 
-  const showLogin = isSupabaseConfigured && authStatus !== "authenticated";
-
   return (
     <ErrorBoundary>
-      {showLogin ? <LoginScreen /> : <App />}
+      <AuthGate />
       <UpdatePrompt />
       <AppToast />
       <ConfirmDialog />
