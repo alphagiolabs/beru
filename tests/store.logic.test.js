@@ -1188,4 +1188,16 @@ describe("useEditorStore logic regressions", () => {
     expect(state.jobProgress[0]).toBe(100);
     expect(state.jobProgress[1]).toBe(30);
   });
+
+  it("markJobDone is a no-op when not processing (late cancel events)", () => {
+    useEditorStore.setState({
+      queue: [queueItem({ status: "idle", progress: 0 })],
+      isProcessing: false,
+      progressTotal: 1,
+      progressDone: 0,
+    });
+    useEditorStore.getState().markJobDone({ index: 0 });
+    expect(useEditorStore.getState().queue[0].status).toBe("idle");
+    expect(useEditorStore.getState().progressDone).toBe(0);
+  });
 });

@@ -32,6 +32,7 @@ describe("processing error handling", () => {
       queue: [queueItem(), queueItem({ path: "C:\\videos\\b.mp4", filename: "b.mp4" })],
       progressDone: 0,
       progressTotal: 2,
+      isProcessing: true,
     });
   });
 
@@ -56,5 +57,11 @@ describe("processing error handling", () => {
     useEditorStore.getState().markJobError({ index: 99, error: "bad index" });
 
     expect(useEditorStore.getState().queue.every((q) => q.status === "idle")).toBe(true);
+  });
+
+  it("markJobError is a no-op when not processing", () => {
+    useEditorStore.setState({ isProcessing: false });
+    useEditorStore.getState().markJobError({ index: 1, error: "late" });
+    expect(useEditorStore.getState().queue[1].status).toBe("idle");
   });
 });

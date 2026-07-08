@@ -288,6 +288,8 @@ export function createProcessingSlice(set, get) {
 
     markJobDone: (msg) =>
       set((s) => {
+        // Ignore late events after cancel/error cleared the busy flag.
+        if (!s.isProcessing) return {};
         const idx = msg.index;
         if (!isQueueJobIndex(idx, s.queue.length)) return {};
         const updated = [...s.queue];
@@ -305,6 +307,7 @@ export function createProcessingSlice(set, get) {
 
     markJobError: (msg) =>
       set((s) => {
+        if (!s.isProcessing) return {};
         const idx = msg.index;
         if (!isQueueJobIndex(idx, s.queue.length)) return {};
         const updated = [...s.queue];
@@ -455,24 +458,34 @@ export function createProcessingSlice(set, get) {
       if (get().templateRegions.length > 0) {
         get().materializeBatchTextOps();
       }
-      let { queue, isProcessing } = get();
-      if (isProcessing) return { ok: false, error: "Ya hay un proceso en ejecución" };
+      if (get().isProcessing) return { ok: false, error: "Ya hay un proceso en ejecución" };
+      let { queue } = get();
       if (videoIdx < 0 || videoIdx >= queue.length) return { ok: false, error: "Video inválido" };
-      if (!queue[videoIdx].width || !queue[videoIdx].height) {
-        queue = await get().refreshMissingVideoInfo(api);
-        if (videoIdx < 0 || videoIdx >= queue.length) return { ok: false, error: "Video inválido" };
-      }
-      const item = queue[videoIdx];
-      const job = get()._buildJobFor(item, videoIdx);
-      if (!job) return { ok: false, error: "No se pudo construir el job" };
 
-      get().startExecutionRun({ kind: "single", jobCount: 1 });
+      // Claim before any await so concurrent process-all / test cannot interleave.
       set({ isProcessing: true, progressTotal: 1, progressDone: 0, jobProgress: {} });
-      const updated = [...queue];
-      updated[videoIdx] = { ...updated[videoIdx], status: "processing", progress: 0, error: null };
-      set({ queue: updated });
 
       try {
+        if (!queue[videoIdx].width || !queue[videoIdx].height) {
+          queue = await get().refreshMissingVideoInfo(api);
+          if (videoIdx < 0 || videoIdx >= queue.length) {
+            return { ok: false, error: "Video inválido" };
+          }
+        }
+        const item = queue[videoIdx];
+        const job = get()._buildJobFor(item, videoIdx);
+        if (!job) return { ok: false, error: "No se pudo construir el job" };
+
+        get().startExecutionRun({ kind: "single", jobCount: 1 });
+        const updated = [...queue];
+        updated[videoIdx] = {
+          ...updated[videoIdx],
+          status: "processing",
+          progress: 0,
+          error: null,
+        };
+        set({ queue: updated });
+
         const result = await api.startProcessing(createJobManifest([job]));
         const itemError = get().queue[videoIdx]?.error;
         return {

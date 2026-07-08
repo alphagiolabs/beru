@@ -252,74 +252,85 @@ export default function Header() {
       showToast({ kind: "err", text: t("errors.noApi") });
       return;
     }
-    const { templateRegions, sidebarMode } = get();
-    if (sidebarMode === "batch" || templateRegions.length > 0) {
-      get().materializeBatchTextOps();
-    }
+    // Claim busy before any await so double-clicks cannot re-enter preflight.
+    if (get().isProcessing) return;
+    useEditorStore.setState({ isProcessing: true, progressDone: 0, jobProgress: {} });
 
-    let queueForProcessing = get().queue;
-    if (queueForProcessing.some((q) => !hasVideoDimensions(q))) {
-      queueForProcessing = await get().refreshMissingVideoInfo(api);
-    }
+    try {
+      const { templateRegions, sidebarMode } = get();
+      if (sidebarMode === "batch" || templateRegions.length > 0) {
+        get().materializeBatchTextOps();
+      }
 
-    const missingDims = queueForProcessing.filter((q) => !hasVideoDimensions(q));
-    if (missingDims.length > 0) {
-      const names = missingDims
-        .slice(0, 3)
-        .map((q) => q.filename)
-        .join(", ");
-      const more = missingDims.length > 3 ? ` (+${missingDims.length - 3})` : "";
-      showToast({
-        kind: "err",
-        text: t("errors.missingVideoDimensions", { count: missingDims.length, names, more }),
-      });
-      return;
-    }
+      let queueForProcessing = get().queue;
+      if (queueForProcessing.some((q) => !hasVideoDimensions(q))) {
+        queueForProcessing = await get().refreshMissingVideoInfo(api);
+      }
 
-    if (templateRegions.length > 0) {
-      const missingText = listVideosMissingBatchText(
-        queueForProcessing,
-        templateRegions,
-        (videoIdx, regionId) => get().getCellTextForRegion(videoIdx, regionId),
-      );
-      if (missingText.length > 0) {
-        const names = missingText.slice(0, 3).join(", ");
-        const more = missingText.length > 3 ? ` (+${missingText.length - 3})` : "";
+      const missingDims = queueForProcessing.filter((q) => !hasVideoDimensions(q));
+      if (missingDims.length > 0) {
+        const names = missingDims
+          .slice(0, 3)
+          .map((q) => q.filename)
+          .join(", ");
+        const more = missingDims.length > 3 ? ` (+${missingDims.length - 3})` : "";
         showToast({
           kind: "err",
-          text: t("errors.batchTextMissing", { count: missingText.length, names, more }),
+          text: t("errors.missingVideoDimensions", { count: missingDims.length, names, more }),
         });
+        get().setProcessing(false);
         return;
       }
-    }
 
-    const jobs = queueForProcessing.map((q, i) => get()._buildJobFor(q, i)).filter(Boolean);
-    if (jobs.length === 0) {
-      showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
-      return;
-    }
-    get().startExecutionRun({ kind: "batch", jobCount: jobs.length });
+      if (templateRegions.length > 0) {
+        const missingText = listVideosMissingBatchText(
+          queueForProcessing,
+          templateRegions,
+          (videoIdx, regionId) => get().getCellTextForRegion(videoIdx, regionId),
+        );
+        if (missingText.length > 0) {
+          const names = missingText.slice(0, 3).join(", ");
+          const more = missingText.length > 3 ? ` (+${missingText.length - 3})` : "";
+          showToast({
+            kind: "err",
+            text: t("errors.batchTextMissing", { count: missingText.length, names, more }),
+          });
+          get().setProcessing(false);
+          return;
+        }
+      }
 
-    const queueReset = get().queue.map((item) => ({
-      ...item,
-      status: "idle",
-      progress: 0,
-      error: null,
-    }));
-    useEditorStore.setState({
-      queue: queueReset,
-      progressTotal: jobs.length,
-      progressDone: 0,
-      jobProgress: {},
-      isProcessing: true,
-    });
+      const jobs = queueForProcessing.map((q, i) => get()._buildJobFor(q, i)).filter(Boolean);
+      if (jobs.length === 0) {
+        showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
+        get().setProcessing(false);
+        return;
+      }
+      get().startExecutionRun({ kind: "batch", jobCount: jobs.length });
 
-    api
-      .startProcessing(createJobManifest(jobs))
-      .then((result) => {
-        if (!result.success) {
+      const queueReset = get().queue.map((item) => ({
+        ...item,
+        status: "idle",
+        progress: 0,
+        error: null,
+      }));
+      useEditorStore.setState({
+        queue: queueReset,
+        progressTotal: jobs.length,
+        progressDone: 0,
+        jobProgress: {},
+      });
+
+      try {
+        const result = await api.startProcessing(createJobManifest(jobs));
+        if (!result?.success) {
+          // Intentional cancel during probe/start — not a start failure toast.
+          if (result?.cancelled) {
+            get().abortActiveProcessing();
+            return;
+          }
           // Runtime failures are toasted via useProcessing → onError; only pre-spawn errors here.
-          if (result.error && result.code == null) {
+          if (result?.error && result.code == null) {
             showToast({
               kind: "err",
               text: t("errors.processStartFailed", {
@@ -329,14 +340,20 @@ export default function Header() {
           }
           get().setProcessing(false);
         }
-      })
-      .catch((e) => {
+      } catch (e) {
         showToast({
           kind: "err",
           text: t("errors.processStartFailed", { message: e.message }),
         });
         get().setProcessing(false);
+      }
+    } catch (e) {
+      get().setProcessing(false);
+      showToast({
+        kind: "err",
+        text: t("errors.processStartFailed", { message: e.message }),
       });
+    }
   };
 
   const handleTestCurrent = async () => {
