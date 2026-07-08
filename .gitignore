@@ -59,6 +59,7 @@ skills-lock.json
 AGENTS.md
 CLAUDE.md
 GEMINI.md
+.claude/
 
 # Versioned build output directories (never commit)
 dist-installer-v*/
