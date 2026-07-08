@@ -244,10 +244,26 @@ export function stripExt(name) {
   return i > 0 ? name.slice(0, i) : name;
 }
 
+/** Format Excel-ish IDs without scientific notation (large numeric cells). */
+function formatMatchIdRaw(raw) {
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    return raw.toLocaleString("fullwide", { useGrouping: false, maximumFractionDigits: 20 });
+  }
+  const s = String(raw).trim();
+  // Some readers stringify large IDs as "1.23e+21" — expand when parseable.
+  if (/^-?\d+(\.\d+)?e[+-]?\d+$/i.test(s)) {
+    const n = Number(s);
+    if (Number.isFinite(n)) {
+      return n.toLocaleString("fullwide", { useGrouping: false, maximumFractionDigits: 20 });
+    }
+  }
+  return s;
+}
+
 /** Canonical ID for matching queue videos to Excel rows (trim, lowercase, no extension). */
 export function normalizeMatchId(name) {
   if (name === undefined || name === null) return "";
-  return stripExt(String(name).trim()).toLowerCase();
+  return stripExt(formatMatchIdRaw(name)).toLowerCase();
 }
 
 export function rowGet(row, ...keys) {

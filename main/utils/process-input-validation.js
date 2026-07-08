@@ -98,10 +98,18 @@ export function translateProcessorErrorMessage(msg) {
         "(Arial, Times New Roman, etc.) y vuelve a intentar."
       );
     }
-    return (
-      "El video no está disponible localmente. " +
-      "Si está en OneDrive / Google Drive / Dropbox, espere a que se descargue o desactive 'Archivos a petición'."
-    );
+    // Cloud placeholder guidance only when the path/message looks cloud-related.
+    // Other ENOENT (missing assets, bad paths) keep a generic missing-file text.
+    const cloudHint =
+      /onedrive|dropbox|google drive|gdrive|files on-?demand|cloud/i.test(msg) ||
+      /\\onedrive|\/onedrive|\\dropbox|\/dropbox/i.test(msg);
+    if (cloudHint) {
+      return (
+        "El video no está disponible localmente. " +
+        "Si está en OneDrive / Google Drive / Dropbox, espere a que se descargue o desactive 'Archivos a petición'."
+      );
+    }
+    return "No se encontró un archivo necesario para el procesamiento. Comprueba rutas de entrada, imágenes y fuentes.";
   }
   return msg;
 }

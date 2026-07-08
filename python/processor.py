@@ -1687,6 +1687,15 @@ def _extract_error_line(stderr_text):
     if len(stderr_text) > MAX_STDERR_CHARS:
         stderr_text = stderr_text[-MAX_STDERR_CHARS:]
     lines = stderr_text.split("\n")
+    # Prefer actionable parse/path failures over generic "Error while ..." wrappers.
+    priority = ("invalid", "no such", "unable to parse")
+    for line in reversed(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        low = stripped.lower()
+        if any(p in low for p in priority):
+            return stripped[-400:]
     for line in reversed(lines):
         stripped = line.strip()
         if stripped and "error" in stripped.lower():
