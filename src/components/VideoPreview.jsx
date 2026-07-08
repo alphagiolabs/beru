@@ -389,11 +389,7 @@ export default function VideoPreview() {
         y: Math.max(0, Math.min(1 - startRegion.h, startRegion.y + deltaY)),
       };
 
-      useEditorStore
-        .getState()
-        .updateOperation(draggingBatchText.videoIdx, draggingBatchText.opIdx, {
-          region: nextRegion,
-        });
+      useEditorStore.getState().setCurrentRegion(nextRegion);
     },
     [draggingBatchText, batchTextDragStart],
   );
@@ -705,7 +701,7 @@ export default function VideoPreview() {
               return (
                 <div
                   key={op.id}
-                  className={`absolute z-30 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
+                  className={`absolute z-40 ${isDragging ? "cursor-grabbing" : "cursor-grab hover:cursor-grab"}`}
                   style={{
                     left: s.x,
                     top: s.y,
@@ -738,7 +734,7 @@ export default function VideoPreview() {
                 </div>
               );
             }
-            if (op.mode === "text" && op.text && sidebarMode !== "batch") {
+            if (op.mode === "text" && op.text && sidebarMode !== "batch" && !showFfmpegOverlay) {
               return (
                 <TextOverlay key={op.id} screen={s} text={op.text} style={op} showOutline={false} />
               );
@@ -803,6 +799,7 @@ export default function VideoPreview() {
           {/* Batch: live text preview per template region (coords memoized) */}
           {sidebarMode === "batch" &&
             selectedIdx >= 0 &&
+            !showFfmpegOverlay &&
             batchRegionPreviews.map(({ tr, payload, screen: s }) => {
               if (!s) return null;
               const isSelected = selectedTemplateRegionId === tr.id;
@@ -820,7 +817,7 @@ export default function VideoPreview() {
                   label={tr.label}
                   interactive={batchOverlayInteractive}
                   cursor={batchOverlayInteractive ? (isDragging ? "grabbing" : "grab") : undefined}
-                  zIndex={20}
+                  zIndex={40}
                   onMouseDown={
                     batchOverlayInteractive ? (e) => handleBatchTextDragStart(tr, e) : undefined
                   }
@@ -831,6 +828,8 @@ export default function VideoPreview() {
           {/* Batch: preview while drawing a new region */}
           {sidebarMode === "batch" &&
             currentRegion &&
+            !selectedTemplateRegionId &&
+            !showFfmpegOverlay &&
             (() => {
               const s = regionToScreen(currentRegion, videoRef.current);
               if (!s) return null;
@@ -946,7 +945,7 @@ export default function VideoPreview() {
             })()}
 
           {/* Live preview of the in-progress delogo effect (under the selection handles) */}
-          <DelogoLivePreview videoRef={videoRef} />
+          {!showFfmpegOverlay && <DelogoLivePreview videoRef={videoRef} />}
 
           {/* Drawing canvas — above batch text overlays so resize handles receive clicks */}
           <canvas
@@ -955,6 +954,8 @@ export default function VideoPreview() {
             style={{
               cursor: activeTool === "pan" && zoom > 1 ? "grab" : undefined,
               zIndex: 30,
+              pointerEvents: activeTool === "pan" || showFfmpegOverlay ? "none" : "auto",
+              opacity: showFfmpegOverlay ? 0 : 1,
             }}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
@@ -982,7 +983,7 @@ export default function VideoPreview() {
 
         {showFfmpegPreview && ffmpegPreviewUrl && (
           <div
-            className="absolute top-2 left-1/2 -translate-x-1/2 z-[26] flex items-center gap-0.5 px-1 py-1 rounded"
+            className="absolute top-2 left-1/2 -translate-x-1/2 z-[35] flex items-center gap-0.5 px-1 py-1 rounded"
             style={{ background: "rgba(0,0,0,0.82)", border: "1px solid rgba(255,255,255,0.12)" }}
           >
             {[
@@ -1163,40 +1164,46 @@ export default function VideoPreview() {
           <div className="flex-1" />
           {!isSplitCompare && (
             <div
-              className="flex items-center gap-0.5 px-1 py-0.5 rounded"
-              style={{ background: "rgba(0,0,0,0.4)" }}
+              className="flex items-center gap-1 px-1.5 py-1 rounded-lg border border-white/10 shadow-sm backdrop-blur-md transition-all"
+              style={{ background: "rgba(0,0,0,0.5)" }}
             >
               <button
                 type="button"
                 onClick={zoomOut}
                 disabled={zoom <= MIN_ZOOM}
-                className="p-0.5 rounded hover:bg-white/10 disabled:opacity-30"
-                style={{ color: "var(--text-dim)" }}
+                className="p-1 rounded hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:active:scale-100 transition-all"
+                style={{ color: "var(--text-secondary, #a3a3a3)" }}
                 title={t("preview.zoomOut")}
                 aria-label={t("preview.zoomOut")}
               >
-                <ZoomOut size={13} />
+                <ZoomOut size={14} />
               </button>
+
+              <div className="w-[1px] h-3 bg-white/10 mx-0.5"></div>
+
               <button
                 type="button"
                 onClick={zoomReset}
-                className="px-1.5 py-0.5 rounded text-[9px] font-mono hover:bg-white/10 min-w-[40px] text-center"
-                style={{ color: zoom > 1 ? "var(--accent)" : "var(--text-dim)" }}
+                className="px-2 py-0.5 rounded text-[10px] font-mono hover:bg-white/10 active:scale-95 transition-all min-w-[48px] text-center font-medium"
+                style={{ color: zoom > 1 ? "var(--accent)" : "var(--text-secondary, #a3a3a3)" }}
                 title={t("preview.zoomReset")}
                 aria-label={t("preview.zoomReset")}
               >
                 {Math.round(zoom * 100)}%
               </button>
+
+              <div className="w-[1px] h-3 bg-white/10 mx-0.5"></div>
+
               <button
                 type="button"
                 onClick={zoomIn}
                 disabled={zoom >= MAX_ZOOM}
-                className="p-0.5 rounded hover:bg-white/10 disabled:opacity-30"
-                style={{ color: "var(--text-dim)" }}
+                className="p-1 rounded hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:active:scale-100 transition-all"
+                style={{ color: "var(--text-secondary, #a3a3a3)" }}
                 title={t("preview.zoomIn")}
                 aria-label={t("preview.zoomIn")}
               >
-                <ZoomIn size={13} />
+                <ZoomIn size={14} />
               </button>
             </div>
           )}
