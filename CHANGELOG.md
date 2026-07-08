@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.45] - 2026-07-08
+
+### Fixed
+
+- **Texto en preview: mover y redimensionar** — Nuevo marco DOM estilo Figma (`TextRegionFrame` + `useRegionGesture`) para mover/redimensionar regiones de texto sin depender del hit-test del canvas. Zoom compartido entre video, overlays y manijas; preview en vivo barato (commit al soltar).
+- **Paridad CSS ↔ export FFmpeg** — El padding del preview ya no usa un mínimo de 2 px de pantalla que inflaba el margen al escalar. El inset combina `safeMargin + boxPad` como en Python `_text_layout_bounds`, fondo sin `border-radius` (como `drawbox`), y `y_align=text` en drawtext.
+
+### Added
+
+- Helpers y tests de interacción de región (`region-interaction`, `text-region-interaction`, `text-canvas-paint`, `text-preview-export-parity`).
+
 ## [1.6.44] - 2026-07-08
 
 ### Changed
