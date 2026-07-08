@@ -41,10 +41,13 @@ function TextOverlay({
   const safeX = scaledSafeMargin(style.safeMargin, scaleX);
   const safeY = scaledSafeMargin(style.safeMargin, scaleY);
   const bgOn = style.bgEnabled !== false;
-  const boxPadX = bgOn ? Math.max(2, (style.boxBorderWidth || 4) * scaleX) : 0;
-  const boxPadY = bgOn ? Math.max(2, (style.boxBorderWidth || 4) * scaleY) : 0;
-  const measureWidth = Math.max(0, (screen?.w || 0) - safeX * 2);
-  const measureHeight = Math.max(0, (screen?.h || 0) - safeY * 2);
+  // Pure video-pixel → screen scale. Do NOT floor with max(2, …): that inflated
+  // padding at small preview scales and made CSS look more padded than FFmpeg export.
+  const boxPadX = bgOn ? Math.max(0, (style.boxBorderWidth ?? 4) * scaleX) : 0;
+  const boxPadY = bgOn ? Math.max(0, (style.boxBorderWidth ?? 4) * scaleY) : 0;
+  // Usable text area = region − safeMargin − boxPad (matches Python _text_layout_bounds)
+  const measureWidth = Math.max(0, (screen?.w || 0) - safeX * 2 - boxPadX * 2);
+  const measureHeight = Math.max(0, (screen?.h || 0) - safeY * 2 - boxPadY * 2);
 
   useLayoutEffect(() => {
     const el = measureRef.current;
@@ -136,6 +139,8 @@ function TextOverlay({
 
   return (
     <div
+      data-text-overlay="true"
+      data-interactive={interactive ? "true" : "false"}
       className={`absolute ${interactive ? "pointer-events-auto" : "pointer-events-none"}`}
       onMouseDown={onMouseDown}
       style={{
@@ -229,7 +234,9 @@ function TextOverlay({
             inset: 0,
             background: style.bgColor || "black",
             opacity: style.bgOpacity ?? 0.65,
-            borderRadius: `${Math.max(3, 6 * screen.sy)}px`,
+            // Match FFmpeg drawbox (axis-aligned rect) — radius only made preview
+            // look softer/different from export.
+            borderRadius: 0,
           }}
         />
       )}
@@ -243,7 +250,8 @@ function TextOverlay({
             display: "flex",
             flexDirection: "column",
             justifyContent: verticalAlignToFlex(style.verticalAlign || "top"),
-            padding: `${safeY}px ${safeX}px`,
+            // Single combined inset = safeMargin + boxPad (same as Python layout)
+            padding: `${safeY + boxPadY}px ${safeX + boxPadX}px`,
             boxSizing: "border-box",
             overflow: "hidden",
           }}
@@ -251,6 +259,11 @@ function TextOverlay({
           <div
             style={{
               ...getTextLayoutCss(style),
+              // FFmpeg drawtext line box ≈ glyph metrics; line-height half-leading
+              // in CSS shifted glyphs vs export. Keep line-height for multi-line
+              // spacing via the layout helper, but pin leading so top/center align
+              // matches drawtext y_align=text + text_h centering.
+              lineHeight: style.lineHeight ?? 1.2,
               color: style.fontColor || "white",
               opacity: textOpacity,
               fontSize: `${fontSize}px`,
@@ -259,7 +272,7 @@ function TextOverlay({
               fontStyle: style.italic ? "italic" : "normal",
               letterSpacing: `${letterSpacing}px`,
               textAlign: align,
-              padding: `${boxPadY}px ${boxPadX}px`,
+              padding: 0,
               textShadow,
               WebkitTextStroke:
                 style.borderWidth > 0

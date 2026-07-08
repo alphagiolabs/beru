@@ -64,6 +64,28 @@ export function contentRect(videoEl) {
   return { dw, dh, ox, oy, br };
 }
 
+export function contentRectLayout(videoEl) {
+  if (!videoEl) return null;
+  const w = videoEl.offsetWidth;
+  const h = videoEl.offsetHeight;
+  if (w === 0 || h === 0) return null;
+  const vr = videoEl.videoWidth / videoEl.videoHeight;
+  const cr = w / h;
+  let dw, dh, ox, oy;
+  if (vr > cr) {
+    dw = w;
+    dh = w / vr;
+    ox = 0;
+    oy = (h - dh) / 2;
+  } else {
+    dh = h;
+    dw = h * vr;
+    ox = (w - dw) / 2;
+    oy = 0;
+  }
+  return { dw, dh, ox, oy, width: w, height: h };
+}
+
 export function toVideoCoordsNormalized(videoEl, cx, cy) {
   const c = contentRect(videoEl);
   if (!c || !videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return null;
@@ -75,7 +97,7 @@ export function toVideoCoordsNormalized(videoEl, cx, cy) {
 
 export function regionToScreen(region, videoEl) {
   if (!region || !videoEl) return null;
-  const c = contentRect(videoEl);
+  const c = contentRectLayout(videoEl);
   if (!c || !videoEl.videoWidth || !videoEl.videoHeight) return null;
   const sx = c.dw / videoEl.videoWidth;
   const sy = c.dh / videoEl.videoHeight;
@@ -117,7 +139,7 @@ export function drawRegionOnCanvas(
   ctx.imageSmoothingQuality = "high";
   ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
   if (!region) return;
-  const c = contentRect(videoEl);
+  const c = contentRectLayout(videoEl);
   if (!c || !videoEl.videoWidth || !videoEl.videoHeight) return;
   const sx = c.dw / videoEl.videoWidth;
   const sy = c.dh / videoEl.videoHeight;
@@ -151,6 +173,14 @@ export function drawRegionOnCanvas(
     ctx.setLineDash([5, 3]);
     ctx.strokeRect(x, y, w, h);
     ctx.setLineDash([]);
+  } else if (tool === "text") {
+    // Outline only — a translucent fill was covering the live text preview
+    // underneath the canvas (z-index) and looked like the text "disappeared".
+    ctx.strokeStyle = "rgba(168,85,247,0.95)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.setLineDash([]);
   } else {
     ctx.fillStyle = "rgba(0,240,234,0.12)";
     ctx.fillRect(x, y, w, h);
@@ -159,7 +189,9 @@ export function drawRegionOnCanvas(
     ctx.strokeRect(x, y, w, h);
   }
 
-  // Corner handles
+  // Corner handles (skip for text — DOM TextRegionFrame / dashed outline is enough)
+  if (tool === "text") return;
+
   const cornerColor = tool === "crop" ? "#fbbf24" : tool === "delogo" ? "#ef4444" : "#ffffff";
   const ms = Math.min(12, w / 3, h / 3);
   ctx.strokeStyle = cornerColor;

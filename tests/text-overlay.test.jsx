@@ -64,7 +64,8 @@ function renderOverlay(style = {}) {
           fontSize: 24,
           safeMargin: 4,
           bgEnabled: true,
-          boxBorderWidth: 24,
+          // boxPad + safeMargin inset matches Python _text_layout_bounds
+          boxBorderWidth: 4,
           ...style,
         }}
       />,
@@ -86,18 +87,19 @@ describe("TextOverlay overflow warning", () => {
   });
 
   it("does not mark overflow when text fits the usable safe area", () => {
-    mockMeasurerMetrics({ scrollWidth: 148, scrollHeight: 32 });
+    // usable = 160 - 2*4(safe) - 2*4(boxPad) = 144 wide; 50 - 8 - 8 = 34 tall
+    mockMeasurerMetrics({ scrollWidth: 140, scrollHeight: 28 });
     renderOverlay();
 
     const measurer = document.querySelector("[data-overflow-measurer]");
-    expect(measurer.style.width).toBe("152px");
-    expect(measurer.style.maxHeight).toBe("42px");
+    expect(measurer.style.width).toBe("144px");
+    expect(measurer.style.maxHeight).toBe("34px");
     expect(measurer.style.padding).toBe("0px");
     expect(document.body.textContent).not.toMatch(/Desborda/i);
   });
 
   it("marks overflow when measured text exceeds the usable safe area", () => {
-    mockMeasurerMetrics({ scrollWidth: 148, scrollHeight: 48 });
+    mockMeasurerMetrics({ scrollWidth: 140, scrollHeight: 48 });
     renderOverlay();
 
     expect(document.body.textContent).toMatch(/Desborda/i);

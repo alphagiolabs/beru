@@ -670,6 +670,102 @@ describe("useEditorStore logic regressions", () => {
     expect(useEditorStore.getState().excelRows[0].TEXT_1).toBe("Despues");
   });
 
+  it("updates only the specific video operation and currentRegion when dragging batch overlay (per-video positioning)", () => {
+    const templateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const nextRegion = { x: 0.4, y: 0.4, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      sidebarMode: "batch",
+      selectedIdx: 0,
+      selectedTemplateRegionId: "region-1",
+      currentRegion: { ...templateRegion },
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region: templateRegion }],
+      queue: [
+        queueItem({
+          operations: [
+            {
+              id: "op-1",
+              mode: "text",
+              batchRegionId: "region-1",
+              region: { ...templateRegion },
+              text: "Video 1",
+            },
+          ],
+        }),
+        queueItem({
+          operations: [
+            {
+              id: "op-2",
+              mode: "text",
+              batchRegionId: "region-1",
+              region: { ...templateRegion },
+              text: "Video 2",
+            },
+          ],
+        }),
+      ],
+    });
+
+    // Simulate drag updating operation 0 on video 0
+    useEditorStore.getState().updateOperation(0, 0, { region: nextRegion });
+    useEditorStore.setState({ currentRegion: nextRegion });
+
+    const state = useEditorStore.getState();
+    // 1. Current region is updated in UI
+    expect(state.currentRegion).toEqual(nextRegion);
+    // 2. Video 0's operation has the new custom region
+    expect(state.queue[0].operations[0].region).toEqual(nextRegion);
+    // 3. Template region remains at original position
+    expect(state.templateRegions[0].region).toEqual(templateRegion);
+    // 4. Video 1's operation remains at original template position
+    expect(state.queue[1].operations[0].region).toEqual(templateRegion);
+  });
+
+  it("live region drag can skip undo snapshots (recordHistory: false)", () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      selectedIdx: 0,
+      undoStack: [],
+      queue: [
+        queueItem({
+          operations: [
+            {
+              id: "op-1",
+              mode: "text",
+              region: { ...region },
+              text: "A",
+            },
+          ],
+        }),
+      ],
+    });
+
+    // Pointerdown: one snapshot
+    useEditorStore.getState()._saveUndo();
+    expect(useEditorStore.getState().undoStack).toHaveLength(1);
+
+    // Many mousemove updates must not flood the undo stack
+    for (let i = 0; i < 20; i++) {
+      useEditorStore
+        .getState()
+        .updateOperation(
+          0,
+          0,
+          { region: { ...region, x: 0.1 + i * 0.01 } },
+          { recordHistory: false },
+        );
+      useEditorStore
+        .getState()
+        .updateOperationRegion(0, { ...region, x: 0.1 + i * 0.01 }, { recordHistory: false });
+    }
+
+    expect(useEditorStore.getState().undoStack).toHaveLength(1);
+    expect(useEditorStore.getState().queue[0].operations[0].region.x).toBeCloseTo(0.29, 5);
+
+    // Default path still records history
+    useEditorStore.getState().updateOperationRegion(0, { ...region, x: 0.5 });
+    expect(useEditorStore.getState().undoStack).toHaveLength(2);
+  });
+
   it("removes moved batch text operations when deleting their template region", () => {
     const removedTemplateRegion = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     const movedRegion = { x: 0.35, y: 0.28, w: 0.3, h: 0.1 };

@@ -541,10 +541,11 @@ export function createQueueSlice(set, get) {
       set({ queue: updated, selectedOperationIdx: opIdx + 1 });
     },
 
-    updateOperationRegion: (opIdx, region) => {
+    updateOperationRegion: (opIdx, region, { recordHistory = true } = {}) => {
       const { queue, selectedIdx } = get();
       if (selectedIdx < 0) return;
-      get()._saveUndo();
+      // Live drag passes recordHistory:false and snapshots once on pointerdown.
+      if (recordHistory) get()._saveUndo();
       const updated = [...queue];
       const ops = [...updated[selectedIdx].operations];
       ops[opIdx] = { ...ops[opIdx], region: { ...region } };
@@ -552,13 +553,13 @@ export function createQueueSlice(set, get) {
       set({ queue: updated });
     },
 
-    updateOperation: (videoIdx, opIdx, patch) => {
+    updateOperation: (videoIdx, opIdx, patch, { recordHistory = true } = {}) => {
       const { queue, selectedIdx } = get();
       if (videoIdx < 0 || videoIdx >= queue.length) return;
       const updated = [...queue];
       const ops = [...updated[videoIdx].operations];
       if (opIdx < 0 || opIdx >= ops.length) return;
-      if (videoIdx === selectedIdx) get()._saveUndo();
+      if (recordHistory && videoIdx === selectedIdx) get()._saveUndo();
       const nextOp = { ...ops[opIdx], ...patch };
       ops[opIdx] = nextOp;
       updated[videoIdx] = { ...updated[videoIdx], operations: ops };

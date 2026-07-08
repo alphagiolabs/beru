@@ -1260,6 +1260,10 @@ def build_drawtext(op):
         f"y={y_expr}",
     ]
 
+    # y is the top of the first text line (matches CSS content box top), not baseline.
+    if _drawtext_supports("y_align"):
+        parts.append("y_align=text")
+
     # Numeric font weight (100-900). "bold" is a convenience alias.
     if font_weight is not None and _drawtext_supports("fontweight"):
         try:
