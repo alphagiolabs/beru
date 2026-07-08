@@ -80,8 +80,16 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     [clampPan, setZoomBoth, setPanBoth],
   );
 
-  const zoomIn = useCallback(() => applyZoom(zoomRef.current + ZOOM_STEP), [applyZoom]);
-  const zoomOut = useCallback(() => applyZoom(zoomRef.current - ZOOM_STEP), [applyZoom]);
+  const zoomIn = useCallback(() => {
+    const nextZ = Math.round((zoomRef.current + ZOOM_STEP) * 10) / 10;
+    applyZoom(nextZ);
+  }, [applyZoom]);
+
+  const zoomOut = useCallback(() => {
+    const nextZ = Math.round((zoomRef.current - ZOOM_STEP) * 10) / 10;
+    applyZoom(nextZ);
+  }, [applyZoom]);
+
   const zoomReset = useCallback(() => {
     setZoomBoth(1);
     setPanBoth({ x: 0, y: 0 });
