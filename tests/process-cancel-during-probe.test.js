@@ -39,4 +39,14 @@ describe("main/handlers/process.js: cancel-during-probe race", () => {
       expect(guardIdx).toBeLessThan(writeFileIdx);
     }
   });
+
+  it("also guards isCurrentRun after writeFile before spawn", () => {
+    const writeIdx = src.indexOf("fs.promises.writeFile");
+    const spawnIdx = src.indexOf("spawn(spawnSpec.command");
+    expect(writeIdx).toBeGreaterThan(-1);
+    expect(spawnIdx).toBeGreaterThan(writeIdx);
+    const between = src.slice(writeIdx, spawnIdx);
+    expect(between).toMatch(/isCurrentRun\(\)/);
+    expect(between).toMatch(/cancelled\s*:\s*true/);
+  });
 });

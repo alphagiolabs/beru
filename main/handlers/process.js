@@ -6,15 +6,16 @@ import os from "os";
 import { randomBytes } from "crypto";
 import { app } from "electron";
 import {
-  getMainWindow,
   getPythonProcess,
   setPythonProcess,
   getCurrentTmpFile,
   setCurrentTmpFile,
-  getIsProcessing,
   beginProcessingRun,
   clearProcessingRun,
   getProcessingRunId,
+  getCancellingRunId,
+  setCancellingRunId,
+  clearCancellingRunId,
   setProbePhaseActive,
   getLastProcessingError,
   setLastProcessingError,
@@ -130,14 +131,24 @@ function waitForProcessClose(proc, timeoutMs = 5000) {
 }
 
 function killProcessTree(proc) {
-  if (!proc?.pid) return;
+  if (!proc?.pid) return Promise.resolve();
   if (process.platform === "win32") {
-    execFile("taskkill", ["/F", "/T", "/PID", String(proc.pid)], { windowsHide: true }, (err) => {
-      if (err) console.error("[beru] taskkill error:", err.message);
+    return new Promise((resolve) => {
+      execFile("taskkill", ["/F", "/T", "/PID", String(proc.pid)], { windowsHide: true }, (err) => {
+        if (err) {
+          console.error("[beru] taskkill error:", err.message);
+          try {
+            proc.kill();
+          } catch {}
+        }
+        resolve();
+      });
     });
-    return;
   }
-  proc.kill("SIGTERM");
+  try {
+    proc.kill("SIGTERM");
+  } catch {}
+  return Promise.resolve();
 }
 
 function hasVideoOperations(job) {
@@ -218,7 +229,17 @@ async function enrichJobVideoInfo(job) {
 
 export async function cancelActiveProcessing() {
   const runId = getProcessingRunId();
+  const proc = getPythonProcess();
   const currentTmp = getCurrentTmpFile();
+
+  // Idle: do not emit process:finished — a spurious cancelled event can abort a
+  // newly started run in the renderer (abortActiveProcessing).
+  if (!runId && !proc?.pid) {
+    return { success: true, idle: true };
+  }
+
+  if (runId) setCancellingRunId(runId);
+
   if (currentTmp) {
     const cancelFile = currentTmp.replace(".json", ".cancel");
     try {
@@ -226,36 +247,47 @@ export async function cancelActiveProcessing() {
     } catch {}
   }
 
-  const proc = getPythonProcess();
   if (proc?.pid) {
     const deathPromise = waitForProcessClose(proc);
-    killProcessTree(proc);
+    await killProcessTree(proc);
     const closed = await deathPromise;
-    if (!closed && process.platform !== "win32") {
-      // SIGTERM grace expired without the child exiting — escalate to SIGKILL so
-      // we don't proceed to setPythonProcess(null) while the processor is still
-      // alive (which would orphan it). Windows uses taskkill /F, so no escalation.
+    if (!closed) {
+      // Escalate: non-Windows SIGKILL; Windows fallback if taskkill failed.
       try {
-        proc.kill("SIGKILL");
+        if (process.platform === "win32") proc.kill();
+        else proc.kill("SIGKILL");
       } catch (e) {
-        console.error("[beru] SIGKILL error:", e.message);
+        console.error("[beru] kill escalate error:", e.message);
       }
       await waitForProcessClose(proc, 3000);
     }
+    // When a child was alive, onClose owns the single cancelled finished emit
+    // (if this run is still cancelling). Do not emit a second finished here.
   }
 
-  setPythonProcess(null);
-  clearProcessingRun(runId);
-  if (currentTmp) {
-    try {
-      fs.unlinkSync(currentTmp);
-    } catch {}
-    try {
-      fs.unlinkSync(currentTmp.replace(".json", ".cancel"));
-    } catch {}
-    if (getCurrentTmpFile() === currentTmp) setCurrentTmpFile(null);
+  // Probe-only cancel (no child) or onClose did not settle this runId:
+  // clear the lock and emit exactly one cancelled finished.
+  if (runId && getProcessingRunId() === runId) {
+    setPythonProcess(null);
+    clearProcessingRun(runId);
+    if (currentTmp) {
+      try {
+        fs.unlinkSync(currentTmp);
+      } catch {}
+      try {
+        fs.unlinkSync(currentTmp.replace(".json", ".cancel"));
+      } catch {}
+      if (getCurrentTmpFile() === currentTmp) setCurrentTmpFile(null);
+    }
+    sendToRenderer("process:finished", { code: null, cancelled: true });
+  } else if (!runId && getPythonProcess() === proc) {
+    setPythonProcess(null);
   }
-  sendToRenderer("process:finished", { code: null, cancelled: true });
+
+  if (runId) clearCancellingRunId(runId);
+  else clearCancellingRunId();
+
+  return { success: true, idle: false };
 }
 
 export function registerProcessHandlers(pathSecurity) {
@@ -278,7 +310,21 @@ export function registerProcessHandlers(pathSecurity) {
       return { success: false, error: mediaCheck.error };
     }
 
-    const unreadable = findUnreadableInputs(jobs);
+    const outputDirectory = pathSecurity.getOutputDirectory();
+    if (!outputDirectory) {
+      return { success: false, error: "Selecciona una carpeta de salida antes de procesar" };
+    }
+
+    // Path security first — never open/stat arbitrary renderer paths before
+    // validateReadableFile has constrained them to trusted roots / allow-list.
+    let safeJobs;
+    try {
+      safeJobs = prepareJobsForProcessor(jobs, outputDirectory, pathSecurity);
+    } catch (securityError) {
+      return { success: false, error: securityError.message };
+    }
+
+    const unreadable = findUnreadableInputs(safeJobs);
     if (unreadable.length > 0) {
       const first = unreadable[0];
       return {
@@ -289,18 +335,6 @@ export function registerProcessHandlers(pathSecurity) {
           code: u.code,
         })),
       };
-    }
-
-    const outputDirectory = pathSecurity.getOutputDirectory();
-    if (!outputDirectory) {
-      return { success: false, error: "Selecciona una carpeta de salida antes de procesar" };
-    }
-
-    let safeJobs;
-    try {
-      safeJobs = prepareJobsForProcessor(jobs, outputDirectory, pathSecurity);
-    } catch (securityError) {
-      return { success: false, error: securityError.message };
     }
 
     const runId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
@@ -369,6 +403,13 @@ export function registerProcessHandlers(pathSecurity) {
         JSON.stringify(createProcessorManifest(manifest, enrichedJobs)),
       );
 
+      // Cancel can land during writeFile (async). Re-check before spawn so we
+      // never install an unowned processor child after cancel cleared the run.
+      if (!isCurrentRun()) {
+        cleanupRunArtifacts();
+        return { success: false, error: "Procesamiento cancelado", cancelled: true };
+      }
+
       const firstProfile = enrichedJobs[0]?.encode_profile || "balanced";
       const settings = readSettings();
       const batchWorkersMode =
@@ -420,6 +461,8 @@ export function registerProcessHandlers(pathSecurity) {
         settled = true;
         cleanupChildListeners();
         if (!isCurrentRun()) {
+          // Drop orphaned ref if this child is still installed as the live proc.
+          if (getPythonProcess() === proc) setPythonProcess(null);
           cleanupRunArtifacts();
           return result;
         }
@@ -458,7 +501,10 @@ export function registerProcessHandlers(pathSecurity) {
             superseded: true,
           });
         }
-        if (!isCurrentRun()) {
+
+        const cancellingThisRun = getCancellingRunId() === runId;
+
+        if (!isCurrentRun() && !cancellingThisRun) {
           return settleRun({
             success: false,
             code,
@@ -467,6 +513,15 @@ export function registerProcessHandlers(pathSecurity) {
           });
         }
         if (stdoutBuf.trim()) dispatchProcessorLine(stdoutBuf);
+
+        // Cancel owns terminal signalling: emit cancelled once here so
+        // cancelActiveProcessing does not also emit after kill waits.
+        if (cancellingThisRun) {
+          sendToRenderer("process:finished", { code: null, cancelled: true });
+          clearCancellingRunId(runId);
+          return settleRun({ success: false, code: null, cancelled: true });
+        }
+
         sendToRenderer("process:finished", { code });
         const failed = code !== 0;
         let errMsg;
@@ -529,8 +584,8 @@ export function registerProcessHandlers(pathSecurity) {
   });
 
   ipcMain.handle("process:cancel", async () => {
-    await cancelActiveProcessing();
-    return { success: true };
+    const result = await cancelActiveProcessing();
+    return { success: true, idle: !!result?.idle };
   });
 
   ipcMain.handle("process:exportLogs", async (_event, text) => {

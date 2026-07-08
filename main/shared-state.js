@@ -31,6 +31,20 @@ export const getIsProcessing = () => _isProcessing;
 
 export const getProcessingRunId = () => _processingRunId;
 
+// Set while cancelActiveProcessing owns a run so the child's onClose can emit a
+// single `process:finished { cancelled: true }` instead of a normal finished
+// event, and so a late cancel cannot emit after a newer run has started.
+let _cancellingRunId = null;
+export const getCancellingRunId = () => _cancellingRunId;
+export const setCancellingRunId = (runId) => {
+  _cancellingRunId = runId || null;
+};
+export const clearCancellingRunId = (runId) => {
+  if (runId && _cancellingRunId !== runId) return false;
+  _cancellingRunId = null;
+  return true;
+};
+
 /**
  * Maximum lifetime of a processing run before the watchdog force-releases the
  * lock. Guards against a future refactor that throws between beginProcessingRun
