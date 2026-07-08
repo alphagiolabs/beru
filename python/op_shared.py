@@ -104,13 +104,41 @@ def _optimize_delogo_for_speed(op, video_w, video_h):
 
     if video_w > 0 and video_h > 0 and rw <= 1 and rh <= 1:
         area_ratio = rw * rh
+        px = float(region.get("x", 0))
+        py = float(region.get("y", 0))
+        # Pixel coords: use absolute edges for flush-edge check
+        edge_x0, edge_y0 = px, py
+        edge_x1, edge_y1 = px + rw, py + rh
+        if rw <= 1 and rh <= 1 and px <= 1 and py <= 1:
+            edge_x0 = px * video_w
+            edge_y0 = py * video_h
+            edge_x1 = (px + rw) * video_w
+            edge_y1 = (py + rh) * video_h
     elif video_w > 0 and video_h > 0:
         area_ratio = (rw * rh) / (video_w * video_h)
+        edge_x0 = float(region.get("x", 0))
+        edge_y0 = float(region.get("y", 0))
+        edge_x1 = edge_x0 + rw
+        edge_y1 = edge_y0 + rh
     else:
         area_ratio = 0.1
+        edge_x0 = edge_y0 = 0
+        edge_x1 = edge_y1 = 1
 
     if area_ratio > 0.25:
         return op
+
+    # FFmpeg delogo needs a band around the box; edge logos fail as inpaint.
+    # Keep temporal when flush to any frame edge.
+    band = 1.0
+    if video_w > 0 and video_h > 0:
+        if (
+            edge_x0 <= band
+            or edge_y0 <= band
+            or edge_x1 >= video_w - band
+            or edge_y1 >= video_h - band
+        ):
+            return op
 
     optimized = dict(op)
     optimized["delogo_method"] = "inpaint"
@@ -121,7 +149,12 @@ def _optimize_delogo_for_speed(op, video_w, video_h):
 
 
 def _region_to_pixels(region, video_w, video_h):
-    """Convert a normalized (0..1) or pixel region to integer pixel coords."""
+    """Convert a normalized (0..1) or pixel region to integer pixel coords.
+
+    Electron denormalizes to pixels when dimensions are known, so a 1×1 box at
+    the origin is a real 1px region — not a full-frame normalized unit square.
+    Treat as normalized only when width or height is a proper fraction (< 1).
+    """
     if not region:
         return None
     x = float(region.get("x", 0))
@@ -130,12 +163,25 @@ def _region_to_pixels(region, video_w, video_h):
     h = float(region.get("h", 0))
     if w <= 0 or h <= 0:
         return None
-    if video_w > 0 and video_h > 0 and x <= 1 and y <= 1 and w <= 1 and h <= 1:
+    # Fractional size → normalized 0..1 coords from the UI.
+    looks_normalized = (
+        video_w > 0
+        and video_h > 0
+        and 0 <= x <= 1
+        and 0 <= y <= 1
+        and 0 < w <= 1
+        and 0 < h <= 1
+        and (w < 1 or h < 1)
+    )
+    if looks_normalized:
         px = max(0, int(round(x * video_w)))
         py = max(0, int(round(y * video_h)))
         pw = max(1, min(video_w - px, int(round(w * video_w))))
         ph = max(1, min(video_h - py, int(round(h * video_h))))
         return {"x": px, "y": py, "w": pw, "h": ph}
+    # Unit square {0,0,1,1} with integer 1×1 size: prefer full-frame only when
+    # both axes are exactly 1.0 and video is multi-pixel — but Electron always
+    # denormalizes full frames to video_w×video_h, so 1×1 is a 1px box.
     px = max(0, int(round(x)))
     py = max(0, int(round(y)))
     pw = max(1, min(video_w - px, int(round(w)))) if video_w > 0 else max(1, int(round(w)))

@@ -1501,11 +1501,19 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
                         f"[full{n}][cropped{n}]overlay={overlay_opts}[tmp{n}]"
                     )
             else:
-                # Full-duration crop: changes output resolution
+                # Full-duration crop: changes output resolution. Force even
+                # width/height so yuv420p / H.264 encoders accept the frame, and
+                # update video_w/h so later ops target the cropped size.
+                cw, ch = int(w), int(h)
+                if cw % 2:
+                    cw = max(2, cw - 1)
+                if ch % 2:
+                    ch = max(2, ch - 1)
                 if n == 0:
-                    filters.append(f"[0:v]crop={w}:{h}:{x}:{y}[tmp{n}]")
+                    filters.append(f"[0:v]crop={cw}:{ch}:{x}:{y}[tmp{n}]")
                 else:
-                    filters.append(f"[tmp{n-1}]crop={w}:{h}:{x}:{y}[tmp{n}]")
+                    filters.append(f"[tmp{n-1}]crop={cw}:{ch}:{x}:{y}[tmp{n}]")
+                video_w, video_h = cw, ch
         elif mode == "delogo":
             prev = f"tmp{n-1}" if n > 0 else None
             chain = _build_delogo_chain(
@@ -1968,9 +1976,13 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         return _job_failed_result(job_id, raw_err, max_workers=_BATCH_ACTIVE_WORKERS)
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    raw_operations = job.get("operations", [])
+    raw_operations = job.get("operations", []) or []
+    watermark = job.get("watermark")
+    wm_enabled = isinstance(watermark, dict) and bool(watermark.get("enabled"))
 
-    if not raw_operations:
+    # Stream-copy only when there is truly nothing to composite. A watermark-only
+    # job must go through the filter graph (previously watermark was skipped).
+    if not raw_operations and not wm_enabled:
         logger.debug("Job %d: no operations, copying stream", idx)
         ok, err = _run_ffmpeg(
             [ffmpeg_path, "-y", "-loglevel", "error", "-i", input_path, "-c", "copy", output_path],
@@ -2003,10 +2015,9 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         for op in raw_operations
     ]
 
-    watermark = job.get("watermark")
     filter_complex, output_label, image_paths = build_filter_complex(operations, vw, vh, watermark=watermark)
 
-    if not filter_complex and operations:
+    if not filter_complex and (operations or wm_enabled):
         err = (
             "Las operaciones no generaron un filtro válido. "
             "Comprueba que cada región tenga tamaño suficiente y esté dentro del video."

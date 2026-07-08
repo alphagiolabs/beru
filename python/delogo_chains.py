@@ -25,7 +25,11 @@ logger = logging.getLogger("beru")
 
 
 def _fit_delogo_rect(x, y, w, h, video_w, video_h):
-    """Clamp logo box to frame; FFmpeg delogo prefers even width/height."""
+    """Clamp logo box to frame; FFmpeg delogo prefers even width/height.
+
+    Also insets by 1px from frame edges so native ``delogo`` has a band for
+    interpolation (corner logos otherwise fail with 'outside of the frame').
+    """
     x = max(0, min(int(x), max(0, video_w - 2)))
     y = max(0, min(int(y), max(0, video_h - 2)))
     w = max(2, min(int(w), video_w - x))
@@ -42,6 +46,31 @@ def _fit_delogo_rect(x, y, w, h, video_w, video_h):
         x = max(0, video_w - w)
     if y + h > video_h:
         y = max(0, video_h - h)
+
+    # Keep a 1px band inside the frame for FFmpeg delogo interpolation.
+    band = 1
+    if video_w >= 4 and video_h >= 4:
+        if x < band:
+            shrink = band - x
+            w = max(2, w - shrink)
+            x = band
+        if y < band:
+            shrink = band - y
+            h = max(2, h - shrink)
+            y = band
+        if x + w > video_w - band:
+            w = max(2, video_w - band - x)
+        if y + h > video_h - band:
+            h = max(2, video_h - band - y)
+        if w % 2:
+            w = max(2, w - 1)
+        if h % 2:
+            h = max(2, h - 1)
+        if x + w > video_w - band:
+            x = max(band, video_w - band - w)
+        if y + h > video_h - band:
+            y = max(band, video_h - band - h)
+
     return x, y, w, h
 
 
