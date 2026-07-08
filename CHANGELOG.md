@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.44] - 2026-07-08
+
+### Changed
+
+- **Mejoras en controles de Zoom y UI** — Mejoras en el diseño y pasos funcionales de los controles de zoom para una mejor experiencia de edición en la previsualización de video.
+
 ## [1.6.43] - 2026-07-08
 
 ### Added
