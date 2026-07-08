@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.43] - 2026-07-08
+
+### Added
+
+- **Rediseño pantalla de login y apariencia** — Implementación de layout cinemático en la pantalla de inicio de sesión (`LoginScreen`), además de alinear el estado y apariencia en `StatusFooter` y `AppearancePanel`.
+
 ## [1.6.42] - 2026-06-25
 
 ### Changed
