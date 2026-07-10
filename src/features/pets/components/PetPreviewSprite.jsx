@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { beruLocalUrl } from "../../utils/pet-url.js";
+import { beruLocalUrl } from "../utils/pet-url.js";
 import StaticPetSprite from "./StaticPetSprite.jsx";
 
 function useInViewport(rootMargin = "120px") {

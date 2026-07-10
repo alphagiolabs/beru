@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, PawPrint, Power, Search, Settings, X } from "lucide-react";
-import useEditorStore from "../../stores/useEditorStore";
-import { useT } from "../../i18n/useT";
+import useEditorStore from "../../../stores/useEditorStore";
+import { useT } from "../../../i18n/useT";
 import PetPreviewSprite from "./PetPreviewSprite.jsx";
 
 export default function PetPaletteModal() {
@@ -15,6 +15,7 @@ export default function PetPaletteModal() {
   const selectPet = useEditorStore((s) => s.selectPet);
   const setPetEnabled = useEditorStore((s) => s.setPetEnabled);
   const showToast = useEditorStore((s) => s.showToast);
+  const ensurePetsReady = useEditorStore((s) => s.ensurePetsReady);
 
   const [query, setQuery] = useState("");
   const [highlightIdx, setHighlightIdx] = useState(0);
@@ -40,10 +41,11 @@ export default function PetPaletteModal() {
 
   useEffect(() => {
     if (!showPetPalette) return undefined;
+    void ensurePetsReady?.();
     setHighlightIdx(0);
     const timer = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(timer);
-  }, [showPetPalette]);
+  }, [showPetPalette, ensurePetsReady]);
 
   useEffect(() => {
     if (highlightIdx >= filteredPets.length) {

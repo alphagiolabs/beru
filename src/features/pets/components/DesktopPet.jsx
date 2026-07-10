@@ -1,8 +1,8 @@
 import { useCallback, useEffect } from "react";
-import useEditorStore from "../../stores/useEditorStore";
-import { useT } from "../../i18n/useT";
-import usePetState from "../../hooks/usePetState";
-import usePetOverlaySync from "../../hooks/usePetOverlaySync";
+import useEditorStore from "../../../stores/useEditorStore";
+import { useT } from "../../../i18n/useT";
+import usePetState from "../hooks/usePetState";
+import usePetOverlaySync from "../hooks/usePetOverlaySync";
 import PetSurface from "./PetSurface.jsx";
 
 export default function DesktopPet() {

@@ -11,7 +11,7 @@ function defaultCornerPosition() {
 
 /**
  * @param {{
- *   state: import("../../utils/pet-states.js").PetStateId,
+ *   state: import("../utils/pet-states.js").PetStateId,
  *   spritesheet: string,
  *   scale: number,
  *   opacity?: number,

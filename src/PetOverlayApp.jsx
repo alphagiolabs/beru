@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import PetSprite from "./components/pets/PetSprite.jsx";
-import { petBubbleKey } from "./utils/pet-activity.js";
+import PetSprite from "./features/pets/components/PetSprite.jsx";
+import { petBubbleKey } from "./features/pets/utils/pet-activity.js";
 import { tStatic } from "./utils/format-message.js";
+import "./features/pets/pets.css";
 
 const DEFAULT_STATE = {
   enabled: false,

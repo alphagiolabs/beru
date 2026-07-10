@@ -1,7 +1,7 @@
 import React, { act } from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
-import PetPaletteModal from "../src/components/pets/PetPaletteModal.jsx";
+import PetPaletteModal from "../src/features/pets/components/PetPaletteModal.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
 
 globalThis.React = React;

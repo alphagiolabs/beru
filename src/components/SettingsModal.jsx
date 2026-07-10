@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, Suspense, lazy } from "react";
 import { X, Settings, Palette, Users, PawPrint } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import UserManagementPanel from "./settings/UserManagementPanel";
 import AppearancePanel from "./settings/AppearancePanel";
-import PetdexPanel from "./settings/PetdexPanel";
+
+const PetdexPanel = lazy(() => import("../features/pets/settings/PetdexPanel.jsx"));
 
 function accountInitial(email) {
   const ch = email?.trim()?.[0];
@@ -111,7 +112,9 @@ export default function SettingsModal() {
             {settingsTab === "users" && isAdmin ? (
               <UserManagementPanel />
             ) : settingsTab === "pets" ? (
-              <PetdexPanel />
+              <Suspense fallback={null}>
+                <PetdexPanel />
+              </Suspense>
             ) : (
               <AppearancePanel />
             )}

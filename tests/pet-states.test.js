@@ -5,7 +5,7 @@ import {
   defaultPetState,
   petStates,
   resolvePetState,
-} from "../src/utils/pet-states.js";
+} from "../src/features/pets/utils/pet-states.js";
 
 describe("pet-states", () => {
   it("exposes the canonical Petdex atlas dimensions", () => {

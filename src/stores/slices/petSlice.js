@@ -1,11 +1,14 @@
 import { swallow } from "../../utils/swallow.js";
-import { beruLocalUrl } from "../../utils/pet-url.js";
+import { beruLocalUrl } from "../../features/pets/utils/pet-url.js";
 
 const FEATURED_SLUGS = ["boba", "doraemon", "wangcai", "eve", "mallow", "noir-webling"];
 const EMPTY_MANIFEST = { total: 0, pets: [] };
 export const PET_SCALE_MIN = 0.1;
 export const PET_SCALE_MAX = 3;
 export const PET_SCALE_DEFAULT = 0.33;
+
+/** In-flight promise so concurrent ensurePetsReady callers share one init. */
+let petsInitPromise = null;
 
 function clampPetScale(value) {
   const n = Number(value);
@@ -43,6 +46,8 @@ export function createPetSlice(set, get) {
     petInstalledLoading: false,
     petInstallingSlug: null,
     petUninstallingSlug: null,
+    showPetPalette: false,
+    petsInitialized: false,
 
     hydratePetSettings: (settings) => {
       set({
@@ -326,7 +331,22 @@ export function createPetSlice(set, get) {
           swallow("openPetOverlay(init)", e);
         }
       }
+      set({ petsInitialized: true });
     },
+
+    ensurePetsReady: () => {
+      if (get().petsInitialized) return Promise.resolve();
+      if (!petsInitPromise) {
+        petsInitPromise = get()
+          .initPets()
+          .finally(() => {
+            petsInitPromise = null;
+          });
+      }
+      return petsInitPromise;
+    },
+
+    setShowPetPalette: (val) => set({ showPetPalette: !!val }),
 
     buildPetOverlayPayload: (petState) => {
       const {

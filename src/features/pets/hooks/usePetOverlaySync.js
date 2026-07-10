@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import useEditorStore from "../stores/useEditorStore";
+import useEditorStore from "../../../stores/useEditorStore";
 import usePetState from "./usePetState";
 
 export default function usePetOverlaySync() {

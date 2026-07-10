@@ -97,6 +97,7 @@ describe("SettingsModal appearance", () => {
 
     await act(async () => {
       petsTab.click();
+      await import("../src/features/pets/settings/PetdexPanel.jsx");
     });
 
     expect(useEditorStore.getState().settingsTab).toBe("pets");

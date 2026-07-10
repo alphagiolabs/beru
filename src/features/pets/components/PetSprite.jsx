@@ -1,10 +1,10 @@
 import { memo } from "react";
-import { ATLAS_SHEET_HEIGHT, ATLAS_SHEET_WIDTH, resolvePetState } from "../../utils/pet-states.js";
+import { ATLAS_SHEET_HEIGHT, ATLAS_SHEET_WIDTH, resolvePetState } from "../utils/pet-states.js";
 
 /**
  * @param {{
  *   src: string,
- *   state?: import("../../utils/pet-states.js").PetStateId,
+ *   state?: import("../utils/pet-states.js").PetStateId,
  *   scale?: number,
  *   label?: string,
  *   className?: string,

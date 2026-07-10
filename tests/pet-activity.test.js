@@ -4,7 +4,7 @@ import {
   petBubbleKey,
   resolveBatchCelebration,
   resolvePetActivity,
-} from "../src/utils/pet-activity.js";
+} from "../src/features/pets/utils/pet-activity.js";
 
 describe("pet-activity", () => {
   it("maps Beru activity to Hermes-style pet states", () => {

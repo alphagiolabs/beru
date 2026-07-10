@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Loader2, RefreshCw, Search, ChevronLeft, ChevronRight } from "lucide-react";
-import useEditorStore from "../../stores/useEditorStore";
-import { PET_SCALE_MAX, PET_SCALE_MIN } from "../../stores/slices/petSlice";
-import { useT } from "../../i18n/useT";
-import PetPreviewSprite from "../pets/PetPreviewSprite.jsx";
-import { petStates } from "../../utils/pet-states.js";
+import useEditorStore from "../../../stores/useEditorStore";
+import { PET_SCALE_MAX, PET_SCALE_MIN } from "../../../stores/slices/petSlice";
+import { useT } from "../../../i18n/useT";
+import PetPreviewSprite from "../components/PetPreviewSprite.jsx";
+import { petStates } from "../utils/pet-states.js";
 
 const PAGE_SIZE = 36;
 const CATEGORIES = ["Todos", "Character", "Creature", "Object"];

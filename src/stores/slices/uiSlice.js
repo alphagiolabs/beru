@@ -57,7 +57,6 @@ export function createUiSlice(set, get) {
     },
 
     showShortcuts: false,
-    showPetPalette: false,
     showSettings: false,
     settingsTab: "appearance",
     updateModalOpen: false,
@@ -419,11 +418,12 @@ export function createUiSlice(set, get) {
     },
 
     setShowShortcuts: (val) => set({ showShortcuts: val }),
-    setShowPetPalette: (val) => set({ showPetPalette: val }),
     setShowSettings: (val) => set({ showSettings: val }),
     setSettingsTab: (tab) => set({ settingsTab: tab }),
-    openSettingsTab: (tab = "appearance") =>
-      set({ showSettings: true, settingsTab: tab, showPetPalette: false }),
+    openSettingsTab: (tab = "appearance") => {
+      get().setShowPetPalette?.(false);
+      set({ showSettings: true, settingsTab: tab });
+    },
     setUpdateModalOpen: (val) => set({ updateModalOpen: val }),
     setIsDragging: (val) => set({ isDragging: val }),
   };
