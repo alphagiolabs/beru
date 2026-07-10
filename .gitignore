@@ -77,5 +77,3 @@ nul
 
 # Local scripts (machine-specific, never commit)
 /scripts
-
-.worktrees/

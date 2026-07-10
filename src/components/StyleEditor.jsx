@@ -5,8 +5,11 @@ import { pickTextStyle } from "../utils/text-style";
 import { normalizeColor } from "../utils/color-utils";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS, TEXT_STYLE_PRESETS } from "../utils/types";
 import TextLayoutControls from "./TextLayoutControls";
-import { presetMatches, presetPreviewTextStyle } from "./style-editor/preset-utils";
-import { InspectorGroup, ToggleSwitch, SegmentedToolbar } from "./inspector";
+import {
+  samePresetValue,
+  presetMatches,
+  presetPreviewTextStyle,
+} from "./style-editor/preset-utils";
 
 export default function StyleEditor() {
   const {
@@ -128,24 +131,31 @@ export default function StyleEditor() {
     textShadowOffsetY,
   };
 
-  const strokeActive = (borderWidth ?? 0) > 0;
-
   return (
-    <div className="space-y-2.5">
-      <InspectorGroup title="Vista previa">
+    <div className="space-y-2">
+      <div className="pb-2 mb-1 border-b" style={{ borderColor: "var(--border)" }}>
         <button
           type="button"
           onClick={() => window.dispatchEvent(new CustomEvent("beru:preview:renderFrame"))}
-          className="cap-btn-secondary w-full !text-[11px]"
+          className="w-full py-1.5 px-2 rounded text-[10px] font-medium flex items-center justify-center gap-1.5 transition-colors hover:opacity-90"
+          style={{
+            background: "var(--bg-elevated)",
+            color: "var(--text-secondary)",
+            border: "1px solid var(--border)",
+          }}
           title="Genera un frame con FFmpeg drawtext en el tiempo actual del reproductor"
         >
-          <ScanEye size={13} style={{ color: "var(--accent-brand)" }} />
+          <ScanEye size={12} style={{ color: "var(--accent)" }} />
           Previsualizar frame renderizado
         </button>
-      </InspectorGroup>
+        <p className="text-[9px] mt-1 leading-snug" style={{ color: "var(--text-dim)" }}>
+          Compara CSS vs FFmpeg en el reproductor (modos CSS, FFmpeg o lado a lado).
+        </p>
+      </div>
 
-      <InspectorGroup title="Estilo preestablecido">
-        <div className="inspector-preset-grid">
+      <div className="pb-2 mb-1 border-b" style={{ borderColor: "var(--border)" }}>
+        <span className="cap-input-label">Estilo preestablecido</span>
+        <div className="grid grid-cols-7 gap-1">
           {TEXT_STYLE_PRESETS.map((preset) => {
             const active = presetMatches(preset, currentTextStyle);
             return (
@@ -153,15 +163,19 @@ export default function StyleEditor() {
                 key={preset.id || preset.name}
                 type="button"
                 onClick={() => patch(pickTextStyle(preset))}
-                className={`inspector-preset${active ? " is-selected" : ""}`}
-                style={{ background: preset.previewBg || "var(--bg-surface)" }}
+                className="h-8 min-w-0 rounded flex items-center justify-center transition-colors"
+                style={{
+                  background: preset.previewBg || "var(--bg-elevated)",
+                  border: active ? "1px solid var(--accent)" : "1px solid var(--border)",
+                  boxShadow: active ? "0 0 0 1px var(--accent)" : "none",
+                }}
                 aria-label={`Aplicar estilo: ${preset.name}`}
                 title={preset.name}
                 data-text-style-preset
                 data-preset-id={preset.id}
               >
                 {preset.id === "plain" ? (
-                  <Ban size={16} style={{ color: "var(--text-dim)" }} />
+                  <Ban size={18} style={{ color: "var(--text-dim)" }} />
                 ) : (
                   <span style={presetPreviewTextStyle(preset)}>Aa</span>
                 )}
@@ -169,133 +183,131 @@ export default function StyleEditor() {
             );
           })}
         </div>
-      </InspectorGroup>
+      </div>
 
-      <InspectorGroup title="Tipografía">
+      <label>
+        <span className="cap-input-label">Fuente</span>
+        <select
+          value={fontFamily}
+          onChange={(e) => patch({ fontFamily: e.target.value })}
+          className="cap-input text-[11px]"
+        >
+          {FONT_FAMILIES.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div>
+        <span className="cap-input-label">Peso</span>
+        <div className="grid grid-cols-7 gap-0.5">
+          {FONT_WEIGHTS.map((w) => {
+            const active = (fontWeight ?? 400) === w.value;
+            return (
+              <button
+                key={w.value}
+                onClick={() => patch({ fontWeight: w.value, bold: w.value >= 700 })}
+                className="cap-btn-secondary !text-[9px] !px-0 !py-1.5"
+                style={{
+                  ...(active
+                    ? {
+                        background: "var(--accent)",
+                        color: "var(--bg-app)",
+                        borderColor: "var(--accent)",
+                      }
+                    : {}),
+                  fontWeight: w.value,
+                }}
+                title={w.label}
+              >
+                Aa
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
         <label>
-          <span className="cap-input-label">Fuente</span>
-          <select
-            value={fontFamily}
-            onChange={(e) => patch({ fontFamily: e.target.value })}
-            className="cap-input text-[11px]"
-          >
-            {FONT_FAMILIES.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
+          <span className="cap-input-label">Tamaño</span>
+          <input
+            type="number"
+            value={textFontSize}
+            onChange={(e) => patch({ fontSize: Number(e.target.value) })}
+            className="cap-input font-mono text-[11px]"
+            min={8}
+            max={200}
+          />
         </label>
-
-        <div>
-          <span className="cap-input-label">Peso</span>
-          <SegmentedToolbar
-            ariaLabel="Peso de fuente"
-            columns={7}
-            value={fontWeight ?? 400}
-            onChange={(value) => patch({ fontWeight: value, bold: value >= 700 })}
-            options={FONT_WEIGHTS.map((w) => ({
-              value: w.value,
-              label: "Aa",
-              title: w.label,
-              style: { fontWeight: w.value },
-            }))}
+        <label>
+          <span className="cap-input-label">Espaciado</span>
+          <input
+            type="number"
+            value={letterSpacing ?? 0}
+            onChange={(e) => patch({ letterSpacing: Number(e.target.value) })}
+            className="cap-input font-mono text-[11px]"
+            step={0.5}
           />
-        </div>
+        </label>
+      </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <label>
-            <span className="cap-input-label">Tamaño</span>
-            <input
-              type="number"
-              value={textFontSize}
-              onChange={(e) => patch({ fontSize: Number(e.target.value) })}
-              className="cap-input font-mono text-[11px]"
-              min={8}
-              max={200}
-            />
-          </label>
-          <label>
-            <span className="cap-input-label">Espaciado</span>
-            <input
-              type="number"
-              value={letterSpacing ?? 0}
-              onChange={(e) => patch({ letterSpacing: Number(e.target.value) })}
-              className="cap-input font-mono text-[11px]"
-              step={0.5}
-            />
-          </label>
+      <div>
+        <span className="cap-input-label">Alineación</span>
+        <div className="grid grid-cols-3 gap-1">
+          {TEXT_ALIGNS.map((a) => {
+            const active = (textAlign || "left") === a.value;
+            return (
+              <button
+                key={a.value}
+                onClick={() => patch({ textAlign: a.value })}
+                className="cap-btn-secondary !text-[10px] !py-1"
+                style={
+                  active
+                    ? {
+                        background: "var(--accent)",
+                        color: "var(--bg-app)",
+                        borderColor: "var(--accent)",
+                      }
+                    : {}
+                }
+              >
+                {a.value === "left" && <AlignLeft size={12} />}
+                {a.value === "center" && <AlignCenter size={12} />}
+                {a.value === "right" && <AlignRight size={12} />}
+              </button>
+            );
+          })}
         </div>
+      </div>
 
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => patch({ bold: !bold })}
-            className={`inspector-chip flex-1 gap-1${bold ? " is-selected" : ""}`}
-            aria-pressed={bold}
-          >
-            <Bold size={12} /> Negrita
-          </button>
-          <button
-            type="button"
-            onClick={() => patch({ italic: !italic })}
-            className={`inspector-chip flex-1 gap-1${italic ? " is-selected" : ""}`}
-            aria-pressed={italic}
-          >
-            <Italic size={12} /> Cursiva
-          </button>
-        </div>
-      </InspectorGroup>
+      <TextLayoutControls
+        values={{ autoFit, lineHeight, verticalAlign, textWrap, safeMargin, truncate }}
+        onPatch={patch}
+      />
 
-      <InspectorGroup title="Párrafo">
-        <div>
-          <span className="cap-input-label">Alineación</span>
-          <SegmentedToolbar
-            ariaLabel="Alineación horizontal"
-            columns={3}
-            value={textAlign || "left"}
-            onChange={(value) => patch({ textAlign: value })}
-            options={TEXT_ALIGNS.map((a) => ({
-              value: a.value,
-              title: a.value,
-              icon:
-                a.value === "left" ? (
-                  <AlignLeft size={12} />
-                ) : a.value === "center" ? (
-                  <AlignCenter size={12} />
-                ) : (
-                  <AlignRight size={12} />
-                ),
-            }))}
-          />
-        </div>
-        <TextLayoutControls
-          values={{ autoFit, lineHeight, verticalAlign, textWrap, safeMargin, truncate }}
-          onPatch={patch}
-        />
-      </InspectorGroup>
-
-      <InspectorGroup title="Color">
-        <label className="min-w-0 block">
+      <div className="grid grid-cols-2 gap-2">
+        <label>
           <span className="cap-input-label">Color</span>
-          <div className="flex gap-1.5 min-w-0">
+          <div className="flex gap-1">
             <input
               type="color"
               value={normalizeColor(textFontColor) || "#ffffff"}
               onChange={(e) => patch({ fontColor: e.target.value })}
-              className="w-7 h-7 shrink-0 rounded border-0 p-0 cursor-pointer"
+              className="w-7 h-7 rounded border-0 p-0 cursor-pointer"
             />
             <input
               type="text"
               value={textFontColor}
               onChange={(e) => patch({ fontColor: e.target.value })}
-              className="cap-input min-w-0 flex-1 font-mono text-[10px]"
+              className="cap-input flex-1 font-mono text-[10px]"
             />
           </div>
         </label>
-        <label className="min-w-0 block">
+        <label>
           <span className="cap-input-label">Opacidad</span>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5">
             <input
               type="range"
               min={0}
@@ -303,30 +315,74 @@ export default function StyleEditor() {
               step={0.05}
               value={textOpacity ?? 1}
               onChange={(e) => patch({ textOpacity: parseFloat(e.target.value) })}
-              className="inspector-range"
-              style={{ accentColor: "var(--accent-brand)" }}
+              className="flex-1"
+              style={{ accentColor: "var(--accent)" }}
             />
             <span
-              className="font-mono text-[10px] w-8 shrink-0 text-right"
+              className="font-mono text-[10px] w-7 text-right"
               style={{ color: "var(--text-dim)" }}
             >
               {Math.round((textOpacity ?? 1) * 100)}%
             </span>
           </div>
         </label>
-      </InspectorGroup>
+      </div>
 
-      <InspectorGroup title="Fondo" collapsible defaultOpen={!!bgEnabled} forceOpen={!!bgEnabled}>
-        <ToggleSwitch
-          label="Activo"
-          checked={!!bgEnabled}
-          onChange={(next) => patch({ bgEnabled: next })}
-        />
+      <div className="flex gap-1">
+        <button
+          onClick={() => patch({ bold: !bold })}
+          className={`cap-btn-secondary !px-2 ${bold ? "!text-white" : ""}`}
+          style={
+            bold
+              ? {
+                  background: "var(--accent)",
+                  borderColor: "var(--accent)",
+                  color: "var(--bg-app)",
+                }
+              : {}
+          }
+        >
+          <Bold size={12} /> Negrita
+        </button>
+        <button
+          onClick={() => patch({ italic: !italic })}
+          className={`cap-btn-secondary !px-2 ${italic ? "!text-white" : ""}`}
+          style={
+            italic
+              ? {
+                  background: "var(--accent)",
+                  borderColor: "var(--accent)",
+                  color: "var(--bg-app)",
+                }
+              : {}
+          }
+        >
+          <Italic size={12} /> Cursiva
+        </button>
+      </div>
+
+      <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="cap-input-label !mb-0">Fondo</span>
+          <label
+            className="flex items-center gap-1.5 text-[10px] cursor-pointer"
+            style={{ color: "var(--text-dim)" }}
+          >
+            <input
+              type="checkbox"
+              checked={bgEnabled}
+              onChange={(e) => patch({ bgEnabled: e.target.checked })}
+            />{" "}
+            activo
+          </label>
+        </div>
         {bgEnabled && (
           <div className="space-y-1.5">
             <div className="grid grid-cols-2 gap-2">
               <label>
-                <span className="cap-input-label">Color</span>
+                <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                  Color
+                </span>
                 <div className="flex gap-1">
                   <input
                     type="color"
@@ -343,7 +399,9 @@ export default function StyleEditor() {
                 </div>
               </label>
               <label>
-                <span className="cap-input-label">Opacidad</span>
+                <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                  Opacidad
+                </span>
                 <input
                   type="number"
                   value={bgOpacity}
@@ -356,7 +414,9 @@ export default function StyleEditor() {
               </label>
             </div>
             <label>
-              <span className="cap-input-label">Padding</span>
+              <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                Padding
+              </span>
               <input
                 type="number"
                 value={boxBorderWidth ?? 4}
@@ -368,17 +428,15 @@ export default function StyleEditor() {
             </label>
           </div>
         )}
-      </InspectorGroup>
+      </div>
 
-      <InspectorGroup
-        title="Contorno"
-        collapsible
-        defaultOpen={strokeActive}
-        forceOpen={strokeActive}
-      >
+      <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
+        <span className="cap-input-label">Borde (stroke)</span>
         <div className="grid grid-cols-2 gap-2">
           <label>
-            <span className="cap-input-label">Ancho</span>
+            <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+              Ancho
+            </span>
             <input
               type="number"
               value={borderWidth}
@@ -389,7 +447,9 @@ export default function StyleEditor() {
             />
           </label>
           <label>
-            <span className="cap-input-label">Color</span>
+            <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+              Color
+            </span>
             <div className="flex gap-1">
               <input
                 type="color"
@@ -406,23 +466,29 @@ export default function StyleEditor() {
             </div>
           </label>
         </div>
-      </InspectorGroup>
+      </div>
 
-      <InspectorGroup
-        title="Sombra"
-        collapsible
-        defaultOpen={!!textShadowEnabled}
-        forceOpen={!!textShadowEnabled}
-      >
-        <ToggleSwitch
-          label="Activa"
-          checked={!!textShadowEnabled}
-          onChange={(next) => patch({ textShadowEnabled: next })}
-        />
+      <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="cap-input-label !mb-0">Sombra</span>
+          <label
+            className="flex items-center gap-1.5 text-[10px] cursor-pointer"
+            style={{ color: "var(--text-dim)" }}
+          >
+            <input
+              type="checkbox"
+              checked={!!textShadowEnabled}
+              onChange={(e) => patch({ textShadowEnabled: e.target.checked })}
+            />{" "}
+            activa
+          </label>
+        </div>
         {textShadowEnabled && (
           <div className="space-y-1.5">
             <label>
-              <span className="cap-input-label">Color</span>
+              <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                Color
+              </span>
               <div className="flex gap-1">
                 <input
                   type="color"
@@ -440,7 +506,9 @@ export default function StyleEditor() {
             </label>
             <div className="grid grid-cols-2 gap-2">
               <label>
-                <span className="cap-input-label">Offset X</span>
+                <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                  Offset X
+                </span>
                 <input
                   type="number"
                   value={textShadowOffsetX ?? 2}
@@ -451,7 +519,9 @@ export default function StyleEditor() {
                 />
               </label>
               <label>
-                <span className="cap-input-label">Offset Y</span>
+                <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
+                  Offset Y
+                </span>
                 <input
                   type="number"
                   value={textShadowOffsetY ?? 2}
@@ -464,7 +534,7 @@ export default function StyleEditor() {
             </div>
           </div>
         )}
-      </InspectorGroup>
+      </div>
     </div>
   );
 }
