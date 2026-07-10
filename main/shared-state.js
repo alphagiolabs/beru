@@ -31,6 +31,16 @@ export const getIsProcessing = () => _isProcessing;
 
 export const getProcessingRunId = () => _processingRunId;
 
+/** True once quit/update-quit has started — blocks post-probe spawn races. */
+let _appIsQuitting = false;
+export const getAppIsQuitting = () => _appIsQuitting;
+export const setAppIsQuitting = (quitting) => {
+  _appIsQuitting = Boolean(quitting);
+};
+
+export const hasActiveProcessing = () =>
+  Boolean(_processingRunId || _isProcessing || _pythonProcess);
+
 // Set while cancelActiveProcessing owns a run so the child's onClose can emit a
 // single `process:finished { cancelled: true }` instead of a normal finished
 // event, and so a late cancel cannot emit after a newer run has started.
@@ -91,6 +101,16 @@ function armProcessingWatchdog(runId) {
       `[beru] Processing lock watchdog fired for run ${runId} — ` +
         `force-releasing after ${PROCESSING_LOCK_MAX_MS}ms`,
     );
+    // Notify the renderer so Zustand isProcessing is cleared; otherwise the UI
+    // stays stuck while main already allows a new process:start.
+    import("./utils/renderer.js")
+      .then(({ sendToRenderer }) => {
+        sendToRenderer(
+          "process:error",
+          "El procesamiento se interrumpió de forma inesperada. Puedes volver a intentarlo.",
+        );
+      })
+      .catch(() => {});
   }, PROCESSING_LOCK_MAX_MS);
   // Don't keep the app alive on quit just for the watchdog.
   _processingWatchdog?.unref?.();

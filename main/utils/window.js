@@ -1,8 +1,9 @@
-import { BrowserWindow } from "electron";
+import { BrowserWindow, dialog } from "electron";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { setMainWindow, isDev } from "../shared-state.js";
+import { setMainWindow, isDev, hasActiveProcessing } from "../shared-state.js";
+import { cancelActiveProcessing } from "../handlers/process.js";
 import { readSettings } from "./settings.js";
 import { applyWindowTheme, resolveWindowTheme, TITLEBAR_OVERLAY_COLOR } from "./windowTheme.js";
 import * as updater from "../updater.js";
@@ -59,6 +60,38 @@ export function createWindow() {
   });
   win.setMenu(null);
   setMainWindow(win);
+
+  let closeConfirmed = false;
+  win.on("close", (event) => {
+    if (closeConfirmed) return;
+    if (updater.isQuittingForUpdate()) return;
+    if (!hasActiveProcessing()) return;
+
+    event.preventDefault();
+    dialog
+      .showMessageBox(win, {
+        type: "warning",
+        buttons: ["Cancelar y salir", "Seguir procesando"],
+        defaultId: 1,
+        cancelId: 1,
+        title: "Beru",
+        message: "Hay un procesamiento en curso. ¿Cancelar y salir?",
+        detail: "Si sales ahora, el lote actual se cancelará.",
+      })
+      .then(async ({ response }) => {
+        if (response !== 0) return;
+        closeConfirmed = true;
+        try {
+          await cancelActiveProcessing();
+        } catch (e) {
+          console.error("[beru] cancel on close failed:", e?.message || e);
+        }
+        if (!win.isDestroyed()) win.close();
+      })
+      .catch((e) => {
+        console.error("[beru] close confirm dialog failed:", e?.message || e);
+      });
+  });
 
   let devFallbackUsed = false;
   if (isDev) {

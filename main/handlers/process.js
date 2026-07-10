@@ -19,6 +19,7 @@ import {
   setProbePhaseActive,
   getLastProcessingError,
   setLastProcessingError,
+  getAppIsQuitting,
 } from "../shared-state.js";
 import { validateMediaBinaries } from "../utils/paths.js";
 import {
@@ -389,8 +390,9 @@ export function registerProcessHandlers(pathSecurity) {
       // probe, cancelActiveProcessing() already cleared our runId and tmpFile.
       // Bail before spawning so we don't start a Python process that nobody
       // owns — it would run to completion (or until the watchdog fires) with
-      // no way for the renderer to cancel it.
-      if (!isCurrentRun()) {
+      // no way for the renderer to cancel it. Also bail if the app is quitting
+      // (probe-phase quit race before cancel clears the runId).
+      if (!isCurrentRun() || getAppIsQuitting()) {
         cleanupRunArtifacts();
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
@@ -403,9 +405,9 @@ export function registerProcessHandlers(pathSecurity) {
         JSON.stringify(createProcessorManifest(manifest, enrichedJobs)),
       );
 
-      // Cancel can land during writeFile (async). Re-check before spawn so we
-      // never install an unowned processor child after cancel cleared the run.
-      if (!isCurrentRun()) {
+      // Cancel / quit can land during writeFile (async). Re-check before spawn
+      // so we never install an unowned processor child after cancel cleared the run.
+      if (!isCurrentRun() || getAppIsQuitting()) {
         cleanupRunArtifacts();
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
@@ -522,7 +524,6 @@ export function registerProcessHandlers(pathSecurity) {
           return settleRun({ success: false, code: null, cancelled: true });
         }
 
-        sendToRenderer("process:finished", { code });
         const failed = code !== 0;
         let errMsg;
         if (failed) {
@@ -536,6 +537,9 @@ export function registerProcessHandlers(pathSecurity) {
           }
           errMsg = translateProcessorErrorMessage(errMsg);
         }
+        // Include error on finished so the renderer can toast when no prior
+        // process:error was emitted (crash / OOM / unexpected exit).
+        sendToRenderer("process:finished", failed ? { code, error: errMsg } : { code });
         return settleRun({
           success: !failed,
           code,

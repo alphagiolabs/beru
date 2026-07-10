@@ -28,11 +28,17 @@ function buildSource() {
   // time (fakeWindow is created after runInContext, so binding the value at
   // module top-level would capture undefined).
   src = src.replace(
-    /import\s*\{\s*getMainWindow\s*,\s*isDev\s*\}\s*from\s*["']\.\/shared-state\.js["'];?/,
+    /import\s*\{[^}]*getMainWindow[^}]*\}\s*from\s*["']\.\/shared-state\.js["'];?/,
     [
       "const getMainWindow = () => globalThis.__mockGetMainWindow && globalThis.__mockGetMainWindow();",
       "const isDev = !globalThis.__mockElectronApp.isPackaged;",
+      "const setAppIsQuitting = (v) => { globalThis.__mockSetAppIsQuitting && globalThis.__mockSetAppIsQuitting(v); };",
     ].join("\n"),
+  );
+  // scheduleInstall cancels active processing before quitAndInstall.
+  src = src.replace(
+    /import\s*\{\s*cancelActiveProcessing\s*\}\s*from\s*["']\.\/handlers\/process\.js["'];?/,
+    "const cancelActiveProcessing = () => (globalThis.__mockCancelActiveProcessing ? globalThis.__mockCancelActiveProcessing() : Promise.resolve({ success: true, idle: true }));",
   );
   // The source uses import.meta.url for createRequire. Replace with a fixed URL.
   src = src.replace(/import\.meta\.url/g, '"file:///test/updater.js"');
@@ -100,6 +106,10 @@ export function createUpdaterHarness() {
   context.globalThis = context;
   context.__mockElectronApp = fakeApp;
   context.__mockCreateRequire = createRequireMock;
+  context.__mockCancelActiveProcessing = vi.fn(() =>
+    Promise.resolve({ success: true, idle: true }),
+  );
+  context.__mockSetAppIsQuitting = vi.fn();
 
   const module = { exports: {} };
   context.module = module;
@@ -150,6 +160,12 @@ export function createUpdaterHarness() {
     rejectDownload,
     get autoUpdater() {
       return autoUpdater;
+    },
+    get cancelActiveProcessing() {
+      return context.__mockCancelActiveProcessing;
+    },
+    get setAppIsQuitting() {
+      return context.__mockSetAppIsQuitting;
     },
     init: () => updater.init(fakeWindow),
   };
