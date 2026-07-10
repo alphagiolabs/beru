@@ -66,7 +66,7 @@ pero nunca sacrificar seguridad por cantidad de lineas eliminadas.
 
 - **Electron IPC por string**: los handlers en `main/handlers/*.js` se registran con `ipcMain.handle('canal', ...)` y el renderer los invoca con `ipcRenderer.invoke('canal')`. El vinculo es un **string**, no un import. Verificar coincidencia exacta de canales antes de marcar un handler como muerto.
 - **Handlers no registrados en `main/main.js`**: si un archivo de `main/handlers/` no se importa en `main.js`, todo el archivo puede ser dead, pero confirmar que ningun `require`/`import` dinamico lo carga.
-- **Python empaquetado**: `electron-builder` declara explicitamente `processor.py`, `batch_errors.py`, `encode_profiles.py` en `extraResources`. **No tocarlos** aunque parezcan no importados; se invocan por spawn como CLI.
+- **Python empaquetado**: el instalador no incluye `.py` sueltos. Produccion usa `beru-processor.exe` (PyInstaller) empaquetado via `extraResources` `bin/`. Los modulos locales de `processor.py` deben estar en `beru-processor.spec` `hiddenimports` (cubierto por tests de packaging/spec).
 - **`processor.py` como CLI**: tiene `if __name__ == '__main__'` y funciones invocadas via argparse/subcomandos. Un arg/subcomando no usado en JS puede seguir siendo API publica del binario: reportar, no borrar.
 - **i18n dinamico**: `src/i18n/useT.js` y claves referenciadas como string interpolado (``t(`field.${id}`)``). Buscar la clave como substring, no como identificador.
 - **Zustand slices**: actions exportadas de `src/stores/slices/*` pueden usarse solo en tests. Buscar en `tests/` antes de declararlas muertas.

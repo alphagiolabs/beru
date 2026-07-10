@@ -83,19 +83,6 @@
     ],
     "extraResources": [
       {
-        "from": "python",
-        "to": "python",
-        "filter": [
-          "processor.py",
-          "batch_errors.py",
-          "encode_profiles.py",
-          "!build/**",
-          "!dist/**",
-          "!__pycache__/**",
-          "!test_*.py"
-        ]
-      },
-      {
         "from": "bin",
         "to": "bin"
       },
