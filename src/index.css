@@ -1233,10 +1233,22 @@ label {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 18%, transparent);
 }
 
+/* Appearance panel layout (two-column: quick access | theme library) */
+.settings-appearance {
+  @apply grid gap-4 h-full min-h-0;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+}
+
+.settings-appearance > .settings-card {
+  @apply min-h-0;
+}
+
 .settings-appearance-quick-card {
   @apply flex flex-col overflow-hidden;
   grid-column: 1;
-  grid-row: 1 / span 2;
+  grid-row: 1;
   align-self: stretch;
 }
 
@@ -1248,7 +1260,7 @@ label {
 .settings-appearance-library-card {
   @apply flex flex-col overflow-hidden;
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 1;
   align-self: stretch;
 }
 
