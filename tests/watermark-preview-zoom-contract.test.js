@@ -13,4 +13,11 @@ describe("watermark preview zoom contract", () => {
     expect(wmBody).toMatch(/video\.offsetHeight/);
     expect(wmBody).not.toMatch(/\.getBoundingClientRect\s*\(/);
   });
+
+  it("keeps bottom watermark margin parity with FFmpeg (no +60 preview offset)", () => {
+    const wmStart = src.indexOf("{/* Global watermark preview */}");
+    const wmBody = src.slice(wmStart, wmStart + 3500);
+    expect(wmBody).toMatch(/"bottom-right":\s*\{\s*right:\s*margin,\s*bottom:\s*margin\s*\}/);
+    expect(wmBody).not.toMatch(/bottom:\s*margin\s*\+\s*60/);
+  });
 });

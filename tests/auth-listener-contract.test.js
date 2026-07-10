@@ -23,4 +23,15 @@ describe("auth listener registration contract", () => {
     const signInBody = src.slice(signInStart, src.indexOf("signOut: async"));
     expect(signInBody).toMatch(/ensureAuthListener/);
   });
+
+  // supabase-js deadlocks if onAuthStateChange is async and awaits client APIs
+  // while getSession/signIn hold the same lock — boot freezes on "Verificando sesión".
+  it("defers async session work out of onAuthStateChange (no deadlock)", () => {
+    expect(src).not.toMatch(/onAuthStateChange\(\s*async\b/);
+    expect(src).toMatch(/onAuthStateChange\s*\(\s*\([^)]*\)\s*=>\s*\{/);
+    const ensureStart = src.indexOf("function ensureAuthListener");
+    const ensureBody = src.slice(ensureStart, src.indexOf("export function createAuthSlice"));
+    expect(ensureBody).toMatch(/setTimeout\s*\(/);
+    expect(ensureBody).toMatch(/applySession/);
+  });
 });

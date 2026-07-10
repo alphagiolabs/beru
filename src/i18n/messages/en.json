@@ -370,6 +370,8 @@
   "auth.loginFailed": "Could not sign in",
   "auth.invalidCredentials": "Invalid email or password",
   "auth.accountDisabled": "Your account is disabled. Contact an administrator.",
+  "auth.profileMissing": "Your account has no profile. Contact an administrator.",
+  "auth.profileFetchFailed": "Could not verify your profile. Try again.",
   "auth.notConfigured": "Supabase is not configured.",
   "auth.notConfiguredHint": "Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in a .env file",
   "auth.unknownError": "Authentication error",

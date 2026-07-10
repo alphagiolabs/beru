@@ -118,7 +118,10 @@ export default function useProcessing(api) {
         pendingJobProgress.clear();
         cancelJobProgressFlush();
         const state = useEditorStore.getState();
-        state.setProcessing(false);
+        // Fatal errors may arrive without process:finished — finalize history
+        // and reset in-flight rows so the UI is not stuck in "processing".
+        state.finalizeActiveExecution();
+        state.abortActiveProcessing();
         console.error("[beru] Processing error:", msg);
         state.showToast({ kind: "err", text: processingErrorText(msg) });
       }),

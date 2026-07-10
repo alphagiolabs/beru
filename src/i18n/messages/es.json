@@ -370,6 +370,8 @@
   "auth.loginFailed": "No se pudo iniciar sesión",
   "auth.invalidCredentials": "Correo o contraseña incorrectos",
   "auth.accountDisabled": "Tu cuenta está deshabilitada. Contacta al administrador.",
+  "auth.profileMissing": "Tu cuenta no tiene perfil. Contacta al administrador.",
+  "auth.profileFetchFailed": "No se pudo verificar tu perfil. Intenta de nuevo.",
   "auth.notConfigured": "Supabase no está configurado.",
   "auth.notConfiguredHint": "Define VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en un archivo .env",
   "auth.unknownError": "Error de autenticación",

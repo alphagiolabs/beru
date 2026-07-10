@@ -37,6 +37,16 @@ export default function App() {
   useKeyboard();
   useProcessing(api);
 
+  // Re-register restored session paths with the main-process allow-list so
+  // preview (beru://) and process:start work after crash/relaunch.
+  useEffect(() => {
+    if (!api?.restoreSessionPaths) return;
+    const { outputDir, queue, excelPath } = useEditorStore.getState();
+    const videoPaths = (queue || []).map((item) => item?.path).filter(Boolean);
+    if (!outputDir && videoPaths.length === 0 && !excelPath) return;
+    void api.restoreSessionPaths({ outputDir, videoPaths, excelPath });
+  }, []);
+
   useEffect(() => {
     loadPresetsFromStorage();
     const settingsReady = loadSettings();
@@ -133,7 +143,7 @@ export default function App() {
           <ToolBar />
         </div>
         <aside
-          className="w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l"
+          className="inspector w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l"
           style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
         >
           <PropertiesPanel />

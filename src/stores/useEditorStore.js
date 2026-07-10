@@ -8,66 +8,25 @@ import { createProjectSlice } from "./slices/projectSlice.js";
 import { createWatermarkSlice } from "./slices/watermarkSlice.js";
 import { createAuthSlice } from "./slices/authSlice.js";
 import { createPetSlice } from "./slices/petSlice.js";
+import {
+  SESSION_PERSIST_KEY,
+  readSessionSnapshotFromStorage,
+  writeSessionSnapshotToStorage,
+} from "../utils/session-persist.js";
 
-const QUEUE_PERSIST_KEY = "beru-queue-session";
 const QUEUE_PERSIST_DELAY_MS = 800;
 let _queuePersistTimer = null;
 
-/**
- * Persist the video queue to sessionStorage so a crash or accidental close
- * doesn't lose the user's loaded videos and operations. Thumbnails and
- * imageDataCache are excluded (too large, regenerable). Only queue items
- * with a valid path are kept.
- */
-function persistQueue(queue) {
+function persistSession(getState) {
   if (typeof window === "undefined") return;
   if (_queuePersistTimer) clearTimeout(_queuePersistTimer);
   _queuePersistTimer = setTimeout(() => {
     _queuePersistTimer = null;
-    try {
-      const minimal = queue
-        .filter((item) => item && item.path)
-        .map((item) => ({
-          path: item.path,
-          src: item.src,
-          filename: item.filename,
-          width: item.width || 0,
-          height: item.height || 0,
-          duration: item.duration || 0,
-          operations: item.operations || [],
-          customOutputName: item.customOutputName || "",
-        }));
-      sessionStorage.setItem(QUEUE_PERSIST_KEY, JSON.stringify(minimal));
-    } catch {
-      // sessionStorage may be full or unavailable — silently skip
-    }
+    writeSessionSnapshotToStorage(getState());
   }, QUEUE_PERSIST_DELAY_MS);
 }
 
-/**
- * Restore the queue from sessionStorage on startup. Returns the queue array
- * or null if nothing was saved or restoration failed.
- */
-function restoreQueue() {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = sessionStorage.getItem(QUEUE_PERSIST_KEY);
-    if (!raw) return null;
-    const items = JSON.parse(raw);
-    if (!Array.isArray(items) || items.length === 0) return null;
-    return items.map((item) => ({
-      ...item,
-      status: "idle",
-      progress: 0,
-      error: null,
-      thumbnail: null,
-    }));
-  } catch {
-    return null;
-  }
-}
-
-const _restoredQueue = restoreQueue();
+const _restoredSession = typeof window !== "undefined" ? readSessionSnapshotFromStorage() : null;
 
 const useEditorStore = createWithEqualityFn(
   (set, get) => ({
@@ -80,28 +39,31 @@ const useEditorStore = createWithEqualityFn(
     ...createWatermarkSlice(set, get),
     ...createAuthSlice(set, get),
     ...createPetSlice(set, get),
-    // Restore queue from sessionStorage if available
-    ...(_restoredQueue
-      ? {
-          queue: _restoredQueue,
-          selectedIdx: _restoredQueue.length > 0 ? 0 : -1,
-        }
-      : {}),
+    ...(_restoredSession || {}),
   }),
   Object.is,
 );
 
-// Subscribe to queue changes for persistence (only persists the queue field).
-// zustand's subscribe fires on every state change, so we compare the queue
-// reference to avoid persisting on unrelated state updates.
+// Persist queue + batch/Excel/output context across crash/relaunch.
 if (typeof window !== "undefined") {
-  let _lastQueue = useEditorStore.getState().queue;
+  let prev = useEditorStore.getState();
   useEditorStore.subscribe((state) => {
-    if (state.queue !== _lastQueue) {
-      _lastQueue = state.queue;
-      persistQueue(state.queue);
-    }
+    const changed =
+      state.queue !== prev.queue ||
+      state.outputDir !== prev.outputDir ||
+      state.templateRegions !== prev.templateRegions ||
+      state.selectedTemplateRegionId !== prev.selectedTemplateRegionId ||
+      state.nextRegionLabel !== prev.nextRegionLabel ||
+      state.excelPath !== prev.excelPath ||
+      state.excelHeaders !== prev.excelHeaders ||
+      state.excelRows !== prev.excelRows ||
+      state.excelMapping !== prev.excelMapping ||
+      state.excelMatchStatus !== prev.excelMatchStatus ||
+      state.excelRowIndexByFilename !== prev.excelRowIndexByFilename;
+    prev = state;
+    if (changed) persistSession(() => useEditorStore.getState());
   });
 }
 
+export { SESSION_PERSIST_KEY };
 export default useEditorStore;

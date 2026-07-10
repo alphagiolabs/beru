@@ -102,7 +102,20 @@ describe("batch-runner", () => {
       });
       expect(result).toMatchObject({ ok: false, error: "spawn failed" });
       expect(setProcessing).toHaveBeenCalledWith(false);
+      expect(hooks.finalizeActiveExecution).toHaveBeenCalled();
       expect(hooks.applyPatch).not.toHaveBeenCalledWith({ isProcessing: false });
+    });
+
+    it("finalizes execution when startProcessing throws", async () => {
+      api.startProcessing.mockRejectedValue(new Error("boom"));
+      const result = await runBatch({
+        api,
+        jobs: [{ id: 0 }],
+        queue: [item()],
+        hooks,
+      });
+      expect(result).toMatchObject({ ok: false, error: "boom" });
+      expect(hooks.finalizeActiveExecution).toHaveBeenCalled();
     });
 
     it("returns api_unavailable when api missing", async () => {
@@ -147,6 +160,36 @@ describe("batch-runner", () => {
         hooks: makeHooks(),
       });
       expect(result).toMatchObject({ ok: false, code: "already_processing" });
+    });
+
+    it("resets the video row out of processing when startProcessing fails", async () => {
+      const api = {
+        startProcessing: vi.fn(async () => ({ success: false, error: "no output" })),
+      };
+      const queue = [item({ status: "processing" })];
+      const hooks = makeHooks({
+        getQueue: vi.fn(() => queue),
+      });
+      const result = await runSingle({
+        api,
+        job: { id: 0, output_path: "C:\\out\\a.mp4" },
+        videoIdx: 0,
+        queue: [item()],
+        hooks,
+      });
+      expect(result.ok).toBe(false);
+      expect(hooks.applyPatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isProcessing: false,
+          queue: [
+            expect.objectContaining({
+              status: "error",
+              error: "no output",
+            }),
+          ],
+        }),
+      );
+      expect(hooks.finalizeActiveExecution).toHaveBeenCalled();
     });
   });
 

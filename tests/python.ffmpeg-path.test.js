@@ -1178,6 +1178,6 @@ print("RESULT", json.dumps(result, sort_keys=True))
     }
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('"file": "a.mp4"');
-    expect(r.stdout).toContain('RESULT {"failed": 0, "succeeded": 1, "total": 1}');
+    expect(r.stdout).toContain('RESULT {"cancelled": 0, "failed": 0, "succeeded": 1, "total": 1}');
   });
 });

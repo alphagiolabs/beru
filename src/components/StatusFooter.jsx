@@ -172,6 +172,9 @@ export default function StatusFooter() {
               {batchSummary.failed > 0 && (
                 <span className="status-footer-err"> · {batchSummary.failed} err</span>
               )}
+              {batchSummary.cancelled > 0 && (
+                <span className="status-footer-dim"> · {batchSummary.cancelled} cancel</span>
+              )}
             </span>
           </FooterChip>
         )}

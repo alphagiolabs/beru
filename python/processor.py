@@ -2313,7 +2313,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
 
     logger.info("Batch finished: %d/%d succeeded, %d failed, %d cancelled",
                 succeeded, total, failed, cancelled)
-    return {"total": total, "succeeded": succeeded, "failed": failed + cancelled}
+    return {"total": total, "succeeded": succeeded, "failed": failed, "cancelled": cancelled}
 
 
 def _init_ffmpeg_globals():
