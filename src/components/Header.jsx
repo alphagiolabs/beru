@@ -26,8 +26,9 @@ import { shallow } from "zustand/shallow";
 import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
 import useEditorStore from "../stores/useEditorStore";
 import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
-import { hasVideoDimensions, listVideosMissingBatchText } from "../utils/batch-process";
-import { createJobManifest } from "../utils/job-manifest";
+import { hasVideoDimensions } from "../utils/batch-process";
+import { buildExportJobs } from "../utils/export-pipeline";
+import { validateBatchReady, runBatch, cancelBatch } from "../utils/batch-runner";
 import { resolveThemeName } from "../theme/engine.js";
 
 const api = window.api;
@@ -262,81 +263,64 @@ export default function Header() {
       queueForProcessing = await get().refreshMissingVideoInfo(api);
     }
 
-    const missingDims = queueForProcessing.filter((q) => !hasVideoDimensions(q));
-    if (missingDims.length > 0) {
-      const names = missingDims
-        .slice(0, 3)
-        .map((q) => q.filename)
-        .join(", ");
-      const more = missingDims.length > 3 ? ` (+${missingDims.length - 3})` : "";
-      showToast({
-        kind: "err",
-        text: t("errors.missingVideoDimensions", { count: missingDims.length, names, more }),
-      });
-      return;
-    }
-
-    if (templateRegions.length > 0) {
-      const missingText = listVideosMissingBatchText(
-        queueForProcessing,
-        templateRegions,
-        (videoIdx, regionId) => get().getCellTextForRegion(videoIdx, regionId),
-      );
-      if (missingText.length > 0) {
-        const names = missingText.slice(0, 3).join(", ");
-        const more = missingText.length > 3 ? ` (+${missingText.length - 3})` : "";
+    const validation = validateBatchReady({
+      queue: queueForProcessing,
+      templateRegions,
+      getCellText: (videoIdx, regionId) => get().getCellTextForRegion(videoIdx, regionId),
+    });
+    if (!validation.ok) {
+      if (validation.code === "missing_dimensions") {
+        const missing = validation.details.missing;
+        const names = missing
+          .slice(0, 3)
+          .map((q) => q.filename)
+          .join(", ");
+        const more = missing.length > 3 ? ` (+${missing.length - 3})` : "";
         showToast({
           kind: "err",
-          text: t("errors.batchTextMissing", { count: missingText.length, names, more }),
+          text: t("errors.missingVideoDimensions", { count: missing.length, names, more }),
         });
         return;
       }
-    }
-
-    const jobs = queueForProcessing.map((q, i) => get()._buildJobFor(q, i)).filter(Boolean);
-    if (jobs.length === 0) {
-      showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
-      return;
-    }
-    get().startExecutionRun({ kind: "batch", jobCount: jobs.length });
-
-    const queueReset = get().queue.map((item) => ({
-      ...item,
-      status: "idle",
-      progress: 0,
-      error: null,
-    }));
-    useEditorStore.setState({
-      queue: queueReset,
-      progressTotal: jobs.length,
-      progressDone: 0,
-      jobProgress: {},
-      isProcessing: true,
-    });
-
-    api
-      .startProcessing(createJobManifest(jobs))
-      .then((result) => {
-        if (!result.success) {
-          // Runtime failures are toasted via useProcessing → onError; only pre-spawn errors here.
-          if (result.error && result.code == null) {
-            showToast({
-              kind: "err",
-              text: t("errors.processStartFailed", {
-                message: result.error,
-              }),
-            });
-          }
-          get().setProcessing(false);
-        }
-      })
-      .catch((e) => {
+      if (validation.code === "missing_batch_text") {
+        const missing = validation.details.missing;
+        const names = missing.slice(0, 3).join(", ");
+        const more = missing.length > 3 ? ` (+${missing.length - 3})` : "";
         showToast({
           kind: "err",
-          text: t("errors.processStartFailed", { message: e.message }),
+          text: t("errors.batchTextMissing", { count: missing.length, names, more }),
         });
-        get().setProcessing(false);
-      });
+        return;
+      }
+      return;
+    }
+
+    const jobs = buildExportJobs(queueForProcessing, (q, i) => get()._buildJobFor(q, i));
+    // Fire-and-forget like before: process:start resolves when the batch ends.
+    void runBatch({
+      api,
+      jobs,
+      queue: get().queue,
+      hooks: {
+        startExecutionRun: (opts) => get().startExecutionRun(opts),
+        applyPatch: (patch) => useEditorStore.setState(patch),
+        setProcessing: (val) => get().setProcessing(val),
+      },
+    }).then((result) => {
+      if (!result.ok) {
+        if (result.code === "no_jobs") {
+          showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
+          return;
+        }
+        // Runtime failures are toasted via useProcessing → onError; only pre-spawn errors here.
+        if (result.error && result.code == null) {
+          showToast({
+            kind: "err",
+            text: t("errors.processStartFailed", { message: result.error }),
+          });
+        }
+      }
+    });
   };
 
   const handleTestCurrent = async () => {
@@ -351,8 +335,12 @@ export default function Header() {
   };
 
   const handleCancel = async () => {
-    await api?.cancelProcessing();
-    get().abortActiveProcessing();
+    await cancelBatch({
+      api,
+      hooks: {
+        abortActiveProcessing: () => get().abortActiveProcessing(),
+      },
+    });
   };
 
   const canTest = !isProcessing && selectedIdx >= 0 && selectedIdx < queueLength;
