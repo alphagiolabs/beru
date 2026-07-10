@@ -2,6 +2,13 @@ import { getSupabase, isSupabaseConfigured } from "../../lib/supabaseClient.js";
 
 let _authListenerRegistered = false;
 
+/** Distinguish missing profile rows from explicitly disabled accounts. */
+export function profileGateError(profile) {
+  if (!profile) return "auth.profileMissing";
+  if (!profile.is_active) return "auth.accountDisabled";
+  return null;
+}
+
 async function fetchProfile(supabase, userId) {
   const { data, error } = await supabase
     .from("profiles")
@@ -23,19 +30,30 @@ async function applySession(supabase, set, nextSession) {
   }
   try {
     const nextProfile = await fetchProfile(supabase, nextSession.user.id);
-    if (!nextProfile?.is_active) {
+    const gate = profileGateError(nextProfile);
+    if (gate) {
       await supabase.auth.signOut();
       set({
         authStatus: "unauthenticated",
         user: null,
         profile: null,
-        authError: "auth.accountDisabled",
+        authError: gate,
       });
       return;
     }
-    set({ authStatus: "authenticated", user: nextSession.user, profile: nextProfile });
+    set({
+      authStatus: "authenticated",
+      user: nextSession.user,
+      profile: nextProfile,
+      authError: null,
+    });
   } catch {
-    set({ authStatus: "unauthenticated", user: null, profile: null });
+    set({
+      authStatus: "unauthenticated",
+      user: null,
+      profile: null,
+      authError: "auth.profileFetchFailed",
+    });
   }
 }
 
@@ -87,15 +105,16 @@ export function createAuthSlice(set, get) {
         }
 
         const profile = await fetchProfile(supabase, session.user.id);
-        if (!profile?.is_active) {
+        const gate = profileGateError(profile);
+        if (gate) {
           await supabase.auth.signOut();
           set({
             authStatus: "unauthenticated",
             user: null,
             profile: null,
-            authError: "auth.accountDisabled",
+            authError: gate,
           });
-          return { ok: false, reason: "disabled" };
+          return { ok: false, reason: gate === "auth.accountDisabled" ? "disabled" : "no-profile" };
         }
 
         set({
@@ -111,7 +130,7 @@ export function createAuthSlice(set, get) {
           authStatus: "unauthenticated",
           user: null,
           profile: null,
-          authError: err?.message || "auth.unknownError",
+          authError: err?.message || "auth.profileFetchFailed",
         });
         return { ok: false, reason: "error" };
       }
@@ -135,11 +154,19 @@ export function createAuthSlice(set, get) {
         return { ok: false, error: code };
       }
 
-      const profile = await fetchProfile(supabase, data.user.id);
-      if (!profile?.is_active) {
+      let profile;
+      try {
+        profile = await fetchProfile(supabase, data.user.id);
+      } catch {
         await supabase.auth.signOut();
-        set({ authError: "auth.accountDisabled" });
-        return { ok: false, error: "auth.accountDisabled" };
+        set({ authError: "auth.profileFetchFailed" });
+        return { ok: false, error: "auth.profileFetchFailed" };
+      }
+      const gate = profileGateError(profile);
+      if (gate) {
+        await supabase.auth.signOut();
+        set({ authError: gate });
+        return { ok: false, error: gate };
       }
 
       // Safety net if initAuth never ran (or failed before ensureAuthListener).

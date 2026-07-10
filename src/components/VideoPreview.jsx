@@ -968,21 +968,16 @@ export default function VideoPreview() {
                 "center-left": { left: margin, top: "50%", transform: "translateY(-50%)" },
                 center: { left: "50%", top: "50%", transform: "translate(-50%, -50%)" },
                 "center-right": { right: margin, top: "50%", transform: "translateY(-50%)" },
-                "bottom-left": { left: margin, bottom: margin + 60 },
+                "bottom-left": { left: margin, bottom: margin },
                 "bottom-center": {
                   left: "50%",
-                  bottom: margin + 60,
+                  bottom: margin,
                   transform: "translateX(-50%)",
                 },
-                "bottom-right": { right: margin, bottom: margin + 60 },
+                "bottom-right": { right: margin, bottom: margin },
               };
-              // NOTE: The +60 offset on bottom-* positions lifts the watermark
-              // above the player controls overlay (absolute bottom-0 z-30).
-              // FFmpeg export does NOT apply this offset (uses H-h-margin), so
-              // bottom-* watermarks appear ~60px lower in export than in preview.
-              // This is a known WYSIWYG divergence for bottom-* positions. The
-              // alternative (removing +60) hides the watermark behind controls
-              // in preview, which is worse UX. Left as-is to preserve UI.
+              // Match FFmpeg export margins (H-h-margin). zIndex above the
+              // player controls (z-30) so bottom watermarks stay visible.
               const posStyle = posMap[pos] || posMap["bottom-right"];
               const boxStyle = {
                 position: "absolute",
@@ -991,12 +986,12 @@ export default function VideoPreview() {
                 width: layoutW,
                 height: layoutH,
                 pointerEvents: "none",
-                zIndex: 20,
+                zIndex: 35,
               };
               if (watermark.type === "text" && watermark.text) {
                 const fontSize = Math.max(8, (watermark.fontSize || 18) * sy);
                 return (
-                  <div className="absolute pointer-events-none z-20" style={boxStyle}>
+                  <div className="absolute pointer-events-none z-[35]" style={boxStyle}>
                     <div
                       className="absolute"
                       style={{
@@ -1024,7 +1019,7 @@ export default function VideoPreview() {
                 const baseSize = 80 * sy;
                 const scaledSize = baseSize * (watermark.scale || 1);
                 return (
-                  <div className="absolute pointer-events-none z-20" style={boxStyle}>
+                  <div className="absolute pointer-events-none z-[35]" style={boxStyle}>
                     <div
                       className="absolute"
                       style={{ ...posStyle, opacity: watermark.opacity ?? 0.5 }}

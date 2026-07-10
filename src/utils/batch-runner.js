@@ -56,20 +56,20 @@ export async function runBatch({ api, jobs, queue, hooks }) {
     else hooks.applyPatch?.({ isProcessing: false });
   };
 
+  const failStart = (error, code = null) => {
+    clearProcessing();
+    hooks.finalizeActiveExecution?.(null);
+    return { ok: false, error, ...(code != null ? { code } : {}) };
+  };
+
   try {
     const result = await api.startProcessing(createJobManifest(jobs));
     if (!result?.success) {
-      clearProcessing();
-      return {
-        ok: false,
-        error: result?.error || "startProcessing failed",
-        code: result?.code ?? null,
-      };
+      return failStart(result?.error || "startProcessing failed", result?.code ?? null);
     }
     return { ok: true };
   } catch (e) {
-    clearProcessing();
-    return { ok: false, error: e?.message || String(e) };
+    return failStart(e?.message || String(e));
   }
 }
 
@@ -93,21 +93,39 @@ export async function runSingle({ api, job, videoIdx, queue, isProcessing = fals
   hooks.startExecutionRun?.({ kind: "single", jobCount: 1 });
   hooks.applyPatch?.(createSingleStartPatch({ queue, videoIdx }));
 
+  let startError = null;
   try {
     const result = await api.startProcessing(createJobManifest([job]));
     const itemError = hooks.getQueue?.()?.[videoIdx]?.error;
+    if (!result?.success) {
+      startError = result?.error || itemError || "startProcessing failed";
+    }
     return {
       ok: !!result?.success,
       outputPath: job.output_path,
-      error: result?.error || itemError || undefined,
+      error: startError || undefined,
     };
   } catch (e) {
-    return { ok: false, error: e?.message || String(e) };
+    startError = e?.message || String(e);
+    return { ok: false, error: startError };
   } finally {
     const currentQueue = hooks.getQueue?.() ?? queue;
     const summary = hooks.summarizeQueue?.(currentQueue);
     hooks.finalizeActiveExecution?.(summary);
-    hooks.applyPatch?.({ isProcessing: false });
+    if (startError) {
+      const nextQueue = [...currentQueue];
+      if (videoIdx >= 0 && videoIdx < nextQueue.length) {
+        nextQueue[videoIdx] = {
+          ...nextQueue[videoIdx],
+          status: "error",
+          progress: 0,
+          error: startError,
+        };
+      }
+      hooks.applyPatch?.({ queue: nextQueue, isProcessing: false, jobProgress: {} });
+    } else {
+      hooks.applyPatch?.({ isProcessing: false });
+    }
   }
 }
 

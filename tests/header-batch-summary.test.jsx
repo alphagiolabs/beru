@@ -77,4 +77,18 @@ describe("StatusFooter batch summary", () => {
     expect(chip.textContent).toMatch(/0\/1/);
     expect(chip.textContent).toMatch(/1 err/);
   });
+
+  it("shows cancelled count separately from errors", () => {
+    useEditorStore.setState({
+      isProcessing: false,
+      batchSummary: { total: 3, succeeded: 1, failed: 1, cancelled: 1 },
+    });
+    act(() => {
+      root.render(<StatusFooter />);
+    });
+    const chip = document.querySelector(".status-footer-chip");
+    expect(chip.textContent).toMatch(/1\/3/);
+    expect(chip.textContent).toMatch(/1 err/);
+    expect(chip.textContent).toMatch(/1 cancel/);
+  });
 });

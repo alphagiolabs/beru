@@ -81,4 +81,31 @@ export function registerFileHandlers(pathSecurity) {
     shell.showItemInFolder(check.resolvedPath);
     return { success: true };
   });
+
+  /**
+   * Re-register paths restored from sessionStorage after relaunch.
+   * Output dir must be registered for process:start; videos/excel for preview/read.
+   */
+  ipcMain.handle("session:restorePaths", async (_event, payload = {}) => {
+    const result = { ok: true, outputDir: null, videos: 0, excel: false, errors: [] };
+    const outputDir = payload?.outputDir;
+    if (outputDir) {
+      const check = pathSecurity.registerOutputDirectory(outputDir);
+      if (check.ok) {
+        result.outputDir = check.resolvedPath;
+      } else {
+        result.errors.push(check.error || "outputDir");
+      }
+    }
+    const videoPaths = Array.isArray(payload?.videoPaths) ? payload.videoPaths : [];
+    if (videoPaths.length > 0) {
+      pathSecurity.registerAllowedPaths(videoPaths);
+      result.videos = videoPaths.length;
+    }
+    if (payload?.excelPath) {
+      pathSecurity.registerAllowedPath(payload.excelPath);
+      result.excel = true;
+    }
+    return result;
+  });
 }

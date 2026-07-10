@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("api", {
   openVideos: () => ipcRenderer.invoke("dialog:openVideos"),
   openExcel: () => ipcRenderer.invoke("dialog:openExcel"),
   selectOutputDir: () => ipcRenderer.invoke("dialog:selectOutputDir"),
+  restoreSessionPaths: (payload) => ipcRenderer.invoke("session:restorePaths", payload),
   getVideoInfo: (path) => ipcRenderer.invoke("fs:getVideoInfo", path),
   getVideoInfoBatch: (paths) => ipcRenderer.invoke("fs:getVideoInfoBatch", paths),
   readExcel: (path) => ipcRenderer.invoke("fs:readExcel", path),
