@@ -12,31 +12,49 @@ async function fetchProfile(supabase, userId) {
   return data;
 }
 
-/** Register once so cold-start (no session) still receives later sign-in / sign-out events. */
+/**
+ * Apply a session to the store (profile fetch + active check).
+ * Must not run inside the onAuthStateChange callback body — see ensureAuthListener.
+ */
+async function applySession(supabase, set, nextSession) {
+  if (!nextSession?.user) {
+    set({ authStatus: "unauthenticated", user: null, profile: null });
+    return;
+  }
+  try {
+    const nextProfile = await fetchProfile(supabase, nextSession.user.id);
+    if (!nextProfile?.is_active) {
+      await supabase.auth.signOut();
+      set({
+        authStatus: "unauthenticated",
+        user: null,
+        profile: null,
+        authError: "auth.accountDisabled",
+      });
+      return;
+    }
+    set({ authStatus: "authenticated", user: nextSession.user, profile: nextProfile });
+  } catch {
+    set({ authStatus: "unauthenticated", user: null, profile: null });
+  }
+}
+
+/**
+ * Register once so cold-start (no session) still receives later sign-in / sign-out events.
+ *
+ * CRITICAL: never `await` Supabase APIs inside the onAuthStateChange callback.
+ * supabase-js holds an internal lock while the callback runs; an async call that
+ * needs the same lock deadlocks getSession/signIn and freezes the app on
+ * "Verificando sesión…". Defer with setTimeout(0) so the lock is released first.
+ * @see https://supabase.com/docs/guides/troubleshooting/why-is-my-supabase-api-call-not-returning-PGzXw0
+ */
 function ensureAuthListener(supabase, set) {
   if (_authListenerRegistered || !supabase) return;
   _authListenerRegistered = true;
-  supabase.auth.onAuthStateChange(async (_event, nextSession) => {
-    if (!nextSession?.user) {
-      set({ authStatus: "unauthenticated", user: null, profile: null });
-      return;
-    }
-    try {
-      const nextProfile = await fetchProfile(supabase, nextSession.user.id);
-      if (!nextProfile?.is_active) {
-        await supabase.auth.signOut();
-        set({
-          authStatus: "unauthenticated",
-          user: null,
-          profile: null,
-          authError: "auth.accountDisabled",
-        });
-        return;
-      }
-      set({ authStatus: "authenticated", user: nextSession.user, profile: nextProfile });
-    } catch {
-      set({ authStatus: "unauthenticated", user: null, profile: null });
-    }
+  supabase.auth.onAuthStateChange((_event, nextSession) => {
+    setTimeout(() => {
+      void applySession(supabase, set, nextSession);
+    }, 0);
   });
 }
 
