@@ -56,6 +56,9 @@ describe("installer packaging config", () => {
     expect(pkg.build.extraResources).toEqual(
       expect.arrayContaining([expect.objectContaining({ from: "bin", to: "bin" })]),
     );
+
+    // beforeBuild must still build the exe into bin/ before packaging.
+    expect(pkg.build.beforeBuild).toBe("scripts/build-processor.hook.cjs");
   });
 
   it("covers every processor.py local import via beru-processor.spec hiddenimports (bundled path)", () => {

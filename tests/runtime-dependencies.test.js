@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import fs from "fs";
+import path from "path";
 
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
 
@@ -8,7 +9,12 @@ import {
   resolveProcessorSpawn,
   getBundledProcessorPath,
 } from "../main/utils/processor-spawn.js";
-import { getFfmpegPath, getFfprobePath, validateMediaBinaries } from "../main/utils/paths.js";
+import {
+  getFfmpegPath,
+  getFfprobePath,
+  getPythonPath,
+  validateMediaBinaries,
+} from "../main/utils/paths.js";
 import { translateProcessorErrorMessage } from "../main/utils/process-input-validation.js";
 
 /**
@@ -49,6 +55,32 @@ describe("processor-spawn", () => {
     const bundled = getBundledProcessorPath();
     if (!bundled) return; // Not built yet — fine in dev.
     expect(fs.existsSync(bundled)).toBe(true);
+  });
+
+  it("getPythonPath points at repo sources, not packaged resources/python", () => {
+    const scriptPath = getPythonPath();
+    const normalized = scriptPath.replace(/\\/g, "/");
+    expect(normalized.endsWith("python/processor.py")).toBe(true);
+    expect(normalized).not.toMatch(/resources\/python\//);
+    expect(fs.existsSync(scriptPath)).toBe(true);
+  });
+
+  it("production spawn path never uses resources/python (source contract)", () => {
+    // Guard against reintroducing a packaged .py fallback: prod must only
+    // return bundled mode or null (see resolveProcessorSpawn).
+    const spawnSrc = fs.readFileSync(
+      path.join(process.cwd(), "main", "utils", "processor-spawn.js"),
+      "utf-8",
+    );
+    expect(spawnSrc).toMatch(/if\s*\(\s*!isDev\s*\)/);
+    expect(spawnSrc).toMatch(/mode:\s*["']bundled["']/);
+    expect(spawnSrc).not.toMatch(/resourcesPath.*python/);
+
+    const pathsSrc = fs.readFileSync(
+      path.join(process.cwd(), "main", "utils", "paths.js"),
+      "utf-8",
+    );
+    expect(pathsSrc).not.toMatch(/resourcesPath,\s*["']python["']/);
   });
 });
 

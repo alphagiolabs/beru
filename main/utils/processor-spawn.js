@@ -88,8 +88,16 @@ export function getBundledProcessorPath() {
  */
 export function resolveProcessorSpawn(userArgs = []) {
   const bundled = getBundledProcessorPath();
+
+  // Packaged installs ship only the PyInstaller binary under resources/bin.
+  // Never fall back to loose processor.py (those scripts are not packaged).
+  if (!isDev) {
+    if (!bundled) return null;
+    return { command: bundled, args: userArgs, mode: "bundled" };
+  }
+
   const preferBundled =
-    bundled && (!isDev || process.env.BERU_USE_BUNDLED === "1" || !resolveSystemPythonSpawn());
+    bundled && (process.env.BERU_USE_BUNDLED === "1" || !resolveSystemPythonSpawn());
 
   if (preferBundled) {
     return { command: bundled, args: userArgs, mode: "bundled" };
