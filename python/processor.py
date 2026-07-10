@@ -1689,27 +1689,22 @@ def _extract_error_line(stderr_text):
     lines = stderr_text.split("\n")
     # Prefer actionable parse/path failures over generic "Error while ..." wrappers.
     priority = ("invalid", "no such", "unable to parse")
+    best_error = None
+    best_any = None
     for line in reversed(lines):
         stripped = line.strip()
         if not stripped:
             continue
+        if best_any is None:
+            best_any = stripped
         low = stripped.lower()
         if any(p in low for p in priority):
             return stripped[-400:]
-    for line in reversed(lines):
-        stripped = line.strip()
-        if stripped and "error" in stripped.lower():
-            return stripped[-400:]
-    # No line contains "error": return the last NON-EMPTY line. Previously
-    # this returned lines[-2], which assumed a trailing newline (lines[-1]
-    # would be ""). Without a trailing newline, lines[-1] is the useful line
-    # and lines[-2] is noise. Iterating reversed for the first non-empty line
-    # is correct in both cases.
-    for line in reversed(lines):
-        stripped = line.strip()
-        if stripped:
-            return stripped[-400:]
-    return stderr_text.strip()[-400:]
+        if best_error is None and "error" in low:
+            best_error = stripped
+    # Last non-empty line if nothing matched (handles missing trailing newline).
+    chosen = best_error or best_any or stderr_text.strip()
+    return chosen[-400:] if chosen else ""
 
 
 def _remove_partial_output(output_path, input_path=None):

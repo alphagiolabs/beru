@@ -4,7 +4,7 @@ const mockApi = { startProcessing: vi.fn(async () => ({ success: true })) };
 globalThis.window = { api: mockApi };
 
 const { default: useEditorStore } = await import("../src/stores/useEditorStore.js");
-const { normalizeMatchId, rowGet } = await import("../src/utils/video-utils.js");
+const { normalizeMatchId, formatMatchIdRaw, rowGet } = await import("../src/utils/video-utils.js");
 
 describe("normalizeMatchId", () => {
   it("strips extension and normalizes case", () => {
@@ -16,6 +16,13 @@ describe("normalizeMatchId", () => {
   it("formats large numeric Excel IDs without scientific notation", () => {
     expect(normalizeMatchId(123456789012345)).toBe("123456789012345");
     expect(normalizeMatchId("1.23456789012345e+14")).toBe("123456789012345");
+  });
+});
+
+describe("formatMatchIdRaw", () => {
+  it("expands scientific notation for display IDs", () => {
+    expect(formatMatchIdRaw("1.23456789012345e+14")).toBe("123456789012345");
+    expect(formatMatchIdRaw(123456789012345)).toBe("123456789012345");
   });
 });
 

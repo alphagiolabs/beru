@@ -62,7 +62,7 @@ export function ensureNormalized(region, videoWidth, videoHeight) {
       region.x >= 0 && region.y >= 0 && region.x + region.w <= 1 && region.y + region.h <= 1;
     return clean ? region : clampUnitRegion(region);
   }
-  // Ambiguous 0..1-looking coords that failed the sum check: clamp as
+  // Ambiguous 0..1-looking coords that failed the sum check: keep as
   // normalized instead of dividing by video size (which collapses the box).
   const maybeNorm =
     region.x >= 0 &&
@@ -73,9 +73,7 @@ export function ensureNormalized(region, videoWidth, videoHeight) {
     region.y <= 1 &&
     region.w <= 1 &&
     region.h <= 1;
-  if (maybeNorm) {
-    return clampUnitRegion(region);
-  }
+  if (maybeNorm) return region;
   return normalizeRegion(region, videoWidth, videoHeight);
 }
 

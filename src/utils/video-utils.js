@@ -245,17 +245,15 @@ export function stripExt(name) {
 }
 
 /** Format Excel-ish IDs without scientific notation (large numeric cells). */
-function formatMatchIdRaw(raw) {
-  if (typeof raw === "number" && Number.isFinite(raw)) {
-    return raw.toLocaleString("fullwide", { useGrouping: false, maximumFractionDigits: 20 });
-  }
+export function formatMatchIdRaw(raw) {
+  const fullwide = (n) =>
+    n.toLocaleString("fullwide", { useGrouping: false, maximumFractionDigits: 20 });
+  if (typeof raw === "number" && Number.isFinite(raw)) return fullwide(raw);
   const s = String(raw).trim();
   // Some readers stringify large IDs as "1.23e+21" — expand when parseable.
   if (/^-?\d+(\.\d+)?e[+-]?\d+$/i.test(s)) {
     const n = Number(s);
-    if (Number.isFinite(n)) {
-      return n.toLocaleString("fullwide", { useGrouping: false, maximumFractionDigits: 20 });
-    }
+    if (Number.isFinite(n)) return fullwide(n);
   }
   return s;
 }
