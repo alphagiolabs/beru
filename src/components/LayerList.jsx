@@ -3,7 +3,6 @@ import { Trash2, Copy, ChevronUp, ChevronDown } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
-import { InspectorGroup } from "./inspector";
 
 const labelKeys = {
   blur: "props.mode.blur",
@@ -37,16 +36,21 @@ const LayerRow = memo(function LayerRow({
   onRemove,
 }) {
   return (
-    <div className={`inspector-layer-row${isSelected ? " is-selected" : ""}`}>
+    <div
+      className="flex items-center gap-2 p-2 rounded"
+      style={{
+        background: isSelected ? "rgba(0,240,234,0.12)" : "var(--bg-elevated)",
+        border: `1px solid ${isSelected ? "var(--accent)" : "transparent"}`,
+      }}
+    >
       <div
-        className="inspector-layer-dot"
+        className="w-2 h-2 rounded-full flex-shrink-0"
         style={{ background: color || "var(--text-dim)" }}
-        aria-hidden
       />
       <button
         type="button"
         onClick={() => onSelect(i)}
-        className="inspector-layer-label"
+        className="flex-1 text-left text-[11px] font-medium min-w-0"
         style={{ color: "var(--text-primary)" }}
       >
         {label}
@@ -54,40 +58,40 @@ const LayerRow = memo(function LayerRow({
           ? ` "${op.text.slice(0, 20)}${op.text.length > 20 ? "…" : ""}"`
           : ""}
       </button>
-      <div className="inspector-layer-actions">
+      <div className="flex items-center gap-0.5">
         <button
-          type="button"
           onClick={() => onMoveUp(i)}
           disabled={i === 0}
-          className="inspector-layer-icon-btn"
+          className="text-[10px] p-0.5 rounded hover:bg-white/10"
+          style={{ color: "var(--text-dim)" }}
           title={moveUpTitle}
           aria-label={moveUpTitle}
         >
           <ChevronUp size={12} />
         </button>
         <button
-          type="button"
           onClick={() => onMoveDown(i)}
           disabled={i === count - 1}
-          className="inspector-layer-icon-btn"
+          className="text-[10px] p-0.5 rounded hover:bg-white/10"
+          style={{ color: "var(--text-dim)" }}
           title={moveDownTitle}
           aria-label={moveDownTitle}
         >
           <ChevronDown size={12} />
         </button>
         <button
-          type="button"
           onClick={() => onDuplicate(i)}
-          className="inspector-layer-icon-btn"
+          className="text-[10px] p-0.5 rounded hover:bg-white/10"
+          style={{ color: "var(--text-dim)" }}
           title={duplicateTitle}
           aria-label={duplicateTitle}
         >
           <Copy size={12} />
         </button>
         <button
-          type="button"
           onClick={() => onRemove(i)}
-          className="inspector-layer-icon-btn inspector-layer-icon-btn--danger"
+          className="text-[10px] p-0.5 rounded hover:bg-red-500/20 hover:text-red-400"
+          style={{ color: "var(--text-dim)" }}
           title={removeTitle}
           aria-label={removeTitle}
         >
@@ -124,35 +128,38 @@ export default function LayerList() {
   const layerCount = ops?.length ?? 0;
 
   return (
-    <div className="inspector-layers">
-      <InspectorGroup title={`${t("props.layers")} (${layerCount})`}>
-        {!ops || ops.length === 0 ? (
-          <p className="inspector-helper">{t("props.noLayers")}</p>
-        ) : (
-          <div className="inspector-layer-list">
-            {ops.map((op, i) => (
-              <LayerRow
-                key={op.id}
-                op={op}
-                i={i}
-                count={ops.length}
-                label={t(labelKeys[op.mode] || op.mode)}
-                color={colors[op.mode]}
-                moveUpTitle={t("props.actions.moveUp")}
-                moveDownTitle={t("props.actions.moveDown")}
-                duplicateTitle={t("props.actions.duplicate")}
-                removeTitle={t("props.actions.deleteLayer")}
-                isSelected={selectedOperationIdx === i}
-                onSelect={handleSelect}
-                onMoveUp={handleMoveUp}
-                onMoveDown={handleMoveDown}
-                onDuplicate={handleDuplicate}
-                onRemove={handleRemove}
-              />
-            ))}
-          </div>
-        )}
-      </InspectorGroup>
+    <div className="cap-section">
+      <div className="cap-section-title">
+        {t("props.layers")} ({layerCount})
+      </div>
+      {!ops || ops.length === 0 ? (
+        <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>
+          {t("props.noLayers")}
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {ops.map((op, i) => (
+            <LayerRow
+              key={op.id}
+              op={op}
+              i={i}
+              count={ops.length}
+              label={t(labelKeys[op.mode] || op.mode)}
+              color={colors[op.mode]}
+              moveUpTitle={t("props.actions.moveUp")}
+              moveDownTitle={t("props.actions.moveDown")}
+              duplicateTitle={t("props.actions.duplicate")}
+              removeTitle={t("props.actions.deleteLayer")}
+              isSelected={selectedOperationIdx === i}
+              onSelect={handleSelect}
+              onMoveUp={handleMoveUp}
+              onMoveDown={handleMoveDown}
+              onDuplicate={handleDuplicate}
+              onRemove={handleRemove}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

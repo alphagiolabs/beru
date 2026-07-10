@@ -1,6 +1,5 @@
 import { AlignStartVertical, AlignCenterVertical, AlignEndVertical } from "lucide-react";
 import { VERTICAL_ALIGNS, TRUNCATE_MODES } from "../utils/text-layout";
-import { ToggleSwitch, SegmentedToolbar } from "./inspector";
 
 export default function TextLayoutControls({ values = {}, onPatch, disabled = false }) {
   const autoFit = !!values.autoFit;
@@ -16,13 +15,21 @@ export default function TextLayoutControls({ values = {}, onPatch, disabled = fa
   };
 
   return (
-    <div className="space-y-2">
-      <ToggleSwitch
-        label="Auto-ajustar al cuadro"
-        checked={autoFit}
-        disabled={disabled}
-        onChange={(next) => patch({ autoFit: next })}
-      />
+    <div className="border-t pt-2 space-y-2" style={{ borderColor: "var(--border)" }}>
+      <span className="cap-input-label">Composición</span>
+
+      <label
+        className="flex items-center justify-between gap-2 text-[10px] cursor-pointer"
+        style={{ color: "var(--text-dim)" }}
+      >
+        <span>Auto-ajustar al cuadro</span>
+        <input
+          type="checkbox"
+          checked={autoFit}
+          disabled={disabled}
+          onChange={(e) => patch({ autoFit: e.target.checked })}
+        />
+      </label>
 
       <div className="grid grid-cols-2 gap-2">
         <label>
@@ -54,34 +61,53 @@ export default function TextLayoutControls({ values = {}, onPatch, disabled = fa
 
       <div>
         <span className="cap-input-label">Alineación vertical</span>
-        <SegmentedToolbar
-          ariaLabel="Alineación vertical"
-          columns={3}
-          value={verticalAlign}
-          disabled={disabled}
-          onChange={(value) => patch({ verticalAlign: value })}
-          options={VERTICAL_ALIGNS.map((a) => ({
-            value: a.value,
-            title: a.value,
-            icon:
-              a.value === "top" ? (
-                <AlignStartVertical size={12} />
-              ) : a.value === "center" ? (
-                <AlignCenterVertical size={12} />
-              ) : (
-                <AlignEndVertical size={12} />
-              ),
-          }))}
-        />
+        <div className="grid grid-cols-3 gap-1">
+          {VERTICAL_ALIGNS.map((a) => {
+            const active = verticalAlign === a.value;
+            const Icon =
+              a.value === "top"
+                ? AlignStartVertical
+                : a.value === "center"
+                  ? AlignCenterVertical
+                  : AlignEndVertical;
+            return (
+              <button
+                key={a.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => patch({ verticalAlign: a.value })}
+                className="cap-btn-secondary !text-[10px] !py-1 flex items-center justify-center"
+                style={
+                  active
+                    ? {
+                        background: "var(--accent)",
+                        color: "var(--bg-app)",
+                        borderColor: "var(--accent)",
+                      }
+                    : {}
+                }
+                title={a.value}
+              >
+                <Icon size={12} />
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 items-end">
-        <ToggleSwitch
-          label="Ajuste de línea"
-          checked={textWrap}
-          disabled={disabled}
-          onChange={(next) => patch({ textWrap: next })}
-        />
+      <div className="grid grid-cols-2 gap-2">
+        <label
+          className="flex items-center justify-between gap-2 text-[10px] cursor-pointer rounded px-2 py-1.5"
+          style={{ background: "var(--bg-elevated)", color: "var(--text-dim)" }}
+        >
+          <span>Ajuste de línea</span>
+          <input
+            type="checkbox"
+            checked={textWrap}
+            disabled={disabled}
+            onChange={(e) => patch({ textWrap: e.target.checked })}
+          />
+        </label>
         <label>
           <span className="cap-input-label">Truncado</span>
           <select
@@ -100,7 +126,7 @@ export default function TextLayoutControls({ values = {}, onPatch, disabled = fa
       </div>
 
       {autoFit && (
-        <p className="inspector-helper">
+        <p className="text-[9px] leading-snug" style={{ color: "var(--text-dim)" }}>
           El tamaño se reduce automáticamente para caber en la región. Desactiva auto-ajuste para
           ver avisos de desborde.
         </p>
