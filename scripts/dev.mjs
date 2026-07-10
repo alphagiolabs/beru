@@ -4,6 +4,7 @@ import net from "net";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { shouldRestartElectronForPythonChange } from "./dev-python-watch.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const preferredPort = Number(process.env.BERU_DEV_PORT || 5173);
@@ -133,13 +134,14 @@ try {
   let electronExitHandler = (code) => shutdown(code ?? 0);
   electron.on("exit", electronExitHandler);
 
-  // Watch Python files for changes — restart Electron (not Vite) when
-  // python/*.py changes, since the processor is loaded at runtime.
+  // Watch runtime processor modules — restart Electron (not Vite) when they
+  // change. Ignore test_*.py / scratch scripts so editing tests does not
+  // bounce the app window (see scripts/dev-python-watch.mjs).
   const pythonDir = path.join(root, "python");
   let restartTimer = null;
   try {
-    fs.watch(pythonDir, { recursive: false }, (eventType, filename) => {
-      if (!filename || !filename.endsWith(".py")) return;
+    fs.watch(pythonDir, { recursive: false }, (_eventType, filename) => {
+      if (!shouldRestartElectronForPythonChange(filename)) return;
       // Debounce rapid saves
       if (restartTimer) clearTimeout(restartTimer);
       restartTimer = setTimeout(() => {
