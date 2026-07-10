@@ -1,18 +1,17 @@
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import App from "./App";
 import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConfirmDialog from "./components/ConfirmDialog";
 import SettingsModal from "./components/SettingsModal";
-import DesktopPet from "./components/pets/DesktopPet";
-import PetPaletteModal from "./components/pets/PetPaletteModal";
 import AppToast from "./components/AppToast";
 import UpdatePrompt from "./components/UpdatePrompt";
 import useUpdater from "./hooks/useUpdater";
 import useEditorStore from "./stores/useEditorStore";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import { useT } from "./i18n/useT";
+import { DesktopPet, PetPaletteModal, usePetKeyboard } from "./features/pets";
 
 const api = window.api;
 
@@ -48,6 +47,7 @@ export default function BeruRoot() {
   const clearAppToast = useEditorStore((s) => s.clearAppToast);
 
   useUpdater(api);
+  usePetKeyboard();
 
   useEffect(() => {
     if (isSupabaseConfigured) {
@@ -68,8 +68,10 @@ export default function BeruRoot() {
       <AppToast />
       <ConfirmDialog />
       <SettingsModal />
-      <DesktopPet />
-      <PetPaletteModal />
+      <Suspense fallback={null}>
+        <DesktopPet />
+        <PetPaletteModal />
+      </Suspense>
     </ErrorBoundary>
   );
 }

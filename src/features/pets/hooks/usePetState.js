@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import useEditorStore from "../stores/useEditorStore";
+import useEditorStore from "../../../stores/useEditorStore";
 import {
   celebrationDurationMs,
   resolveBatchCelebration,

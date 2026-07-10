@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diagnosePetSetup } from "../src/utils/pet-doctor.js";
+import { diagnosePetSetup } from "../src/features/pets/utils/pet-doctor.js";
 
 describe("pet-doctor", () => {
   it("reports ready when pet is enabled, selected, and loaded", () => {

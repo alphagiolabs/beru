@@ -84,6 +84,11 @@ describe("SettingsModal pets", () => {
       root.render(<SettingsModal />);
     });
 
+    // PetdexPanel is lazy-loaded; flush the Suspense boundary.
+    await act(async () => {
+      await import("../src/features/pets/settings/PetdexPanel.jsx");
+    });
+
     const petCard = Array.from(document.querySelectorAll(".settings-petdex-card-item")).find((el) =>
       el.textContent.includes("Boba"),
     );

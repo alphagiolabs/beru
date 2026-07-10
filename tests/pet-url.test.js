@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beruLocalUrl } from "../src/utils/pet-url.js";
+import { beruLocalUrl } from "../src/features/pets/utils/pet-url.js";
 
 describe("beruLocalUrl", () => {
   it("returns null for empty paths", () => {
