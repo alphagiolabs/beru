@@ -226,7 +226,7 @@ export default function PropertiesPanel() {
                   </div>
                 )}
                 <div
-                  className="flex items-center gap-2 text-[11px]"
+                  className="flex items-center gap-2 text-[11px] min-w-0"
                   style={{ color: "var(--text-dim)" }}
                 >
                   Opacidad
@@ -237,7 +237,7 @@ export default function PropertiesPanel() {
                     step="0.05"
                     value={tempImageOpacity}
                     onChange={(e) => get().setTempImageOpacity(Number(e.target.value))}
-                    className="flex-1"
+                    className="inspector-range"
                   />
                   <span
                     className="font-mono text-xs w-8 text-right"
@@ -247,7 +247,7 @@ export default function PropertiesPanel() {
                   </span>
                 </div>
                 <div
-                  className="flex items-center gap-2 text-[11px]"
+                  className="flex items-center gap-2 text-[11px] min-w-0"
                   style={{ color: "var(--text-dim)" }}
                 >
                   Escala
@@ -272,7 +272,7 @@ export default function PropertiesPanel() {
                         });
                       }
                     }}
-                    className="flex-1"
+                    className="inspector-range"
                   />
                   <span
                     className="font-mono text-xs w-8 text-right"
@@ -325,7 +325,7 @@ export default function PropertiesPanel() {
             {sidebarMode === "logo" && activeTool === "blur" && (
               <InspectorGroup title="Desenfoque">
                 <div
-                  className="flex items-center gap-2 text-[11px]"
+                  className="flex items-center gap-2 text-[11px] min-w-0"
                   style={{ color: "var(--text-dim)" }}
                 >
                   Intensidad
@@ -335,7 +335,7 @@ export default function PropertiesPanel() {
                     max="60"
                     value={blurStrength}
                     onChange={(e) => get().setBlurStrength(Number(e.target.value))}
-                    className="flex-1"
+                    className="inspector-range"
                   />
                   <span
                     className="font-mono text-xs w-6 text-right"
@@ -391,7 +391,7 @@ export default function PropertiesPanel() {
 
                 {delogoMethod === "temporal" && (
                   <div
-                    className="flex items-center gap-2 text-[11px]"
+                    className="flex items-center gap-2 text-[11px] min-w-0"
                     style={{ color: "var(--text-dim)" }}
                   >
                     Radio (frames)
@@ -401,7 +401,7 @@ export default function PropertiesPanel() {
                       max="15"
                       value={temporalRadius}
                       onChange={(e) => get().setTemporalRadius(e.target.value)}
-                      className="flex-1"
+                      className="inspector-range"
                     />
                     <span
                       className="font-mono text-xs w-6 text-right"
@@ -414,7 +414,7 @@ export default function PropertiesPanel() {
 
                 {delogoMethod === "mosaic" && (
                   <div
-                    className="flex items-center gap-2 text-[11px]"
+                    className="flex items-center gap-2 text-[11px] min-w-0"
                     style={{ color: "var(--text-dim)" }}
                   >
                     Tamaño bloque
@@ -424,7 +424,7 @@ export default function PropertiesPanel() {
                       max="40"
                       value={mosaicSize}
                       onChange={(e) => get().setMosaicSize(e.target.value)}
-                      className="flex-1"
+                      className="inspector-range"
                     />
                     <span
                       className="font-mono text-xs w-6 text-right"
@@ -463,7 +463,7 @@ export default function PropertiesPanel() {
 
                 {delogoMethod === "blur" && (
                   <div
-                    className="flex items-center gap-2 text-[11px]"
+                    className="flex items-center gap-2 text-[11px] min-w-0"
                     style={{ color: "var(--text-dim)" }}
                   >
                     Intensidad blur
@@ -472,8 +472,8 @@ export default function PropertiesPanel() {
                       min="2"
                       max="60"
                       value={blurStrength}
-                      onChange={(e) => get().setBlurStrength(e.target.value)}
-                      className="flex-1"
+                      onChange={(e) => get().setBlurStrength(Number(e.target.value))}
+                      className="inspector-range"
                     />
                     <span
                       className="font-mono text-xs w-6 text-right"
@@ -499,7 +499,7 @@ export default function PropertiesPanel() {
                       </span>
                     </label>
                     <div
-                      className="flex items-center gap-2 text-[11px]"
+                      className="flex items-center gap-2 text-[11px] min-w-0"
                       style={{ color: "var(--text-dim)" }}
                     >
                       Opacidad
@@ -510,7 +510,7 @@ export default function PropertiesPanel() {
                         step="0.05"
                         value={delogoFillOpacity}
                         onChange={(e) => get().setDelogoFillOpacity(e.target.value)}
-                        className="flex-1"
+                        className="inspector-range"
                       />
                       <span
                         className="font-mono text-xs w-6 text-right"
@@ -572,7 +572,7 @@ export default function PropertiesPanel() {
                 )}
 
                 <div
-                  className="flex items-center gap-2 text-[11px] pt-1"
+                  className="flex items-center gap-2 text-[11px] pt-1 min-w-0"
                   style={{ color: "var(--text-dim)" }}
                 >
                   <span title="Suaviza el borde entre la zona restaurada y el video original">
@@ -584,7 +584,7 @@ export default function PropertiesPanel() {
                     max="20"
                     value={edgeFeather}
                     onChange={(e) => get().setEdgeFeather(e.target.value)}
-                    className="flex-1"
+                    className="inspector-range"
                   />
                   <span
                     className="font-mono text-xs w-8 text-right"

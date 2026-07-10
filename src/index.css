@@ -2193,6 +2193,40 @@ label {
   color: var(--text-secondary);
 }
 
+.inspector-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  min-width: 0;
+}
+
+.inspector-group-heading .inspector-group-title {
+  margin-bottom: 0;
+}
+
+.inspector-group-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inspector-group-header-row .inspector-group-header {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.inspector-group-header-accessory {
+  flex-shrink: 0;
+}
+
+.inspector-group-header-accessory .inspector-switch-row {
+  justify-content: flex-end;
+  gap: 0;
+}
+
 .inspector-group-header {
   display: flex;
   align-items: center;

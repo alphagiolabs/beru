@@ -316,29 +316,36 @@ export default function StyleEditor() {
         </label>
       </InspectorGroup>
 
-      <InspectorGroup title="Fondo" collapsible defaultOpen={!!bgEnabled} forceOpen={!!bgEnabled}>
-        <ToggleSwitch
-          label="Activo"
-          checked={!!bgEnabled}
-          onChange={(next) => patch({ bgEnabled: next })}
-        />
-        {bgEnabled && (
+      <InspectorGroup
+        title="Fondo"
+        collapsible
+        defaultOpen={!!bgEnabled}
+        forceOpen={!!bgEnabled}
+        headerAccessory={
+          <ToggleSwitch
+            ariaLabel="Fondo activo"
+            checked={!!bgEnabled}
+            onChange={(next) => patch({ bgEnabled: next })}
+          />
+        }
+      >
+        {bgEnabled ? (
           <div className="space-y-1.5">
             <div className="grid grid-cols-2 gap-2">
               <label>
                 <span className="cap-input-label">Color</span>
-                <div className="flex gap-1">
+                <div className="flex gap-1 min-w-0">
                   <input
                     type="color"
                     value={normalizeColor(bgColor) || "#000000"}
                     onChange={(e) => patch({ bgColor: e.target.value })}
-                    className="w-6 h-6 rounded border-0 p-0 cursor-pointer"
+                    className="w-6 h-6 shrink-0 rounded border-0 p-0 cursor-pointer"
                   />
                   <input
                     type="text"
                     value={bgColor}
                     onChange={(e) => patch({ bgColor: e.target.value })}
-                    className="cap-input flex-1 font-mono text-[10px]"
+                    className="cap-input min-w-0 flex-1 font-mono text-[10px]"
                   />
                 </div>
               </label>
@@ -367,6 +374,8 @@ export default function StyleEditor() {
               />
             </label>
           </div>
+        ) : (
+          <p className="inspector-helper">Activa el fondo para color, opacidad y padding.</p>
         )}
       </InspectorGroup>
 
@@ -390,18 +399,18 @@ export default function StyleEditor() {
           </label>
           <label>
             <span className="cap-input-label">Color</span>
-            <div className="flex gap-1">
+            <div className="flex gap-1 min-w-0">
               <input
                 type="color"
                 value={normalizeColor(borderColor) || "#000000"}
                 onChange={(e) => patch({ borderColor: e.target.value })}
-                className="w-6 h-6 rounded border-0 p-0 cursor-pointer"
+                className="w-6 h-6 shrink-0 rounded border-0 p-0 cursor-pointer"
               />
               <input
                 type="text"
                 value={borderColor}
                 onChange={(e) => patch({ borderColor: e.target.value })}
-                className="cap-input flex-1 font-mono text-[10px]"
+                className="cap-input min-w-0 flex-1 font-mono text-[10px]"
               />
             </div>
           </label>
@@ -413,28 +422,30 @@ export default function StyleEditor() {
         collapsible
         defaultOpen={!!textShadowEnabled}
         forceOpen={!!textShadowEnabled}
+        headerAccessory={
+          <ToggleSwitch
+            ariaLabel="Sombra activa"
+            checked={!!textShadowEnabled}
+            onChange={(next) => patch({ textShadowEnabled: next })}
+          />
+        }
       >
-        <ToggleSwitch
-          label="Activa"
-          checked={!!textShadowEnabled}
-          onChange={(next) => patch({ textShadowEnabled: next })}
-        />
-        {textShadowEnabled && (
+        {textShadowEnabled ? (
           <div className="space-y-1.5">
             <label>
               <span className="cap-input-label">Color</span>
-              <div className="flex gap-1">
+              <div className="flex gap-1 min-w-0">
                 <input
                   type="color"
                   value={normalizeColor(textShadowColor) || "#000000"}
                   onChange={(e) => patch({ textShadowColor: e.target.value })}
-                  className="w-6 h-6 rounded border-0 p-0 cursor-pointer"
+                  className="w-6 h-6 shrink-0 rounded border-0 p-0 cursor-pointer"
                 />
                 <input
                   type="text"
                   value={textShadowColor}
                   onChange={(e) => patch({ textShadowColor: e.target.value })}
-                  className="cap-input flex-1 font-mono text-[10px]"
+                  className="cap-input min-w-0 flex-1 font-mono text-[10px]"
                 />
               </div>
             </label>
@@ -463,6 +474,8 @@ export default function StyleEditor() {
               </label>
             </div>
           </div>
+        ) : (
+          <p className="inspector-helper">Activa la sombra para color y offsets.</p>
         )}
       </InspectorGroup>
     </div>

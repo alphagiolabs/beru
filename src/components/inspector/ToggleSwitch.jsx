@@ -9,9 +9,11 @@ export default function ToggleSwitch({
   label,
   disabled = false,
   id: idProp,
+  ariaLabel,
 }) {
   const autoId = useId();
   const id = idProp || autoId;
+  const accessibleName = ariaLabel || (typeof label === "string" ? label : undefined);
 
   return (
     <div className="inspector-switch-row">
@@ -25,7 +27,7 @@ export default function ToggleSwitch({
         type="button"
         role="switch"
         aria-checked={checked}
-        aria-label={typeof label === "string" ? label : undefined}
+        aria-label={accessibleName}
         disabled={disabled}
         className={`inspector-switch${checked ? " is-on" : ""}`}
         onClick={() => {
