@@ -8,7 +8,8 @@
 
 import { app } from "electron";
 import { createRequire } from "module";
-import { getMainWindow, isDev } from "./shared-state.js";
+import { getMainWindow, isDev, setAppIsQuitting } from "./shared-state.js";
+import { cancelActiveProcessing } from "./handlers/process.js";
 const requireCJS = createRequire(import.meta.url);
 
 let autoUpdater = null;
@@ -318,26 +319,36 @@ const INSTALL_GRACE_MS = 10000;
 const scheduleInstall = (au) => {
   if (isDev || !au || quittingForUpdate) return;
   quittingForUpdate = true;
+  setAppIsQuitting(true);
   // Use silent=false because NSIS is configured with oneClick: false — the
   // installer wizard must be visible for the user to confirm the installation.
   // forceRunAfter=true so the app relaunches once the user completes the
   // wizard.
   setImmediate(() => {
-    try {
-      const result = au.quitAndInstall(false, true);
-      // electron-updater's install is fire-and-forget for NSIS, but newer
-      // builds may return a promise — handle both so a rejection never leaves
-      // us stuck in the "install-in-progress" state.
-      if (result && typeof result.catch === "function") {
-        result.catch((e) => {
+    // Kill any active batch (including probe-phase) before quitAndInstall so
+    // FFmpeg/processor children are not orphaned. Quit handlers skip cancel
+    // when isQuittingForUpdate() is true, so this must happen here.
+    Promise.resolve(cancelActiveProcessing())
+      .catch((e) => {
+        console.error("[updater] cancel before install failed:", e?.message || e);
+      })
+      .finally(() => {
+        try {
+          const result = au.quitAndInstall(false, true);
+          // electron-updater's install is fire-and-forget for NSIS, but newer
+          // builds may return a promise — handle both so a rejection never leaves
+          // us stuck in the "install-in-progress" state.
+          if (result && typeof result.catch === "function") {
+            result.catch((e) => {
+              quittingForUpdate = false;
+              send({ type: "error", message: e?.message || String(e) });
+            });
+          }
+        } catch (e) {
           quittingForUpdate = false;
           send({ type: "error", message: e?.message || String(e) });
-        });
-      }
-    } catch (e) {
-      quittingForUpdate = false;
-      send({ type: "error", message: e?.message || String(e) });
-    }
+        }
+      });
   });
   // Safety net: NSIS install is fire-and-forget, so quitAndInstall() does NOT
   // reject when the installer spawn fails — it just quits. If we are still

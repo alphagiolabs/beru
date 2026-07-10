@@ -3,7 +3,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createPathSecurity } from "./pathSecurity.js";
-import { getPythonProcess } from "./shared-state.js";
+import { getPythonProcess, hasActiveProcessing, setAppIsQuitting } from "./shared-state.js";
 import { createBeruVideoResponse, validateBeruRequestPath } from "./utils/beru-protocol.js";
 import { createWindow } from "./utils/window.js";
 
@@ -86,16 +86,31 @@ function onFatalError(err) {
   app.quit();
 }
 
-app.on("will-quit", (event) => {
+/**
+ * Intercept quit while a batch is active (including probe phase with no child).
+ * Update-quit cancels in scheduleInstall before quitAndInstall, so skip here.
+ */
+function interceptQuitIfProcessing(event) {
   if (quitCleanupStarted) return;
   if (isQuittingForUpdate()) return;
-  disposeOnQuit();
-  if (!getPythonProcess()) return;
+
+  if (!hasActiveProcessing()) {
+    disposeOnQuit();
+    return;
+  }
+
   event.preventDefault();
   quitCleanupStarted = true;
+  setAppIsQuitting(true);
+  // Cancel first (may write .cancel / kill child), then dispose temps + workers.
   cancelActiveProcessing().finally(() => {
+    disposeOnQuit();
     app.quit();
   });
+}
+
+app.on("will-quit", (event) => {
+  interceptQuitIfProcessing(event);
 });
 
 app.on("render-process-gone", (event, _webContents, details) => {
@@ -158,12 +173,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", (event) => {
-  if (quitCleanupStarted || isQuittingForUpdate()) return;
-  disposeOnQuit();
-  if (!getPythonProcess()) return;
-  event.preventDefault();
-  quitCleanupStarted = true;
-  cancelActiveProcessing().finally(() => app.quit());
+  interceptQuitIfProcessing(event);
 });
 
 app.on("activate", () => {

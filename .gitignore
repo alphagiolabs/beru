@@ -75,7 +75,9 @@ agent-tools/
 Review-beru.md
 nul
 
-# Local scripts (machine-specific, never commit)
-/scripts
+# Ignore untracked junk under scripts/ (tracked tooling stays tracked).
+# Use /scripts/* (not /scripts) so specific new modules can be un-ignored.
+/scripts/*
+!/scripts/dev-python-watch.mjs
 
 .worktrees/

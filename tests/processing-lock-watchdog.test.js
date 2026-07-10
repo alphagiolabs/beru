@@ -7,6 +7,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
 
+const sendToRenderer = vi.fn();
+vi.mock("../main/utils/renderer.js", () => ({
+  sendToRenderer: (...args) => sendToRenderer(...args),
+}));
+
 const {
   beginProcessingRun,
   clearProcessingRun,
@@ -21,21 +26,34 @@ describe("processing lock watchdog", () => {
     vi.useFakeTimers();
     clearProcessingRun();
     setPythonProcess(null);
+    sendToRenderer.mockClear();
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("force-releases the lock after the max lifetime", () => {
+  it("force-releases the lock after the max lifetime", async () => {
     expect(beginProcessingRun("run-1")).toBe(true);
     expect(getIsProcessing()).toBe(true);
     expect(getProcessingRunId()).toBe("run-1");
 
     vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
+    await vi.runAllTimersAsync();
 
     expect(getIsProcessing()).toBe(false);
     expect(getProcessingRunId()).toBe(null);
+  });
+
+  it("notifies the renderer with process:error on force-release", async () => {
+    expect(beginProcessingRun("run-notify")).toBe(true);
+
+    vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
+    await vi.runAllTimersAsync();
+
+    expect(sendToRenderer).toHaveBeenCalled();
+    expect(sendToRenderer.mock.calls[0][0]).toBe("process:error");
+    expect(typeof sendToRenderer.mock.calls[0][1]).toBe("string");
   });
 
   it("does not fire after a normal clearProcessingRun", () => {
@@ -47,9 +65,10 @@ describe("processing lock watchdog", () => {
 
     expect(getIsProcessing()).toBe(false);
     expect(getProcessingRunId()).toBe(null);
+    expect(sendToRenderer).not.toHaveBeenCalled();
   });
 
-  it("releases a wedged run so a new one can start afterwards", () => {
+  it("releases a wedged run so a new one can start afterwards", async () => {
     // Simulate the failure mode the watchdog exists for: beginProcessingRun
     // succeeds but clearProcessingRun is never called (e.g. a refactor throws
     // between the two). The watchdog must release the lock on its own.
@@ -57,6 +76,7 @@ describe("processing lock watchdog", () => {
     // No clearProcessingRun("run-a") here — that's the whole point.
 
     vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
+    await vi.runAllTimersAsync();
 
     expect(getIsProcessing()).toBe(false);
     expect(getProcessingRunId()).toBe(null);
@@ -76,9 +96,12 @@ describe("processing lock watchdog", () => {
     expect(beginProcessingRun("run-live")).toBe(true);
     setPythonProcess({ exitCode: null, signalCode: null, killed: false });
 
+    // One watchdog tick rearms while the child is alive — do not runAllTimers
+    // (that would loop forever on the rearm).
     vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
     expect(getIsProcessing()).toBe(true);
     expect(getProcessingRunId()).toBe("run-live");
+    expect(sendToRenderer).not.toHaveBeenCalled();
 
     setPythonProcess(null);
     vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);

@@ -110,6 +110,13 @@ export default function useProcessing(api) {
         state.finalizeActiveExecution();
         if (msg?.cancelled) {
           state.abortActiveProcessing();
+        } else if (msg?.code != null && msg.code !== 0) {
+          // Crash / unexpected non-zero exit without a prior process:error.
+          state.abortActiveProcessing();
+          state.showToast({
+            kind: "err",
+            text: processingErrorText(msg.error || msg),
+          });
         } else {
           state.setProcessing(false);
         }
