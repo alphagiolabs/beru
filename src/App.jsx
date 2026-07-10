@@ -133,7 +133,7 @@ export default function App() {
           <ToolBar />
         </div>
         <aside
-          className="w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l"
+          className="inspector w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l"
           style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
         >
           <PropertiesPanel />
