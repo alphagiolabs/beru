@@ -6,9 +6,13 @@ import { isDev } from "../shared-state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Repo path to processor.py for development script mode only.
+ * Production never ships loose .py files; it runs beru-processor from bin/
+ * (see resolveProcessorSpawn / validateProcessorAvailable).
+ */
 export function getPythonPath() {
-  if (isDev) return path.join(__dirname, "..", "..", "python", "processor.py");
-  return path.join(process.resourcesPath, "python", "processor.py");
+  return path.join(__dirname, "..", "..", "python", "processor.py");
 }
 
 /**
