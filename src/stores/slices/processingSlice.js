@@ -1,10 +1,6 @@
-import { denormalizeRegion } from "../../utils/types";
-import { sanitizeOperation } from "../../utils/delogo-ops";
-import { filterOperationsForExport, hasVideoDimensions } from "../../utils/batch-process";
+import { hasVideoDimensions } from "../../utils/batch-process";
 import { buildBatchTextOperationsForPreview } from "../../utils/preview-frame-job";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
-import { textStyleToPythonPayload } from "../../utils/text-style";
-import { createJobManifest } from "../../utils/job-manifest";
 import { appendProcessingLog, formatProcessingLogs } from "../../utils/processing-logs";
 import {
   appendLineToRun,
@@ -17,6 +13,14 @@ import {
 } from "../../utils/execution-history.js";
 import { PERF_FLAGS } from "../../utils/perf-flags.js";
 import { swallow } from "../../utils/swallow.js";
+import {
+  applyJobDone,
+  applyJobError,
+  applyJobProgressBatch,
+  abortProcessingQueue,
+  buildExportJob,
+} from "../../utils/export-pipeline.js";
+import { runSingle } from "../../utils/batch-runner.js";
 
 // Module-level debounce timer for execution history persistence.
 // This is safe because the store lives for the entire app session — the timer
@@ -33,79 +37,14 @@ function schedulePersistExecutionHistory(history) {
   }, 1200);
 }
 
-function isQueueJobIndex(idx, queueLength) {
-  return Number.isInteger(idx) && idx >= 0 && idx < queueLength;
-}
-
-function applyJobProgressMessages(queue, messages) {
-  const latestByIndex = new Map();
-  for (const msg of messages) {
-    const idx = msg?.index;
-    if (isQueueJobIndex(idx, queue.length)) latestByIndex.set(idx, msg);
-  }
-  if (latestByIndex.size === 0) return queue;
-
-  let next = null;
-  for (const [idx, msg] of latestByIndex) {
-    const current = (next || queue)[idx];
-    if (current.status === "done" || current.status === "error") continue;
-
-    const progress = Math.round(msg.percent ?? current.progress ?? 0);
-    if (current.status === "processing" && current.progress === progress) continue;
-
-    if (!next) next = [...queue];
-    next[idx] = {
-      ...current,
-      status: "processing",
-      progress,
-    };
-  }
-
-  return next || queue;
-}
-
-/**
- * Flag-on path: flip `status` to "processing" the first time a job reports
- * progress, but keep the numeric `progress` out of `queue` (it lives in the
- * standalone `jobProgress` map). Returns the same `queue` reference when no
- * item needs a status flip, so subscribers that only read `queue` don't
- * re-render on every progress tick.
- */
-function applyJobProgressStatusOnly(queue, messages) {
-  let next = null;
-  for (const msg of messages) {
-    const idx = msg?.index;
-    if (!isQueueJobIndex(idx, queue.length)) continue;
-    const current = (next || queue)[idx];
-    if (current.status === "done" || current.status === "error") continue;
-    if (current.status === "processing") continue;
-    if (!next) next = [...queue];
-    next[idx] = { ...current, status: "processing" };
-  }
-  return next || queue;
-}
-
-/**
- * Build the next `jobProgress` map from the current map and a batch of
- * `job_progress` messages. Returns the same reference when nothing changed.
- */
-function applyJobProgressMap(jobProgress, queue, messages) {
-  let next = jobProgress;
-  let changed = false;
-  for (const msg of messages) {
-    const idx = msg?.index;
-    if (!isQueueJobIndex(idx, queue.length)) continue;
-    const current = queue[idx];
-    if (current.status === "done" || current.status === "error") continue;
-    const progress = Math.round(msg.percent ?? 0);
-    if (!Number.isFinite(progress)) continue;
-    if (!changed) {
-      next = { ...jobProgress };
-      changed = true;
-    }
-    next[idx] = progress;
-  }
-  return next;
+function processingHooks(set, get) {
+  return {
+    startExecutionRun: (opts) => get().startExecutionRun(opts),
+    applyPatch: (patch) => set(patch),
+    getQueue: () => get().queue,
+    finalizeActiveExecution: (summary) => get().finalizeActiveExecution(summary),
+    summarizeQueue,
+  };
 }
 
 /** Batch encode progress, job building, and FFmpeg processing orchestration. */
@@ -273,59 +212,44 @@ export function createProcessingSlice(set, get) {
 
     updateJobProgressBatch: (messages) =>
       set((s) => {
-        const msgs = Array.isArray(messages) ? messages : [];
+        const { queue, jobProgress } = applyJobProgressBatch({
+          queue: s.queue,
+          jobProgress: s.jobProgress,
+          messages,
+          progressMap: PERF_FLAGS.progressMap,
+        });
+        const queueChanged = queue !== s.queue;
+        const progressChanged = jobProgress !== s.jobProgress;
+        if (!queueChanged && !progressChanged) return s;
         if (PERF_FLAGS.progressMap) {
-          const queue = applyJobProgressStatusOnly(s.queue, msgs);
-          const jobProgress = applyJobProgressMap(s.jobProgress, s.queue, msgs);
-          const queueChanged = queue !== s.queue;
-          const progressChanged = jobProgress !== s.jobProgress;
-          if (!queueChanged && !progressChanged) return s;
           return queueChanged ? { queue, jobProgress } : { jobProgress };
         }
-        const queue = applyJobProgressMessages(s.queue, msgs);
-        return queue === s.queue ? s : { queue };
+        return queueChanged ? { queue } : s;
       }),
 
     markJobDone: (msg) =>
-      set((s) => {
-        const idx = msg.index;
-        if (!isQueueJobIndex(idx, s.queue.length)) return {};
-        const updated = [...s.queue];
-        updated[idx] = { ...updated[idx], status: "done", progress: 100, error: null };
-        const jobProgress =
-          PERF_FLAGS.progressMap && s.jobProgress?.[idx] !== undefined
-            ? { ...s.jobProgress, [idx]: 100 }
-            : s.jobProgress;
-        return {
-          queue: updated,
-          progressDone: Math.min(s.progressDone + 1, s.progressTotal),
-          jobProgress,
-        };
-      }),
+      set((s) =>
+        applyJobDone({
+          queue: s.queue,
+          jobProgress: s.jobProgress,
+          progressDone: s.progressDone,
+          progressTotal: s.progressTotal,
+          msg,
+          progressMap: PERF_FLAGS.progressMap,
+        }),
+      ),
 
     markJobError: (msg) =>
-      set((s) => {
-        const idx = msg.index;
-        if (!isQueueJobIndex(idx, s.queue.length)) return {};
-        const updated = [...s.queue];
-        updated[idx] = { ...updated[idx], status: "error", error: msg.error };
-        // Delete the key (instead of setting it to undefined) so
-        // hasOwnProperty-based consumers like getBatchProgress don't read NaN
-        // and applyJobProgressMap doesn't carry stale entries forward.
-        const jobProgress =
-          PERF_FLAGS.progressMap && s.jobProgress?.[idx] !== undefined
-            ? (() => {
-                const next = { ...s.jobProgress };
-                delete next[idx];
-                return next;
-              })()
-            : s.jobProgress;
-        return {
-          queue: updated,
-          progressDone: Math.min(s.progressDone + 1, s.progressTotal),
-          jobProgress,
-        };
-      }),
+      set((s) =>
+        applyJobError({
+          queue: s.queue,
+          jobProgress: s.jobProgress,
+          progressDone: s.progressDone,
+          progressTotal: s.progressTotal,
+          msg,
+          progressMap: PERF_FLAGS.progressMap,
+        }),
+      ),
 
     refreshMissingVideoInfo: async (api) => {
       const missing = get().queue.filter((item) => !item.width || !item.height);
@@ -379,52 +303,11 @@ export function createProcessingSlice(set, get) {
 
     _buildJobFor: (item, index) => {
       if (!item) return null;
-      const { encodeProfile } = get();
-      const outPath = get().outputPathFor(item);
-      const { width, height } = getLockedDimensions(item);
-      return {
-        id: index,
-        input_path: item.path,
-        output_path: outPath,
-        width,
-        height,
-        source_width: width,
-        source_height: height,
-        operations: filterOperationsForExport(item.operations).map((op) => {
-          const safe = sanitizeOperation(op);
-          return {
-            mode: safe.mode,
-            region: safe.region
-              ? width > 0 && height > 0
-                ? denormalizeRegion(safe.region, width, height)
-                : safe.region
-              : safe.region,
-            blur_strength: safe.blurStrength,
-            delogo_method: safe.delogoMethod,
-            delogo_fill_color: safe.delogoFillColor,
-            delogo_fill_opacity: safe.delogoFillOpacity,
-            delogo_image_path: safe.delogoImagePath,
-            temporal_radius: safe.temporalRadius,
-            mosaic_size: safe.mosaicSize,
-            mirror_side: safe.mirrorSide,
-            edge_feather: safe.edgeFeather,
-            text: safe.text,
-            ...textStyleToPythonPayload(safe),
-            image_path: safe.imagePath,
-            image_opacity: safe.imageOpacity,
-            start_time: safe.startTime,
-            end_time: safe.endTime,
-          };
-        }),
-        video_duration: item.duration,
-        video_codec: item.videoCodec || "",
-        pix_fmt: item.pixFmt || "yuv420p",
-        frame_rate: item.frameRate || 0,
-        audio_codec: item.audioCodec || "",
-        audio_channels: item.audioChannels || 0,
-        encode_profile: encodeProfile,
+      return buildExportJob(item, index, {
+        encodeProfile: get().encodeProfile,
+        outputPath: get().outputPathFor(item),
         watermark: get().watermark?.enabled ? get().watermark : null,
-      };
+      });
     },
 
     buildPreviewFrameJob: (videoIdx, timestamp) => {
@@ -457,35 +340,25 @@ export function createProcessingSlice(set, get) {
       }
       let { queue, isProcessing } = get();
       if (isProcessing) return { ok: false, error: "Ya hay un proceso en ejecución" };
-      if (videoIdx < 0 || videoIdx >= queue.length) return { ok: false, error: "Video inválido" };
+      if (videoIdx < 0 || videoIdx >= queue.length) {
+        return { ok: false, error: "Video inválido" };
+      }
       if (!queue[videoIdx].width || !queue[videoIdx].height) {
         queue = await get().refreshMissingVideoInfo(api);
-        if (videoIdx < 0 || videoIdx >= queue.length) return { ok: false, error: "Video inválido" };
+        if (videoIdx < 0 || videoIdx >= queue.length) {
+          return { ok: false, error: "Video inválido" };
+        }
       }
       const item = queue[videoIdx];
       const job = get()._buildJobFor(item, videoIdx);
-      if (!job) return { ok: false, error: "No se pudo construir el job" };
-
-      get().startExecutionRun({ kind: "single", jobCount: 1 });
-      set({ isProcessing: true, progressTotal: 1, progressDone: 0, jobProgress: {} });
-      const updated = [...queue];
-      updated[videoIdx] = { ...updated[videoIdx], status: "processing", progress: 0, error: null };
-      set({ queue: updated });
-
-      try {
-        const result = await api.startProcessing(createJobManifest([job]));
-        const itemError = get().queue[videoIdx]?.error;
-        return {
-          ok: !!result?.success,
-          outputPath: job.output_path,
-          error: result?.error || itemError || undefined,
-        };
-      } catch (e) {
-        return { ok: false, error: e.message };
-      } finally {
-        get().finalizeActiveExecution(summarizeQueue(get().queue));
-        set({ isProcessing: false });
-      }
+      return runSingle({
+        api,
+        job,
+        videoIdx,
+        queue,
+        isProcessing: false,
+        hooks: processingHooks(set, get),
+      });
     },
 
     setProcessing: (val) =>
@@ -500,12 +373,7 @@ export function createProcessingSlice(set, get) {
     /** Reset queue rows left mid-batch after user cancel or main-process abort. */
     abortActiveProcessing: () =>
       set((s) => {
-        let queueChanged = false;
-        const queue = s.queue.map((item) => {
-          if (item.status !== "processing") return item;
-          queueChanged = true;
-          return { ...item, status: "idle", progress: 0, error: null };
-        });
+        const { queue, queueChanged } = abortProcessingQueue(s.queue);
         return {
           ...(queueChanged ? { queue } : {}),
           jobProgress: {},
