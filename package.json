@@ -15,7 +15,7 @@
     "start": "electron .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:python": "python python/test_delogo.py && python python/test_delogo_robust.py",
+    "test:python": "python python/test_delogo.py && python python/test_delogo_robust.py && python python/test_text_layout_fixtures.py",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",

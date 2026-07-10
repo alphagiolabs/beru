@@ -5,6 +5,8 @@ import {
   elementOverflows,
   getTextLayoutCss,
   scaledSafeMargin,
+  textBgEnabled,
+  textBoxPad,
   verticalAlignToFlex,
 } from "../utils/text-layout";
 
@@ -40,12 +42,11 @@ function TextOverlay({
   const baseFontPx = Math.max(1, (style.fontSize || 24) * scaleY);
   const safeX = scaledSafeMargin(style.safeMargin, scaleX);
   const safeY = scaledSafeMargin(style.safeMargin, scaleY);
-  const bgOn = style.bgEnabled !== false;
-  // Pure video-pixel → screen scale. Do NOT floor with max(2, …): that inflated
-  // padding at small preview scales and made CSS look more padded than FFmpeg export.
-  const boxPadX = bgOn ? Math.max(0, (style.boxBorderWidth ?? 4) * scaleX) : 0;
-  const boxPadY = bgOn ? Math.max(0, (style.boxBorderWidth ?? 4) * scaleY) : 0;
-  // Usable text area = region − safeMargin − boxPad (matches Python _text_layout_bounds)
+  const bgOn = textBgEnabled(style);
+  // Pure video-pixel → screen scale (matches Python _text_box_pad / _text_layout_bounds).
+  const boxPad = textBoxPad(style);
+  const boxPadX = boxPad * scaleX;
+  const boxPadY = boxPad * scaleY;
   const measureWidth = Math.max(0, (screen?.w || 0) - safeX * 2 - boxPadX * 2);
   const measureHeight = Math.max(0, (screen?.h || 0) - safeY * 2 - boxPadY * 2);
 

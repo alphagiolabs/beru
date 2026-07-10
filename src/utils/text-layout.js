@@ -20,6 +20,39 @@ export function scaledSafeMargin(safeMargin, scale = 1) {
   return Math.max(0, Number(safeMargin) || 0) * scale;
 }
 
+/** Match Python `_text_bg_enabled` (op may use snake_case). */
+export function textBgEnabled(op = {}) {
+  const bg = op.bg_enabled ?? op.bgEnabled;
+  if (typeof bg === "string") {
+    return !["0", "false", "no"].includes(bg.toLowerCase());
+  }
+  if (bg === undefined || bg === null) return true;
+  return Boolean(bg);
+}
+
+/** Match Python `_text_box_pad` (op may use snake_case). */
+export function textBoxPad(op = {}) {
+  if (!textBgEnabled(op)) return 0;
+  const raw = op.box_border_width ?? op.boxBorderWidth ?? 4;
+  const boxPad = Number.parseInt(raw, 10);
+  return Math.max(0, Number.isFinite(boxPad) ? boxPad : 4);
+}
+
+/** Usable text area inside a region — matches Python `_text_layout_bounds`. */
+export function textLayoutBounds(region = {}, safeMargin = 0, boxPad = 0) {
+  const rx = Math.trunc(Number(region.x) || 0);
+  const ry = Math.trunc(Number(region.y) || 0);
+  const rw = Math.trunc(Number(region.w) || 0);
+  const rh = Math.trunc(Number(region.h) || 0);
+  const inset = Math.max(0, Number(safeMargin) || 0) + Math.max(0, Number(boxPad) || 0);
+  return {
+    x: rx + inset,
+    y: ry + inset,
+    w: Math.max(0, rw - 2 * inset),
+    h: Math.max(0, rh - 2 * inset),
+  };
+}
+
 export function getTextLayoutCss(style = {}) {
   const textWrap = style.textWrap !== false;
   const truncate = style.truncate || "none";
