@@ -11,7 +11,7 @@ import {
   denormalizeRegion,
   ensureNormalized,
 } from "../../utils/types";
-import { clampRegionToVideo, isRegionUsable } from "../../utils/video-utils";
+import { clampRegionToVideo, isRegionUsable, stripExt } from "../../utils/video-utils";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { sanitizeOperation } from "../../utils/delogo-ops";
 import { buildIdTextOutputName } from "../../utils/batch-process";
@@ -42,6 +42,31 @@ function pruneImageDataCache(cache, queue) {
   return next;
 }
 
+/** Desired basename for a queue item (before batch collision suffixes). */
+function desiredOutputNameFor(item, get) {
+  if (!item) return null;
+  const { exportFormat, templateRegions } = get();
+  const filename = item.path.split(/[\\/]/).pop();
+  const stem = stripExt(filename);
+  let outputName = item.customOutputName;
+  if (!outputName && templateRegions.length > 0) {
+    const videoIdx = get().queue.findIndex((q) => q === item || q.path === item.path);
+    const textFor = (region) =>
+      videoIdx >= 0 ? String(get().getCellTextForRegion(videoIdx, region.id) ?? "") : "";
+    const firstTextRegion =
+      templateRegions.find(
+        (r) => String(r.label || "").toUpperCase() === "TEXT_1" && textFor(r).trim(),
+      ) ||
+      templateRegions.find((r) => textFor(r).trim()) ||
+      templateRegions.find((r) => String(r.label || "").toUpperCase() === "TEXT_1") ||
+      templateRegions[0];
+    const id = videoIdx >= 0 ? stripExt(get().getExcelDisplayId(videoIdx)) : stem;
+    const text = textFor(firstTextRegion);
+    outputName = buildIdTextOutputName(id, text, exportFormat);
+  }
+  return outputName || `${stem}_beru.${exportFormat}`;
+}
+
 /** Video queue, region drawing, per-video operations, and undo/redo. */
 export function createQueueSlice(set, get) {
   return {
@@ -65,52 +90,24 @@ export function createQueueSlice(set, get) {
       return getLockedDimensions(s);
     },
 
-    /* Desired basename for a queue item (before batch collision suffixes). */
-    _desiredOutputNameFor: (item) => {
-      if (!item) return null;
-      const { exportFormat, templateRegions } = get();
-      const filename = item.path.split(/[\\/]/).pop();
-      const stem = filename.replace(/\.[^.]+$/, "");
-      let outputName = item.customOutputName;
-      if (!outputName && templateRegions.length > 0) {
-        const videoIdx = get().queue.findIndex((q) => q === item || q.path === item.path);
-        const textFor = (region) =>
-          videoIdx >= 0 ? String(get().getCellTextForRegion(videoIdx, region.id) ?? "") : "";
-        const firstTextRegion =
-          templateRegions.find(
-            (r) => String(r.label || "").toUpperCase() === "TEXT_1" && textFor(r).trim(),
-          ) ||
-          templateRegions.find((r) => textFor(r).trim()) ||
-          templateRegions.find((r) => String(r.label || "").toUpperCase() === "TEXT_1") ||
-          templateRegions[0];
-        const id =
-          videoIdx >= 0
-            ? get()
-                .getExcelDisplayId(videoIdx)
-                .replace(/\.[^.]+$/, "")
-            : stem;
-        const text = textFor(firstTextRegion);
-        outputName = buildIdTextOutputName(id, text, exportFormat);
-      }
-      return outputName || `${stem}_beru.${exportFormat}`;
-    },
-
     /* Compute the output file path for a queue item. */
     outputPathFor: (item) => {
       if (!item) return null;
       const { outputDir, queue } = get();
-      let outputName = get()._desiredOutputNameFor(item);
+      let outputName = desiredOutputNameFor(item, get);
       // When several queue items share the same basename, keep the first and
       // suffix later ones (__2, __3, ...) so batch export does not overwrite.
-      const sameName = queue.filter((q) => get()._desiredOutputNameFor(q) === outputName);
-      if (sameName.length > 1) {
-        const rank = sameName.findIndex((q) => q === item || q.path === item.path);
-        if (rank > 0) {
-          const dot = outputName.lastIndexOf(".");
-          const stem = dot > 0 ? outputName.slice(0, dot) : outputName;
-          const ext = dot > 0 ? outputName.slice(dot) : "";
-          outputName = `${stem}__${rank + 1}${ext}`;
-        }
+      let count = 0;
+      let rank = -1;
+      for (const q of queue) {
+        if (desiredOutputNameFor(q, get) !== outputName) continue;
+        if (q === item || q.path === item.path) rank = count;
+        count++;
+      }
+      if (count > 1 && rank > 0) {
+        const stem = stripExt(outputName);
+        const ext = outputName.slice(stem.length);
+        outputName = `${stem}__${rank + 1}${ext}`;
       }
       const outDir = outputDir || item.path.replace(/[\\/][^\\/]*$/, "");
       const base = outDir.replace(/[\\/]+$/, "");
@@ -437,25 +434,7 @@ export function createQueueSlice(set, get) {
           mirrorSide: get().mirrorSide,
           edgeFeather: get().edgeFeather,
           text: get().textInput,
-          fontSize: get().textFontSize,
-          fontColor: get().textFontColor,
-          fontFamily: get().fontFamily,
-          fontWeight: get().fontWeight,
-          letterSpacing: get().letterSpacing,
-          textAlign: get().textAlign,
-          textOpacity: get().textOpacity,
-          bold: get().bold,
-          italic: get().italic,
-          bgEnabled: get().bgEnabled,
-          bgColor: get().bgColor,
-          bgOpacity: get().bgOpacity,
-          boxBorderWidth: get().boxBorderWidth,
-          borderWidth: get().borderWidth,
-          borderColor: get().borderColor,
-          textShadowEnabled: get().textShadowEnabled,
-          textShadowColor: get().textShadowColor,
-          textShadowOffsetX: get().textShadowOffsetX,
-          textShadowOffsetY: get().textShadowOffsetY,
+          ...pickTextStyle(getGlobalTextStyleFromState(get())),
           imagePath: get().tempImagePath,
           imageOpacity: get().tempImageOpacity,
           startTime: get().tempStart,

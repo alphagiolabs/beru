@@ -1,5 +1,11 @@
 import { createOperation, uid } from "../../utils/types";
-import { stripExt, rowGet, isRegionUsable, normalizeMatchId } from "../../utils/video-utils";
+import {
+  stripExt,
+  rowGet,
+  isRegionUsable,
+  normalizeMatchId,
+  formatMatchIdRaw,
+} from "../../utils/video-utils";
 import { sanitizeOperation } from "../../utils/delogo-ops";
 import {
   getGlobalTextStyleFromState,
@@ -367,10 +373,10 @@ export function createBatchSlice(set, get) {
       const tr = templateRegions.find((r) => r.id === regionId);
       if (!tr) return "";
       const item = queue[videoIdx];
-      const { op, opIdx } = findTextOpForRegion(item.operations, tr.region, tr.id);
+      const { op } = findTextOpForRegion(item.operations, tr.region, tr.id);
       // Prefer the op once it exists — including intentional empty string — so
       // cleared cells do not resurrect Excel values on materialize/preview.
-      if (opIdx >= 0 && op) return op.text != null ? String(op.text) : "";
+      if (op) return op.text != null ? String(op.text) : "";
       const rowIdx = get().getExcelRowIndexForVideo(videoIdx);
       const colName = excelMapping.columns?.[regionId];
       if (rowIdx < 0 || !colName) return "";
@@ -385,7 +391,7 @@ export function createBatchSlice(set, get) {
       const rowIdx = get().getExcelRowIndexForVideo(videoIdx);
       if (rowIdx < 0 || !excelMapping.idColumn) return fallback;
       const val = rowGet(excelRows[rowIdx], excelMapping.idColumn);
-      return val !== undefined && val !== null ? String(val) : fallback;
+      return val !== undefined && val !== null ? formatMatchIdRaw(val) : fallback;
     },
 
     _reapplyExcel: () => {
