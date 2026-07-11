@@ -255,6 +255,7 @@
   "preview.showTimeline": "Mostrar marcadores de tiempo",
   "preview.hideTimeline": "Ocultar marcadores de tiempo",
   "preview.renderFrame": "Previsualizar frame renderizado (FFmpeg drawtext)",
+  "preview.closeRenderFrame": "Cerrar preview FFmpeg",
   "preview.zoomOut": "Alejar (Ctrl + rueda)",
   "preview.zoomReset": "Restablecer zoom (1:1)",
   "preview.zoomIn": "Acercar (Ctrl + rueda)",

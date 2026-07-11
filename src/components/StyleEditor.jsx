@@ -1,4 +1,4 @@
-import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, ScanEye, Ban } from "lucide-react";
+import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, Ban } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { pickTextStyle } from "../utils/text-style";
@@ -6,7 +6,7 @@ import { normalizeColor } from "../utils/color-utils";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS, TEXT_STYLE_PRESETS } from "../utils/types";
 import TextLayoutControls from "./TextLayoutControls";
 import { presetMatches, presetPreviewTextStyle } from "./style-editor/preset-utils";
-import { InspectorGroup, ToggleSwitch, SegmentedToolbar } from "./inspector";
+import { InspectorGroup, ToggleSwitch, SegmentedToolbar, FontFamilyPicker } from "./inspector";
 
 export default function StyleEditor() {
   const {
@@ -132,170 +132,195 @@ export default function StyleEditor() {
 
   return (
     <div className="space-y-2.5">
-      <InspectorGroup title="Vista previa">
-        <button
-          type="button"
-          onClick={() => window.dispatchEvent(new CustomEvent("beru:preview:renderFrame"))}
-          className="cap-btn-secondary w-full !text-[11px]"
-          title="Genera un frame con FFmpeg drawtext en el tiempo actual del reproductor"
-        >
-          <ScanEye size={13} style={{ color: "var(--accent-brand)" }} />
-          Previsualizar frame renderizado
-        </button>
-      </InspectorGroup>
-
-      <InspectorGroup title="Estilo preestablecido">
-        <div className="inspector-preset-grid">
-          {TEXT_STYLE_PRESETS.map((preset) => {
-            const active = presetMatches(preset, currentTextStyle);
-            return (
-              <button
-                key={preset.id || preset.name}
-                type="button"
-                onClick={() => patch(pickTextStyle(preset))}
-                className={`inspector-preset${active ? " is-selected" : ""}`}
-                style={{ background: preset.previewBg || "var(--bg-surface)" }}
-                aria-label={`Aplicar estilo: ${preset.name}`}
-                title={preset.name}
-                data-text-style-preset
-                data-preset-id={preset.id}
-              >
-                {preset.id === "plain" ? (
-                  <Ban size={16} style={{ color: "var(--text-dim)" }} />
-                ) : (
-                  <span style={presetPreviewTextStyle(preset)}>Aa</span>
-                )}
-              </button>
+      <InspectorGroup title="Estilos" className="inspector-group--presets">
+        <div className="inspector-presets">
+          <div className="inspector-preset-grid" role="listbox" aria-label="Estilos preestablecidos">
+            {TEXT_STYLE_PRESETS.map((preset) => {
+              const active = presetMatches(preset, currentTextStyle);
+              return (
+                <button
+                  key={preset.id || preset.name}
+                  type="button"
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => patch(pickTextStyle(preset))}
+                  className={`inspector-preset${active ? " is-selected" : ""}`}
+                  style={{ background: preset.previewBg || "var(--bg-elevated)" }}
+                  aria-label={`Aplicar estilo: ${preset.name}`}
+                  title={preset.name}
+                  data-text-style-preset
+                  data-preset-id={preset.id}
+                >
+                  {preset.id === "plain" ? (
+                    <Ban size={13} className="inspector-preset-plain" aria-hidden />
+                  ) : (
+                    <span className="inspector-preset-sample" style={presetPreviewTextStyle(preset)}>
+                      Aa
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {(() => {
+            const activePreset = TEXT_STYLE_PRESETS.find((p) =>
+              presetMatches(p, currentTextStyle),
             );
-          })}
+            return (
+              <div className="inspector-preset-meta" aria-live="polite">
+                <span className="inspector-preset-meta-name">
+                  {activePreset?.name || "Personalizado"}
+                </span>
+              </div>
+            );
+          })()}
         </div>
       </InspectorGroup>
 
-      <InspectorGroup title="Tipografía">
-        <label>
-          <span className="cap-input-label">Fuente</span>
-          <select
+      <InspectorGroup title="Tipografía" className="inspector-group--type">
+        <div className="inspector-type">
+          <FontFamilyPicker
+            label="Fuente"
+            ariaLabel="Fuente"
             value={fontFamily}
-            onChange={(e) => patch({ fontFamily: e.target.value })}
-            className="cap-input text-[11px]"
-          >
-            {FONT_FAMILIES.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div>
-          <span className="cap-input-label">Peso</span>
-          <SegmentedToolbar
-            ariaLabel="Peso de fuente"
-            columns={7}
-            value={fontWeight ?? 400}
-            onChange={(value) => patch({ fontWeight: value, bold: value >= 700 })}
-            options={FONT_WEIGHTS.map((w) => ({
-              value: w.value,
-              label: "Aa",
-              title: w.label,
-              style: { fontWeight: w.value },
-            }))}
+            options={FONT_FAMILIES}
+            onChange={(next) => patch({ fontFamily: next })}
           />
-        </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <label>
-            <span className="cap-input-label">Tamaño</span>
-            <input
-              type="number"
-              value={textFontSize}
-              onChange={(e) => patch({ fontSize: Number(e.target.value) })}
-              className="cap-input font-mono text-[11px]"
-              min={8}
-              max={200}
+          <div className="inspector-type-weight">
+            <span className="inspector-paragraph-micro">Peso</span>
+            <SegmentedToolbar
+              ariaLabel="Peso de fuente"
+              columns={FONT_WEIGHTS.length}
+              value={fontWeight ?? 400}
+              onChange={(value) => patch({ fontWeight: value, bold: value >= 700 })}
+              options={FONT_WEIGHTS.map((w) => ({
+                value: w.value,
+                label: "Aa",
+                title: w.label,
+                ariaLabel: w.label,
+                style: { fontWeight: w.value, fontFamily: fontFamily || undefined },
+              }))}
             />
-          </label>
-          <label>
-            <span className="cap-input-label">Espaciado</span>
-            <input
-              type="number"
-              value={letterSpacing ?? 0}
-              onChange={(e) => patch({ letterSpacing: Number(e.target.value) })}
-              className="cap-input font-mono text-[11px]"
-              step={0.5}
-            />
-          </label>
-        </div>
+          </div>
 
-        <div className="flex gap-1.5">
-          <button
-            type="button"
-            onClick={() => patch({ bold: !bold })}
-            className={`inspector-chip flex-1 gap-1${bold ? " is-selected" : ""}`}
-            aria-pressed={bold}
-          >
-            <Bold size={12} /> Negrita
-          </button>
-          <button
-            type="button"
-            onClick={() => patch({ italic: !italic })}
-            className={`inspector-chip flex-1 gap-1${italic ? " is-selected" : ""}`}
-            aria-pressed={italic}
-          >
-            <Italic size={12} /> Cursiva
-          </button>
+          <div className="inspector-type-metrics" role="group" aria-label="Tamaño y espaciado">
+            <label className="inspector-type-metric">
+              <span className="inspector-type-metric-key">Tam.</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                aria-label="Tamaño"
+                value={textFontSize}
+                onChange={(e) => patch({ fontSize: Number(e.target.value) })}
+                className="inspector-type-metric-input"
+                min={8}
+                max={200}
+              />
+            </label>
+            <label className="inspector-type-metric">
+              <span className="inspector-type-metric-key">Esp.</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                aria-label="Espaciado"
+                value={letterSpacing ?? 0}
+                onChange={(e) => patch({ letterSpacing: Number(e.target.value) })}
+                className="inspector-type-metric-input"
+                step={0.5}
+              />
+            </label>
+          </div>
+
+          <div className="inspector-type-style" role="group" aria-label="Estilo de fuente">
+            <button
+              type="button"
+              onClick={() => patch({ bold: !bold })}
+              className={`inspector-chip${bold ? " is-selected" : ""}`}
+              aria-pressed={bold}
+              aria-label="Negrita"
+              title="Negrita"
+            >
+              <Bold size={12} strokeWidth={2.5} />
+              <span>Negrita</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => patch({ italic: !italic })}
+              className={`inspector-chip${italic ? " is-selected" : ""}`}
+              aria-pressed={italic}
+              aria-label="Cursiva"
+              title="Cursiva"
+            >
+              <Italic size={12} />
+              <span>Cursiva</span>
+            </button>
+          </div>
         </div>
       </InspectorGroup>
 
-      <InspectorGroup title="Párrafo">
-        <div>
-          <span className="cap-input-label">Alineación</span>
-          <SegmentedToolbar
-            ariaLabel="Alineación horizontal"
-            columns={3}
-            value={textAlign || "left"}
-            onChange={(value) => patch({ textAlign: value })}
-            options={TEXT_ALIGNS.map((a) => ({
-              value: a.value,
-              title: a.value,
-              icon:
-                a.value === "left" ? (
-                  <AlignLeft size={12} />
-                ) : a.value === "center" ? (
-                  <AlignCenter size={12} />
-                ) : (
-                  <AlignRight size={12} />
-                ),
-            }))}
-          />
-        </div>
+      <InspectorGroup title="Párrafo" className="inspector-group--paragraph">
         <TextLayoutControls
-          values={{ autoFit, lineHeight, verticalAlign, textWrap, safeMargin, truncate }}
+          showTextAlign
+          values={{
+            textAlign: textAlign || "left",
+            autoFit,
+            lineHeight,
+            verticalAlign,
+            textWrap,
+            safeMargin,
+            truncate,
+          }}
           onPatch={patch}
+          textAlignOptions={TEXT_ALIGNS.map((a) => ({
+            value: a.value,
+            title: a.value,
+            icon:
+              a.value === "left" ? (
+                <AlignLeft size={12} />
+              ) : a.value === "center" ? (
+                <AlignCenter size={12} />
+              ) : (
+                <AlignRight size={12} />
+              ),
+          }))}
         />
       </InspectorGroup>
 
-      <InspectorGroup title="Color">
-        <label className="min-w-0 block">
-          <span className="cap-input-label">Color</span>
-          <div className="flex gap-1.5 min-w-0">
-            <input
-              type="color"
-              value={normalizeColor(textFontColor) || "#ffffff"}
-              onChange={(e) => patch({ fontColor: e.target.value })}
-              className="w-7 h-7 shrink-0 rounded border-0 p-0 cursor-pointer"
-            />
+      <InspectorGroup title="Color" className="inspector-group--color">
+        <div className="inspector-color">
+          <label className="inspector-color-swatch-row">
+            <span className="inspector-color-key">Tinta</span>
+            <span className="inspector-color-swatch">
+              <span
+                className="inspector-color-swatch-fill"
+                style={{
+                  background: normalizeColor(textFontColor) || textFontColor || "#ffffff",
+                  opacity: textOpacity ?? 1,
+                }}
+                aria-hidden
+              />
+              <input
+                type="color"
+                value={normalizeColor(textFontColor) || "#ffffff"}
+                onChange={(e) => patch({ fontColor: e.target.value })}
+                className="inspector-color-swatch-input"
+                aria-label="Color de texto"
+              />
+            </span>
             <input
               type="text"
               value={textFontColor}
               onChange={(e) => patch({ fontColor: e.target.value })}
-              className="cap-input min-w-0 flex-1 font-mono text-[10px]"
+              className="inspector-color-hex"
+              spellCheck={false}
+              autoComplete="off"
+              aria-label="Valor de color"
             />
-          </div>
-        </label>
-        <label className="min-w-0 block">
-          <span className="cap-input-label">Opacidad</span>
-          <div className="flex items-center gap-2 min-w-0">
+          </label>
+
+          <label className="inspector-color-opacity-row">
+            <span className="inspector-color-key">Opacidad</span>
             <input
               type="range"
               min={0}
@@ -303,24 +328,27 @@ export default function StyleEditor() {
               step={0.05}
               value={textOpacity ?? 1}
               onChange={(e) => patch({ textOpacity: parseFloat(e.target.value) })}
-              className="inspector-range"
-              style={{ accentColor: "var(--accent-brand)" }}
+              className="inspector-color-range"
+              style={{
+                accentColor: normalizeColor(textFontColor) || "var(--accent-brand)",
+              }}
+              aria-label="Opacidad de texto"
             />
-            <span
-              className="font-mono text-[10px] w-8 shrink-0 text-right"
-              style={{ color: "var(--text-dim)" }}
-            >
+            <span className="inspector-color-pct">
               {Math.round((textOpacity ?? 1) * 100)}%
             </span>
-          </div>
-        </label>
+          </label>
+        </div>
       </InspectorGroup>
 
       <InspectorGroup
         title="Fondo"
+        className="inspector-group--fx"
         collapsible
         defaultOpen={!!bgEnabled}
         forceOpen={!!bgEnabled}
+        collapseWhenOff
+        hideChevron
         headerAccessory={
           <ToggleSwitch
             ariaLabel="Fondo activo"
@@ -330,98 +358,130 @@ export default function StyleEditor() {
         }
       >
         {bgEnabled ? (
-          <div className="space-y-1.5">
-            <div className="grid grid-cols-2 gap-2">
-              <label>
-                <span className="cap-input-label">Color</span>
-                <div className="flex gap-1 min-w-0">
-                  <input
-                    type="color"
-                    value={normalizeColor(bgColor) || "#000000"}
-                    onChange={(e) => patch({ bgColor: e.target.value })}
-                    className="w-6 h-6 shrink-0 rounded border-0 p-0 cursor-pointer"
-                  />
-                  <input
-                    type="text"
-                    value={bgColor}
-                    onChange={(e) => patch({ bgColor: e.target.value })}
-                    className="cap-input min-w-0 flex-1 font-mono text-[10px]"
-                  />
-                </div>
-              </label>
-              <label>
-                <span className="cap-input-label">Opacidad</span>
-                <input
-                  type="number"
-                  value={bgOpacity}
-                  onChange={(e) => patch({ bgOpacity: parseFloat(e.target.value) })}
-                  className="cap-input font-mono text-[11px]"
-                  min={0}
-                  max={1}
-                  step={0.05}
+          <div className="inspector-color">
+            <label className="inspector-color-swatch-row">
+              <span className="inspector-color-key">Color</span>
+              <span className="inspector-color-swatch">
+                <span
+                  className="inspector-color-swatch-fill"
+                  style={{
+                    background: normalizeColor(bgColor) || bgColor || "#000000",
+                    opacity: bgOpacity ?? 1,
+                  }}
+                  aria-hidden
                 />
-              </label>
-            </div>
-            <label>
-              <span className="cap-input-label">Padding</span>
+                <input
+                  type="color"
+                  value={normalizeColor(bgColor) || "#000000"}
+                  onChange={(e) => patch({ bgColor: e.target.value })}
+                  className="inspector-color-swatch-input"
+                  aria-label="Color de fondo"
+                />
+              </span>
+              <input
+                type="text"
+                value={bgColor}
+                onChange={(e) => patch({ bgColor: e.target.value })}
+                className="inspector-color-hex"
+                spellCheck={false}
+                autoComplete="off"
+                aria-label="Valor de color de fondo"
+              />
+            </label>
+            <label className="inspector-color-opacity-row">
+              <span className="inspector-color-key">Opacidad</span>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={bgOpacity ?? 0}
+                onChange={(e) => patch({ bgOpacity: parseFloat(e.target.value) })}
+                className="inspector-color-range"
+                style={{
+                  accentColor: normalizeColor(bgColor) || "var(--accent-brand)",
+                }}
+                aria-label="Opacidad de fondo"
+              />
+              <span className="inspector-color-pct">
+                {Math.round((bgOpacity ?? 0) * 100)}%
+              </span>
+            </label>
+            <label className="inspector-color-metric-row">
+              <span className="inspector-color-key">Padding</span>
               <input
                 type="number"
+                inputMode="numeric"
                 value={boxBorderWidth ?? 4}
                 onChange={(e) => patch({ boxBorderWidth: Number(e.target.value) })}
-                className="cap-input font-mono text-[11px]"
+                className="inspector-color-metric-input"
                 min={0}
                 max={80}
+                aria-label="Padding de fondo"
               />
             </label>
           </div>
-        ) : (
-          <p className="inspector-helper">Activa el fondo para color, opacidad y padding.</p>
-        )}
+        ) : null}
       </InspectorGroup>
 
       <InspectorGroup
         title="Contorno"
+        className="inspector-group--fx"
         collapsible
         defaultOpen={strokeActive}
         forceOpen={strokeActive}
       >
-        <div className="grid grid-cols-2 gap-2">
-          <label>
-            <span className="cap-input-label">Ancho</span>
+        <div className="inspector-color">
+          <label className="inspector-color-metric-row">
+            <span className="inspector-color-key">Ancho</span>
             <input
               type="number"
+              inputMode="numeric"
               value={borderWidth}
               onChange={(e) => patch({ borderWidth: Number(e.target.value) })}
-              className="cap-input font-mono text-[11px]"
+              className="inspector-color-metric-input"
               min={0}
               max={20}
+              aria-label="Ancho de contorno"
             />
           </label>
-          <label>
-            <span className="cap-input-label">Color</span>
-            <div className="flex gap-1 min-w-0">
+          <label className="inspector-color-swatch-row">
+            <span className="inspector-color-key">Color</span>
+            <span className="inspector-color-swatch">
+              <span
+                className="inspector-color-swatch-fill"
+                style={{ background: normalizeColor(borderColor) || borderColor || "#000000" }}
+                aria-hidden
+              />
               <input
                 type="color"
                 value={normalizeColor(borderColor) || "#000000"}
                 onChange={(e) => patch({ borderColor: e.target.value })}
-                className="w-6 h-6 shrink-0 rounded border-0 p-0 cursor-pointer"
+                className="inspector-color-swatch-input"
+                aria-label="Color de contorno"
               />
-              <input
-                type="text"
-                value={borderColor}
-                onChange={(e) => patch({ borderColor: e.target.value })}
-                className="cap-input min-w-0 flex-1 font-mono text-[10px]"
-              />
-            </div>
+            </span>
+            <input
+              type="text"
+              value={borderColor}
+              onChange={(e) => patch({ borderColor: e.target.value })}
+              className="inspector-color-hex"
+              spellCheck={false}
+              autoComplete="off"
+              aria-label="Valor de color de contorno"
+            />
           </label>
         </div>
       </InspectorGroup>
 
       <InspectorGroup
         title="Sombra"
+        className="inspector-group--fx"
         collapsible
         defaultOpen={!!textShadowEnabled}
         forceOpen={!!textShadowEnabled}
+        collapseWhenOff
+        hideChevron
         headerAccessory={
           <ToggleSwitch
             ariaLabel="Sombra activa"
@@ -431,52 +491,66 @@ export default function StyleEditor() {
         }
       >
         {textShadowEnabled ? (
-          <div className="space-y-1.5">
-            <label>
-              <span className="cap-input-label">Color</span>
-              <div className="flex gap-1 min-w-0">
+          <div className="inspector-color">
+            <label className="inspector-color-swatch-row">
+              <span className="inspector-color-key">Color</span>
+              <span className="inspector-color-swatch">
+                <span
+                  className="inspector-color-swatch-fill"
+                  style={{
+                    background:
+                      normalizeColor(textShadowColor) || textShadowColor || "#000000",
+                  }}
+                  aria-hidden
+                />
                 <input
                   type="color"
                   value={normalizeColor(textShadowColor) || "#000000"}
                   onChange={(e) => patch({ textShadowColor: e.target.value })}
-                  className="w-6 h-6 shrink-0 rounded border-0 p-0 cursor-pointer"
+                  className="inspector-color-swatch-input"
+                  aria-label="Color de sombra"
                 />
-                <input
-                  type="text"
-                  value={textShadowColor}
-                  onChange={(e) => patch({ textShadowColor: e.target.value })}
-                  className="cap-input min-w-0 flex-1 font-mono text-[10px]"
-                />
-              </div>
+              </span>
+              <input
+                type="text"
+                value={textShadowColor}
+                onChange={(e) => patch({ textShadowColor: e.target.value })}
+                className="inspector-color-hex"
+                spellCheck={false}
+                autoComplete="off"
+                aria-label="Valor de color de sombra"
+              />
             </label>
-            <div className="grid grid-cols-2 gap-2">
-              <label>
-                <span className="cap-input-label">Offset X</span>
+            <div className="inspector-color-pair" role="group" aria-label="Offset de sombra">
+              <label className="inspector-color-pair-cell">
+                <span className="inspector-color-pair-key">X</span>
                 <input
                   type="number"
+                  inputMode="numeric"
                   value={textShadowOffsetX ?? 2}
                   onChange={(e) => patch({ textShadowOffsetX: Number(e.target.value) })}
-                  className="cap-input font-mono text-[11px]"
+                  className="inspector-color-metric-input"
                   min={-64}
                   max={64}
+                  aria-label="Offset X de sombra"
                 />
               </label>
-              <label>
-                <span className="cap-input-label">Offset Y</span>
+              <label className="inspector-color-pair-cell">
+                <span className="inspector-color-pair-key">Y</span>
                 <input
                   type="number"
+                  inputMode="numeric"
                   value={textShadowOffsetY ?? 2}
                   onChange={(e) => patch({ textShadowOffsetY: Number(e.target.value) })}
-                  className="cap-input font-mono text-[11px]"
+                  className="inspector-color-metric-input"
                   min={-64}
                   max={64}
+                  aria-label="Offset Y de sombra"
                 />
               </label>
             </div>
           </div>
-        ) : (
-          <p className="inspector-helper">Activa la sombra para color y offsets.</p>
-        )}
+        ) : null}
       </InspectorGroup>
     </div>
   );

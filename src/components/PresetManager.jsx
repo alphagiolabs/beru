@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { Save, Trash2 } from "lucide-react";
+import { Save, Trash2, Package } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
+import { InspectorGroup } from "./inspector";
 
 export default function PresetManager() {
   const presets = useEditorStore((s) => s.presets);
@@ -61,70 +62,96 @@ export default function PresetManager() {
     scheduleFeedbackClear();
   };
 
+  const canSave = Boolean(name.trim()) && !saving;
+
   return (
-    <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
-      <span className="cap-input-label">Presets</span>
-      <div className="flex gap-1 mb-2">
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Nombre..."
-          className="cap-input flex-1 text-[11px] !py-1"
-          onKeyDown={(e) => e.key === "Enter" && handleSave()}
-          disabled={saving}
-        />
-        <button
-          onClick={handleSave}
-          disabled={!name.trim() || saving}
-          className="cap-btn-secondary !px-2"
-          title="Guardar preset"
-        >
-          <Save size={14} />
-        </button>
-      </div>
-      {feedback && (
-        <div
-          className="text-[10px] mb-1"
-          style={{ color: feedback.kind === "ok" ? "#22c55e" : "var(--rose)" }}
-        >
-          {feedback.text}
-        </div>
-      )}
-      <div className="flex flex-wrap gap-1 max-h-[100px] overflow-y-auto">
-        {presets.map((p) => (
-          <div
-            key={`${p.source}-${p.filename}`}
-            className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] cursor-pointer"
-            style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-            onClick={() => getState().loadPreset(p)}
+    <InspectorGroup title="Presets" className="inspector-group--user-presets">
+      <div className="inspector-user-presets">
+        <div className="inspector-user-presets-save">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nombre del preset…"
+            className="inspector-user-presets-input"
+            onKeyDown={(e) => e.key === "Enter" && handleSave()}
+            disabled={saving}
+            aria-label="Nombre del preset"
+          />
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!canSave}
+            className={`inspector-user-presets-save-btn${canSave ? " is-ready" : ""}`}
+            title="Guardar preset"
+            aria-label="Guardar preset"
           >
-            <span style={{ color: "var(--text-secondary)" }}>{p.name}</span>
-            {p.source === "bundled" ? (
-              <span
-                style={{ color: "var(--text-dim)" }}
-                className="opacity-60"
-                title="Preset incluido (no se puede eliminar)"
-              >
-                <Trash2 size={10} />
-              </span>
-            ) : (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(p);
-                }}
-                disabled={deletingFilename === p.filename}
-                style={{ color: "var(--text-dim)" }}
-                className="hover:text-red-400 disabled:opacity-50"
-                title="Eliminar preset"
-              >
-                <Trash2 size={10} />
-              </button>
-            )}
-          </div>
-        ))}
+            <Save size={13} strokeWidth={2.25} />
+          </button>
+        </div>
+
+        {feedback ? (
+          <p
+            className={`inspector-user-presets-feedback is-${feedback.kind}`}
+            role="status"
+            aria-live="polite"
+          >
+            {feedback.text}
+          </p>
+        ) : null}
+
+        {presets.length === 0 ? (
+          <p className="inspector-helper inspector-user-presets-empty">
+            Aún no hay presets guardados.
+          </p>
+        ) : (
+          <ul className="inspector-user-presets-list" aria-label="Presets guardados">
+            {presets.map((p) => {
+              const isBundled = p.source === "bundled";
+              const isDeleting = deletingFilename === p.filename;
+              return (
+                <li key={`${p.source}-${p.filename}`} className="inspector-user-presets-item">
+                  <button
+                    type="button"
+                    className="inspector-user-presets-load"
+                    onClick={() => getState().loadPreset(p)}
+                    title={`Cargar: ${p.name}`}
+                  >
+                    {isBundled ? (
+                      <Package
+                        size={11}
+                        className="inspector-user-presets-badge"
+                        aria-hidden
+                      />
+                    ) : null}
+                    <span className="inspector-user-presets-name">{p.name}</span>
+                  </button>
+                  {isBundled ? (
+                    <span
+                      className="inspector-user-presets-delete is-locked"
+                      title="Preset incluido (no se puede eliminar)"
+                      aria-hidden
+                    >
+                      <Trash2 size={11} />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inspector-user-presets-delete"
+                      onClick={() => handleDelete(p)}
+                      disabled={isDeleting}
+                      title="Eliminar preset"
+                      aria-label={`Eliminar ${p.name}`}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
-    </div>
+    </InspectorGroup>
   );
 }

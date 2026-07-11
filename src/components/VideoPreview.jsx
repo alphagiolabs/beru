@@ -481,17 +481,32 @@ export default function VideoPreview() {
       showToast?.({ kind: "err", text: "Preview FFmpeg no disponible" });
       return;
     }
-    if (selectedIdx < 0 || !sel) return;
+    if (selectedIdx < 0 || !sel) {
+      showToast?.({ kind: "err", text: "Selecciona un video para previsualizar" });
+      return;
+    }
 
     const video = videoRef.current;
     if (video && !video.paused) video.pause();
+
+    // Ensure probe dimensions exist so regions denormalize to pixels
+    // (same guard as processSingle / batch export).
+    let idx = selectedIdx;
+    if (!(sel.width > 0 && sel.height > 0) && api.getVideoInfo) {
+      try {
+        await useEditorStore.getState().refreshMissingVideoInfo?.(api);
+        idx = useEditorStore.getState().selectedIdx;
+      } catch {
+        /* fall through — Python may still probe from the file */
+      }
+    }
 
     // ts uses video.currentTime first (always current after a seek via
     // seekTo), falling back to the React currentTime state. Both are updated
     // during seek: video.currentTime by seekTo(), and React currentTime by
     // the range input's onChange handler. Neither is stale after seek.
     const ts = video?.currentTime ?? currentTime;
-    const job = buildPreviewFrameJob(selectedIdx, ts);
+    const job = buildPreviewFrameJob(idx, ts);
     if (!job) {
       showToast?.({ kind: "err", text: "No se pudo construir el preview" });
       return;
@@ -945,8 +960,9 @@ export default function VideoPreview() {
               );
             })()}
 
-          {/* Global watermark preview */}
+          {/* Global watermark preview (hidden under FFmpeg frame — already burned in) */}
           {watermark?.enabled &&
+            !showFfmpegOverlay &&
             (() => {
               const video = videoRef.current;
               if (!video) return null;
@@ -1254,14 +1270,25 @@ export default function VideoPreview() {
             {showTimeline ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
           <button
-            onClick={handleRenderPreviewFrame}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Looks like a toggle (accent when on): second click closes.
+              // Click again after close re-renders with latest styles/time.
+              if (showFfmpegPreview && !ffmpegPreviewLoading) {
+                dismissFfmpegPreview();
+                return;
+              }
+              handleRenderPreviewFrame();
+            }}
             disabled={ffmpegPreviewLoading}
             className="p-1 rounded hover:bg-white/10 disabled:opacity-40"
             style={{
               color: showFfmpegPreview ? "var(--accent)" : "var(--text-dim)",
             }}
-            title={t("preview.renderFrame")}
-            aria-label={t("preview.renderFrame")}
+            title={showFfmpegPreview ? t("preview.closeRenderFrame") : t("preview.renderFrame")}
+            aria-label={showFfmpegPreview ? t("preview.closeRenderFrame") : t("preview.renderFrame")}
+            aria-pressed={showFfmpegPreview}
           >
             {ffmpegPreviewLoading ? (
               <Loader2 size={14} className="animate-spin" />

@@ -20,19 +20,21 @@ function presetTextShadow(preset) {
 }
 
 export function presetPreviewTextStyle(preset) {
-  const strokeWidth = Math.min(2, Number(preset.borderWidth ?? 0));
+  const strokeWidth = Math.min(1.35, Number(preset.borderWidth ?? 0) * 0.4);
   return {
     color: preset.fontColor || "white",
     fontFamily: `"${preset.fontFamily || "Arial"}", sans-serif`,
-    fontSize: "18px",
+    fontSize: "12px",
     fontStyle: preset.italic ? "italic" : "normal",
     fontWeight: preset.fontWeight ?? (preset.bold ? 700 : 400),
-    letterSpacing: `${Math.min(1.5, Number(preset.letterSpacing ?? 0))}px`,
+    letterSpacing: `${Math.min(0.8, Number(preset.letterSpacing ?? 0) * 0.35)}px`,
     lineHeight: 1,
-    padding: preset.bgEnabled ? "2px 3px" : 0,
+    padding: preset.bgEnabled ? "1px 2px" : 0,
     borderRadius: "3px",
-    background: preset.bgEnabled ? preset.bgColor : "transparent",
+    background: preset.bgEnabled ? preset.bgColor || "black" : "transparent",
+    opacity: preset.textOpacity != null ? Math.max(0.35, Number(preset.textOpacity)) : 1,
     textShadow: presetTextShadow(preset),
     WebkitTextStroke: strokeWidth > 0 ? `${strokeWidth}px ${preset.borderColor || "black"}` : "0",
+    paintOrder: "stroke fill",
   };
 }

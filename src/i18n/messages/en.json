@@ -255,6 +255,7 @@
   "preview.showTimeline": "Show timeline markers",
   "preview.hideTimeline": "Hide timeline markers",
   "preview.renderFrame": "Preview rendered frame (FFmpeg drawtext)",
+  "preview.closeRenderFrame": "Close FFmpeg preview",
   "preview.zoomOut": "Zoom out (Ctrl + wheel)",
   "preview.zoomReset": "Reset zoom (1:1)",
   "preview.zoomIn": "Zoom in (Ctrl + wheel)",

@@ -109,24 +109,22 @@ export default function PropertiesPanel() {
           value={sidebarMode}
           onChange={(id) => get().setSidebarMode(id)}
           options={[
-            { id: "logo", label: "Quitar logo" },
-            {
-              id: "batch",
-              label: "Texto en lote",
-              activeColor: "var(--purple)",
-              activeTextColor: "#ffffff",
-            },
+            { id: "logo", label: "Quitar logo", tone: "accent" },
+            { id: "batch", label: "Texto en lote", tone: "purple" },
           ]}
         />
-        <h2 className="inspector-region-title">
+        <div className="inspector-chrome-meta">
           {sel?.filename ? (
             <>
-              Región · <span>{sel.filename}</span>
+              <span className="inspector-chrome-meta-key">Región</span>
+              <span className="inspector-chrome-meta-value" title={sel.filename}>
+                {sel.filename}
+              </span>
             </>
           ) : (
-            <span>Sin video seleccionado</span>
+            <span className="inspector-chrome-meta-empty">Sin video seleccionado</span>
           )}
-        </h2>
+        </div>
       </div>
 
       <div className="inspector-body">
@@ -141,8 +139,11 @@ export default function PropertiesPanel() {
 
         {currentRegion && (
           <>
-            <InspectorGroup title="Región">
-              <div className="grid grid-cols-2 gap-2">
+            <section className="inspector-region-strip" aria-label="Región">
+              <div className="inspector-region-strip-head">
+                <span className="inspector-region-strip-title">Región</span>
+              </div>
+              <div className="inspector-region-strip-fields" role="group">
                 {(() => {
                   const vw = sel?.width || 0;
                   const vh = sel?.height || 0;
@@ -153,23 +154,25 @@ export default function PropertiesPanel() {
                     ["W", "w"],
                     ["H", "h"],
                   ].map(([label, key]) => (
-                    <label key={key}>
-                      <span className="cap-input-label">{label}</span>
+                    <label key={key} className="inspector-region-cell">
+                      <span className="inspector-region-cell-key">{label}</span>
                       <input
                         type="number"
+                        inputMode="numeric"
+                        aria-label={label}
                         value={Math.round((currentRegion[key] || 0) * (dimFor(key) || 1))}
                         onChange={(e) => {
                           const px = Number(e.target.value);
                           if (!Number.isFinite(px) || !dimFor(key)) return;
                           get().updateRegionValue(key, px / dimFor(key));
                         }}
-                        className="cap-input font-mono text-[11px]"
+                        className="inspector-region-cell-input"
                       />
                     </label>
                   ));
                 })()}
               </div>
-            </InspectorGroup>
+            </section>
 
             {sidebarMode === "logo" && activeTool === "image" && (
               <InspectorGroup title="Marca de agua">
