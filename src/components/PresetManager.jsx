@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Save, Trash2, Package } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { InspectorGroup } from "./inspector";
 
@@ -65,29 +65,70 @@ export default function PresetManager() {
   const canSave = Boolean(name.trim()) && !saving;
 
   return (
-    <InspectorGroup title="Presets" className="inspector-group--user-presets">
+    <InspectorGroup title="Presets" className="inspector-group--user-presets" collapsible defaultOpen>
       <div className="inspector-user-presets">
-        <div className="inspector-user-presets-save">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nombre del preset…"
-            className="inspector-user-presets-input"
-            onKeyDown={(e) => e.key === "Enter" && handleSave()}
-            disabled={saving}
-            aria-label="Nombre del preset"
-          />
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!canSave}
-            className={`inspector-user-presets-save-btn${canSave ? " is-ready" : ""}`}
-            title="Guardar preset"
-            aria-label="Guardar preset"
-          >
-            <Save size={13} strokeWidth={2.25} />
-          </button>
+        <div className="inspector-user-presets-shell">
+          <div className="inspector-user-presets-save">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nombre…"
+              className="inspector-user-presets-input"
+              onKeyDown={(e) => e.key === "Enter" && handleSave()}
+              disabled={saving}
+              aria-label="Nombre del preset"
+            />
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave}
+              className={`inspector-user-presets-save-btn${canSave ? " is-ready" : ""}`}
+              title="Guardar preset"
+              aria-label="Guardar preset"
+            >
+              <Plus size={14} strokeWidth={2.25} />
+            </button>
+          </div>
+
+          {presets.length > 0 ? (
+            <ul className="inspector-user-presets-list" aria-label="Presets guardados">
+              {presets.map((p) => {
+                const isBundled = p.source === "bundled";
+                const isDeleting = deletingFilename === p.filename;
+                return (
+                  <li
+                    key={`${p.source}-${p.filename}`}
+                    className={`inspector-user-presets-item${isBundled ? " is-bundled" : ""}`}
+                  >
+                    <button
+                      type="button"
+                      className="inspector-user-presets-load"
+                      onClick={() => getState().loadPreset(p)}
+                      title={isBundled ? `${p.name} (incluido)` : `Cargar: ${p.name}`}
+                    >
+                      <span className="inspector-user-presets-name">{p.name}</span>
+                      {isBundled ? (
+                        <span className="inspector-user-presets-tag">Incluido</span>
+                      ) : null}
+                    </button>
+                    {!isBundled ? (
+                      <button
+                        type="button"
+                        className="inspector-user-presets-delete"
+                        onClick={() => handleDelete(p)}
+                        disabled={isDeleting}
+                        title="Eliminar preset"
+                        aria-label={`Eliminar ${p.name}`}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
         </div>
 
         {feedback ? (
@@ -99,58 +140,6 @@ export default function PresetManager() {
             {feedback.text}
           </p>
         ) : null}
-
-        {presets.length === 0 ? (
-          <p className="inspector-helper inspector-user-presets-empty">
-            Aún no hay presets guardados.
-          </p>
-        ) : (
-          <ul className="inspector-user-presets-list" aria-label="Presets guardados">
-            {presets.map((p) => {
-              const isBundled = p.source === "bundled";
-              const isDeleting = deletingFilename === p.filename;
-              return (
-                <li key={`${p.source}-${p.filename}`} className="inspector-user-presets-item">
-                  <button
-                    type="button"
-                    className="inspector-user-presets-load"
-                    onClick={() => getState().loadPreset(p)}
-                    title={`Cargar: ${p.name}`}
-                  >
-                    {isBundled ? (
-                      <Package
-                        size={11}
-                        className="inspector-user-presets-badge"
-                        aria-hidden
-                      />
-                    ) : null}
-                    <span className="inspector-user-presets-name">{p.name}</span>
-                  </button>
-                  {isBundled ? (
-                    <span
-                      className="inspector-user-presets-delete is-locked"
-                      title="Preset incluido (no se puede eliminar)"
-                      aria-hidden
-                    >
-                      <Trash2 size={11} />
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="inspector-user-presets-delete"
-                      onClick={() => handleDelete(p)}
-                      disabled={isDeleting}
-                      title="Eliminar preset"
-                      aria-label={`Eliminar ${p.name}`}
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </div>
     </InspectorGroup>
   );

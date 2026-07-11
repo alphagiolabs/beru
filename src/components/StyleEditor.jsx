@@ -132,7 +132,7 @@ export default function StyleEditor() {
 
   return (
     <div className="space-y-2.5">
-      <InspectorGroup title="Estilos" className="inspector-group--presets">
+      <InspectorGroup title="Estilos" className="inspector-group--presets" collapsible defaultOpen>
         <div className="inspector-presets">
           <div className="inspector-preset-grid" role="listbox" aria-label="Estilos preestablecidos">
             {TEXT_STYLE_PRESETS.map((preset) => {
@@ -177,7 +177,7 @@ export default function StyleEditor() {
         </div>
       </InspectorGroup>
 
-      <InspectorGroup title="Tipografía" className="inspector-group--type">
+      <InspectorGroup title="Tipografía" className="inspector-group--type" collapsible defaultOpen>
         <div className="inspector-type">
           <FontFamilyPicker
             label="Fuente"
@@ -259,7 +259,7 @@ export default function StyleEditor() {
         </div>
       </InspectorGroup>
 
-      <InspectorGroup title="Párrafo" className="inspector-group--paragraph">
+      <InspectorGroup title="Párrafo" className="inspector-group--paragraph" collapsible defaultOpen>
         <TextLayoutControls
           showTextAlign
           values={{
@@ -287,7 +287,7 @@ export default function StyleEditor() {
         />
       </InspectorGroup>
 
-      <InspectorGroup title="Color" className="inspector-group--color">
+      <InspectorGroup title="Color" className="inspector-group--color" collapsible defaultOpen>
         <div className="inspector-color">
           <label className="inspector-color-swatch-row">
             <span className="inspector-color-key">Tinta</span>

@@ -174,6 +174,27 @@ export default function PropertiesPanel() {
               </div>
             </section>
 
+            {sidebarMode === "batch" && (
+              <div className="inspector-actions inspector-actions--region">
+                <button
+                  type="button"
+                  onClick={() => get().addTemplateRegion()}
+                  disabled={!isRegionUsable(currentRegion)}
+                  className="cap-btn-primary w-full disabled:opacity-50"
+                >
+                  Agregar región de texto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => get().cancelBatchRegionSelection()}
+                  className="text-[11px] hover:underline block mx-auto"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Cancelar selección
+                </button>
+              </div>
+            )}
+
             {sidebarMode === "logo" && activeTool === "image" && (
               <InspectorGroup title="Marca de agua">
                 <div className="flex gap-1.5">
@@ -613,6 +634,28 @@ export default function PropertiesPanel() {
                   </InspectorGroup>
                 )}
                 <StyleEditor />
+                <InspectorGroup title="Posición automática" className="inspector-group--auto-pos">
+                  <div className="inspector-auto-pos" role="group" aria-label="Posición automática">
+                    {[
+                      ["top-left", "↖", { x: 0.05, y: 0.05, w: 0.4, h: 0.08 }],
+                      ["center", "⊕", { x: 0.3, y: 0.46, w: 0.4, h: 0.08 }],
+                      ["top-right", "↗", { x: 0.55, y: 0.05, w: 0.4, h: 0.08 }],
+                      ["bottom-left", "↙", { x: 0.05, y: 0.87, w: 0.4, h: 0.08 }],
+                      ["bottom-right", "↘", { x: 0.55, y: 0.87, w: 0.4, h: 0.08 }],
+                    ].map(([pos, label, region]) => (
+                      <button
+                        key={pos}
+                        type="button"
+                        onClick={() => get().setCurrentRegion(region)}
+                        className="inspector-auto-pos-btn"
+                        title={pos}
+                        aria-label={pos}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </InspectorGroup>
                 <PresetManager />
               </div>
             )}
@@ -657,9 +700,10 @@ export default function PropertiesPanel() {
               </InspectorGroup>
             )}
 
-            <div className="inspector-actions">
-              {sidebarMode === "logo" ? (
+            {sidebarMode === "logo" && (
+              <div className="inspector-actions">
                 <button
+                  type="button"
                   onClick={() => get().addOperation(activeTool)}
                   className="cap-btn-primary w-full"
                 >
@@ -674,48 +718,15 @@ export default function PropertiesPanel() {
                           ? "Imagen"
                           : "Texto"}
                 </button>
-              ) : (
                 <button
-                  onClick={() => get().addTemplateRegion()}
-                  disabled={!isRegionUsable(currentRegion)}
-                  className="cap-btn-primary w-full disabled:opacity-50"
+                  type="button"
+                  onClick={() => get().setCurrentRegion(null)}
+                  className="text-[11px] hover:underline block mx-auto"
+                  style={{ color: "var(--text-muted)" }}
                 >
-                  Agregar región de texto
+                  Cancelar selección
                 </button>
-              )}
-              <button
-                onClick={() => {
-                  if (sidebarMode === "batch") get().cancelBatchRegionSelection();
-                  else get().setCurrentRegion(null);
-                }}
-                className="text-[11px] hover:underline block mx-auto"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Cancelar selección
-              </button>
-            </div>
-
-            {(activeTool === "text" || sidebarMode === "batch") && (
-              <InspectorGroup title="Posición automática">
-                <div className="grid grid-cols-5 gap-1">
-                  {[
-                    ["top-left", "↖", { x: 0.05, y: 0.05, w: 0.4, h: 0.08 }],
-                    ["center", "⊕", { x: 0.3, y: 0.46, w: 0.4, h: 0.08 }],
-                    ["top-right", "↗", { x: 0.55, y: 0.05, w: 0.4, h: 0.08 }],
-                    ["bottom-left", "↙", { x: 0.05, y: 0.87, w: 0.4, h: 0.08 }],
-                    ["bottom-right", "↘", { x: 0.55, y: 0.87, w: 0.4, h: 0.08 }],
-                  ].map(([pos, label, region]) => (
-                    <button
-                      key={pos}
-                      onClick={() => get().setCurrentRegion(region)}
-                      className="inspector-chip"
-                      title={pos}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </InspectorGroup>
+              </div>
             )}
           </>
         )}
