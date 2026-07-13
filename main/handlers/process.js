@@ -1,5 +1,5 @@
 import { ipcMain, dialog } from "electron";
-import { spawn, execFile } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -27,59 +27,67 @@ import {
   resolveProcessorSpawn,
   buildProcessorChildEnv,
 } from "../utils/processor-spawn.js";
+import { killProcessTree } from "../utils/kill-process-tree.js";
 import { probeVideo } from "../utils/video-cache.js";
 import { readSettings } from "../utils/settings.js";
 import { sendToRenderer } from "../utils/renderer.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
 import { createProcessorManifest, unwrapJobManifest } from "../utils/jobManifest.js";
-import { deriveOutputPath } from "../utils/process-output.js";
+import { removeIncompleteOutput } from "../utils/process-output.js";
 import {
   findUnreadableInputs,
   translateProcessorErrorMessage,
 } from "../utils/process-input-validation.js";
+import { prepareJobsForProcessor } from "../utils/process-media-validation.js";
 
 const MAX_PROCESSOR_STDERR_CHARS = 48_000;
 const MAX_PROCESSOR_STDOUT_LINE_CHARS = 256_000;
+/** Cap grace before force-kill so Python can honor .cancel and clean partials. */
+const CANCEL_KILL_GRACE_MS = 1500;
 
-function prepareJobsForProcessor(jobs, outputDirectory, pathSecurity) {
-  return jobs.map((job) => {
-    const inputCheck = pathSecurity.validateReadableFile(job?.input_path, "video");
-    if (!inputCheck.ok) {
-      throw new Error(`Entrada no permitida: ${inputCheck.error}`);
+/**
+ * Snapshot of active-run output paths (+ inputs) for cancel cleanup.
+ * Populated at spawn so cleanup works even if the tmp JSON is already gone.
+ * Keep-set is only type:"complete" indices (not cancelled).
+ */
+let activeRunOutputSnapshot = null;
+
+function snapshotRunOutputsForCancel(jobs, outputRoot) {
+  activeRunOutputSnapshot = {
+    outputRoot,
+    jobs: (jobs || []).map((job, index) => ({
+      index,
+      outputPath: job?.output_path,
+      inputPath: job?.input_path,
+    })),
+    completedIndices: new Set(),
+  };
+}
+
+function markJobOutputComplete(index) {
+  if (!activeRunOutputSnapshot) return;
+  if (!Number.isInteger(index) || index < 0) return;
+  activeRunOutputSnapshot.completedIndices.add(index);
+}
+
+function clearRunOutputSnapshot() {
+  activeRunOutputSnapshot = null;
+}
+
+function cleanupIncompleteOutputsAfterCancel() {
+  const snap = activeRunOutputSnapshot;
+  if (!snap) return;
+  try {
+    for (const job of snap.jobs) {
+      if (snap.completedIndices.has(job.index)) continue;
+      removeIncompleteOutput(job.outputPath, {
+        outputRoot: snap.outputRoot,
+        inputPath: job.inputPath,
+      });
     }
-
-    const assetRoots = new Set();
-    const validateImage = (imagePath) => {
-      if (!imagePath) return imagePath;
-      const imageCheck = pathSecurity.validateReadableFile(imagePath, "image");
-      if (!imageCheck.ok) {
-        throw new Error(`Imagen no permitida: ${imageCheck.error}`);
-      }
-      assetRoots.add(path.dirname(imageCheck.resolvedPath));
-      return imageCheck.resolvedPath;
-    };
-
-    const operations = (job.operations || []).map((operation) => ({
-      ...operation,
-      image_path: validateImage(operation.image_path),
-      delogo_image_path: validateImage(operation.delogo_image_path),
-    }));
-    const watermark = job.watermark ? { ...job.watermark } : null;
-    if (watermark?.type === "image") {
-      watermark.imagePath = validateImage(watermark.imagePath || watermark.watermark_image);
-    }
-
-    return {
-      ...job,
-      input_path: inputCheck.resolvedPath,
-      input_root: path.dirname(inputCheck.resolvedPath),
-      output_path: deriveOutputPath(outputDirectory, job.output_path),
-      output_root: outputDirectory,
-      asset_roots: [...assetRoots],
-      operations,
-      watermark,
-    };
-  });
+  } finally {
+    clearRunOutputSnapshot();
+  }
 }
 
 function appendBoundedText(current, chunk, maxChars) {
@@ -94,12 +102,21 @@ function dispatchProcessorLine(line) {
     const msg = JSON.parse(trimmed);
     if (msg.type === "progress") sendToRenderer("process:progress", msg);
     else if (msg.type === "job_progress") sendToRenderer("process:jobProgress", msg);
-    else if (msg.type === "complete") sendToRenderer("process:complete", msg);
-    else if (msg.type === "error") {
+    else if (msg.type === "complete") {
+      markJobOutputComplete(msg.index);
+      sendToRenderer("process:complete", msg);
+    } else if (msg.type === "cancelled") {
+      sendToRenderer("process:jobCancelled", msg);
+    } else if (msg.type === "error") {
       const errText = msg.error || "Unknown error";
       const idx = msg.index;
       if (Number.isInteger(idx) && idx >= 0) {
-        sendToRenderer("process:jobError", msg);
+        // Legacy processor: cancel was emitted as type error + "Cancelled".
+        if (errText === "Cancelled") {
+          sendToRenderer("process:jobCancelled", { type: "cancelled", index: idx });
+        } else {
+          sendToRenderer("process:jobError", msg);
+        }
       } else {
         const translated = translateProcessorErrorMessage(errText);
         setLastProcessingError(translated);
@@ -129,27 +146,6 @@ function waitForProcessClose(proc, timeoutMs = 5000) {
       resolve(true);
     }
   });
-}
-
-function killProcessTree(proc) {
-  if (!proc?.pid) return Promise.resolve();
-  if (process.platform === "win32") {
-    return new Promise((resolve) => {
-      execFile("taskkill", ["/F", "/T", "/PID", String(proc.pid)], { windowsHide: true }, (err) => {
-        if (err) {
-          console.error("[beru] taskkill error:", err.message);
-          try {
-            proc.kill();
-          } catch {}
-        }
-        resolve();
-      });
-    });
-  }
-  try {
-    proc.kill("SIGTERM");
-  } catch {}
-  return Promise.resolve();
 }
 
 function hasVideoOperations(job) {
@@ -249,22 +245,31 @@ export async function cancelActiveProcessing() {
   }
 
   if (proc?.pid) {
-    const deathPromise = waitForProcessClose(proc);
-    await killProcessTree(proc);
-    const closed = await deathPromise;
-    if (!closed) {
-      // Escalate: non-Windows SIGKILL; Windows fallback if taskkill failed.
-      try {
-        if (process.platform === "win32") proc.kill();
-        else proc.kill("SIGKILL");
-      } catch (e) {
-        console.error("[beru] kill escalate error:", e.message);
+    // Give Python a short window to see .cancel and run _cleanup_ffmpeg_partial
+    // before we force-kill (which races and can leave truncated .mp4s).
+    const exitedDuringGrace = await waitForProcessClose(proc, CANCEL_KILL_GRACE_MS);
+    if (!exitedDuringGrace) {
+      const deathPromise = waitForProcessClose(proc);
+      await killProcessTree(proc);
+      const closed = await deathPromise;
+      if (!closed) {
+        // Escalate: non-Windows SIGKILL; Windows fallback if taskkill failed.
+        try {
+          if (process.platform === "win32") proc.kill();
+          else proc.kill("SIGKILL");
+        } catch (e) {
+          console.error("[beru] kill escalate error:", e.message);
+        }
+        await waitForProcessClose(proc, 3000);
       }
-      await waitForProcessClose(proc, 3000);
     }
     // When a child was alive, onClose owns the single cancelled finished emit
     // (if this run is still cancelling). Do not emit a second finished here.
   }
+
+  // Always attempt incomplete-output cleanup after cancel settles (grace exit
+  // or force-kill). Keep completed outputs; never touch inputs.
+  cleanupIncompleteOutputsAfterCancel();
 
   // Probe-only cancel (no child) or onClose did not settle this runId:
   // clear the lock and emit exactly one cancelled finished.
@@ -338,6 +343,10 @@ export function registerProcessHandlers(pathSecurity) {
       };
     }
 
+    if (getAppIsQuitting()) {
+      return { success: false, error: "Procesamiento cancelado", cancelled: true };
+    }
+
     const runId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
     if (!beginProcessingRun(runId)) {
       return { success: false, error: "Ya hay un proceso en ejecución" };
@@ -394,6 +403,13 @@ export function registerProcessHandlers(pathSecurity) {
       // (probe-phase quit race before cancel clears the runId).
       if (!isCurrentRun() || getAppIsQuitting()) {
         cleanupRunArtifacts();
+        // Quit can set appIsQuitting before cancel clears the run — release the
+        // owned lock so the probe watchdog does not rearm forever.
+        if (isCurrentRun()) {
+          setProbePhaseActive(false);
+          clearProcessingRun(runId);
+          if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
+        }
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
       // Probe phase is over — the processor child is about to spawn, so the
@@ -409,6 +425,11 @@ export function registerProcessHandlers(pathSecurity) {
       // so we never install an unowned processor child after cancel cleared the run.
       if (!isCurrentRun() || getAppIsQuitting()) {
         cleanupRunArtifacts();
+        if (isCurrentRun()) {
+          setProbePhaseActive(false);
+          clearProcessingRun(runId);
+          if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
+        }
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
 
@@ -443,6 +464,8 @@ export function registerProcessHandlers(pathSecurity) {
         env: childEnv,
       });
       setPythonProcess(proc);
+      // Snapshot outputs at spawn so cancel cleanup works if tmp JSON is gone.
+      snapshotRunOutputsForCancel(enrichedJobs, outputDirectory);
 
       let stdoutBuf = "";
       let stderrBuf = "";
@@ -466,12 +489,15 @@ export function registerProcessHandlers(pathSecurity) {
           // Drop orphaned ref if this child is still installed as the live proc.
           if (getPythonProcess() === proc) setPythonProcess(null);
           cleanupRunArtifacts();
+          // Keep snapshot for cancel cleanup; cancel owns incomplete unlinks.
+          if (!result?.cancelled) clearRunOutputSnapshot();
           return result;
         }
         setPythonProcess(null);
         clearProcessingRun(runId);
         cleanupRunArtifacts();
         if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
+        if (!result?.cancelled) clearRunOutputSnapshot();
         return result;
       };
 

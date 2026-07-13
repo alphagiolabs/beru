@@ -1,10 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { spawn, spawnSync } from "child_process";
+import fs from "fs";
+import os from "os";
 import path from "path";
 import readline from "readline";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { buildBatchTextOperationsForPreview } from "../src/utils/preview-frame-job.js";
 import { disposePreviewFrameWorker, renderPreviewFrame } from "../main/utils/preview-frame.js";
+import { createPathSecurity } from "../main/pathSecurity.js";
+import { sanitizeJobMedia } from "../main/utils/process-media-validation.js";
 
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
 
@@ -152,6 +156,79 @@ describe("preview frame job", () => {
     expect(ops).toHaveLength(1);
     expect(ops[0].text).toBe("TEXT_1");
     expect(ops[0].fontSize).toBe(36);
+  });
+});
+
+describe("preview media path parity with batch asset_roots", () => {
+  const fakeApp = {
+    getPath: (name) => {
+      const map = {
+        userData: path.join(os.tmpdir(), "beru-test-userdata"),
+        temp: os.tmpdir(),
+        home: os.homedir(),
+        documents: path.join(os.homedir(), "Documents"),
+        downloads: path.join(os.homedir(), "Downloads"),
+        desktop: path.join(os.homedir(), "Desktop"),
+        videos: path.join(os.homedir(), "Videos"),
+        music: path.join(os.homedir(), "Music"),
+        pictures: path.join(os.homedir(), "Pictures"),
+      };
+      return map[name] || os.tmpdir();
+    },
+    isPackaged: false,
+    getAppPath: () => process.cwd(),
+  };
+
+  let security;
+  let tmpDir;
+  let videoFile;
+  let imageFile;
+
+  beforeEach(() => {
+    security = createPathSecurity(fakeApp);
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "beru-preview-media-"));
+    videoFile = path.join(tmpDir, "clip.mp4");
+    imageFile = path.join(tmpDir, "logo.png");
+    fs.writeFileSync(videoFile, Buffer.from("fake-video"));
+    fs.writeFileSync(imageFile, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    security.registerAllowedPath(videoFile);
+    security.registerAllowedPath(imageFile);
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it("rejects unauthorized overlay images outside trusted roots", () => {
+    const outsideImage =
+      process.platform === "win32"
+        ? "C:\\Windows\\System32\\beru-evil-preview.png"
+        : "/etc/beru-evil-preview.png";
+    expect(() =>
+      sanitizeJobMedia(
+        {
+          input_path: videoFile,
+          operations: [{ mode: "image", image_path: outsideImage }],
+        },
+        security,
+      ),
+    ).toThrow(/Imagen no permitida/i);
+  });
+
+  it("accepts registered overlay images and sets non-empty asset_roots", () => {
+    const result = sanitizeJobMedia(
+      {
+        input_path: videoFile,
+        operations: [{ mode: "image", image_path: imageFile }],
+      },
+      security,
+    );
+    expect(result.asset_roots.length).toBeGreaterThan(0);
+    expect(result.operations[0].image_path).toBe(fs.realpathSync(imageFile));
   });
 });
 

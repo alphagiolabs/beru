@@ -65,7 +65,7 @@ export function registerProjectHandlers(pathSecurity) {
       filters: [{ name: "Proyecto Beru", extensions: ["beru.json", "json"] }],
     });
     if (canceled || !filePaths || filePaths.length === 0) return { success: false, canceled: true };
-    pathSecurity.registerAllowedPath(filePaths[0]);
+    pathSecurity.registerAllowedPath(filePaths[0], "project");
     const check = pathSecurity.validateReadableFile(filePaths[0], "project");
     if (!check.ok) return { success: false, error: check.error };
     try {
@@ -94,7 +94,7 @@ export function registerProjectHandlers(pathSecurity) {
       if (!validation.valid) {
         return { success: false, error: validation.error };
       }
-      pathSecurity.registerAllowedPath(check.resolvedPath);
+      pathSecurity.registerAllowedPath(check.resolvedPath, "project");
       return { success: true, filePath: check.resolvedPath, data };
     } catch (e) {
       return { success: false, error: e.message };

@@ -10,7 +10,7 @@ export function registerDialogHandlers(pathSecurity) {
       properties: ["openFile", "multiSelections"],
     });
     if (canceled || filePaths.length === 0) return [];
-    pathSecurity.registerAllowedPaths(filePaths);
+    pathSecurity.registerAllowedPaths(filePaths, "video");
     return filePaths;
   });
 
@@ -22,7 +22,7 @@ export function registerDialogHandlers(pathSecurity) {
       properties: ["openFile"],
     });
     if (canceled || filePaths.length === 0) return null;
-    pathSecurity.registerAllowedPath(filePaths[0]);
+    pathSecurity.registerAllowedPath(filePaths[0], "excel");
     return filePaths[0];
   });
 

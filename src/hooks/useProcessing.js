@@ -103,6 +103,10 @@ export default function useProcessing(api) {
         clearPendingJob(msg?.index);
         useEditorStore.getState().markJobError(msg);
       }),
+      bind(api.onJobCancelled, (msg) => {
+        clearPendingJob(msg?.index);
+        useEditorStore.getState().markJobCancelled(msg);
+      }),
       bind(api.onFinished, (msg) => {
         cancelJobProgressFlush();
         flushJobProgress();

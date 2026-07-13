@@ -95,6 +95,11 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("process:jobError", handler);
     return () => ipcRenderer.removeListener("process:jobError", handler);
   },
+  onJobCancelled: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("process:jobCancelled", handler);
+    return () => ipcRenderer.removeListener("process:jobCancelled", handler);
+  },
   onFinished: (cb) => {
     const handler = (_e, data) => cb(data);
     ipcRenderer.on("process:finished", handler);
