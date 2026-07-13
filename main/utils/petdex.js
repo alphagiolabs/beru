@@ -4,12 +4,13 @@ import { homedir } from "node:os";
 import path from "path";
 import { fileURLToPath } from "url";
 import { request as httpsRequest } from "https";
-import { request as httpRequest } from "http";
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 export const PETDEX_MANIFEST_URL = "https://assets.petdex.dev/manifests/petdex-v1.json";
 const PETDEX_REFERER = "https://petdex.dev/";
+export const PETDEX_ALLOWED_HOSTS = new Set(["assets.petdex.dev"]);
+export const PETDEX_MAX_BODY_BYTES = 5 * 1024 * 1024;
 
 export function getPetsRoot() {
   return path.join(app.getPath("userData"), "pets");
@@ -20,6 +21,39 @@ export function getCodexPetsRoot() {
     return process.env.BERU_CODEX_PETS_ROOT;
   }
   return path.join(homedir(), ".codex", "pets");
+}
+
+export function safePetSlug(slug) {
+  const safeSlug = path.basename(String(slug || ""));
+  if (!safeSlug || safeSlug !== slug) {
+    throw new Error("Slug de mascota inválido");
+  }
+  return safeSlug;
+}
+
+export function assertPetdexUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(String(url || ""));
+  } catch {
+    throw new Error("URL de mascota inválida");
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new Error("URL de mascota inválida");
+  }
+
+  if (!PETDEX_ALLOWED_HOSTS.has(parsed.hostname)) {
+    throw new Error("Host de mascota no permitido");
+  }
+
+  return parsed;
+}
+
+export function assertPetdexBodySize(byteLength, maxBytes = PETDEX_MAX_BODY_BYTES) {
+  if (byteLength > maxBytes) {
+    throw new Error("Respuesta demasiado grande");
+  }
 }
 
 export function normalizeManifest(manifest) {
@@ -83,10 +117,16 @@ function fetchBuffer(url, redirects = 0) {
       return;
     }
 
-    const parsed = new URL(url);
-    const transport = parsed.protocol === "http:" ? httpRequest : httpsRequest;
-    const req = transport(
-      url,
+    let parsed;
+    try {
+      parsed = assertPetdexUrl(url);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    const req = httpsRequest(
+      parsed,
       {
         headers: {
           Referer: PETDEX_REFERER,
@@ -95,7 +135,15 @@ function fetchBuffer(url, redirects = 0) {
       },
       (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          const next = new URL(res.headers.location, url).toString();
+          let next;
+          try {
+            next = new URL(res.headers.location, parsed).toString();
+            assertPetdexUrl(next);
+          } catch (error) {
+            res.resume();
+            reject(error);
+            return;
+          }
           res.resume();
           fetchBuffer(next, redirects + 1)
             .then(resolve)
@@ -110,8 +158,31 @@ function fetchBuffer(url, redirects = 0) {
         }
 
         const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => resolve(Buffer.concat(chunks)));
+        let total = 0;
+        let settled = false;
+        const fail = (error) => {
+          if (settled) return;
+          settled = true;
+          res.destroy();
+          reject(error);
+        };
+
+        res.on("data", (chunk) => {
+          total += chunk.length;
+          try {
+            assertPetdexBodySize(total);
+          } catch (error) {
+            fail(error);
+            return;
+          }
+          chunks.push(chunk);
+        });
+        res.on("end", () => {
+          if (settled) return;
+          settled = true;
+          resolve(Buffer.concat(chunks));
+        });
+        res.on("error", fail);
       },
     );
     req.on("error", reject);
@@ -213,14 +284,15 @@ function readPetFromDir(petDir, slug, source) {
 }
 
 function copyBundledPet(slug) {
-  const bundledDir = path.join(getBundledPetsRoot(), slug);
+  const safeSlug = safePetSlug(slug);
+  const bundledDir = path.join(getBundledPetsRoot(), safeSlug);
   const petJsonPath = path.join(bundledDir, "pet.json");
   if (!fs.existsSync(petJsonPath)) return false;
 
   const spritesheetPath = resolveSpritesheetFile(bundledDir);
   if (!spritesheetPath) return false;
 
-  const petDir = path.join(getPetsRoot(), slug);
+  const petDir = path.join(getPetsRoot(), safeSlug);
   fs.mkdirSync(petDir, { recursive: true });
   fs.copyFileSync(petJsonPath, path.join(petDir, "pet.json"));
 
@@ -258,11 +330,13 @@ export async function installPet(entry) {
     throw new Error("Entrada de mascota inválida");
   }
 
-  const alreadyInstalled = listInstalledPets().find((pet) => pet.slug === entry.slug);
+  const safeSlug = safePetSlug(entry.slug);
+
+  const alreadyInstalled = listInstalledPets().find((pet) => pet.slug === safeSlug);
   if (alreadyInstalled) return alreadyInstalled;
 
-  if (copyBundledPet(entry.slug)) {
-    const installed = listInstalledPets().find((pet) => pet.slug === entry.slug);
+  if (copyBundledPet(safeSlug)) {
+    const installed = listInstalledPets().find((pet) => pet.slug === safeSlug);
     if (installed) return installed;
   }
 
@@ -270,7 +344,7 @@ export async function installPet(entry) {
     throw new Error("Mascota no disponible sin conexión");
   }
 
-  const petDir = path.join(getPetsRoot(), entry.slug);
+  const petDir = path.join(getPetsRoot(), safeSlug);
   fs.mkdirSync(petDir, { recursive: true });
 
   const petJson = await fetchBuffer(entry.petJsonUrl);
@@ -282,8 +356,8 @@ export async function installPet(entry) {
   fs.writeFileSync(
     path.join(petDir, "meta.json"),
     JSON.stringify({
-      slug: entry.slug,
-      displayName: entry.displayName || entry.slug,
+      slug: safeSlug,
+      displayName: entry.displayName || safeSlug,
       spritesheetUrl: entry.spritesheetUrl,
       kind: entry.kind || "creature",
       submittedBy: entry.submittedBy || "",
@@ -291,8 +365,8 @@ export async function installPet(entry) {
   );
 
   return {
-    slug: entry.slug,
-    displayName: entry.displayName || entry.slug,
+    slug: safeSlug,
+    displayName: entry.displayName || safeSlug,
     description: entry.description || "",
     spritesheetUrl: entry.spritesheetUrl,
     kind: entry.kind || "creature",
@@ -303,10 +377,7 @@ export async function installPet(entry) {
 }
 
 export function uninstallPet(slug) {
-  const safeSlug = path.basename(String(slug || ""));
-  if (!safeSlug || safeSlug !== slug) {
-    throw new Error("Slug de mascota inválido");
-  }
+  const safeSlug = safePetSlug(slug);
 
   const petDir = path.join(getPetsRoot(), safeSlug);
   if (!fs.existsSync(petDir)) {
@@ -318,10 +389,7 @@ export function uninstallPet(slug) {
 }
 
 export function resolvePetSpritesheetPath(slug) {
-  const safeSlug = path.basename(String(slug || ""));
-  if (!safeSlug || safeSlug !== slug) {
-    throw new Error("Slug de mascota inválido");
-  }
+  const safeSlug = safePetSlug(slug);
 
   const installed = listInstalledPets().find((pet) => pet.slug === safeSlug);
   if (installed?.spritesheetPath) return installed.spritesheetPath;
@@ -334,10 +402,7 @@ export function resolvePetSpritesheetPath(slug) {
 }
 
 export function resolveBundledSpritesheetPath(slug) {
-  const safeSlug = path.basename(String(slug || ""));
-  if (!safeSlug || safeSlug !== slug) {
-    throw new Error("Slug de mascota inválido");
-  }
+  const safeSlug = safePetSlug(slug);
 
   const bundledDir = path.join(getBundledPetsRoot(), safeSlug);
   const bundledPath = resolveSpritesheetFile(bundledDir);

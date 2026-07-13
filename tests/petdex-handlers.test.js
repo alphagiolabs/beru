@@ -197,12 +197,59 @@ describe("petdex handlers", () => {
     expect(normalized.pets[0].slug).toBe("boba");
   });
 
-  it("fetches the remote pet manifest", async () => {
-    const { fetchPetManifest } = await import("../main/utils/petdex.js");
-    const result = await fetchPetManifest();
-    console.log("Real fetchPetManifest result source:", result.source);
-    console.log("Real fetchPetManifest result pets count:", result.manifest.pets.length);
-    expect(result.source).toBe("remote");
-    expect(result.manifest.pets.length).toBeGreaterThan(0);
+  it("keeps offline bundled catalog available without network", async () => {
+    const { readBundledCatalog, normalizeManifest } = await import("../main/utils/petdex.js");
+    const bundled = readBundledCatalog();
+    expect(bundled?.pets?.length).toBeGreaterThan(0);
+    const manifest = normalizeManifest(bundled);
+    expect(manifest.pets.some((pet) => pet.slug === "boba")).toBe(true);
+    expect(manifest.pets.every((pet) => pet.spritesheetUrl.includes("assets.petdex.dev"))).toBe(
+      true,
+    );
+  });
+
+  it("rejects path-traversal slugs on install", async () => {
+    const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
+    registerPetdexHandlers();
+
+    const installHandler = mocks.handlers.get("petdex:install");
+    const res = await installHandler(
+      {},
+      {
+        slug: "../evil",
+        displayName: "Evil",
+        petJsonUrl: "https://assets.petdex.dev/curated/evil/pet.json",
+        spritesheetUrl: "https://assets.petdex.dev/curated/evil/spritesheet.webp",
+      },
+    );
+
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/Slug de mascota inválido/);
+    expect(fs.existsSync(path.join(tempDirectory, "evil"))).toBe(false);
+    expect(fs.existsSync(path.join(tempDirectory, "pets", "evil"))).toBe(false);
+  });
+
+  it("rejects unsafe petdex URLs without network", async () => {
+    const { assertPetdexUrl, safePetSlug } = await import("../main/utils/petdex.js");
+
+    expect(() => safePetSlug("../evil")).toThrow(/Slug de mascota inválido/);
+    expect(safePetSlug("boba")).toBe("boba");
+
+    expect(() => assertPetdexUrl("http://assets.petdex.dev/curated/boba/pet.json")).toThrow(
+      /URL de mascota inválida/,
+    );
+    expect(() => assertPetdexUrl("https://evil.example/curated/boba/pet.json")).toThrow(
+      /Host de mascota no permitido/,
+    );
+    expect(() => assertPetdexUrl("https://assets.petdex.dev/curated/boba/pet.json")).not.toThrow();
+  });
+
+  it("rejects oversize petdex bodies via helper", async () => {
+    const { assertPetdexBodySize, PETDEX_MAX_BODY_BYTES } = await import("../main/utils/petdex.js");
+
+    expect(() => assertPetdexBodySize(PETDEX_MAX_BODY_BYTES)).not.toThrow();
+    expect(() => assertPetdexBodySize(PETDEX_MAX_BODY_BYTES + 1)).toThrow(
+      /Respuesta demasiado grande/,
+    );
   });
 });
