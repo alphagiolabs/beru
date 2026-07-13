@@ -489,35 +489,39 @@ export default function VideoPreview() {
       return;
     }
 
-    const video = videoRef.current;
-    if (video && !video.paused) video.pause();
-
-    // Ensure probe dimensions exist so regions denormalize to pixels
-    // (same guard as processSingle / batch export).
-    let idx = selectedIdx;
-    if (!(sel.width > 0 && sel.height > 0) && api.getVideoInfo) {
-      try {
-        await useEditorStore.getState().refreshMissingVideoInfo?.(api);
-        idx = useEditorStore.getState().selectedIdx;
-      } catch {
-        /* fall through — Python may still probe from the file */
-      }
-    }
-
-    // ts uses video.currentTime first (always current after a seek via
-    // seekTo), falling back to the React currentTime state. Both are updated
-    // during seek: video.currentTime by seekTo(), and React currentTime by
-    // the range input's onChange handler. Neither is stale after seek.
-    const ts = video?.currentTime ?? currentTime;
-    const job = buildPreviewFrameJob(idx, ts);
-    if (!job) {
-      showToast?.({ kind: "err", text: "No se pudo construir el preview" });
-      return;
-    }
-
-    setFfmpegPreviewLoading(true);
     const gen = ++ffmpegPreviewGenRef.current;
+    setFfmpegPreviewLoading(true);
+
     try {
+      const video = videoRef.current;
+      if (video && !video.paused) video.pause();
+
+      // Ensure probe dimensions exist so regions denormalize to pixels
+      // (same guard as processSingle / batch export).
+      let idx = selectedIdx;
+      if (!(sel.width > 0 && sel.height > 0) && api.getVideoInfo) {
+        try {
+          await useEditorStore.getState().refreshMissingVideoInfo?.(api);
+          if (gen !== ffmpegPreviewGenRef.current) return;
+          idx = useEditorStore.getState().selectedIdx;
+        } catch {
+          if (gen !== ffmpegPreviewGenRef.current) return;
+          /* fall through — Python may still probe from the file */
+        }
+      }
+
+      // ts uses video.currentTime first (always current after a seek via
+      // seekTo), falling back to the React currentTime state. Both are updated
+      // during seek: video.currentTime by seekTo(), and React currentTime by
+      // the range input's onChange handler. Neither is stale after seek.
+      const ts = video?.currentTime ?? currentTime;
+      const job = buildPreviewFrameJob(idx, ts);
+      if (!job) {
+        if (gen !== ffmpegPreviewGenRef.current) return;
+        showToast?.({ kind: "err", text: "No se pudo construir el preview" });
+        return;
+      }
+
       const result = await api.renderPreviewFrame(job);
       if (gen !== ffmpegPreviewGenRef.current) return;
       if (result?.ok && result.data_url) {
