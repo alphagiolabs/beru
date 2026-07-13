@@ -1,9 +1,6 @@
-// TECH DEBT: This component is ~1200 lines. Consider extracting:
-//   - VideoTimeline (timeline scrubber + markers)
-//   - VideoControls (play/pause/mute/skip buttons)
-//   - FfmpegPreviewPanel (split-compare mode + loading state)
-//   - BatchTextDragLayer (batch text drag interaction)
-// The useZoomPan hook is already extracted as a reference pattern.
+// TECH DEBT: This component is ~1200 lines (timeline, controls, FFmpeg compare,
+// batch-text drag still inlined). useZoomPan + video-preview/utils are extracted.
+// Do not re-add parallel extract modules unless they are wired as the live UI.
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
