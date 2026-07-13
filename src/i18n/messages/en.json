@@ -313,6 +313,7 @@
   "errors.imageReadFailed": "Could not read image",
   "errors.importVideosFailed": "Could not import videos: {message}",
   "errors.missingVideoDimensions": "{count} video(s) without detected resolution ({names}{more}). Re-import them or check that ffprobe/ffmpeg work.",
+  "errors.videoInfoProbeFailed": "Could not read info for {count} video(s). Check ffprobe/ffmpeg and try again.",
   "errors.batchTextMissing": "{count} video(s) missing text for template regions ({names}{more}). Fill the Table Editor before processing.",
   "errors.noJobsToProcess": "No videos ready to process.",
 

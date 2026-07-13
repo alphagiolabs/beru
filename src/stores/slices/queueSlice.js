@@ -20,6 +20,8 @@ import {
   mergeTextStyles,
   pickTextStyle,
 } from "../../utils/text-style";
+import { tStatic } from "../../utils/format-message.js";
+import { swallow } from "../../utils/swallow.js";
 
 const MAX_UNDO_STACK = 50;
 const IMAGE_DATA_CACHE_MAX = 50;
@@ -242,7 +244,14 @@ export function createQueueSlice(set, get) {
 
       return fetchInfos()
         .then((infos) => get()._patchQueueVideoInfo(startIdx, toAdd, infos))
-        .catch(() => {});
+        .catch((err) => {
+          swallow("getVideoInfoBatch", err);
+          const lang = get().language;
+          get().showToast?.({
+            kind: "warn",
+            text: tStatic("errors.videoInfoProbeFailed", { count: toAdd.length }, lang),
+          });
+        });
     },
 
     /**
