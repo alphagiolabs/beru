@@ -457,6 +457,7 @@ export default function Header() {
 
         {!isProcessing ? (
           <button
+            data-testid="header-process-all"
             onClick={handleProcessAll}
             disabled={queueLength === 0}
             className="cap-btn-primary whitespace-nowrap"

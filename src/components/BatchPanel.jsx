@@ -81,7 +81,7 @@ export default function BatchPanel() {
   };
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5" data-testid="batch-panel">
       <InspectorGroup
         className="inspector-group--regions"
         title="Regiones de texto"
