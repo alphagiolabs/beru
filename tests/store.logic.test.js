@@ -119,6 +119,30 @@ describe("useEditorStore logic regressions", () => {
     expect(state.selectedIdx).toBe(0);
   });
 
+  it("addVideos keeps items and warns when video info probe fails", async () => {
+    const showToast = vi.fn();
+    useEditorStore.setState({ showToast });
+    mockApi.getVideoInfoBatch.mockRejectedValueOnce(new Error("ffprobe failed"));
+
+    await useEditorStore.getState().addVideos(["C:\\videos\\clip.mp4"], mockApi);
+
+    expect(useEditorStore.getState().queue).toHaveLength(1);
+    expect(useEditorStore.getState().queue[0]).toEqual(
+      expect.objectContaining({
+        path: "C:\\videos\\clip.mp4",
+        filename: "clip.mp4",
+        width: 0,
+        height: 0,
+        duration: 0,
+      }),
+    );
+    expect(showToast).toHaveBeenCalledOnce();
+    expect(showToast.mock.calls[0][0]).toEqual({
+      kind: "warn",
+      text: "No se pudo leer la información de 1 video(s). Comprueba ffprobe/ffmpeg e inténtalo de nuevo.",
+    });
+  });
+
   it("uses the queue index as the job id when processing a single video", async () => {
     useEditorStore.setState({
       queue: [

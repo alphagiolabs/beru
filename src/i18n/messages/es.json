@@ -313,6 +313,7 @@
   "errors.imageReadFailed": "No se pudo leer la imagen",
   "errors.importVideosFailed": "No se pudieron importar los videos: {message}",
   "errors.missingVideoDimensions": "{count} video(s) sin resolución detectada ({names}{more}). Vuelve a importarlos o comprueba que ffprobe/ffmpeg funcionen.",
+  "errors.videoInfoProbeFailed": "No se pudo leer la información de {count} video(s). Comprueba ffprobe/ffmpeg e inténtalo de nuevo.",
   "errors.batchTextMissing": "{count} video(s) sin texto en las regiones de plantilla ({names}{more}). Completa el Editor de tabla antes de procesar.",
   "errors.noJobsToProcess": "No hay videos listos para procesar.",
 
