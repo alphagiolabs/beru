@@ -33,6 +33,7 @@ import { readSettings } from "../utils/settings.js";
 import { sendToRenderer } from "../utils/renderer.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
 import { createProcessorManifest, unwrapJobManifest } from "../utils/jobManifest.js";
+import { removeIncompleteOutput } from "../utils/process-output.js";
 import {
   findUnreadableInputs,
   translateProcessorErrorMessage,
@@ -41,6 +42,53 @@ import { prepareJobsForProcessor } from "../utils/process-media-validation.js";
 
 const MAX_PROCESSOR_STDERR_CHARS = 48_000;
 const MAX_PROCESSOR_STDOUT_LINE_CHARS = 256_000;
+/** Cap grace before force-kill so Python can honor .cancel and clean partials. */
+const CANCEL_KILL_GRACE_MS = 1500;
+
+/**
+ * Snapshot of active-run output paths (+ inputs) for cancel cleanup.
+ * Populated at spawn so cleanup works even if the tmp JSON is already gone.
+ * Keep-set is only type:"complete" indices (not cancelled).
+ */
+let activeRunOutputSnapshot = null;
+
+function snapshotRunOutputsForCancel(jobs, outputRoot) {
+  activeRunOutputSnapshot = {
+    outputRoot,
+    jobs: (jobs || []).map((job, index) => ({
+      index,
+      outputPath: job?.output_path,
+      inputPath: job?.input_path,
+    })),
+    completedIndices: new Set(),
+  };
+}
+
+function markJobOutputComplete(index) {
+  if (!activeRunOutputSnapshot) return;
+  if (!Number.isInteger(index) || index < 0) return;
+  activeRunOutputSnapshot.completedIndices.add(index);
+}
+
+function clearRunOutputSnapshot() {
+  activeRunOutputSnapshot = null;
+}
+
+function cleanupIncompleteOutputsAfterCancel() {
+  const snap = activeRunOutputSnapshot;
+  if (!snap) return;
+  try {
+    for (const job of snap.jobs) {
+      if (snap.completedIndices.has(job.index)) continue;
+      removeIncompleteOutput(job.outputPath, {
+        outputRoot: snap.outputRoot,
+        inputPath: job.inputPath,
+      });
+    }
+  } finally {
+    clearRunOutputSnapshot();
+  }
+}
 
 function appendBoundedText(current, chunk, maxChars) {
   const next = `${current || ""}${chunk || ""}`;
@@ -54,9 +102,12 @@ function dispatchProcessorLine(line) {
     const msg = JSON.parse(trimmed);
     if (msg.type === "progress") sendToRenderer("process:progress", msg);
     else if (msg.type === "job_progress") sendToRenderer("process:jobProgress", msg);
-    else if (msg.type === "complete") sendToRenderer("process:complete", msg);
-    else if (msg.type === "cancelled") sendToRenderer("process:jobCancelled", msg);
-    else if (msg.type === "error") {
+    else if (msg.type === "complete") {
+      markJobOutputComplete(msg.index);
+      sendToRenderer("process:complete", msg);
+    } else if (msg.type === "cancelled") {
+      sendToRenderer("process:jobCancelled", msg);
+    } else if (msg.type === "error") {
       const errText = msg.error || "Unknown error";
       const idx = msg.index;
       if (Number.isInteger(idx) && idx >= 0) {
@@ -194,22 +245,31 @@ export async function cancelActiveProcessing() {
   }
 
   if (proc?.pid) {
-    const deathPromise = waitForProcessClose(proc);
-    await killProcessTree(proc);
-    const closed = await deathPromise;
-    if (!closed) {
-      // Escalate: non-Windows SIGKILL; Windows fallback if taskkill failed.
-      try {
-        if (process.platform === "win32") proc.kill();
-        else proc.kill("SIGKILL");
-      } catch (e) {
-        console.error("[beru] kill escalate error:", e.message);
+    // Give Python a short window to see .cancel and run _cleanup_ffmpeg_partial
+    // before we force-kill (which races and can leave truncated .mp4s).
+    const exitedDuringGrace = await waitForProcessClose(proc, CANCEL_KILL_GRACE_MS);
+    if (!exitedDuringGrace) {
+      const deathPromise = waitForProcessClose(proc);
+      await killProcessTree(proc);
+      const closed = await deathPromise;
+      if (!closed) {
+        // Escalate: non-Windows SIGKILL; Windows fallback if taskkill failed.
+        try {
+          if (process.platform === "win32") proc.kill();
+          else proc.kill("SIGKILL");
+        } catch (e) {
+          console.error("[beru] kill escalate error:", e.message);
+        }
+        await waitForProcessClose(proc, 3000);
       }
-      await waitForProcessClose(proc, 3000);
     }
     // When a child was alive, onClose owns the single cancelled finished emit
     // (if this run is still cancelling). Do not emit a second finished here.
   }
+
+  // Always attempt incomplete-output cleanup after cancel settles (grace exit
+  // or force-kill). Keep completed outputs; never touch inputs.
+  cleanupIncompleteOutputsAfterCancel();
 
   // Probe-only cancel (no child) or onClose did not settle this runId:
   // clear the lock and emit exactly one cancelled finished.
@@ -404,6 +464,8 @@ export function registerProcessHandlers(pathSecurity) {
         env: childEnv,
       });
       setPythonProcess(proc);
+      // Snapshot outputs at spawn so cancel cleanup works if tmp JSON is gone.
+      snapshotRunOutputsForCancel(enrichedJobs, outputDirectory);
 
       let stdoutBuf = "";
       let stderrBuf = "";
@@ -427,12 +489,15 @@ export function registerProcessHandlers(pathSecurity) {
           // Drop orphaned ref if this child is still installed as the live proc.
           if (getPythonProcess() === proc) setPythonProcess(null);
           cleanupRunArtifacts();
+          // Keep snapshot for cancel cleanup; cancel owns incomplete unlinks.
+          if (!result?.cancelled) clearRunOutputSnapshot();
           return result;
         }
         setPythonProcess(null);
         clearProcessingRun(runId);
         cleanupRunArtifacts();
         if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
+        if (!result?.cancelled) clearRunOutputSnapshot();
         return result;
       };
 
