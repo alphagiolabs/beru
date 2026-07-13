@@ -81,18 +81,29 @@ export default function BatchPanel() {
   };
 
   return (
-    <div className="space-y-2.5">
-      <InspectorGroup title={`Regiones de texto (${templateRegions.length})`}>
-        {templateRegions.length > 0 && (
-          <p className="inspector-helper">
-            Selecciona una región para previsualizar y editar su estilo en el video.
-          </p>
-        )}
-
-        {templateRegions.length > 0 && (
+    <div className="space-y-2.5" data-testid="batch-panel">
+      <InspectorGroup
+        className="inspector-group--regions"
+        title="Regiones de texto"
+        headerAccessory={
+          templateRegions.length > 0 ? (
+            <span
+              className="inspector-region-count"
+              aria-label={`${templateRegions.length} regiones`}
+            >
+              {templateRegions.length}
+            </span>
+          ) : null
+        }
+      >
+        {templateRegions.length === 0 ? null : (
           <ul className="inspector-region-list">
-            {templateRegions.map((tr) => {
+            {templateRegions.map((tr, i) => {
               const isSelected = selectedTemplateRegionId === tr.id;
+              const x = Math.round(tr.region.x * 100);
+              const y = Math.round(tr.region.y * 100);
+              const w = Math.round(tr.region.w * 100);
+              const h = Math.round(tr.region.h * 100);
               return (
                 <li key={tr.id}>
                   <div
@@ -106,14 +117,18 @@ export default function BatchPanel() {
                       }
                     }}
                     className={`inspector-region-row${isSelected ? " is-selected" : ""}`}
+                    aria-selected={isSelected}
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="inspector-region-row-label">{tr.label}</div>
-                      <div className="inspector-region-row-meta">
-                        {(tr.region.x * 100).toFixed(0)}%,{(tr.region.y * 100).toFixed(0)}% ·{" "}
-                        {(tr.region.w * 100).toFixed(0)}%×{(tr.region.h * 100).toFixed(0)}%
-                      </div>
-                    </div>
+                    <span className="inspector-region-row-index" aria-hidden>
+                      {i + 1}
+                    </span>
+                    <span className="inspector-region-row-label">{tr.label}</span>
+                    <span
+                      className="inspector-region-row-meta"
+                      title={`${x}%, ${y}% · ${w}%×${h}%`}
+                    >
+                      {x}·{y}
+                    </span>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -124,7 +139,7 @@ export default function BatchPanel() {
                       aria-label={`Eliminar ${tr.label}`}
                       title="Eliminar"
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={11} strokeWidth={2} />
                     </button>
                   </div>
                 </li>
@@ -137,9 +152,10 @@ export default function BatchPanel() {
           type="button"
           onClick={get().addTemplateRegion}
           disabled={!currentRegion}
-          className="cap-btn-secondary w-full !text-[11px] disabled:opacity-45"
+          className="inspector-region-add"
         >
-          <Plus size={13} /> Agregar región actual
+          <Plus size={12} strokeWidth={2.25} />
+          <span>Agregar región actual</span>
         </button>
       </InspectorGroup>
 
@@ -205,27 +221,33 @@ export default function BatchPanel() {
         )}
       </InspectorGroup>
 
-      <InspectorGroup title="Acciones">
-        <div className="inspector-action-stack">
+      <InspectorGroup title="Acciones" className="inspector-group--actions">
+        <div className="inspector-action-stack" role="group" aria-label="Acciones de lote">
           <button type="button" onClick={get().applyToAll} className="inspector-action-btn">
-            <Copy size={13} />
-            <span>Aplicar capas a todos</span>
+            <span className="inspector-action-icon" aria-hidden>
+              <Copy size={13} strokeWidth={2} />
+            </span>
+            <span className="inspector-action-label">Aplicar capas a todos</span>
           </button>
           <button
             type="button"
             onClick={() => get().setShowTableEditor(true)}
             className="inspector-action-btn"
           >
-            <Table2 size={13} />
-            <span>Editor de tabla</span>
+            <span className="inspector-action-icon" aria-hidden>
+              <Table2 size={13} strokeWidth={2} />
+            </span>
+            <span className="inspector-action-label">Editor de tabla</span>
           </button>
           <button
             type="button"
             onClick={() => get().setTemplate(selectedIdx)}
             className="inspector-action-btn inspector-action-btn--accent"
           >
-            <Bookmark size={13} />
-            <span>Marcar como plantilla</span>
+            <span className="inspector-action-icon" aria-hidden>
+              <Bookmark size={13} strokeWidth={2} />
+            </span>
+            <span className="inspector-action-label">Marcar como plantilla</span>
           </button>
         </div>
       </InspectorGroup>

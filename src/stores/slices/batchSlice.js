@@ -52,10 +52,20 @@ export function createBatchSlice(set, get) {
     },
 
     getBatchPreviewText: (videoIdx, regionId) => {
+      const { queue, templateRegions } = get();
+      const tr = templateRegions.find((r) => r.id === regionId);
+      if (!tr) return "Texto de ejemplo";
+
+      // If a linked text op exists, honor it even when intentionally empty —
+      // do not resurrect the region label over a cleared cell.
+      if (videoIdx >= 0 && videoIdx < queue.length) {
+        const { op } = findTextOpForRegion(queue[videoIdx].operations, tr.region, tr.id);
+        if (op) return op.text != null ? String(op.text) : "";
+      }
+
       const text = get().getCellTextForRegion(videoIdx, regionId);
-      if (text) return text;
-      const tr = get().templateRegions.find((r) => r.id === regionId);
-      return tr?.label || "Texto de ejemplo";
+      if (String(text ?? "").trim()) return String(text);
+      return tr.label || "Texto de ejemplo";
     },
 
     getBatchPreviewPayload: (videoIdx, regionId) => {

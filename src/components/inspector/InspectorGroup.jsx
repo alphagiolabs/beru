@@ -12,6 +12,10 @@ export default function InspectorGroup({
   collapsible = false,
   defaultOpen = true,
   forceOpen = false,
+  /** When true, collapses automatically if forceOpen becomes false (toggle sections). */
+  collapseWhenOff = false,
+  /** Hide the expand chevron (useful when a switch already drives open state). */
+  hideChevron = false,
   headerAccessory = null,
   className = "",
 }) {
@@ -20,7 +24,8 @@ export default function InspectorGroup({
 
   useEffect(() => {
     if (forceOpen) setOpen(true);
-  }, [forceOpen]);
+    else if (collapseWhenOff) setOpen(false);
+  }, [forceOpen, collapseWhenOff]);
 
   if (!collapsible) {
     return (
@@ -37,7 +42,9 @@ export default function InspectorGroup({
   }
 
   return (
-    <section className={`inspector-group inspector-group--collapsible ${className}`.trim()}>
+    <section
+      className={`inspector-group inspector-group--collapsible${hideChevron ? " inspector-group--no-chevron" : ""} ${className}`.trim()}
+    >
       <div className="inspector-group-header-row">
         <button
           type="button"
@@ -47,11 +54,13 @@ export default function InspectorGroup({
           onClick={() => setOpen((v) => !v)}
         >
           <h3 className="inspector-group-title !mb-0">{title}</h3>
-          <ChevronDown
-            size={14}
-            className={`inspector-group-chevron${open ? " is-open" : ""}`}
-            aria-hidden
-          />
+          {hideChevron ? null : (
+            <ChevronDown
+              size={14}
+              className={`inspector-group-chevron${open ? " is-open" : ""}`}
+              aria-hidden
+            />
+          )}
         </button>
         {headerAccessory ? (
           <div

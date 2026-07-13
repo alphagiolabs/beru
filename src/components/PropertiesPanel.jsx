@@ -109,24 +109,22 @@ export default function PropertiesPanel() {
           value={sidebarMode}
           onChange={(id) => get().setSidebarMode(id)}
           options={[
-            { id: "logo", label: "Quitar logo" },
-            {
-              id: "batch",
-              label: "Texto en lote",
-              activeColor: "var(--purple)",
-              activeTextColor: "#ffffff",
-            },
+            { id: "logo", label: "Quitar logo", tone: "accent" },
+            { id: "batch", label: "Texto en lote", tone: "purple" },
           ]}
         />
-        <h2 className="inspector-region-title">
+        <div className="inspector-chrome-meta">
           {sel?.filename ? (
             <>
-              Región · <span>{sel.filename}</span>
+              <span className="inspector-chrome-meta-key">Región</span>
+              <span className="inspector-chrome-meta-value" title={sel.filename}>
+                {sel.filename}
+              </span>
             </>
           ) : (
-            <span>Sin video seleccionado</span>
+            <span className="inspector-chrome-meta-empty">Sin video seleccionado</span>
           )}
-        </h2>
+        </div>
       </div>
 
       <div className="inspector-body">
@@ -141,8 +139,11 @@ export default function PropertiesPanel() {
 
         {currentRegion && (
           <>
-            <InspectorGroup title="Región">
-              <div className="grid grid-cols-2 gap-2">
+            <section className="inspector-region-strip" aria-label="Región">
+              <div className="inspector-region-strip-head">
+                <span className="inspector-region-strip-title">Región</span>
+              </div>
+              <div className="inspector-region-strip-fields" role="group">
                 {(() => {
                   const vw = sel?.width || 0;
                   const vh = sel?.height || 0;
@@ -153,23 +154,46 @@ export default function PropertiesPanel() {
                     ["W", "w"],
                     ["H", "h"],
                   ].map(([label, key]) => (
-                    <label key={key}>
-                      <span className="cap-input-label">{label}</span>
+                    <label key={key} className="inspector-region-cell">
+                      <span className="inspector-region-cell-key">{label}</span>
                       <input
                         type="number"
+                        inputMode="numeric"
+                        aria-label={label}
                         value={Math.round((currentRegion[key] || 0) * (dimFor(key) || 1))}
                         onChange={(e) => {
                           const px = Number(e.target.value);
                           if (!Number.isFinite(px) || !dimFor(key)) return;
                           get().updateRegionValue(key, px / dimFor(key));
                         }}
-                        className="cap-input font-mono text-[11px]"
+                        className="inspector-region-cell-input"
                       />
                     </label>
                   ));
                 })()}
               </div>
-            </InspectorGroup>
+            </section>
+
+            {sidebarMode === "batch" && (
+              <div className="inspector-actions inspector-actions--region">
+                <button
+                  type="button"
+                  onClick={() => get().addTemplateRegion()}
+                  disabled={!isRegionUsable(currentRegion)}
+                  className="cap-btn-primary w-full disabled:opacity-50"
+                >
+                  Agregar región de texto
+                </button>
+                <button
+                  type="button"
+                  onClick={() => get().cancelBatchRegionSelection()}
+                  className="text-[11px] hover:underline block mx-auto"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Cancelar selección
+                </button>
+              </div>
+            )}
 
             {sidebarMode === "logo" && activeTool === "image" && (
               <InspectorGroup title="Marca de agua">
@@ -610,6 +634,28 @@ export default function PropertiesPanel() {
                   </InspectorGroup>
                 )}
                 <StyleEditor />
+                <InspectorGroup title="Posición automática" className="inspector-group--auto-pos">
+                  <div className="inspector-auto-pos" role="group" aria-label="Posición automática">
+                    {[
+                      ["top-left", "↖", { x: 0.05, y: 0.05, w: 0.4, h: 0.08 }],
+                      ["center", "⊕", { x: 0.3, y: 0.46, w: 0.4, h: 0.08 }],
+                      ["top-right", "↗", { x: 0.55, y: 0.05, w: 0.4, h: 0.08 }],
+                      ["bottom-left", "↙", { x: 0.05, y: 0.87, w: 0.4, h: 0.08 }],
+                      ["bottom-right", "↘", { x: 0.55, y: 0.87, w: 0.4, h: 0.08 }],
+                    ].map(([pos, label, region]) => (
+                      <button
+                        key={pos}
+                        type="button"
+                        onClick={() => get().setCurrentRegion(region)}
+                        className="inspector-auto-pos-btn"
+                        title={pos}
+                        aria-label={pos}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </InspectorGroup>
                 <PresetManager />
               </div>
             )}
@@ -654,9 +700,10 @@ export default function PropertiesPanel() {
               </InspectorGroup>
             )}
 
-            <div className="inspector-actions">
-              {sidebarMode === "logo" ? (
+            {sidebarMode === "logo" && (
+              <div className="inspector-actions">
                 <button
+                  type="button"
                   onClick={() => get().addOperation(activeTool)}
                   className="cap-btn-primary w-full"
                 >
@@ -671,48 +718,15 @@ export default function PropertiesPanel() {
                           ? "Imagen"
                           : "Texto"}
                 </button>
-              ) : (
                 <button
-                  onClick={() => get().addTemplateRegion()}
-                  disabled={!isRegionUsable(currentRegion)}
-                  className="cap-btn-primary w-full disabled:opacity-50"
+                  type="button"
+                  onClick={() => get().setCurrentRegion(null)}
+                  className="text-[11px] hover:underline block mx-auto"
+                  style={{ color: "var(--text-muted)" }}
                 >
-                  Agregar región de texto
+                  Cancelar selección
                 </button>
-              )}
-              <button
-                onClick={() => {
-                  if (sidebarMode === "batch") get().cancelBatchRegionSelection();
-                  else get().setCurrentRegion(null);
-                }}
-                className="text-[11px] hover:underline block mx-auto"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Cancelar selección
-              </button>
-            </div>
-
-            {(activeTool === "text" || sidebarMode === "batch") && (
-              <InspectorGroup title="Posición automática">
-                <div className="grid grid-cols-5 gap-1">
-                  {[
-                    ["top-left", "↖", { x: 0.05, y: 0.05, w: 0.4, h: 0.08 }],
-                    ["center", "⊕", { x: 0.3, y: 0.46, w: 0.4, h: 0.08 }],
-                    ["top-right", "↗", { x: 0.55, y: 0.05, w: 0.4, h: 0.08 }],
-                    ["bottom-left", "↙", { x: 0.05, y: 0.87, w: 0.4, h: 0.08 }],
-                    ["bottom-right", "↘", { x: 0.55, y: 0.87, w: 0.4, h: 0.08 }],
-                  ].map(([pos, label, region]) => (
-                    <button
-                      key={pos}
-                      onClick={() => get().setCurrentRegion(region)}
-                      className="inspector-chip"
-                      title={pos}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </InspectorGroup>
+              </div>
             )}
           </>
         )}

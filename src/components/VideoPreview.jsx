@@ -1,9 +1,6 @@
-// TECH DEBT: This component is ~1200 lines. Consider extracting:
-//   - VideoTimeline (timeline scrubber + markers)
-//   - VideoControls (play/pause/mute/skip buttons)
-//   - FfmpegPreviewPanel (split-compare mode + loading state)
-//   - BatchTextDragLayer (batch text drag interaction)
-// The useZoomPan hook is already extracted as a reference pattern.
+// TECH DEBT: This component is ~1200 lines (timeline, controls, FFmpeg compare,
+// batch-text drag still inlined). useZoomPan + video-preview/utils are extracted.
+// Do not re-add parallel extract modules unless they are wired as the live UI.
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
@@ -137,6 +134,7 @@ export default function VideoPreview() {
   const [videoError, setVideoError] = useState(null);
   const [ffmpegPreviewUrl, setFfmpegPreviewUrl] = useState(null);
   const [ffmpegPreviewLoading, setFfmpegPreviewLoading] = useState(false);
+  const ffmpegPreviewGenRef = useRef(0);
   const [showFfmpegPreview, setShowFfmpegPreview] = useState(false);
   const [previewCompareMode, setPreviewCompareMode] = useState("ffmpeg");
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
@@ -310,6 +308,8 @@ export default function VideoPreview() {
   }, [sel?.path, sel?.duration]);
 
   useEffect(() => {
+    ffmpegPreviewGenRef.current += 1;
+    setFfmpegPreviewLoading(false);
     setPlaying(false);
     setCurrentTime(0);
     setDuration(sel?.duration || 0);
@@ -481,25 +481,46 @@ export default function VideoPreview() {
       showToast?.({ kind: "err", text: "Preview FFmpeg no disponible" });
       return;
     }
-    if (selectedIdx < 0 || !sel) return;
-
-    const video = videoRef.current;
-    if (video && !video.paused) video.pause();
-
-    // ts uses video.currentTime first (always current after a seek via
-    // seekTo), falling back to the React currentTime state. Both are updated
-    // during seek: video.currentTime by seekTo(), and React currentTime by
-    // the range input's onChange handler. Neither is stale after seek.
-    const ts = video?.currentTime ?? currentTime;
-    const job = buildPreviewFrameJob(selectedIdx, ts);
-    if (!job) {
-      showToast?.({ kind: "err", text: "No se pudo construir el preview" });
+    if (selectedIdx < 0 || !sel) {
+      showToast?.({ kind: "err", text: "Selecciona un video para previsualizar" });
       return;
     }
 
+    const gen = ++ffmpegPreviewGenRef.current;
     setFfmpegPreviewLoading(true);
+
     try {
+      const video = videoRef.current;
+      if (video && !video.paused) video.pause();
+
+      // Ensure probe dimensions exist so regions denormalize to pixels
+      // (same guard as processSingle / batch export).
+      let idx = selectedIdx;
+      if (!(sel.width > 0 && sel.height > 0) && api.getVideoInfo) {
+        try {
+          await useEditorStore.getState().refreshMissingVideoInfo?.(api);
+          if (gen !== ffmpegPreviewGenRef.current) return;
+          idx = useEditorStore.getState().selectedIdx;
+        } catch {
+          if (gen !== ffmpegPreviewGenRef.current) return;
+          /* fall through — Python may still probe from the file */
+        }
+      }
+
+      // ts uses video.currentTime first (always current after a seek via
+      // seekTo), falling back to the React currentTime state. Both are updated
+      // during seek: video.currentTime by seekTo(), and React currentTime by
+      // the range input's onChange handler. Neither is stale after seek.
+      const ts = video?.currentTime ?? currentTime;
+      const job = buildPreviewFrameJob(idx, ts);
+      if (!job) {
+        if (gen !== ffmpegPreviewGenRef.current) return;
+        showToast?.({ kind: "err", text: "No se pudo construir el preview" });
+        return;
+      }
+
       const result = await api.renderPreviewFrame(job);
+      if (gen !== ffmpegPreviewGenRef.current) return;
       if (result?.ok && result.data_url) {
         setFfmpegPreviewUrl(result.data_url);
         setPreviewCompareMode("ffmpeg");
@@ -511,9 +532,12 @@ export default function VideoPreview() {
         });
       }
     } catch (err) {
+      if (gen !== ffmpegPreviewGenRef.current) return;
       showToast?.({ kind: "err", text: err.message || "Error al renderizar el frame" });
     } finally {
-      setFfmpegPreviewLoading(false);
+      if (gen === ffmpegPreviewGenRef.current) {
+        setFfmpegPreviewLoading(false);
+      }
     }
   }, [selectedIdx, sel, currentTime, buildPreviewFrameJob, showToast]);
 
@@ -945,8 +969,9 @@ export default function VideoPreview() {
               );
             })()}
 
-          {/* Global watermark preview */}
+          {/* Global watermark preview (hidden under FFmpeg frame — already burned in) */}
           {watermark?.enabled &&
+            !showFfmpegOverlay &&
             (() => {
               const video = videoRef.current;
               if (!video) return null;
@@ -1254,14 +1279,27 @@ export default function VideoPreview() {
             {showTimeline ? <Eye size={14} /> : <EyeOff size={14} />}
           </button>
           <button
-            onClick={handleRenderPreviewFrame}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Looks like a toggle (accent when on): second click closes.
+              // Click again after close re-renders with latest styles/time.
+              if (showFfmpegPreview && !ffmpegPreviewLoading) {
+                dismissFfmpegPreview();
+                return;
+              }
+              handleRenderPreviewFrame();
+            }}
             disabled={ffmpegPreviewLoading}
             className="p-1 rounded hover:bg-white/10 disabled:opacity-40"
             style={{
               color: showFfmpegPreview ? "var(--accent)" : "var(--text-dim)",
             }}
-            title={t("preview.renderFrame")}
-            aria-label={t("preview.renderFrame")}
+            title={showFfmpegPreview ? t("preview.closeRenderFrame") : t("preview.renderFrame")}
+            aria-label={
+              showFfmpegPreview ? t("preview.closeRenderFrame") : t("preview.renderFrame")
+            }
+            aria-pressed={showFfmpegPreview}
           >
             {ffmpegPreviewLoading ? (
               <Loader2 size={14} className="animate-spin" />

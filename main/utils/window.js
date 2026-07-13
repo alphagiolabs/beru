@@ -93,6 +93,19 @@ export function createWindow() {
       });
   });
 
+  // Electron restores the DevTools open state from userData preferences, which
+  // makes them auto-open (often as a separate window) on `npm run dev`. The
+  // restore fires after load, so close any DevTools that open during a short
+  // startup window. Manual opens (F12/Ctrl+Shift+I) after that still work.
+  if (isDev) {
+    const startupOpenedAt = Date.now();
+    win.webContents.on("devtools-opened", () => {
+      if (Date.now() - startupOpenedAt < 5000) {
+        win.webContents.closeDevTools();
+      }
+    });
+  }
+
   let devFallbackUsed = false;
   if (isDev) {
     win.webContents.on(
@@ -109,7 +122,6 @@ export function createWindow() {
       },
     );
     win.loadURL(DEV_URL);
-    win.webContents.openDevTools({ mode: "detach" });
   } else {
     loadProductionBuild(win);
   }

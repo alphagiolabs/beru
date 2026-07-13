@@ -7,9 +7,9 @@ export const VERTICAL_ALIGNS = [
 ];
 
 export const TRUNCATE_MODES = [
-  { value: "none", label: "Ninguno" },
-  { value: "ellipsis", label: "…" },
-  { value: "clip", label: "Recortar" },
+  { value: "none", label: "Ninguno", title: "Sin truncado" },
+  { value: "ellipsis", label: "···", title: "Puntos suspensivos" },
+  { value: "clip", label: "Clip", title: "Recortar" },
 ];
 
 export function verticalAlignToFlex(verticalAlign) {

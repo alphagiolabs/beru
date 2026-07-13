@@ -4,6 +4,7 @@ import {
   buildProcessorChildEnv,
   validateProcessorAvailable,
 } from "./processor-spawn.js";
+import { validateMediaBinaries } from "./paths.js";
 
 const STARTUP_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -57,9 +58,15 @@ function startWorker() {
       );
       return;
     }
+    // Same media binary wiring as batch export — otherwise the worker may
+    // pick a system FFmpeg without drawtext / different path than export.
+    const media = validateMediaBinaries();
+    const mediaOpts = media.ok
+      ? { ffmpegPath: media.ffmpegPath, ffprobePath: media.ffprobePath }
+      : {};
     const proc = spawn(spawnSpec.command, spawnSpec.args, {
       windowsHide: true,
-      env: buildProcessorChildEnv(process.env),
+      env: buildProcessorChildEnv(process.env, mediaOpts),
     });
 
     worker = proc;

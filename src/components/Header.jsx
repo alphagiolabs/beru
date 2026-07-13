@@ -73,8 +73,8 @@ export default function Header() {
     shallow,
   );
   const showToast = useEditorStore((s) => s.showToast);
-  const undoStack = useEditorStore((s) => s.undoStack);
-  const redoStack = useEditorStore((s) => s.redoStack);
+  const canUndo = useEditorStore((s) => (s.undoStack?.length ?? 0) > 0);
+  const canRedo = useEditorStore((s) => (s.redoStack?.length ?? 0) > 0);
   const t = useT();
   const get = useEditorStore.getState;
   const [testResult, setTestResult] = useState(null);
@@ -305,6 +305,7 @@ export default function Header() {
         startExecutionRun: (opts) => get().startExecutionRun(opts),
         applyPatch: (patch) => useEditorStore.setState(patch),
         setProcessing: (val) => get().setProcessing(val),
+        finalizeActiveExecution: (summary) => get().finalizeActiveExecution(summary),
       },
     }).then((result) => {
       if (!result.ok) {
@@ -347,14 +348,14 @@ export default function Header() {
 
   return (
     <header
-      className="cap-titlebar-drag flex flex-wrap items-center gap-3 px-4 py-2 border-b flex-shrink-0"
+      className="app-header cap-titlebar-drag flex flex-nowrap items-center gap-3 px-4 py-2 border-b flex-shrink-0"
       style={{
         background: "var(--bg-elevated)",
         borderColor: "var(--border)",
         paddingTop: "max(0.5rem, env(titlebar-area-height, 0px))",
       }}
     >
-      <div className="flex flex-shrink-0 items-center gap-3">
+      <div className="app-header-brand flex flex-shrink-0 items-center gap-3">
         <svg viewBox="0 0 300 400" width="22" height="28" aria-label="Beru">
           <path
             fill="currentColor"
@@ -369,7 +370,7 @@ export default function Header() {
 
       <div
         data-testid="header-actions"
-        className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2"
+        className="app-header-actions flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2"
       >
         <button
           onClick={handleAddVideos}
@@ -391,7 +392,7 @@ export default function Header() {
         <select
           value={exportFormat}
           onChange={(e) => get().setExportFormat(e.target.value)}
-          className="cap-input !w-[72px] !py-1 text-[11px]"
+          className="app-header-select app-header-select--format cap-input !w-[72px] !py-1 text-[11px]"
           disabled={isProcessing}
         >
           <option value="mp4">MP4</option>
@@ -402,7 +403,7 @@ export default function Header() {
         <select
           value={encodeProfile}
           onChange={(e) => get().setEncodeProfile(e.target.value)}
-          className="cap-input !w-[116px] !py-1 text-[11px]"
+          className="app-header-select app-header-select--profile cap-input !w-[116px] !py-1 text-[11px]"
           disabled={isProcessing}
           title={t("header.encodeProfileHint")}
         >
@@ -415,7 +416,7 @@ export default function Header() {
         <select
           value={String(batchWorkers)}
           onChange={(e) => get().setBatchWorkers(e.target.value)}
-          className="cap-input !w-[88px] !py-1 text-[11px]"
+          className="app-header-select app-header-select--workers cap-input !w-[88px] !py-1 text-[11px]"
           disabled={isProcessing}
           title={t("header.batchWorkersHint")}
         >
@@ -457,6 +458,7 @@ export default function Header() {
 
         {!isProcessing ? (
           <button
+            data-testid="header-process-all"
             onClick={handleProcessAll}
             disabled={queueLength === 0}
             className="cap-btn-primary whitespace-nowrap"
@@ -469,20 +471,20 @@ export default function Header() {
           </button>
         )}
 
-        <div className="w-px h-5 mx-1" style={{ background: "var(--border)" }} />
+        <div className="app-header-divider w-px h-5 mx-1" style={{ background: "var(--border)" }} />
 
         <button
           onClick={get().undo}
-          disabled={undoStack.length === 0}
-          className="cap-btn-secondary !p-1.5"
+          disabled={!canUndo}
+          className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title={`${t("header.undo")} (Ctrl+Z)`}
         >
           <Undo2 size={14} />
         </button>
         <button
           onClick={get().redo}
-          disabled={redoStack.length === 0}
-          className="cap-btn-secondary !p-1.5"
+          disabled={!canRedo}
+          className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title={`${t("header.redo")} (Ctrl+Y)`}
         >
           <Redo2 size={14} />
@@ -490,7 +492,7 @@ export default function Header() {
         <div className="relative" ref={presetsRef}>
           <button
             onClick={handleTogglePresets}
-            className="cap-btn-secondary !p-1.5"
+            className="cap-btn-secondary app-header-icon-btn !p-1.5"
             title={t("header.presetsLibrary")}
           >
             <Library size={14} />
@@ -563,7 +565,7 @@ export default function Header() {
         <button
           onClick={handleLoadProject}
           disabled={isProcessing}
-          className="cap-btn-secondary !p-1.5"
+          className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title={t("header.loadProject")}
         >
           <FolderInput size={14} />
@@ -571,7 +573,7 @@ export default function Header() {
         <div className="relative" ref={recentRef}>
           <button
             onClick={() => setRecentOpen((v) => !v)}
-            className="cap-btn-secondary !p-1.5"
+            className="cap-btn-secondary app-header-icon-btn !p-1.5"
             title={t("header.recent")}
           >
             <History size={14} />
@@ -632,14 +634,14 @@ export default function Header() {
         </div>
         <button
           onClick={handleSaveProject}
-          className="cap-btn-secondary !p-1.5"
+          className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title={t("header.saveProject")}
         >
           <Save size={14} />
         </button>
         <button
           onClick={openSavePreset}
-          className="cap-btn-secondary !p-1.5"
+          className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title={t("header.savePreset")}
         >
           <BookmarkPlus size={14} />
@@ -651,7 +653,7 @@ export default function Header() {
             get().setSettingsTab("appearance");
             get().setShowSettings(true);
           }}
-          className={`cap-btn-secondary !p-1.5 header-theme-toggle ${
+          className={`cap-btn-secondary app-header-icon-btn !p-1.5 header-theme-toggle ${
             themeActiveSlot === 1 ? "header-theme-toggle--slot1" : "header-theme-toggle--slot2"
           }`}
           title={t("header.themeSwitchTo", {
@@ -667,7 +669,7 @@ export default function Header() {
         <div className="relative" ref={langRef}>
           <button
             onClick={() => setLangOpen((v) => !v)}
-            className="cap-btn-secondary !p-1.5 !text-[10px] font-semibold"
+            className="cap-btn-secondary app-header-icon-btn !p-1.5 !text-[10px] font-semibold"
             title={t("header.language")}
           >
             <Languages size={14} />
@@ -700,7 +702,7 @@ export default function Header() {
         </div>
         <button
           onClick={() => get().setShowWatermarkModal(true)}
-          className="cap-btn-secondary !p-1.5"
+          className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title="Marca de agua"
           disabled={isProcessing}
         >
@@ -708,7 +710,7 @@ export default function Header() {
         </button>
         <button
           onClick={() => get().setShowSettings(true)}
-          className="cap-btn-secondary !p-1.5"
+          className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title={t("header.settings")}
         >
           <Settings size={14} />

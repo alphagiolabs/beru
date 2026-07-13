@@ -60,6 +60,7 @@ AGENTS.md
 CLAUDE.md
 GEMINI.md
 .claude/
+plans/
 
 # Versioned build output directories (never commit)
 dist-installer-v*/

@@ -91,7 +91,7 @@ describe("preview frame job", () => {
     expect(job.operations.some((op) => op.mode === "text" && op.text === "Hola FFmpeg")).toBe(true);
   });
 
-  it("buildBatchTextOperationsForPreview mirrors materialize logic for one item", () => {
+  it("buildBatchTextOperationsForPreview uses excel text when available", () => {
     useEditorStore.setState({
       queue: [
         {
@@ -118,6 +118,40 @@ describe("preview frame job", () => {
     expect(ops).toHaveLength(1);
     expect(ops[0].text).toBe("Batch");
     expect(ops[0].fontSize).toBe(40);
+  });
+
+  it("buildBatchTextOperationsForPreview uses CSS sample text when excel cell is empty", () => {
+    useEditorStore.setState({
+      queue: [
+        {
+          path: "C:\\videos\\clip.mp4",
+          filename: "clip.mp4",
+          operations: [],
+          width: 1280,
+          height: 720,
+        },
+      ],
+      templateRegions: [
+        {
+          id: "r1",
+          label: "TEXT_1",
+          region: { x: 0.2, y: 0.2, w: 0.2, h: 0.1 },
+          style: { fontSize: 36 },
+        },
+      ],
+      excelRows: [],
+      excelMapping: { idColumn: null, columns: {} },
+    });
+
+    // CSS live preview falls back to the region label; FFmpeg must match so the
+    // ScanEye control is not a no-op empty frame when Excel is not linked yet.
+    const cssText = useEditorStore.getState().getBatchPreviewText(0, "r1");
+    expect(cssText).toBe("TEXT_1");
+
+    const ops = buildBatchTextOperationsForPreview(useEditorStore.getState(), 0);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].text).toBe("TEXT_1");
+    expect(ops[0].fontSize).toBe(36);
   });
 });
 

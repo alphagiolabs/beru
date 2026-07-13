@@ -1,6 +1,8 @@
 /**
- * iOS-style segmented control. Props-only — no store knowledge.
+ * iOS / macOS-style segmented control. Props-only — no store knowledge.
  * Uses radiogroup semantics for keyboard a11y.
+ *
+ * Optional per-option `tone`: "accent" | "purple" | "neutral" (default elevated pill).
  */
 export default function SegmentedControl({
   options = [],
@@ -17,6 +19,7 @@ export default function SegmentedControl({
     >
       {options.map((opt) => {
         const selected = value === opt.id;
+        const tone = opt.tone || (opt.activeColor ? "custom" : "neutral");
         return (
           <button
             key={opt.id}
@@ -24,17 +27,26 @@ export default function SegmentedControl({
             role="radio"
             aria-checked={selected}
             disabled={opt.disabled}
-            className={`inspector-segment${selected ? " is-selected" : ""}`}
+            className={[
+              "inspector-segment",
+              selected ? "is-selected" : "",
+              selected ? `is-tone-${tone}` : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             style={
-              selected && opt.activeColor
-                ? { background: opt.activeColor, color: opt.activeTextColor || "white" }
+              selected && tone === "custom" && opt.activeColor
+                ? {
+                    background: opt.activeColor,
+                    color: opt.activeTextColor || "#ffffff",
+                  }
                 : undefined
             }
             onClick={() => {
-              if (!selected) onChange?.(opt.id);
+              if (!selected && !opt.disabled) onChange?.(opt.id);
             }}
           >
-            {opt.label}
+            <span className="inspector-segment-label">{opt.label}</span>
           </button>
         );
       })}
