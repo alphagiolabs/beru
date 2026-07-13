@@ -25,9 +25,7 @@ export default function TextLayoutControls({
 
   return (
     <div className="inspector-paragraph">
-      <div
-        className={`inspector-paragraph-aligns${showTextAlign ? " has-h" : ""}`}
-      >
+      <div className={`inspector-paragraph-aligns${showTextAlign ? " has-h" : ""}`}>
         {showTextAlign && textAlignOptions ? (
           <div className="inspector-paragraph-align-block">
             <span className="inspector-paragraph-micro">H</span>
@@ -43,9 +41,7 @@ export default function TextLayoutControls({
         ) : null}
 
         <div className="inspector-paragraph-align-block">
-          <span className="inspector-paragraph-micro">
-            {showTextAlign ? "V" : "Vertical"}
-          </span>
+          <span className="inspector-paragraph-micro">{showTextAlign ? "V" : "Vertical"}</span>
           <SegmentedToolbar
             ariaLabel="Alineación vertical"
             columns={3}
@@ -115,9 +111,7 @@ export default function TextLayoutControls({
         />
       </div>
 
-      <div
-        className={`inspector-paragraph-truncate${autoFit || disabled ? " is-disabled" : ""}`}
-      >
+      <div className={`inspector-paragraph-truncate${autoFit || disabled ? " is-disabled" : ""}`}>
         <span className="inspector-paragraph-micro">Truncado</span>
         <SegmentedToolbar
           ariaLabel="Truncado"

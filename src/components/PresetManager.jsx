@@ -65,7 +65,12 @@ export default function PresetManager() {
   const canSave = Boolean(name.trim()) && !saving;
 
   return (
-    <InspectorGroup title="Presets" className="inspector-group--user-presets" collapsible defaultOpen>
+    <InspectorGroup
+      title="Presets"
+      className="inspector-group--user-presets"
+      collapsible
+      defaultOpen
+    >
       <div className="inspector-user-presets">
         <div className="inspector-user-presets-shell">
           <div className="inspector-user-presets-save">

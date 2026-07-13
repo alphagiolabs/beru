@@ -87,7 +87,10 @@ export default function BatchPanel() {
         title="Regiones de texto"
         headerAccessory={
           templateRegions.length > 0 ? (
-            <span className="inspector-region-count" aria-label={`${templateRegions.length} regiones`}>
+            <span
+              className="inspector-region-count"
+              aria-label={`${templateRegions.length} regiones`}
+            >
               {templateRegions.length}
             </span>
           ) : null
@@ -120,7 +123,10 @@ export default function BatchPanel() {
                       {i + 1}
                     </span>
                     <span className="inspector-region-row-label">{tr.label}</span>
-                    <span className="inspector-region-row-meta" title={`${x}%, ${y}% · ${w}%×${h}%`}>
+                    <span
+                      className="inspector-region-row-meta"
+                      title={`${x}%, ${y}% · ${w}%×${h}%`}
+                    >
                       {x}·{y}
                     </span>
                     <button

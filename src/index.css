@@ -1233,6 +1233,110 @@ label {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-brand) 18%, transparent);
 }
 
+/* Compact header: keep one row on narrow windows (min window width 1024). */
+@media (max-width: 1400px) {
+  .app-header {
+    gap: 0.5rem;
+    padding-left: 0.625rem;
+    padding-right: 0.625rem;
+  }
+
+  .app-header-brand {
+    gap: 0.5rem;
+  }
+
+  .app-header-brand svg {
+    width: 18px;
+    height: 23px;
+  }
+
+  .app-header-actions {
+    gap: 0.25rem;
+  }
+
+  .app-header-actions .cap-btn {
+    padding: 0.25rem 0.5rem;
+    gap: 0.25rem;
+    font-size: 10px;
+  }
+
+  .app-header-actions .app-header-icon-btn {
+    padding: 0.25rem !important;
+  }
+
+  .app-header-actions .cap-input,
+  .app-header-select {
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
+    padding-left: 0.35rem !important;
+    padding-right: 0.35rem !important;
+    font-size: 10px;
+  }
+
+  .app-header-select--format {
+    width: 60px !important;
+  }
+
+  .app-header-select--profile {
+    width: 96px !important;
+  }
+
+  .app-header-select--workers {
+    width: 72px !important;
+  }
+
+  .app-header-divider {
+    margin-left: 0.15rem;
+    margin-right: 0.15rem;
+  }
+
+  .app-header-actions label {
+    font-size: 9px;
+    gap: 0.15rem;
+  }
+}
+
+@media (max-width: 1180px) {
+  .app-header {
+    gap: 0.35rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  .app-header-brand {
+    gap: 0.35rem;
+  }
+
+  .app-header-brand span {
+    font-size: 11px;
+  }
+
+  .app-header-actions {
+    gap: 0.15rem;
+  }
+
+  .app-header-actions .cap-btn {
+    padding: 0.2rem 0.4rem;
+    font-size: 9px;
+  }
+
+  .app-header-actions .app-header-icon-btn {
+    padding: 0.2rem !important;
+  }
+
+  .app-header-select--format {
+    width: 54px !important;
+  }
+
+  .app-header-select--profile {
+    width: 88px !important;
+  }
+
+  .app-header-select--workers {
+    width: 64px !important;
+  }
+}
+
 /* Appearance panel layout (two-column: quick access | theme library) */
 .settings-appearance {
   @apply grid gap-4 h-full min-h-0;

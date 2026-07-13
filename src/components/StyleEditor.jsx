@@ -134,7 +134,11 @@ export default function StyleEditor() {
     <div className="space-y-2.5">
       <InspectorGroup title="Estilos" className="inspector-group--presets" collapsible defaultOpen>
         <div className="inspector-presets">
-          <div className="inspector-preset-grid" role="listbox" aria-label="Estilos preestablecidos">
+          <div
+            className="inspector-preset-grid"
+            role="listbox"
+            aria-label="Estilos preestablecidos"
+          >
             {TEXT_STYLE_PRESETS.map((preset) => {
               const active = presetMatches(preset, currentTextStyle);
               return (
@@ -154,7 +158,10 @@ export default function StyleEditor() {
                   {preset.id === "plain" ? (
                     <Ban size={13} className="inspector-preset-plain" aria-hidden />
                   ) : (
-                    <span className="inspector-preset-sample" style={presetPreviewTextStyle(preset)}>
+                    <span
+                      className="inspector-preset-sample"
+                      style={presetPreviewTextStyle(preset)}
+                    >
                       Aa
                     </span>
                   )}
@@ -163,9 +170,7 @@ export default function StyleEditor() {
             })}
           </div>
           {(() => {
-            const activePreset = TEXT_STYLE_PRESETS.find((p) =>
-              presetMatches(p, currentTextStyle),
-            );
+            const activePreset = TEXT_STYLE_PRESETS.find((p) => presetMatches(p, currentTextStyle));
             return (
               <div className="inspector-preset-meta" aria-live="polite">
                 <span className="inspector-preset-meta-name">
@@ -259,7 +264,12 @@ export default function StyleEditor() {
         </div>
       </InspectorGroup>
 
-      <InspectorGroup title="Párrafo" className="inspector-group--paragraph" collapsible defaultOpen>
+      <InspectorGroup
+        title="Párrafo"
+        className="inspector-group--paragraph"
+        collapsible
+        defaultOpen
+      >
         <TextLayoutControls
           showTextAlign
           values={{
@@ -334,9 +344,7 @@ export default function StyleEditor() {
               }}
               aria-label="Opacidad de texto"
             />
-            <span className="inspector-color-pct">
-              {Math.round((textOpacity ?? 1) * 100)}%
-            </span>
+            <span className="inspector-color-pct">{Math.round((textOpacity ?? 1) * 100)}%</span>
           </label>
         </div>
       </InspectorGroup>
@@ -403,9 +411,7 @@ export default function StyleEditor() {
                 }}
                 aria-label="Opacidad de fondo"
               />
-              <span className="inspector-color-pct">
-                {Math.round((bgOpacity ?? 0) * 100)}%
-              </span>
+              <span className="inspector-color-pct">{Math.round((bgOpacity ?? 0) * 100)}%</span>
             </label>
             <label className="inspector-color-metric-row">
               <span className="inspector-color-key">Padding</span>
@@ -498,8 +504,7 @@ export default function StyleEditor() {
                 <span
                   className="inspector-color-swatch-fill"
                   style={{
-                    background:
-                      normalizeColor(textShadowColor) || textShadowColor || "#000000",
+                    background: normalizeColor(textShadowColor) || textShadowColor || "#000000",
                   }}
                   aria-hidden
                 />

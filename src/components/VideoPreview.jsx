@@ -1287,7 +1287,9 @@ export default function VideoPreview() {
               color: showFfmpegPreview ? "var(--accent)" : "var(--text-dim)",
             }}
             title={showFfmpegPreview ? t("preview.closeRenderFrame") : t("preview.renderFrame")}
-            aria-label={showFfmpegPreview ? t("preview.closeRenderFrame") : t("preview.renderFrame")}
+            aria-label={
+              showFfmpegPreview ? t("preview.closeRenderFrame") : t("preview.renderFrame")
+            }
             aria-pressed={showFfmpegPreview}
           >
             {ffmpegPreviewLoading ? (

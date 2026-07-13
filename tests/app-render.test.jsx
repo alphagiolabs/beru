@@ -182,7 +182,7 @@ describe("App render", () => {
     });
 
     expect(document.querySelector('[data-testid="header-actions"]')?.className).toMatch(
-      /flex-wrap/,
+      /flex-nowrap/,
     );
 
     const unnamedIconButtons = Array.from(document.querySelectorAll("button")).filter(
