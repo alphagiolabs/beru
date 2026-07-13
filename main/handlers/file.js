@@ -54,7 +54,7 @@ export function registerFileHandlers(pathSecurity) {
       filters: [{ name: "Imágenes", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],
     });
     if (canceled || !filePaths || filePaths.length === 0) return { success: false, canceled: true };
-    pathSecurity.registerAllowedPath(filePaths[0]);
+    pathSecurity.registerAllowedPath(filePaths[0], "image");
     return { success: true, path: filePaths[0] };
   });
 
@@ -98,13 +98,21 @@ export function registerFileHandlers(pathSecurity) {
       }
     }
     const videoPaths = Array.isArray(payload?.videoPaths) ? payload.videoPaths : [];
-    if (videoPaths.length > 0) {
-      pathSecurity.registerAllowedPaths(videoPaths);
-      result.videos = videoPaths.length;
+    for (const videoPath of videoPaths) {
+      const check = pathSecurity.registerAllowedPath(videoPath, "video");
+      if (check.ok) {
+        result.videos += 1;
+      } else {
+        result.errors.push(check.error || videoPath);
+      }
     }
     if (payload?.excelPath) {
-      pathSecurity.registerAllowedPath(payload.excelPath);
-      result.excel = true;
+      const check = pathSecurity.registerAllowedPath(payload.excelPath, "excel");
+      if (check.ok) {
+        result.excel = true;
+      } else {
+        result.errors.push(check.error || "excel");
+      }
     }
     return result;
   });
