@@ -5,11 +5,17 @@ import {
   applyJobProgressBatch,
   applyJobDone,
   applyJobError,
+  applyJobCancelled,
   resetQueueForRun,
   abortProcessingQueue,
   createBatchStartPatch,
   createSingleStartPatch,
 } from "../src/utils/export-pipeline.js";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function item(overrides = {}) {
   return {
@@ -174,6 +180,34 @@ describe("export-pipeline", () => {
       expect(result.progressDone).toBe(1);
     });
 
+    it("applyJobCancelled leaves row idle and bumps progressDone", () => {
+      const queue = [item(), item({ status: "processing", progress: 40 })];
+      const result = applyJobCancelled({
+        queue,
+        jobProgress: { 0: 10, 1: 40 },
+        progressDone: 0,
+        progressTotal: 2,
+        msg: { index: 1 },
+        progressMap: true,
+      });
+      expect(result.queue[1]).toMatchObject({ status: "idle", progress: 0, error: null });
+      expect(result.jobProgress).toEqual({ 0: 10 });
+      expect(result.progressDone).toBe(1);
+    });
+
+    it("real applyJobError with non-Cancelled message stays error", () => {
+      const queue = [item({ status: "processing" })];
+      const result = applyJobError({
+        queue,
+        jobProgress: { 0: 50 },
+        progressDone: 0,
+        progressTotal: 1,
+        msg: { index: 0, error: "FFmpeg failed" },
+        progressMap: true,
+      });
+      expect(result.queue[0]).toMatchObject({ status: "error", error: "FFmpeg failed" });
+    });
+
     it("returns empty patch for invalid index", () => {
       expect(
         applyJobDone({
@@ -209,6 +243,19 @@ describe("export-pipeline", () => {
       expect(next[1].status).toBe("done");
     });
 
+    it("abort clears legacy Cancelled error rows but not real failures", () => {
+      const queue = [
+        item({ status: "error", error: "Cancelled", progress: 20 }),
+        item({ status: "error", error: "FFmpeg failed", progress: 10 }),
+        item({ status: "done", progress: 100 }),
+      ];
+      const { queue: next, queueChanged } = abortProcessingQueue(queue);
+      expect(queueChanged).toBe(true);
+      expect(next[0]).toMatchObject({ status: "idle", progress: 0, error: null });
+      expect(next[1]).toMatchObject({ status: "error", error: "FFmpeg failed" });
+      expect(next[2].status).toBe("done");
+    });
+
     it("createBatchStartPatch prepares batch state", () => {
       const queue = [item({ status: "done", progress: 100 })];
       const patch = createBatchStartPatch({ queue, jobCount: 1 });
@@ -226,6 +273,15 @@ describe("export-pipeline", () => {
       expect(patch.progressTotal).toBe(1);
       expect(patch.queue[1]).toMatchObject({ status: "processing", progress: 0, error: null });
       expect(patch.queue[0].status).toBe("idle");
+    });
+  });
+
+  describe("main cancel contract", () => {
+    it("process.js forwards type cancelled and legacy Cancelled error", () => {
+      const src = readFileSync(join(__dirname, "../main/handlers/process.js"), "utf8");
+      expect(src).toContain('msg.type === "cancelled"');
+      expect(src).toContain("process:jobCancelled");
+      expect(src).toContain('errText === "Cancelled"');
     });
   });
 });

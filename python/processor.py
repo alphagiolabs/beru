@@ -1767,7 +1767,7 @@ def _job_failed_result(job_id, raw_error, *, max_workers=None):
 
 
 def _job_cancelled_result(job_id):
-    _safe_print(json.dumps({"type": "error", "index": job_id, "error": "Cancelled"}))
+    _safe_print(json.dumps({"type": "cancelled", "index": job_id}))
     return {"index": job_id, "status": "cancelled"}
 
 
@@ -2175,7 +2175,7 @@ def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True, 
                                 "failed": state["failed"],
                             }))
                 _safe_print(json.dumps({
-                    "type": "error", "index": job_id, "error": "Cancelled",
+                    "type": "cancelled", "index": job_id,
                 }))
                 continue
             fut = executor.submit(_process_one, i, job, ffmpeg_path, hw_encoder=hw_encoder)

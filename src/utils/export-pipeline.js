@@ -199,6 +199,33 @@ export function applyJobError({
   };
 }
 
+export function applyJobCancelled({
+  queue,
+  jobProgress = {},
+  progressDone = 0,
+  progressTotal = 0,
+  msg,
+  progressMap = false,
+}) {
+  const idx = msg?.index;
+  if (!isQueueJobIndex(idx, queue.length)) return {};
+  const updated = [...queue];
+  updated[idx] = { ...updated[idx], status: "idle", progress: 0, error: null };
+  const nextProgress =
+    progressMap && jobProgress?.[idx] !== undefined
+      ? (() => {
+          const next = { ...jobProgress };
+          delete next[idx];
+          return next;
+        })()
+      : jobProgress;
+  return {
+    queue: updated,
+    progressDone: Math.min(progressDone + 1, progressTotal),
+    jobProgress: nextProgress,
+  };
+}
+
 export function resetQueueForRun(queue) {
   return (Array.isArray(queue) ? queue : []).map((item) => ({
     ...item,
@@ -211,7 +238,8 @@ export function resetQueueForRun(queue) {
 export function abortProcessingQueue(queue) {
   let queueChanged = false;
   const next = (Array.isArray(queue) ? queue : []).map((item) => {
-    if (item.status !== "processing") return item;
+    const isLegacyCancelled = item.status === "error" && item.error === "Cancelled";
+    if (item.status !== "processing" && !isLegacyCancelled) return item;
     queueChanged = true;
     return { ...item, status: "idle", progress: 0, error: null };
   });
