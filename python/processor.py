@@ -165,7 +165,17 @@ def _validated_job_media(job, *, require_output):
             media_path = operation.get(field)
             if not media_path:
                 continue
-            roots = asset_roots or _path_parent(media_path)
+            if field == "font_path":
+                # Fonts may live outside overlay asset roots; keep parent fallback.
+                roots = asset_roots or _path_parent(media_path)
+            else:
+                # Fail closed: overlay/delogo images require trusted asset_roots
+                # from the main process (no parent-of-self fallback).
+                if not asset_roots:
+                    raise ValueError(
+                        f"asset_roots required for {field} when media path is set"
+                    )
+                roots = asset_roots
             operation[field] = validate_media_path(media_path, roots, extensions)
         operations.append(operation)
     validated["operations"] = operations
@@ -175,9 +185,12 @@ def _validated_job_media(job, *, require_output):
         watermark = dict(watermark)
         watermark_image = watermark.get("imagePath") or watermark.get("watermark_image")
         if watermark_image:
-            roots = asset_roots or _path_parent(watermark_image)
+            if not asset_roots:
+                raise ValueError(
+                    "asset_roots required for watermark image when media path is set"
+                )
             watermark["imagePath"] = validate_media_path(
-                watermark_image, roots, IMAGE_EXTENSIONS
+                watermark_image, asset_roots, IMAGE_EXTENSIONS
             )
         validated["watermark"] = watermark
 

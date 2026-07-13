@@ -4,6 +4,7 @@ import { probeVideo, probeVideoFast } from "../utils/video-cache.js";
 import { extractThumbnail } from "../utils/thumbnail.js";
 import { renderPreviewFrame } from "../utils/preview-frame.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
+import { sanitizeJobMedia } from "../utils/process-media-validation.js";
 
 export function registerVideoHandlers(pathSecurity) {
   ipcMain.handle("fs:getVideoInfo", async (_event, filePath) => {
@@ -96,11 +97,12 @@ export function registerVideoHandlers(pathSecurity) {
     if (!payload || typeof payload !== "object") {
       return { ok: false, error: "Payload de preview inválido" };
     }
-    const check = pathSecurity.validateReadableFile(payload.input_path, "video");
-    if (!check.ok) return { ok: false, error: check.error };
-    return await renderPreviewFrame({
-      ...payload,
-      input_path: check.resolvedPath,
-    });
+    let safePayload;
+    try {
+      safePayload = sanitizeJobMedia(payload, pathSecurity);
+    } catch (e) {
+      return { ok: false, error: e?.message || String(e) };
+    }
+    return await renderPreviewFrame(safePayload);
   });
 }

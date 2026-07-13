@@ -15,7 +15,7 @@
     "start": "electron .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:python": "python python/test_delogo.py && python python/test_delogo_robust.py && python python/test_delogo_feather0.py && python python/test_text_layout_fixtures.py && python python/test_crop_pipeline.py && python python/test_timed_crop_zoom.py && python python/test_region_to_pixels.py && python python/test_op_shared.py && python python/test_op_time_disabled.py && python python/test_extract_error_line.py && python python/test_batch_errors_perms.py && python python/test_watermark_empty_ops.py && python python/test_batch_summary_cancelled.py",
+    "test:python": "python python/test_delogo.py && python python/test_delogo_robust.py && python python/test_delogo_feather0.py && python python/test_text_layout_fixtures.py && python python/test_crop_pipeline.py && python python/test_timed_crop_zoom.py && python python/test_region_to_pixels.py && python python/test_op_shared.py && python python/test_op_time_disabled.py && python python/test_extract_error_line.py && python python/test_batch_errors_perms.py && python python/test_watermark_empty_ops.py && python python/test_batch_summary_cancelled.py && python python/test_media_roots.py",
     "test:coverage": "vitest run --coverage",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
