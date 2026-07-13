@@ -73,8 +73,8 @@ export default function Header() {
     shallow,
   );
   const showToast = useEditorStore((s) => s.showToast);
-  const undoStack = useEditorStore((s) => s.undoStack);
-  const redoStack = useEditorStore((s) => s.redoStack);
+  const canUndo = useEditorStore((s) => (s.undoStack?.length ?? 0) > 0);
+  const canRedo = useEditorStore((s) => (s.redoStack?.length ?? 0) > 0);
   const t = useT();
   const get = useEditorStore.getState;
   const [testResult, setTestResult] = useState(null);
@@ -474,7 +474,7 @@ export default function Header() {
 
         <button
           onClick={get().undo}
-          disabled={undoStack.length === 0}
+          disabled={!canUndo}
           className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title={`${t("header.undo")} (Ctrl+Z)`}
         >
@@ -482,7 +482,7 @@ export default function Header() {
         </button>
         <button
           onClick={get().redo}
-          disabled={redoStack.length === 0}
+          disabled={!canRedo}
           className="cap-btn-secondary app-header-icon-btn !p-1.5"
           title={`${t("header.redo")} (Ctrl+Y)`}
         >
