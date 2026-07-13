@@ -16,6 +16,7 @@ import { swallow } from "../../utils/swallow.js";
 import {
   applyJobDone,
   applyJobError,
+  applyJobCancelled,
   applyJobProgressBatch,
   abortProcessingQueue,
   buildExportJob,
@@ -242,6 +243,18 @@ export function createProcessingSlice(set, get) {
     markJobError: (msg) =>
       set((s) =>
         applyJobError({
+          queue: s.queue,
+          jobProgress: s.jobProgress,
+          progressDone: s.progressDone,
+          progressTotal: s.progressTotal,
+          msg,
+          progressMap: PERF_FLAGS.progressMap,
+        }),
+      ),
+
+    markJobCancelled: (msg) =>
+      set((s) =>
+        applyJobCancelled({
           queue: s.queue,
           jobProgress: s.jobProgress,
           progressDone: s.progressDone,

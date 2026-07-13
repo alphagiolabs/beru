@@ -95,11 +95,17 @@ function dispatchProcessorLine(line) {
     if (msg.type === "progress") sendToRenderer("process:progress", msg);
     else if (msg.type === "job_progress") sendToRenderer("process:jobProgress", msg);
     else if (msg.type === "complete") sendToRenderer("process:complete", msg);
+    else if (msg.type === "cancelled") sendToRenderer("process:jobCancelled", msg);
     else if (msg.type === "error") {
       const errText = msg.error || "Unknown error";
       const idx = msg.index;
       if (Number.isInteger(idx) && idx >= 0) {
-        sendToRenderer("process:jobError", msg);
+        // Legacy processor: cancel was emitted as type error + "Cancelled".
+        if (errText === "Cancelled") {
+          sendToRenderer("process:jobCancelled", { type: "cancelled", index: idx });
+        } else {
+          sendToRenderer("process:jobError", msg);
+        }
       } else {
         const translated = translateProcessorErrorMessage(errText);
         setLastProcessingError(translated);
