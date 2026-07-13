@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import { createPathSecurity } from "./pathSecurity.js";
 import { getPythonProcess, hasActiveProcessing, setAppIsQuitting } from "./shared-state.js";
 import { createBeruVideoResponse, validateBeruRequestPath } from "./utils/beru-protocol.js";
+import { killProcessTree } from "./utils/kill-process-tree.js";
 import { createWindow } from "./utils/window.js";
 
 import { registerDialogHandlers } from "./handlers/dialog.js";
@@ -78,9 +79,8 @@ function onFatalError(err) {
     disposePreviewFrameWorker();
     const proc = getPythonProcess();
     if (proc?.pid) {
-      try {
-        proc.kill();
-      } catch {}
+      // Fire-and-forget: do not await before quit. Same tree-kill as cancel.
+      void killProcessTree(proc);
     }
   } catch {}
   app.quit();
