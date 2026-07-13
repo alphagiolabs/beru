@@ -132,41 +132,6 @@ export function createPathSecurity(app) {
     return trustedRoots().some((root) => key === root || key.startsWith(`${root}${path.sep}`));
   }
 
-  function registerAllowedPath(filePath) {
-    const resolved = resolveSafe(filePath);
-    if (!resolved) return;
-    allowedFiles.add(normalizeKey(resolved));
-    trimAllowedFiles();
-  }
-
-  function registerAllowedPaths(paths) {
-    if (!Array.isArray(paths)) return;
-    for (const p of paths) registerAllowedPath(p);
-  }
-
-  function registerOutputDirectory(directoryPath) {
-    const resolved = resolveSafe(directoryPath);
-    if (!resolved || isDeniedPath(resolved)) {
-      return { ok: false, error: "Carpeta de salida no permitida" };
-    }
-    try {
-      if (!fs.statSync(resolved).isDirectory()) {
-        return { ok: false, error: "La salida debe ser una carpeta" };
-      }
-    } catch {
-      return { ok: false, error: "Carpeta de salida no encontrada" };
-    }
-
-    selectedOutputDirectory = resolved;
-    allowedFiles.add(normalizeKey(resolved));
-    trimAllowedFiles();
-    return { ok: true, resolvedPath: resolved };
-  }
-
-  function getOutputDirectory() {
-    return selectedOutputDirectory;
-  }
-
   const EXT_BY_KIND = {
     excel: new Set([".xlsx", ".xls", ".xlsm"]),
     image: new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]),
@@ -193,11 +158,14 @@ export function createPathSecurity(app) {
   };
 
   /**
+   * Shared readable-file checks. When requireTrustedRoot is true (registration),
+   * the allow-list bypass is disabled so untrusted paths cannot enter allowedFiles.
    * @param {string} filePath
    * @param {ReadKind} kind
+   * @param {{ requireTrustedRoot?: boolean }} [opts]
    * @returns {{ ok: true, resolvedPath: string } | { ok: false, error: string }}
    */
-  function validateReadableFile(filePath, kind) {
+  function inspectReadableFile(filePath, kind, { requireTrustedRoot = false } = {}) {
     const resolved = resolveSafe(filePath);
     if (!resolved) {
       return { ok: false, error: "Ruta inválida" };
@@ -225,7 +193,12 @@ export function createPathSecurity(app) {
 
     const key = normalizeKey(resolved);
     const explicitlyAllowed = allowedFiles.has(key);
-    if (!explicitlyAllowed && !isUnderTrustedRoot(resolved)) {
+    if (requireTrustedRoot) {
+      if (!isUnderTrustedRoot(resolved)) {
+        console.warn("[beru][security] Register outside trusted roots:", resolved);
+        return { ok: false, error: "Archivo fuera de ubicaciones permitidas" };
+      }
+    } else if (!explicitlyAllowed && !isUnderTrustedRoot(resolved)) {
       console.warn("[beru][security] Path outside trusted roots:", resolved);
       return { ok: false, error: "Archivo fuera de ubicaciones permitidas" };
     }
@@ -236,6 +209,56 @@ export function createPathSecurity(app) {
     }
 
     return { ok: true, resolvedPath: resolved };
+  }
+
+  /**
+   * @param {string} filePath
+   * @param {ReadKind} kind
+   * @returns {{ ok: true, resolvedPath: string } | { ok: false, error: string }}
+   */
+  function registerAllowedPath(filePath, kind) {
+    const check = inspectReadableFile(filePath, kind, { requireTrustedRoot: true });
+    if (!check.ok) return check;
+    allowedFiles.add(normalizeKey(check.resolvedPath));
+    trimAllowedFiles();
+    return check;
+  }
+
+  function registerAllowedPaths(paths, kind) {
+    if (!Array.isArray(paths)) return;
+    for (const p of paths) registerAllowedPath(p, kind);
+  }
+
+  function registerOutputDirectory(directoryPath) {
+    const resolved = resolveSafe(directoryPath);
+    if (!resolved || isDeniedPath(resolved)) {
+      return { ok: false, error: "Carpeta de salida no permitida" };
+    }
+    try {
+      if (!fs.statSync(resolved).isDirectory()) {
+        return { ok: false, error: "La salida debe ser una carpeta" };
+      }
+    } catch {
+      return { ok: false, error: "Carpeta de salida no encontrada" };
+    }
+
+    selectedOutputDirectory = resolved;
+    allowedFiles.add(normalizeKey(resolved));
+    trimAllowedFiles();
+    return { ok: true, resolvedPath: resolved };
+  }
+
+  function getOutputDirectory() {
+    return selectedOutputDirectory;
+  }
+
+  /**
+   * @param {string} filePath
+   * @param {ReadKind} kind
+   * @returns {{ ok: true, resolvedPath: string } | { ok: false, error: string }}
+   */
+  function validateReadableFile(filePath, kind) {
+    return inspectReadableFile(filePath, kind);
   }
 
   /** Open in Explorer / shell — file or directory under trusted roots or allow-list. */
