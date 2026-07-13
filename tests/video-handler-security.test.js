@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import path from "path";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
@@ -28,6 +29,13 @@ vi.mock("../main/utils/thumbnail.js", () => ({
 vi.mock("../main/utils/preview-frame.js", () => ({
   renderPreviewFrame: mocks.renderPreviewFrame,
 }));
+
+// Platform-native absolute paths — backslash literals break path.dirname on Linux CI.
+const videoDir = path.join(path.sep === "\\" ? "C:\\" : "/data", "videos");
+const imgDir = path.join(path.sep === "\\" ? "C:\\" : "/data", "imgs");
+const resolvedVideo = path.join(videoDir, "good.mp4");
+const resolvedImage = path.join(imgDir, "logo.png");
+const evilImage = path.join(path.sep === "\\" ? "C:\\" : "/data", "evil", "logo.png");
 
 describe("video IPC handlers", () => {
   beforeEach(() => {
@@ -93,7 +101,7 @@ describe("video IPC handlers", () => {
     const pathSecurity = {
       validateReadableFile: vi.fn((filePath, kind) => {
         if (kind === "video" && filePath === "good.mp4") {
-          return { ok: true, resolvedPath: "C:\\videos\\good.mp4" };
+          return { ok: true, resolvedPath: resolvedVideo };
         }
         if (kind === "image") {
           return { ok: false, error: "Ruta no permitida" };
@@ -108,7 +116,7 @@ describe("video IPC handlers", () => {
       {},
       {
         input_path: "good.mp4",
-        operations: [{ mode: "image", image_path: "C:\\evil\\logo.png" }],
+        operations: [{ mode: "image", image_path: evilImage }],
       },
     );
 
@@ -121,10 +129,10 @@ describe("video IPC handlers", () => {
     const pathSecurity = {
       validateReadableFile: vi.fn((filePath, kind) => {
         if (kind === "video" && filePath === "good.mp4") {
-          return { ok: true, resolvedPath: "C:\\videos\\good.mp4" };
+          return { ok: true, resolvedPath: resolvedVideo };
         }
-        if (kind === "image" && filePath === "C:\\imgs\\logo.png") {
-          return { ok: true, resolvedPath: "C:\\imgs\\logo.png" };
+        if (kind === "image" && filePath === resolvedImage) {
+          return { ok: true, resolvedPath: resolvedImage };
         }
         return { ok: false, error: "Ruta no permitida" };
       }),
@@ -137,16 +145,16 @@ describe("video IPC handlers", () => {
       {},
       {
         input_path: "good.mp4",
-        operations: [{ mode: "image", image_path: "C:\\imgs\\logo.png" }],
+        operations: [{ mode: "image", image_path: resolvedImage }],
       },
     );
 
     expect(result).toEqual({ ok: true, dataUrl: "data:image/jpeg;base64,x" });
     expect(mocks.renderPreviewFrame).toHaveBeenCalledTimes(1);
     const payload = mocks.renderPreviewFrame.mock.calls[0][0];
-    expect(payload.input_path).toBe("C:\\videos\\good.mp4");
-    expect(payload.input_root).toBe("C:\\videos");
-    expect(payload.asset_roots).toEqual(["C:\\imgs"]);
-    expect(payload.operations[0].image_path).toBe("C:\\imgs\\logo.png");
+    expect(payload.input_path).toBe(resolvedVideo);
+    expect(payload.input_root).toBe(videoDir);
+    expect(payload.asset_roots).toEqual([imgDir]);
+    expect(payload.operations[0].image_path).toBe(resolvedImage);
   });
 });
