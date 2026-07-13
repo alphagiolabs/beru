@@ -341,11 +341,13 @@ const scheduleInstall = (au) => {
           if (result && typeof result.catch === "function") {
             result.catch((e) => {
               quittingForUpdate = false;
+              setAppIsQuitting(false);
               send({ type: "error", message: e?.message || String(e) });
             });
           }
         } catch (e) {
           quittingForUpdate = false;
+          setAppIsQuitting(false);
           send({ type: "error", message: e?.message || String(e) });
         }
       });
@@ -358,6 +360,7 @@ const scheduleInstall = (au) => {
   setTimeout(() => {
     if (quittingForUpdate) {
       quittingForUpdate = false;
+      setAppIsQuitting(false);
       send({
         type: "error",
         message: "No se pudo reiniciar para instalar la actualización. Inténtalo de nuevo.",

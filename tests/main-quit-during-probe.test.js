@@ -41,6 +41,38 @@ describe("quit during probe phase", () => {
     expect(between).toMatch(/cancelled\s*:\s*true/);
   });
 
+  it("clears owned processing run on every getAppIsQuitting early bail before spawn", () => {
+    // Anchor after the concurrency probe call site, not the enrichJobVideoInfo
+    // function definition higher in the file.
+    const probeCallIdx = processSrc.indexOf("runWithConcurrency(");
+    const spawnIdx = processSrc.indexOf("spawn(spawnSpec.command");
+    expect(probeCallIdx).toBeGreaterThan(-1);
+    expect(spawnIdx).toBeGreaterThan(probeCallIdx);
+    const between = processSrc.slice(probeCallIdx, spawnIdx);
+
+    // Post-probe early returns that check quitting must release an owned run
+    // so a quit/probe race cannot leave the lock stuck.
+    const bailRe =
+      /if\s*\(\s*!isCurrentRun\(\)\s*\|\|\s*getAppIsQuitting\(\)\s*\)\s*\{[\s\S]*?return\s*\{\s*success:\s*false,\s*error:\s*"Procesamiento cancelado"/g;
+    const bailBlocks = between.match(bailRe) || [];
+    expect(bailBlocks.length).toBeGreaterThanOrEqual(2);
+    for (const block of bailBlocks) {
+      expect(block).toMatch(/clearProcessingRun\(runId\)/);
+      expect(block).toMatch(/setProbePhaseActive\(false\)/);
+    }
+  });
+
+  it("refuses to begin a processing run while app is quitting", () => {
+    const beginIdx = processSrc.indexOf("beginProcessingRun(runId)");
+    expect(beginIdx).toBeGreaterThan(-1);
+    const beforeBegin = processSrc.slice(0, beginIdx);
+    // Last getAppIsQuitting guard before beginProcessingRun must short-circuit.
+    const guardIdx = beforeBegin.lastIndexOf("getAppIsQuitting()");
+    expect(guardIdx).toBeGreaterThan(-1);
+    const guardSlice = beforeBegin.slice(guardIdx, beginIdx);
+    expect(guardSlice).toMatch(/cancelled\s*:\s*true/);
+  });
+
   it("disposes temp files after cancel, not before", () => {
     // cancelActiveProcessing().finally(() => { disposeOnQuit(); app.quit(); })
     expect(mainSrc).toMatch(
