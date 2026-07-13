@@ -1,7 +1,7 @@
 import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, Ban } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
-import { pickTextStyle } from "../utils/text-style";
+import { pickTextStyle, patchToGlobalState } from "../utils/text-style";
 import { normalizeColor } from "../utils/color-utils";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS, TEXT_STYLE_PRESETS } from "../utils/types";
 import TextLayoutControls from "./TextLayoutControls";
@@ -72,39 +72,7 @@ export default function StyleEditor() {
     const getState = useEditorStore.getState;
     if (isBatch) getState().patchBatchTextStyle(stylePatch);
     else {
-      if (stylePatch.fontSize != null) getState().setTextFontSize(stylePatch.fontSize);
-      if (stylePatch.fontColor != null) getState().setTextFontColor(stylePatch.fontColor);
-      if (stylePatch.fontFamily != null) getState().setFontFamily(stylePatch.fontFamily);
-      if (stylePatch.fontWeight != null) getState().setFontWeight(stylePatch.fontWeight);
-      if (stylePatch.letterSpacing != null) getState().setLetterSpacing(stylePatch.letterSpacing);
-      if (stylePatch.textAlign != null) getState().setTextAlign(stylePatch.textAlign);
-      if (stylePatch.textOpacity != null) getState().setTextOpacity(stylePatch.textOpacity);
-      if (stylePatch.bold != null) getState().setBold(stylePatch.bold);
-      if (stylePatch.italic != null) getState().setItalic(stylePatch.italic);
-      if (stylePatch.bgEnabled != null) getState().setBgEnabled(stylePatch.bgEnabled);
-      if (stylePatch.bgColor != null) getState().setBgColor(stylePatch.bgColor);
-      if (stylePatch.bgOpacity != null) getState().setBgOpacity(stylePatch.bgOpacity);
-      if (stylePatch.boxBorderWidth != null)
-        getState().setBoxBorderWidth(stylePatch.boxBorderWidth);
-      if (stylePatch.borderWidth != null) getState().setBorderWidth(stylePatch.borderWidth);
-      if (stylePatch.borderColor != null) getState().setBorderColor(stylePatch.borderColor);
-      if (stylePatch.textShadowEnabled != null) {
-        getState().setTextShadowEnabled(stylePatch.textShadowEnabled);
-      }
-      if (stylePatch.textShadowColor != null)
-        getState().setTextShadowColor(stylePatch.textShadowColor);
-      if (stylePatch.textShadowOffsetX != null) {
-        getState().setTextShadowOffsetX(stylePatch.textShadowOffsetX);
-      }
-      if (stylePatch.textShadowOffsetY != null) {
-        getState().setTextShadowOffsetY(stylePatch.textShadowOffsetY);
-      }
-      if (stylePatch.autoFit != null) getState().setAutoFit(stylePatch.autoFit);
-      if (stylePatch.lineHeight != null) getState().setLineHeight(stylePatch.lineHeight);
-      if (stylePatch.verticalAlign != null) getState().setVerticalAlign(stylePatch.verticalAlign);
-      if (stylePatch.textWrap != null) getState().setTextWrap(stylePatch.textWrap);
-      if (stylePatch.safeMargin != null) getState().setSafeMargin(stylePatch.safeMargin);
-      if (stylePatch.truncate != null) getState().setTruncate(stylePatch.truncate);
+      useEditorStore.setState(patchToGlobalState(stylePatch));
     }
   };
 
