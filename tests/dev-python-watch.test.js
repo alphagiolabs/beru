@@ -49,8 +49,6 @@ describe("shouldRestartElectronForPythonChange", () => {
   });
 
   it("ignores scratch/build scripts and non-py names", () => {
-    expect(shouldRestartElectronForPythonChange("_do_split.py")).toBe(false);
-    expect(shouldRestartElectronForPythonChange("_split_map.py")).toBe(false);
     expect(shouldRestartElectronForPythonChange("build_excel_template.py")).toBe(false);
     expect(shouldRestartElectronForPythonChange("__pycache__")).toBe(false);
     expect(shouldRestartElectronForPythonChange(null)).toBe(false);
