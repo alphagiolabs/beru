@@ -32,55 +32,14 @@ import { readSettings } from "../utils/settings.js";
 import { sendToRenderer } from "../utils/renderer.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
 import { createProcessorManifest, unwrapJobManifest } from "../utils/jobManifest.js";
-import { deriveOutputPath } from "../utils/process-output.js";
 import {
   findUnreadableInputs,
   translateProcessorErrorMessage,
 } from "../utils/process-input-validation.js";
+import { prepareJobsForProcessor } from "../utils/process-media-validation.js";
 
 const MAX_PROCESSOR_STDERR_CHARS = 48_000;
 const MAX_PROCESSOR_STDOUT_LINE_CHARS = 256_000;
-
-function prepareJobsForProcessor(jobs, outputDirectory, pathSecurity) {
-  return jobs.map((job) => {
-    const inputCheck = pathSecurity.validateReadableFile(job?.input_path, "video");
-    if (!inputCheck.ok) {
-      throw new Error(`Entrada no permitida: ${inputCheck.error}`);
-    }
-
-    const assetRoots = new Set();
-    const validateImage = (imagePath) => {
-      if (!imagePath) return imagePath;
-      const imageCheck = pathSecurity.validateReadableFile(imagePath, "image");
-      if (!imageCheck.ok) {
-        throw new Error(`Imagen no permitida: ${imageCheck.error}`);
-      }
-      assetRoots.add(path.dirname(imageCheck.resolvedPath));
-      return imageCheck.resolvedPath;
-    };
-
-    const operations = (job.operations || []).map((operation) => ({
-      ...operation,
-      image_path: validateImage(operation.image_path),
-      delogo_image_path: validateImage(operation.delogo_image_path),
-    }));
-    const watermark = job.watermark ? { ...job.watermark } : null;
-    if (watermark?.type === "image") {
-      watermark.imagePath = validateImage(watermark.imagePath || watermark.watermark_image);
-    }
-
-    return {
-      ...job,
-      input_path: inputCheck.resolvedPath,
-      input_root: path.dirname(inputCheck.resolvedPath),
-      output_path: deriveOutputPath(outputDirectory, job.output_path),
-      output_root: outputDirectory,
-      asset_roots: [...assetRoots],
-      operations,
-      watermark,
-    };
-  });
-}
 
 function appendBoundedText(current, chunk, maxChars) {
   const next = `${current || ""}${chunk || ""}`;
