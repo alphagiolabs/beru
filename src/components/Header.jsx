@@ -305,6 +305,7 @@ export default function Header() {
         startExecutionRun: (opts) => get().startExecutionRun(opts),
         applyPatch: (patch) => useEditorStore.setState(patch),
         setProcessing: (val) => get().setProcessing(val),
+        finalizeActiveExecution: (summary) => get().finalizeActiveExecution(summary),
       },
     }).then((result) => {
       if (!result.ok) {
