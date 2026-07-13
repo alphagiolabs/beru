@@ -338,6 +338,10 @@ export function registerProcessHandlers(pathSecurity) {
       };
     }
 
+    if (getAppIsQuitting()) {
+      return { success: false, error: "Procesamiento cancelado", cancelled: true };
+    }
+
     const runId = `${Date.now()}-${randomBytes(4).toString("hex")}`;
     if (!beginProcessingRun(runId)) {
       return { success: false, error: "Ya hay un proceso en ejecución" };
@@ -394,6 +398,13 @@ export function registerProcessHandlers(pathSecurity) {
       // (probe-phase quit race before cancel clears the runId).
       if (!isCurrentRun() || getAppIsQuitting()) {
         cleanupRunArtifacts();
+        // Quit can set appIsQuitting before cancel clears the run — release the
+        // owned lock so the probe watchdog does not rearm forever.
+        if (isCurrentRun()) {
+          setProbePhaseActive(false);
+          clearProcessingRun(runId);
+          if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
+        }
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
       // Probe phase is over — the processor child is about to spawn, so the
@@ -409,6 +420,11 @@ export function registerProcessHandlers(pathSecurity) {
       // so we never install an unowned processor child after cancel cleared the run.
       if (!isCurrentRun() || getAppIsQuitting()) {
         cleanupRunArtifacts();
+        if (isCurrentRun()) {
+          setProbePhaseActive(false);
+          clearProcessingRun(runId);
+          if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
+        }
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
 
