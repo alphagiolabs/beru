@@ -137,6 +137,7 @@ export default function VideoPreview() {
   const [videoError, setVideoError] = useState(null);
   const [ffmpegPreviewUrl, setFfmpegPreviewUrl] = useState(null);
   const [ffmpegPreviewLoading, setFfmpegPreviewLoading] = useState(false);
+  const ffmpegPreviewGenRef = useRef(0);
   const [showFfmpegPreview, setShowFfmpegPreview] = useState(false);
   const [previewCompareMode, setPreviewCompareMode] = useState("ffmpeg");
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
@@ -310,6 +311,8 @@ export default function VideoPreview() {
   }, [sel?.path, sel?.duration]);
 
   useEffect(() => {
+    ffmpegPreviewGenRef.current += 1;
+    setFfmpegPreviewLoading(false);
     setPlaying(false);
     setCurrentTime(0);
     setDuration(sel?.duration || 0);
@@ -513,8 +516,10 @@ export default function VideoPreview() {
     }
 
     setFfmpegPreviewLoading(true);
+    const gen = ++ffmpegPreviewGenRef.current;
     try {
       const result = await api.renderPreviewFrame(job);
+      if (gen !== ffmpegPreviewGenRef.current) return;
       if (result?.ok && result.data_url) {
         setFfmpegPreviewUrl(result.data_url);
         setPreviewCompareMode("ffmpeg");
@@ -526,9 +531,12 @@ export default function VideoPreview() {
         });
       }
     } catch (err) {
+      if (gen !== ffmpegPreviewGenRef.current) return;
       showToast?.({ kind: "err", text: err.message || "Error al renderizar el frame" });
     } finally {
-      setFfmpegPreviewLoading(false);
+      if (gen === ffmpegPreviewGenRef.current) {
+        setFfmpegPreviewLoading(false);
+      }
     }
   }, [selectedIdx, sel, currentTime, buildPreviewFrameJob, showToast]);
 
