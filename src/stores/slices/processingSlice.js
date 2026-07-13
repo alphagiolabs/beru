@@ -349,6 +349,10 @@ export function createProcessingSlice(set, get) {
           return { ok: false, error: "Video inválido" };
         }
       }
+      const live = get();
+      if (live.isProcessing) {
+        return { ok: false, error: "Ya hay un proceso en ejecución" };
+      }
       const item = queue[videoIdx];
       const job = get()._buildJobFor(item, videoIdx);
       return runSingle({
@@ -356,7 +360,7 @@ export function createProcessingSlice(set, get) {
         job,
         videoIdx,
         queue,
-        isProcessing: false,
+        isProcessing: live.isProcessing,
         hooks: processingHooks(set, get),
       });
     },

@@ -138,6 +138,43 @@ describe("useEditorStore logic regressions", () => {
     expect(manifest.jobs[0].id).toBe(1);
   });
 
+  it("aborts processSingle when processing starts during video-info refresh", async () => {
+    useEditorStore.setState({
+      queue: [
+        queueItem({
+          path: "C:\\videos\\missing.mp4",
+          filename: "missing.mp4",
+          width: 0,
+          height: 0,
+        }),
+      ],
+    });
+
+    const updatedQueue = [
+      queueItem({
+        path: "C:\\videos\\missing.mp4",
+        filename: "missing.mp4",
+        width: 1280,
+        height: 720,
+      }),
+    ];
+
+    const refreshSpy = vi
+      .spyOn(useEditorStore.getState(), "refreshMissingVideoInfo")
+      .mockImplementation(async () => {
+        useEditorStore.setState({ isProcessing: true });
+        return updatedQueue;
+      });
+
+    const res = await useEditorStore.getState().processSingle(0);
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("Ya hay un proceso en ejecución");
+    expect(mockApi.startProcessing).not.toHaveBeenCalled();
+
+    refreshSpy.mockRestore();
+  });
+
   it("uses ID_TEXT as the output name for batch text jobs", () => {
     useEditorStore.setState({
       queue: [queueItem({ path: "C:\\videos\\promo.mp4", filename: "promo.mp4" })],
