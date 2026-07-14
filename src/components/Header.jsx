@@ -30,6 +30,14 @@ import { hasVideoDimensions } from "../utils/batch-process";
 import { buildExportJobs } from "../utils/export-pipeline";
 import { validateBatchReady, runBatch, cancelBatch } from "../utils/batch-runner";
 import { resolveThemeName } from "../theme/engine.js";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 const api = window.api;
 
@@ -84,19 +92,15 @@ export default function Header() {
   const [presetsOpen, setPresetsOpen] = useState(false);
   const [savePresetOpen, setSavePresetOpen] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
-  const [langOpen, setLangOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const presetsRef = useRef(null);
   const savePresetInputRef = useRef(null);
-  const langRef = useRef(null);
   const recentRef = useRef(null);
 
   const setPresetsOpenStable = useCallback((v) => setPresetsOpen(v), []);
-  const setLangOpenStable = useCallback((v) => setLangOpen(v), []);
   const setRecentOpenStable = useCallback((v) => setRecentOpen(v), []);
 
   useCloseOnOutsideClick(presetsRef, presetsOpen, setPresetsOpenStable);
-  useCloseOnOutsideClick(langRef, langOpen, setLangOpenStable);
   useCloseOnOutsideClick(recentRef, recentOpen, setRecentOpenStable);
 
   useEffect(() => {
@@ -446,7 +450,7 @@ export default function Header() {
         <select
           value={batchWorkersMode === "conservative" ? "conservative" : "balanced"}
           onChange={(e) => get().setBatchWorkersMode(e.target.value)}
-          className="app-header-select app-header-select--workers-mode cap-input !w-[100px] !py-1 text-[11px]"
+          className="app-header-select app-header-select--workers-mode cap-input !w-[128px] !py-1 text-[11px]"
           disabled={isProcessing || Number(batchWorkers) > 0}
           title={t("header.batchWorkersModeHint")}
         >
@@ -515,74 +519,70 @@ export default function Header() {
         </button>
         <div className="relative" ref={presetsRef}>
           <button
+            type="button"
             onClick={handleTogglePresets}
-            className="cap-btn-secondary app-header-icon-btn !p-1.5"
+            className={`cap-btn-secondary app-header-icon-btn header-presets-trigger !p-1.5${
+              presetsOpen ? " is-open" : ""
+            }`}
             title={t("header.presetsLibrary")}
+            aria-haspopup="menu"
+            aria-expanded={presetsOpen}
           >
             <Library size={14} />
-            <ChevronDown size={10} />
+            <ChevronDown
+              size={10}
+              className={`header-presets-chevron${presetsOpen ? " is-open" : ""}`}
+            />
           </button>
           {presetsOpen && (
-            <div
-              className="absolute right-0 top-full mt-1 z-40 rounded-md shadow-xl py-1 w-[280px] max-h-[420px] overflow-y-auto"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-            >
-              <div
-                className="px-3 py-1.5 text-[9px] font-semibold tracking-wider uppercase"
-                style={{ color: "var(--text-dim)" }}
-              >
-                Presets
+            <div className="header-presets-menu" role="menu" aria-label={t("header.presets")}>
+              <div className="header-presets-menu-chrome">
+                <div className="header-presets-menu-title">{t("header.presets")}</div>
               </div>
-              {presets.length === 0 ? (
-                <div className="px-3 py-3 text-[11px]" style={{ color: "var(--text-dim)" }}>
-                  {t("header.noPresets")}
-                </div>
-              ) : (
-                presets.map((p, i) => {
-                  const prev = i > 0 && presets[i - 1].source !== p.source;
-                  return (
-                    <div key={`${p.source}-${p.filename}`}>
-                      {prev && (
-                        <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
-                      )}
-                      <button
-                        onClick={() => handleApplyPreset(p)}
-                        className="w-full text-left px-3 py-2 hover:opacity-80"
-                        style={{ background: "transparent" }}
-                      >
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span
-                            className="text-[11px] font-medium"
-                            style={{ color: "var(--text-primary)" }}
-                          >
-                            {p.name}
-                          </span>
-                          <span
-                            className="text-[8px] font-semibold tracking-wider uppercase px-1 py-0.5 rounded"
-                            style={{
-                              color: p.source === "bundled" ? "var(--accent)" : "#22c55e",
-                              background:
-                                p.source === "bundled"
-                                  ? "rgba(0,240,234,0.10)"
-                                  : "rgba(34,197,94,0.10)",
-                            }}
-                          >
-                            {p.source === "bundled" ? "Incluido" : "Personalizado"}
-                          </span>
-                        </div>
-                        {p.description && (
-                          <div
-                            className="text-[10px] leading-snug"
-                            style={{ color: "var(--text-dim)" }}
-                          >
-                            {p.description}
+              <div className="header-presets-menu-scroll">
+                {presets.length === 0 ? (
+                  <div className="header-presets-empty">
+                    <Library size={16} strokeWidth={1.75} className="header-presets-empty-icon" />
+                    <span>{t("header.noPresets")}</span>
+                  </div>
+                ) : (
+                  presets.map((p, i) => {
+                    const isBundled = p.source === "bundled";
+                    const showSection = i === 0 || presets[i - 1].source !== p.source;
+                    return (
+                      <div key={`${p.source}-${p.filename}`} className="header-presets-group">
+                        {showSection ? (
+                          <div className="header-presets-section" aria-hidden="true">
+                            {isBundled ? t("header.presetsBundled") : t("header.presetsCustom")}
                           </div>
-                        )}
-                      </button>
-                    </div>
-                  );
-                })
-              )}
+                        ) : null}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => handleApplyPreset(p)}
+                          className="header-presets-item"
+                        >
+                          <div className="header-presets-item-row">
+                            <span className="header-presets-item-name">{p.name}</span>
+                            <span
+                              className={`header-presets-tag${
+                                isBundled
+                                  ? " header-presets-tag--bundled"
+                                  : " header-presets-tag--custom"
+                              }`}
+                            >
+                              {isBundled ? t("header.presetBundled") : t("header.presetCustom")}
+                            </span>
+                          </div>
+                          {p.description ? (
+                            <span className="header-presets-item-desc">{p.description}</span>
+                          ) : null}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -690,40 +690,33 @@ export default function Header() {
         >
           {themeActiveSlot === 1 ? <Sun size={14} /> : <Moon size={14} />}
         </button>
-        <div className="relative" ref={langRef}>
-          <button
-            onClick={() => setLangOpen((v) => !v)}
-            className="cap-btn-secondary app-header-icon-btn !p-1.5 !text-[10px] font-semibold"
-            title={t("header.language")}
-          >
-            <Languages size={14} />
-            {language.toUpperCase()}
-            <ChevronDown size={10} />
-          </button>
-          {langOpen && (
-            <div
-              className="absolute right-0 top-full mt-1 rounded shadow-lg z-50 min-w-[120px]"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="cap-btn-secondary app-header-icon-btn header-lang-trigger !p-1.5"
+              title={t("header.language")}
+            >
+              <Languages size={14} />
+              <span className="header-lang-code">{language.toUpperCase()}</span>
+              <ChevronDown size={10} className="header-lang-chevron" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={6} className="min-w-[168px]">
+            <DropdownMenuLabel>{t("header.language")}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={language}
+              onValueChange={(code) => get().setLanguage(code)}
             >
               {SUPPORTED_LANGUAGES.map((lng) => (
-                <button
-                  key={lng.code}
-                  onClick={() => {
-                    get().setLanguage(lng.code);
-                    setLangOpen(false);
-                  }}
-                  className="block w-full text-left px-3 py-1.5 text-[11px] hover:opacity-80"
-                  style={{
-                    color: lng.code === language ? "var(--accent)" : "var(--text-secondary)",
-                    fontWeight: lng.code === language ? 600 : 400,
-                  }}
-                >
+                <DropdownMenuRadioItem key={lng.code} value={lng.code}>
                   {lng.label}
-                </button>
+                  <span className="header-lang-item-code">{lng.code.toUpperCase()}</span>
+                </DropdownMenuRadioItem>
               ))}
-            </div>
-          )}
-        </div>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <button
           onClick={() => get().setShowWatermarkModal(true)}
           className="cap-btn-secondary app-header-icon-btn !p-1.5"

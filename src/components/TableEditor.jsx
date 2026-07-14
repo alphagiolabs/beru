@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Layers, FileSpreadsheet } from "lucide-react";
+import { X, FileSpreadsheet } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { findTextOpForRegion } from "../utils/text-style";
@@ -56,7 +56,7 @@ export default function TableEditor() {
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !showTableEditor) return;
-    const ro = new ResizeObserver(() => setLayoutTick((t) => t + 1));
+    const ro = new ResizeObserver(() => setLayoutTick((tick) => tick + 1));
     ro.observe(v);
     return () => ro.disconnect();
   }, [showTableEditor, focused.videoIdx]);
@@ -68,13 +68,8 @@ export default function TableEditor() {
       setPlaying(false);
       tableRef.current?.focus();
     }
-    // Only reset focus when the editor opens, not when templateRegions.length
-    // changes while open (which would silently yank the user's focused cell).
   }, [showTableEditor, firstRegionId]);
 
-  // Mirror `seeking` into a ref so the video listener effect below does not
-  // depend on `seeking` — otherwise every scrub toggle tears down and re-adds
-  // all five listeners, dropping any timeupdate/play/pause in the gap.
   useEffect(() => {
     seekingRef.current = seeking;
   }, [seeking]);
@@ -267,116 +262,115 @@ export default function TableEditor() {
   const getBatchPreviewPayload = (videoIdx, regionId) =>
     get().getBatchPreviewPayload(videoIdx, regionId);
 
+  const handleExport = async () => {
+    const res = await get().exportExcel();
+    if (res?.canceled) return;
+    if (res?.ok) {
+      const name = (res.filePath || "").split(/[\\/]/).pop() || "export.xlsx";
+      showToast({ kind: "ok", text: t("table.exportExcelOk", { name }) });
+    } else {
+      showToast({
+        kind: "err",
+        text: res?.error || t("table.exportExcelFailed"),
+      });
+    }
+  };
+
+  const metaParts = [
+    `${queue.length} ${t("table.metaVideos")}`,
+    `${templateRegions.length} ${t("table.metaRegions")}`,
+  ];
+  if (excelPath && excelRows.length > 0) {
+    metaParts.push(
+      `Excel ${excelRows.length}${excelMapping.idColumn ? ` · ${excelMapping.idColumn}` : ""}`,
+    );
+  }
+
   return (
     <div className="cap-modal-overlay" onClick={() => get().setShowTableEditor(false)}>
       <div
-        className="cap-modal-panel w-[95vw] max-w-[1200px] max-h-[90vh] flex flex-col"
+        className="table-editor"
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("table.title")}
       >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <div className="flex items-center gap-2">
-            <Layers size={16} style={{ color: "var(--purple)" }} />
-            <span className="text-sm font-semibold">Editor de tabla</span>
-            <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-              {queue.length} videos · {templateRegions.length} regiones
-              {excelPath && excelRows.length > 0 && (
-                <>
-                  {" "}
-                  · Excel ({excelRows.length} filas
-                  {excelMapping.idColumn ? `, ID: ${excelMapping.idColumn}` : ""})
-                </>
-              )}
-            </span>
+        <header className="te-header">
+          <div className="te-header-left">
+            <h2 className="te-header-title">{t("table.title")}</h2>
+            <p className="te-header-meta">{metaParts.join(" · ")}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="te-header-right">
             <button
               type="button"
-              className="cap-btn-secondary text-[11px] flex items-center gap-1.5 !py-1"
+              className="te-ghost-btn"
               disabled={!excelRows?.length}
               title={t("table.exportExcel")}
-              onClick={async () => {
-                const res = await get().exportExcel();
-                if (res?.canceled) return;
-                if (res?.ok) {
-                  const name = (res.filePath || "").split(/[\\/]/).pop() || "export.xlsx";
-                  showToast({ kind: "ok", text: t("table.exportExcelOk", { name }) });
-                } else {
-                  showToast({
-                    kind: "err",
-                    text: res?.error || t("table.exportExcelFailed"),
-                  });
-                }
-              }}
+              onClick={handleExport}
             >
-              <FileSpreadsheet size={13} />
-              {t("table.exportExcel")}
+              <FileSpreadsheet size={14} />
+              <span>{t("table.exportExcel")}</span>
             </button>
-            <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-              ↑↓←→ navegar · Enter editar · Del eliminar · Esc cerrar
-            </span>
             <button
+              type="button"
+              className="te-icon-btn"
               onClick={() => get().setShowTableEditor(false)}
-              className="p-1 rounded hover:bg-white/10"
-              style={{ color: "var(--text-dim)" }}
+              aria-label={t("table.close")}
+              title={t("table.close")}
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Top section: Preview + Editing row */}
-        <div className="flex flex-1 min-h-0 border-b" style={{ borderColor: "var(--border)" }}>
-          <TableEditorPreview
-            videoRef={videoRef}
-            focusedVideo={focusedVideo}
-            focused={focused}
-            templateRegions={templateRegions}
-            focusedOp={focusedOp}
-            playing={playing}
-            currentTime={currentTime}
-            duration={duration}
-            seeking={seeking}
-            setSeeking={setSeeking}
-            seekTo={seekTo}
-            setCurrentTime={setCurrentTime}
-            getBatchPreviewPayload={getBatchPreviewPayload}
-          />
+        <div className="te-workspace">
+          <div className="te-top">
+            <TableEditorPreview
+              videoRef={videoRef}
+              focusedVideo={focusedVideo}
+              focused={focused}
+              templateRegions={templateRegions}
+              focusedOp={focusedOp}
+              playing={playing}
+              currentTime={currentTime}
+              duration={duration}
+              setSeeking={setSeeking}
+              seekTo={seekTo}
+              setCurrentTime={setCurrentTime}
+              getBatchPreviewPayload={getBatchPreviewPayload}
+            />
+            <TableEditorFocusPanel
+              hasRegions={hasRegions}
+              focusedRegion={focusedRegion}
+              focusedVideo={focusedVideo}
+              focused={focused}
+              queueLength={queue.length}
+              focusedOp={focusedOp}
+              updateFocused={updateFocused}
+              createFocusedOp={createFocusedOp}
+              deleteFocusedOp={deleteFocusedOp}
+            />
+          </div>
 
-          <TableEditorFocusPanel
+          <TableEditorGrid
+            tableRef={tableRef}
             hasRegions={hasRegions}
-            focusedRegion={focusedRegion}
-            focusedVideo={focusedVideo}
+            queue={queue}
+            templateRegions={templateRegions}
+            excelPath={excelPath}
+            excelMapping={excelMapping}
+            excelMatchStatus={excelMatchStatus}
             focused={focused}
-            queueLength={queue.length}
-            focusedOp={focusedOp}
-            updateFocused={updateFocused}
-            createFocusedOp={createFocusedOp}
-            deleteFocusedOp={deleteFocusedOp}
+            setFocused={setFocused}
+            editingCell={editingCell}
+            editValue={editValue}
+            setEditValue={setEditValue}
+            startInlineEdit={startInlineEdit}
+            commitInlineEdit={commitInlineEdit}
+            cancelInlineEdit={cancelInlineEdit}
+            handleTableKey={handleTableKey}
           />
         </div>
-
-        <TableEditorGrid
-          tableRef={tableRef}
-          hasRegions={hasRegions}
-          queue={queue}
-          templateRegions={templateRegions}
-          excelPath={excelPath}
-          excelMapping={excelMapping}
-          excelMatchStatus={excelMatchStatus}
-          focused={focused}
-          setFocused={setFocused}
-          editingCell={editingCell}
-          editValue={editValue}
-          setEditValue={setEditValue}
-          startInlineEdit={startInlineEdit}
-          commitInlineEdit={commitInlineEdit}
-          cancelInlineEdit={cancelInlineEdit}
-          handleTableKey={handleTableKey}
-        />
       </div>
     </div>
   );

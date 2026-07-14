@@ -123,8 +123,8 @@ export default function PropertiesPanel() {
           value={sidebarMode}
           onChange={(id) => get().setSidebarMode(id)}
           options={[
-            { id: "logo", label: "Quitar logo", tone: "accent" },
-            { id: "batch", label: "Texto en lote", tone: "purple" },
+            { id: "logo", label: "Quitar logo" },
+            { id: "batch", label: "Texto en lote" },
           ]}
         />
         <div className="inspector-chrome-meta">

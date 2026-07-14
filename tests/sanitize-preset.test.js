@@ -66,7 +66,7 @@ describe("sanitize-preset", () => {
       });
       expect(style.textFontSize).toBe(200);
       expect(style.textOpacity).toBe(1);
-      expect(style.letterSpacing).toBe(0);
+      expect(style.letterSpacing).toBe(-5);
       expect(style.textShadowEnabled).toBe(true);
       expect(style.textShadowOffsetX).toBe(64);
       expect(style.textShadowOffsetY).toBe(-64);

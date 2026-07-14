@@ -68,6 +68,7 @@ from text_layout_helpers import (
     _text_bg_enabled,
     _text_box_pad,
     _text_clusters,
+    _text_glyph_positions,
     _text_layout_bounds,
     _truncate_text,
     _wrap_text_to_width,
@@ -1211,12 +1212,15 @@ def build_drawtext(op):
         spacing_px = int(round(float(letter_spacing)))
     except (TypeError, ValueError):
         spacing_px = 0
-    native_letter_spacing = spacing_px > 0 and _drawtext_supports("spacing")
+    # Match JS LETTER_SPACING_MIN/MAX in src/utils/letter-spacing.js
+    spacing_px = max(-20, min(80, spacing_px))
+    native_letter_spacing = spacing_px != 0 and _drawtext_supports("spacing")
+    # Positive fallback: insert thin spaces. Negative needs per-glyph drawtext.
+    tight_glyph_layout = False
     if spacing_px > 0 and not native_letter_spacing:
         text = _apply_letter_spacing_fallback(text, spacing_px, font_size)
-
-    # Escape the text for FFmpeg drawtext syntax
-    text = _escape_drawtext_text(text)
+    elif spacing_px < 0 and not native_letter_spacing:
+        tight_glyph_layout = True
 
     font_color = _validate_drawtext_color(op.get("font_color", "white"), "font_color")
     font_family = str(op.get("font_family", "Arial") or "Arial").strip()
@@ -1227,10 +1231,10 @@ def build_drawtext(op):
     font_weight = op.get("font_weight")
     if font_weight is None and bold:
         font_weight = 700
-    
-    # Dynamic text alignment using FFmpeg's native text_w variable
+
     text_align = op.get("text_align", "left")
-    
+    vertical_align = str(op.get("vertical_align") or "top").lower()
+
     if text_align == "center" and region_w > 0:
         x_expr = f"{x} + ({region_w} - text_w) / 2"
     elif text_align == "right" and region_w > 0:
@@ -1238,7 +1242,6 @@ def build_drawtext(op):
     else:
         x_expr = str(x)
 
-    vertical_align = str(op.get("vertical_align") or "top").lower()
     if vertical_align == "center" and region_h > 0:
         y_expr = f"{y} + ({region_h} - text_h) / 2"
     elif vertical_align == "bottom" and region_h > 0:
@@ -1265,72 +1268,93 @@ def build_drawtext(op):
     if text_opacity < 1.0:
         font_color = f"{font_color}@{text_opacity:.3f}"
 
-    parts = [
-        f"text='{text}'",
-        f"fontsize={font_size}",
-        f"fontcolor={font_color}",
-        f"{font_key}={font_val}",
-        f"x={x_expr}",
-        f"y={y_expr}",
-    ]
+    def _style_parts(x_val, y_val, include_line_spacing=True, include_native_spacing=False):
+        parts = [
+            f"fontsize={font_size}",
+            f"fontcolor={font_color}",
+            f"{font_key}={font_val}",
+            f"x={x_val}",
+            f"y={y_val}",
+        ]
+        # y is the top of the first text line (matches CSS content box top), not baseline.
+        if _drawtext_supports("y_align"):
+            parts.append("y_align=text")
+        if font_weight is not None and _drawtext_supports("fontweight"):
+            try:
+                fw = int(font_weight)
+                if 100 <= fw <= 1000:
+                    parts.append(f"fontweight={fw}")
+            except (TypeError, ValueError):
+                pass
+        if italic and _drawtext_supports("fontstyle"):
+            parts.append("fontstyle=italic")
+        if include_native_spacing and native_letter_spacing:
+            parts.append(f"spacing={spacing_px}")
+        if include_line_spacing:
+            line_spacing_px = int(round(float(font_size) * max(0.0, line_height - 1.0)))
+            if line_spacing_px > 0 and _drawtext_supports("line_spacing"):
+                parts.append(f"line_spacing={line_spacing_px}")
+        # Region background is rendered via drawbox in build_filter_complex (full region).
+        border_w = op.get("border_width", 0)
+        if border_w > 0:
+            border_color = _validate_drawtext_color(op.get("border_color", "black"), "border_color")
+            parts.append(f"bordercolor={border_color}:borderw={border_w}")
+        if op.get("text_shadow_enabled"):
+            shadow_color = _validate_drawtext_color(
+                op.get("text_shadow_color", "black"), "text_shadow_color"
+            )
+            try:
+                shadow_x = int(round(float(op.get("text_shadow_offset_x", 2))))
+            except (TypeError, ValueError):
+                shadow_x = 2
+            try:
+                shadow_y = int(round(float(op.get("text_shadow_offset_y", 2))))
+            except (TypeError, ValueError):
+                shadow_y = 2
+            shadow_x = max(-64, min(64, shadow_x))
+            shadow_y = max(-64, min(64, shadow_y))
+            if shadow_x or shadow_y:
+                parts.append(
+                    f"shadowcolor={shadow_color}:shadowx={shadow_x}:shadowy={shadow_y}"
+                )
+        enable_clause = _build_enable_clause(op)
+        if enable_clause:
+            parts.append(enable_clause)
+        return parts
 
-    # y is the top of the first text line (matches CSS content box top), not baseline.
-    if _drawtext_supports("y_align"):
-        parts.append("y_align=text")
-
-    # Numeric font weight (100-900). "bold" is a convenience alias.
-    if font_weight is not None and _drawtext_supports("fontweight"):
-        try:
-            fw = int(font_weight)
-            if 100 <= fw <= 1000:
-                parts.append(f"fontweight={fw}")
-        except (TypeError, ValueError):
-            pass
-
-    if italic and _drawtext_supports("fontstyle"):
-        parts.append("fontstyle=italic")
-
-    # Letter spacing (drawtext spacing= pixels between glyphs; matches CSS preview)
-    if native_letter_spacing:
-        parts.append(f"spacing={spacing_px}")
-
-    line_spacing_px = int(round(float(font_size) * max(0.0, line_height - 1.0)))
-    if line_spacing_px > 0 and _drawtext_supports("line_spacing"):
-        parts.append(f"line_spacing={line_spacing_px}")
-
-    # Region background is rendered via drawbox in build_filter_complex (full region).
-    # drawtext only paints glyphs so export matches the CSS preview overlay.
-
-    # Border/stroke
-    border_w = op.get("border_width", 0)
-    if border_w > 0:
-        border_color = _validate_drawtext_color(op.get("border_color", "black"), "border_color")
-        parts.append(f"bordercolor={border_color}:borderw={border_w}")
-
-    # Drop shadow. FFmpeg drawtext uses whole-pixel offsets; preview scales the
-    # same operation-style values to screen pixels.
-    if op.get("text_shadow_enabled"):
-        shadow_color = _validate_drawtext_color(
-            op.get("text_shadow_color", "black"), "text_shadow_color"
+    if tight_glyph_layout:
+        glyphs = _text_glyph_positions(
+            text,
+            spacing_px,
+            font_size,
+            line_height=line_height,
+            region_w=region_w,
+            region_h=region_h,
+            text_align=text_align,
+            vertical_align=vertical_align,
         )
-        try:
-            shadow_x = int(round(float(op.get("text_shadow_offset_x", 2))))
-        except (TypeError, ValueError):
-            shadow_x = 2
-        try:
-            shadow_y = int(round(float(op.get("text_shadow_offset_y", 2))))
-        except (TypeError, ValueError):
-            shadow_y = 2
-        shadow_x = max(-64, min(64, shadow_x))
-        shadow_y = max(-64, min(64, shadow_y))
-        if shadow_x or shadow_y:
-            parts.append(f"shadowcolor={shadow_color}:shadowx={shadow_x}:shadowy={shadow_y}")
+        if len(glyphs) >= 2:
+            filters = []
+            for cluster, dx, dy in glyphs:
+                escaped = _escape_drawtext_text(cluster)
+                gx = int(round(x + dx))
+                gy = int(round(y + dy))
+                parts = [f"text='{escaped}'"] + _style_parts(
+                    gx, gy, include_line_spacing=False, include_native_spacing=False
+                )
+                filters.append("drawtext=" + ":".join(parts))
+            filter_str = ",".join(filters)
+            logger.debug("drawtext tight spacing filter: %s", filter_str[:300])
+            if cache_key is not None:
+                with _DRAWTEXT_CACHE_LOCK:
+                    _DRAWTEXT_CACHE[cache_key] = filter_str
+            return filter_str
 
-    # Time range (enable clause)
-    enable_clause = _build_enable_clause(op)
-    if enable_clause:
-        parts.append(enable_clause)
-
+    # Single drawtext path (zero / positive hair-space / native spacing)
+    text = _escape_drawtext_text(text)
+    parts = [f"text='{text}'"] + _style_parts(
+        x_expr, y_expr, include_line_spacing=True, include_native_spacing=True
+    )
     filter_str = "drawtext=" + ":".join(parts)
     logger.debug("drawtext filter: %s", filter_str[:300])
     if cache_key is not None:

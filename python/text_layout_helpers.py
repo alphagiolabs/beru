@@ -134,7 +134,11 @@ def _text_clusters(text):
 
 
 def _apply_letter_spacing_fallback(text, spacing_px, font_size):
-    """Approximate CSS letter-spacing when drawtext lacks a native spacing option."""
+    """Approximate *positive* CSS letter-spacing when drawtext lacks native spacing.
+
+    Negative spacing cannot insert "negative space" — use
+    ``_text_glyph_positions`` + one drawtext per cluster instead.
+    """
     try:
         spacing_px = max(0.0, float(spacing_px))
         font_size = max(1.0, float(font_size))
@@ -168,6 +172,75 @@ def _apply_letter_spacing_fallback(text, spacing_px, font_size):
                 emitted_spacers += spacer_count
         spaced_lines.append("".join(parts))
     return "\n".join(spaced_lines)
+
+
+def _text_glyph_positions(
+    text,
+    spacing_px,
+    font_size,
+    line_height=1.2,
+    region_w=0,
+    region_h=0,
+    text_align="left",
+    vertical_align="top",
+):
+    """Layout glyph clusters with letter-spacing (incl. negative) as pixel offsets.
+
+    Returns a list of ``(cluster, x_off, y_off)`` relative to the layout box
+    top-left. Uses the same average-width heuristic as wrap/fit helpers so
+    export tracking stays consistent when drawtext has no native ``spacing``.
+    """
+    try:
+        spacing_px = float(spacing_px)
+        font_size = max(1.0, float(font_size))
+        line_height = float(line_height)
+    except (TypeError, ValueError):
+        return [(str(text or ""), 0.0, 0.0)]
+
+    try:
+        region_w = float(region_w or 0)
+        region_h = float(region_h or 0)
+    except (TypeError, ValueError):
+        region_w, region_h = 0.0, 0.0
+
+    char_w = _estimate_char_width(font_size)
+    line_step = max(1.0, font_size * max(0.5, line_height))
+    lines = str(text or "").split("\n")
+    line_layouts = []
+    for line in lines:
+        clusters = _text_clusters(line)
+        if not clusters:
+            line_layouts.append(([], 0.0))
+            continue
+        positions = []
+        x = 0.0
+        for index, cluster in enumerate(clusters):
+            positions.append((cluster, x))
+            if index < len(clusters) - 1:
+                x += char_w + spacing_px
+        total_w = len(clusters) * char_w + max(0, len(clusters) - 1) * spacing_px
+        line_layouts.append((positions, total_w))
+
+    block_h = max(line_step, len(lines) * line_step)
+    if vertical_align == "center" and region_h > 0:
+        y0 = (region_h - block_h) / 2.0
+    elif vertical_align == "bottom" and region_h > 0:
+        y0 = region_h - block_h
+    else:
+        y0 = 0.0
+
+    out = []
+    for line_index, (positions, total_w) in enumerate(line_layouts):
+        if text_align == "center" and region_w > 0:
+            x0 = (region_w - total_w) / 2.0
+        elif text_align == "right" and region_w > 0:
+            x0 = region_w - total_w
+        else:
+            x0 = 0.0
+        y = y0 + line_index * line_step
+        for cluster, dx in positions:
+            out.append((cluster, x0 + dx, y))
+    return out
 
 
 def _text_bg_enabled(op):
