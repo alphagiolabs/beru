@@ -1,6 +1,7 @@
 import { memo, useMemo } from "react";
 import useEditorStore from "../../stores/useEditorStore";
 import { findTextOpForRegion } from "../../utils/text-style";
+import { useT } from "../../i18n/useT";
 
 /**
  * Precompute the per-row, per-region cell text and derived flags once per
@@ -26,10 +27,6 @@ function usePrecomputedCells(
     const displayIds = new Array(rowCount);
     const cellText = new Array(rowCount);
     const hasOpText = new Array(rowCount);
-
-    // Cache region lookups by id to avoid a linear `find` per cell.
-    const regionById = new Map();
-    for (let c = 0; c < colCount; c++) regionById.set(templateRegions[c].id, templateRegions[c]);
 
     for (let r = 0; r < rowCount; r++) {
       const item = queue[r];
@@ -74,43 +71,26 @@ const TableRow = memo(
     commitInlineEdit,
     cancelInlineEdit,
   }) {
+    const t = useT();
+
     return (
       <tr
         onClick={() => setFocused((f) => ({ ...f, videoIdx: idx }))}
-        className="cursor-pointer"
-        style={{
-          background: isFocusedRow ? "rgba(168,85,247,0.05)" : "transparent",
-          borderBottom: "1px solid var(--border)",
-        }}
+        className={isFocusedRow ? "is-row-focused" : undefined}
+        data-row-focused={isFocusedRow ? "true" : undefined}
       >
-        <td
-          className="p-2 text-center font-mono"
-          style={{ color: isFocusedRow ? "var(--purple)" : "var(--text-dim)" }}
-        >
-          {idx + 1}
-        </td>
-        <td
-          className="p-2 font-medium"
-          style={{
-            color: isFocusedRow ? "var(--text-primary)" : "var(--text-secondary)",
-          }}
-          title={item.filename}
-        >
+        <td className="table-editor-idx">{idx + 1}</td>
+        <td className="table-editor-filename" title={item.filename}>
           {item.filename}
         </td>
         <td
-          className="p-2 font-mono text-[10px]"
-          style={{ color: "var(--text-dim)" }}
-          title={matchStatus === "matched" ? "Vinculado a Excel" : matchStatus || ""}
+          className="table-editor-id"
+          title={matchStatus === "matched" ? t("table.excelLinked") : matchStatus || ""}
         >
           {displayId}
           {matchStatus === "unmatched" && excelPath && (
-            <span
-              className="ml-1 text-[9px]"
-              style={{ color: "var(--amber)" }}
-              title="Sin fila en Excel"
-            >
-              ⚠
+            <span className="table-editor-unmatched" title={t("table.excelUnmatched")}>
+              !
             </span>
           )}
         </td>
@@ -128,11 +108,17 @@ const TableRow = memo(
                 setFocused({ videoIdx: idx, regionId: tr.id });
               }}
               onDoubleClick={() => startInlineEdit(idx, tr.id, cellText)}
-              className="p-1 align-top"
-              style={{
-                borderLeft: isCellFocused ? "2px solid var(--purple)" : "none",
-                background: isCellFocused ? "rgba(168,85,247,0.08)" : "transparent",
-              }}
+              className={isCellFocused ? "is-cell-focused" : undefined}
+              data-cell-focused={isCellFocused ? "true" : undefined}
+              style={
+                isCellFocused
+                  ? {
+                      // Keep "2px solid" for keyboard navigation tests
+                      borderLeft: "2px solid var(--purple)",
+                      background: "rgba(168,85,247,0.08)",
+                    }
+                  : undefined
+              }
             >
               {isEditing ? (
                 <input
@@ -150,31 +136,17 @@ const TableRow = memo(
                     }
                     e.stopPropagation();
                   }}
-                  className="w-full px-1.5 py-0.5 rounded text-[11px] outline-none"
-                  style={{
-                    background: "var(--bg-app)",
-                    border: "1px solid var(--purple)",
-                    color: "var(--text-primary)",
-                  }}
+                  className="table-editor-cell-input"
                 />
               ) : cellText ? (
                 <div
-                  className="px-1.5 py-0.5 rounded"
-                  style={{
-                    color: fromExcelOnly ? "var(--text-secondary)" : "var(--text-primary)",
-                    fontStyle: fromExcelOnly ? "italic" : "normal",
-                  }}
-                  title={fromExcelOnly ? "Valor desde Excel (doble clic para editar)" : undefined}
+                  className={`table-editor-cell${fromExcelOnly ? " table-editor-cell--excel" : ""}`}
+                  title={fromExcelOnly ? t("table.fromExcel") : undefined}
                 >
                   {cellText}
                 </div>
               ) : (
-                <div
-                  className="px-1.5 py-0.5 rounded text-center text-[10px] italic"
-                  style={{ color: "var(--text-dim)" }}
-                >
-                  +
-                </div>
+                <div className="table-editor-cell table-editor-cell--empty">+</div>
               )}
             </td>
           );
@@ -224,6 +196,7 @@ export default function TableEditorGrid({
   cancelInlineEdit,
   handleTableKey,
 }) {
+  const t = useT();
   // Subscribe to the Excel state that drives getCellTextForRegion / getExcelDisplayId
   // so the precompute memo invalidates when they change (the previous code read
   // these via getState() per cell per render and never re-rendered on change).
@@ -243,72 +216,39 @@ export default function TableEditorGrid({
       ref={tableRef}
       tabIndex={0}
       onKeyDown={handleTableKey}
-      className="flex-1 overflow-auto focus:outline-none"
-      style={{ minHeight: "180px", maxHeight: "40vh" }}
+      className="table-editor-grid"
+      role="grid"
+      aria-label={t("table.gridAria")}
     >
       {!hasRegions ? (
-        <div className="p-6 text-center text-[11px]" style={{ color: "var(--text-dim)" }}>
-          Tabla de texto plano: muestra todas las operaciones de texto del video.
-        </div>
+        <div className="table-editor-grid-empty">{t("table.plainTextHint")}</div>
       ) : (
-        <table className="w-full text-[11px] border-collapse">
+        <table className="table-editor-table">
           <thead>
             <tr>
-              <th
-                className="text-left p-2 sticky top-0 z-10 w-[40px]"
-                style={{
-                  background: "var(--bg-elevated)",
-                  color: "var(--text-dim)",
-                  borderBottom: "1px solid var(--border)",
-                }}
-              >
-                #
-              </th>
-              <th
-                className="text-left p-2 sticky top-0 z-10"
-                style={{
-                  background: "var(--bg-elevated)",
-                  color: "var(--text-dim)",
-                  borderBottom: "1px solid var(--border)",
-                }}
-              >
-                Video
-              </th>
-              <th
-                className="text-left p-2 sticky top-0 z-10 w-[80px]"
-                style={{
-                  background: "var(--bg-elevated)",
-                  color: "var(--text-dim)",
-                  borderBottom: "1px solid var(--border)",
-                }}
-              >
-                ID
-              </th>
+              <th className="w-[40px]">#</th>
+              <th>{t("table.colVideo")}</th>
+              <th className="w-[80px]">ID</th>
               {templateRegions.map((tr) => {
                 const excelCol = excelMapping.columns?.[tr.id];
+                const colFocused = focused.regionId === tr.id;
                 return (
                   <th
                     key={tr.id}
-                    className="text-left p-2 sticky top-0 z-10 cursor-pointer"
-                    style={{
-                      background:
-                        focused.regionId === tr.id ? "rgba(168,85,247,0.15)" : "var(--bg-elevated)",
-                      color: focused.regionId === tr.id ? "var(--purple)" : "var(--purple)",
-                      borderBottom: "1px solid var(--border)",
-                      borderLeft: focused.regionId === tr.id ? "2px solid var(--purple)" : "none",
-                    }}
+                    className={colFocused ? "is-col-focused" : undefined}
                     onClick={() => setFocused((f) => ({ ...f, regionId: tr.id }))}
-                    title={excelCol ? `Columna Excel: ${excelCol}` : "Sin columna Excel mapeada"}
+                    title={excelCol ? t("table.excelCol", { col: excelCol }) : t("table.noExcelCol")}
+                    style={
+                      colFocused
+                        ? {
+                            // Keep "2px solid" for keyboard navigation tests
+                            borderLeft: "2px solid var(--purple)",
+                          }
+                        : undefined
+                    }
                   >
                     <div>{tr.label}</div>
-                    {excelCol && (
-                      <div
-                        className="text-[9px] font-mono font-normal truncate max-w-[120px]"
-                        style={{ color: "var(--text-dim)" }}
-                      >
-                        → {excelCol}
-                      </div>
-                    )}
+                    {excelCol && <span className="table-editor-th-excel">→ {excelCol}</span>}
                   </th>
                 );
               })}

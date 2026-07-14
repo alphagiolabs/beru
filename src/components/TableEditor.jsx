@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Layers, FileSpreadsheet } from "lucide-react";
+import { X, Table2, FileSpreadsheet } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { findTextOpForRegion } from "../utils/text-style";
@@ -56,7 +56,7 @@ export default function TableEditor() {
   useEffect(() => {
     const v = videoRef.current;
     if (!v || !showTableEditor) return;
-    const ro = new ResizeObserver(() => setLayoutTick((t) => t + 1));
+    const ro = new ResizeObserver(() => setLayoutTick((tick) => tick + 1));
     ro.observe(v);
     return () => ro.disconnect();
   }, [showTableEditor, focused.videoIdx]);
@@ -267,69 +267,80 @@ export default function TableEditor() {
   const getBatchPreviewPayload = (videoIdx, regionId) =>
     get().getBatchPreviewPayload(videoIdx, regionId);
 
+  const handleExport = async () => {
+    const res = await get().exportExcel();
+    if (res?.canceled) return;
+    if (res?.ok) {
+      const name = (res.filePath || "").split(/[\\/]/).pop() || "export.xlsx";
+      showToast({ kind: "ok", text: t("table.exportExcelOk", { name }) });
+    } else {
+      showToast({
+        kind: "err",
+        text: res?.error || t("table.exportExcelFailed"),
+      });
+    }
+  };
+
   return (
     <div className="cap-modal-overlay" onClick={() => get().setShowTableEditor(false)}>
-      <div
-        className="cap-modal-panel w-[95vw] max-w-[1200px] max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <div className="flex items-center gap-2">
-            <Layers size={16} style={{ color: "var(--purple)" }} />
-            <span className="text-sm font-semibold">Editor de tabla</span>
-            <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-              {queue.length} videos · {templateRegions.length} regiones
-              {excelPath && excelRows.length > 0 && (
-                <>
-                  {" "}
-                  · Excel ({excelRows.length} filas
-                  {excelMapping.idColumn ? `, ID: ${excelMapping.idColumn}` : ""})
-                </>
-              )}
+      <div className="table-editor" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("table.title")}>
+        <header className="table-editor-header">
+          <div className="table-editor-title-block">
+            <span className="table-editor-icon" aria-hidden>
+              <Table2 size={14} strokeWidth={2} />
             </span>
+            <div className="min-w-0">
+              <div className="table-editor-title">{t("table.title")}</div>
+              <div className="table-editor-meta">
+                <span className="table-editor-chip">
+                  {queue.length} {t("table.metaVideos")}
+                </span>
+                <span className="table-editor-chip">
+                  {templateRegions.length} {t("table.metaRegions")}
+                </span>
+                {excelPath && excelRows.length > 0 && (
+                  <span className="table-editor-chip" title={excelPath}>
+                    Excel · {excelRows.length} {t("table.metaRows")}
+                    {excelMapping.idColumn ? ` · ID ${excelMapping.idColumn}` : ""}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="table-editor-header-actions">
             <button
               type="button"
-              className="cap-btn-secondary text-[11px] flex items-center gap-1.5 !py-1"
+              className="cap-btn-secondary text-[11px] !py-1 !px-2.5"
               disabled={!excelRows?.length}
               title={t("table.exportExcel")}
-              onClick={async () => {
-                const res = await get().exportExcel();
-                if (res?.canceled) return;
-                if (res?.ok) {
-                  const name = (res.filePath || "").split(/[\\/]/).pop() || "export.xlsx";
-                  showToast({ kind: "ok", text: t("table.exportExcelOk", { name }) });
-                } else {
-                  showToast({
-                    kind: "err",
-                    text: res?.error || t("table.exportExcelFailed"),
-                  });
-                }
-              }}
+              onClick={handleExport}
             >
               <FileSpreadsheet size={13} />
               {t("table.exportExcel")}
             </button>
-            <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-              ↑↓←→ navegar · Enter editar · Del eliminar · Esc cerrar
-            </span>
+
+            <div className="table-editor-kbd-hint" aria-hidden>
+              <span className="table-editor-kbd">↑↓←→</span>
+              <span>{t("table.hintNav")}</span>
+              <span className="table-editor-kbd">⏎</span>
+              <span>{t("table.hintEdit")}</span>
+              <span className="table-editor-kbd">Esc</span>
+            </div>
+
             <button
+              type="button"
+              className="table-editor-close"
               onClick={() => get().setShowTableEditor(false)}
-              className="p-1 rounded hover:bg-white/10"
-              style={{ color: "var(--text-dim)" }}
+              aria-label={t("table.close")}
+              title={t("table.close")}
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
-        </div>
+        </header>
 
-        {/* Top section: Preview + Editing row */}
-        <div className="flex flex-1 min-h-0 border-b" style={{ borderColor: "var(--border)" }}>
+        <div className="table-editor-body">
           <TableEditorPreview
             videoRef={videoRef}
             focusedVideo={focusedVideo}
