@@ -134,6 +134,8 @@ export function createQueueSlice(set, get) {
     },
 
     _thumbnailAbortController: null,
+    /** Display-only thumbnails keyed by video path — not on queue items (plan 018). */
+    thumbnailsByPath: {},
 
     _scheduleThumbnailLoads: (api, toAdd, startIdx) => {
       if (!api?.getThumbnailBatch || toAdd.length === 0) return;
@@ -148,14 +150,19 @@ export function createQueueSlice(set, get) {
         if (abortController.signal.aborted) return;
         if (!Array.isArray(results) || results.length === 0) return;
         set((s) => {
-          const next = s.queue.slice();
+          let changed = false;
+          const nextMap = { ...s.thumbnailsByPath };
           for (let i = 0; i < results.length; i++) {
             const r = results[i];
             const target = offset + i;
-            if (!r?.dataUrl || !next[target] || next[target].path !== paths[i]) continue;
-            next[target] = { ...next[target], thumbnail: r.dataUrl };
+            const path = paths[i];
+            if (!r?.dataUrl || !path) continue;
+            if (!s.queue[target] || s.queue[target].path !== path) continue;
+            if (nextMap[path] === r.dataUrl) continue;
+            nextMap[path] = r.dataUrl;
+            changed = true;
           }
-          return { queue: next };
+          return changed ? { thumbnailsByPath: nextMap } : s;
         });
       };
 
@@ -268,6 +275,7 @@ export function createQueueSlice(set, get) {
 
     removeVideo: (idx) => {
       set((s) => {
+        const removed = s.queue[idx];
         const next = s.queue.filter((_, i) => i !== idx);
         let sel = s.selectedIdx;
         if (sel >= next.length) sel = next.length - 1;
@@ -280,6 +288,11 @@ export function createQueueSlice(set, get) {
           if (ki < idx) newStatus[ki] = v;
           else if (ki > idx) newStatus[ki - 1] = v;
         });
+        let thumbnailsByPath = s.thumbnailsByPath;
+        if (removed?.path && thumbnailsByPath?.[removed.path]) {
+          thumbnailsByPath = { ...thumbnailsByPath };
+          delete thumbnailsByPath[removed.path];
+        }
         return {
           queue: next,
           selectedIdx: sel,
@@ -289,6 +302,7 @@ export function createQueueSlice(set, get) {
           redoStack: [],
           excelMatchStatus: newStatus,
           imageDataCache: pruneImageDataCache(s.imageDataCache, next),
+          thumbnailsByPath,
           batchSummary: null,
         };
       });
@@ -310,6 +324,7 @@ export function createQueueSlice(set, get) {
         batchSummary: null,
         templateIdx: -1,
         _thumbnailAbortController: null,
+        thumbnailsByPath: {},
       }));
       return true;
     },
@@ -324,16 +339,19 @@ export function createQueueSlice(set, get) {
       });
       const api = window.api;
       const item = get().queue[idx];
-      if (api?.getThumbnail && item && !item.thumbnail) {
+      if (api?.getThumbnail && item?.path && !get().thumbnailsByPath?.[item.path]) {
         api
           .getThumbnail(item.path)
           .then((r) => {
             if (!r?.dataUrl) return;
             set((s) => {
-              if (s.selectedIdx !== idx || !s.queue[idx]) return s;
-              const next = s.queue.slice();
-              next[idx] = { ...next[idx], thumbnail: r.dataUrl };
-              return { queue: next };
+              if (s.selectedIdx !== idx || !s.queue[idx] || s.queue[idx].path !== item.path) {
+                return s;
+              }
+              if (s.thumbnailsByPath?.[item.path] === r.dataUrl) return s;
+              return {
+                thumbnailsByPath: { ...s.thumbnailsByPath, [item.path]: r.dataUrl },
+              };
             });
           })
           .catch(() => {});

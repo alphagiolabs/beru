@@ -30,6 +30,7 @@ export function normalizeExecutionHistory(raw) {
               total: Math.max(0, Number(run.summary.total) || 0),
               succeeded: Math.max(0, Number(run.summary.succeeded) || 0),
               failed: Math.max(0, Number(run.summary.failed) || 0),
+              cancelled: Math.max(0, Number(run.summary.cancelled) || 0),
             }
           : null,
       lines: Array.isArray(run.lines)
@@ -75,6 +76,7 @@ export function finalizeExecutionRun(history, runId, summary, finishedAt = new D
               total: Math.max(0, Number(summary.total) || 0),
               succeeded: Math.max(0, Number(summary.succeeded) || 0),
               failed: Math.max(0, Number(summary.failed) || 0),
+              cancelled: Math.max(0, Number(summary.cancelled) || 0),
             }
           : run.summary,
     };
@@ -100,7 +102,7 @@ function formatRunHeader(run) {
   if (run.summary) {
     return `── ${started} · ${jobs} · ${run.summary.succeeded}/${run.summary.total} ok${
       run.summary.failed > 0 ? ` · ${run.summary.failed} err` : ""
-    } ──`;
+    }${run.summary.cancelled > 0 ? ` · ${run.summary.cancelled} cancel` : ""} ──`;
   }
   if (run.finishedAt) return `── ${started} · ${jobs} · finalizado ──`;
   return `── ${started} · ${jobs} · en curso ──`;
@@ -122,12 +124,19 @@ export function formatHistoryTimestamp(iso) {
 }
 
 export function summarizeQueue(queue = []) {
-  const terminal = queue.filter((item) => item.status === "done" || item.status === "error");
-  if (terminal.length === 0) return null;
+  const list = Array.isArray(queue) ? queue : [];
+  const succeeded = list.filter((item) => item.status === "done").length;
+  const failed = list.filter((item) => item.status === "error").length;
+  // Cancelled jobs are reset to idle with no error (plan 002); batch summary
+  // may also pass cancelled counts from Python. For queue-only summarize we
+  // cannot recover cancelled vs never-started idle — only count terminal rows.
+  const terminal = succeeded + failed;
+  if (terminal === 0) return null;
   return {
-    total: terminal.length,
-    succeeded: terminal.filter((item) => item.status === "done").length,
-    failed: terminal.filter((item) => item.status === "error").length,
+    total: terminal,
+    succeeded,
+    failed,
+    cancelled: 0,
   };
 }
 

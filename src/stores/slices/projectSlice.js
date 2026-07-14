@@ -57,9 +57,10 @@ export function createProjectSlice(set, get) {
 
     serializeProject: () => {
       const s = get();
+      const wm = s.watermark || {};
       return {
         type: "beru-project",
-        version: "1.2.0",
+        version: "1.3.0",
         savedAt: new Date().toISOString(),
         templateRegions: sanitizeTemplateRegions(s.templateRegions),
         textStyle: {
@@ -103,6 +104,18 @@ export function createProjectSlice(set, get) {
               mapping: s.excelMapping,
             }
           : null,
+        watermark: {
+          enabled: !!wm.enabled,
+          type: wm.type === "image" ? "image" : "text",
+          text: typeof wm.text === "string" ? wm.text : "",
+          imagePath: typeof wm.imagePath === "string" ? wm.imagePath : "",
+          opacity: Number.isFinite(Number(wm.opacity)) ? Number(wm.opacity) : 0.5,
+          scale: Number.isFinite(Number(wm.scale)) ? Number(wm.scale) : 1,
+          position: typeof wm.position === "string" ? wm.position : "bottom-right",
+          fontSize: Number.isFinite(Number(wm.fontSize)) ? Number(wm.fontSize) : 18,
+          fontColor: typeof wm.fontColor === "string" ? wm.fontColor : "#ffffff",
+          fontFamily: typeof wm.fontFamily === "string" ? wm.fontFamily : "Arial",
+        },
       };
     },
 
@@ -229,8 +242,24 @@ export function createProjectSlice(set, get) {
           excelMatchStatus: {},
         });
       }
-      if (data.version && data.version !== "1.2.0") {
-        warnings.push(`Versión del proyecto: ${data.version} (actual 1.2.0)`);
+      if (data.watermark && typeof data.watermark === "object") {
+        const wm = data.watermark;
+        get().setWatermark({
+          enabled: !!wm.enabled,
+          type: wm.type === "image" ? "image" : "text",
+          text: typeof wm.text === "string" ? wm.text : "",
+          imagePath: typeof wm.imagePath === "string" ? wm.imagePath : "",
+          imageDataUrl: "",
+          opacity: Number.isFinite(Number(wm.opacity)) ? Number(wm.opacity) : 0.5,
+          scale: Number.isFinite(Number(wm.scale)) ? Number(wm.scale) : 1,
+          position: typeof wm.position === "string" ? wm.position : "bottom-right",
+          fontSize: Number.isFinite(Number(wm.fontSize)) ? Number(wm.fontSize) : 18,
+          fontColor: typeof wm.fontColor === "string" ? wm.fontColor : "#ffffff",
+          fontFamily: typeof wm.fontFamily === "string" ? wm.fontFamily : "Arial",
+        });
+      }
+      if (data.version && data.version !== "1.3.0" && data.version !== "1.2.0") {
+        warnings.push(`Versión del proyecto: ${data.version} (actual 1.3.0)`);
       }
       return { ok: true, warnings };
     },

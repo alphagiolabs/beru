@@ -60,7 +60,7 @@ AGENTS.md
 CLAUDE.md
 GEMINI.md
 .claude/
-plans/
+/plans/
 
 # Versioned build output directories (never commit)
 dist-installer-v*/
@@ -80,5 +80,7 @@ nul
 # Use /scripts/* (not /scripts) so specific new modules can be un-ignored.
 /scripts/*
 !/scripts/dev-python-watch.mjs
+
+.worktrees/
 
 .worktrees/

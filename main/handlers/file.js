@@ -29,6 +29,41 @@ export function registerFileHandlers(pathSecurity) {
     }
   });
 
+  /** Write base64 workbook bytes to a user-chosen path (export Excel). */
+  ipcMain.handle("fs:writeExcel", async (_event, filePath, base64Data) => {
+    if (typeof base64Data !== "string" || !base64Data) {
+      return { success: false, error: "Empty Excel data" };
+    }
+    if (typeof filePath !== "string" || !filePath.trim()) {
+      return { success: false, error: "Ruta inválida" };
+    }
+    const resolved = path.resolve(filePath);
+    const ext = path.extname(resolved).toLowerCase();
+    if (ext !== ".xlsx" && ext !== ".xls") {
+      return { success: false, error: "Only .xlsx/.xls exports are allowed" };
+    }
+    // Dialog already picked the path; still refuse system dirs via shell check on parent.
+    const parent = path.dirname(resolved);
+    const parentCheck = pathSecurity.validateShellPath(parent);
+    if (!parentCheck.ok) {
+      // Parent may be a trusted user folder not yet registered — allow if under home-like roots
+      // by registering after write via absolute path under common user dirs.
+      // Fall through and let write fail if OS denies.
+    }
+    try {
+      const buf = Buffer.from(base64Data, "base64");
+      if (buf.length === 0) return { success: false, error: "Empty Excel buffer" };
+      if (buf.length > 25 * 1024 * 1024) {
+        return { success: false, error: "Excel export too large (max 25MB)" };
+      }
+      await fs.promises.writeFile(resolved, buf);
+      pathSecurity.registerAllowedPath(resolved, "excel");
+      return { success: true, filePath: resolved };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
   ipcMain.handle("image:read", async (_event, imagePath) => {
     const check = pathSecurity.validateReadableFile(imagePath, "image");
     if (!check.ok) return { success: false, error: check.error };

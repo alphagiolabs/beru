@@ -195,12 +195,12 @@ describe("Frontend performance audit", () => {
       const pf = readSrc("src/utils/perf-flags.js");
       // Progress map keeps queue stable during batch processing (enabled by default).
       expect(pf).toContain('flagBool("VITE_BERU_RENDER_PROGRESS_MAP", true)');
-      // Virtualization requires @tanstack/react-virtual; kept off by default.
-      expect(pf).toContain('flagBool("VITE_BERU_RENDER_VIRTUALIZE", false)');
+      // Virtualization wired with @tanstack/react-virtual (on by default above threshold).
+      expect(pf).toContain('flagBool("VITE_BERU_RENDER_VIRTUALIZE", true)');
       // Delogo preview throttled to 30 FPS to reduce CPU while remaining smooth.
       expect(pf).toContain('flagNumber("VITE_BERU_DELGO_THROTTLE_FPS", 30)');
       // Quickselect reduces temporal median complexity but requires validation.
-      expect(pf).toContain('flagBool("VITE_BERU_DELGO_QUICKSELECT", false)');
+      expect(pf).toContain('flagBool("VITE_BERU_DELGO_QUICKSELECT", true)');
       // Log batching coalesces rapid processing logs into 50 ms store updates.
       expect(pf).toContain('flagBool("VITE_BERU_LOG_BATCH", true)');
     });
@@ -209,6 +209,12 @@ describe("Frontend performance audit", () => {
       const sf = readSrc("src/components/StatusFooter.jsx");
       expect(sf).not.toContain("queue: s.queue");
       expect(sf).toContain("queueLength: s.queue.length");
+    });
+
+    it("StatusFooter only subscribes to executionHistory when panel is open", () => {
+      const sf = readSrc("src/components/StatusFooter.jsx");
+      expect(sf).toContain("historyOpen ? s.executionHistory : null");
+      expect(sf).not.toMatch(/executionHistory:\s*s\.executionHistory/);
     });
 
     it("BatchPanel avoids subscribing to the full queue array", () => {

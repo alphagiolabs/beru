@@ -34,6 +34,23 @@ function restoreQueueItem(item) {
  * @param {object} state
  * @returns {object|null} serializable snapshot, or null if nothing to keep
  */
+function sanitizeWatermark(wm) {
+  if (!wm || typeof wm !== "object") return null;
+  return {
+    enabled: !!wm.enabled,
+    type: wm.type === "image" ? "image" : "text",
+    text: typeof wm.text === "string" ? wm.text : "",
+    imagePath: typeof wm.imagePath === "string" ? wm.imagePath : "",
+    // imageDataUrl is display-only and can be huge — rehydrate from path if needed
+    opacity: Number.isFinite(Number(wm.opacity)) ? Number(wm.opacity) : 0.5,
+    scale: Number.isFinite(Number(wm.scale)) ? Number(wm.scale) : 1,
+    position: typeof wm.position === "string" ? wm.position : "bottom-right",
+    fontSize: Number.isFinite(Number(wm.fontSize)) ? Number(wm.fontSize) : 18,
+    fontColor: typeof wm.fontColor === "string" ? wm.fontColor : "#ffffff",
+    fontFamily: typeof wm.fontFamily === "string" ? wm.fontFamily : "Arial",
+  };
+}
+
 export function buildSessionSnapshot(state) {
   const queue = (Array.isArray(state?.queue) ? state.queue : [])
     .map(sanitizeQueueItem)
@@ -53,6 +70,7 @@ export function buildSessionSnapshot(state) {
     excelMapping: state.excelMapping || { idColumn: null, columns: {} },
     excelMatchStatus: state.excelMatchStatus || {},
     excelRowIndexByFilename: state.excelRowIndexByFilename || {},
+    watermark: sanitizeWatermark(state.watermark),
   };
 }
 
@@ -85,6 +103,8 @@ export function parseSessionSnapshot(raw) {
   const queue = raw.queue.filter((item) => item?.path).map(restoreQueueItem);
   if (queue.length === 0) return null;
 
+  const watermark = sanitizeWatermark(raw.watermark);
+
   return {
     queue,
     selectedIdx: 0,
@@ -98,6 +118,7 @@ export function parseSessionSnapshot(raw) {
     excelMapping: raw.excelMapping || { idColumn: null, columns: {} },
     excelMatchStatus: raw.excelMatchStatus || {},
     excelRowIndexByFilename: raw.excelRowIndexByFilename || {},
+    ...(watermark ? { watermark: { ...watermark, imageDataUrl: "" } } : {}),
   };
 }
 
@@ -120,16 +141,30 @@ export function readSessionSnapshotFromStorage(storage = defaultSessionStorage()
   }
 }
 
+/** Last serialized payload — skip setItem when snapshot is unchanged (plan 014). */
+let _lastSessionJson = null;
+
 export function writeSessionSnapshotToStorage(state, storage = defaultSessionStorage()) {
   try {
     if (!storage) return;
     const snapshot = buildSessionSnapshot(state);
     if (!snapshot) {
-      storage.removeItem(SESSION_PERSIST_KEY);
+      if (_lastSessionJson != null) {
+        storage.removeItem(SESSION_PERSIST_KEY);
+        _lastSessionJson = null;
+      }
       return;
     }
-    storage.setItem(SESSION_PERSIST_KEY, JSON.stringify(snapshot));
+    const json = JSON.stringify(snapshot);
+    if (json === _lastSessionJson) return;
+    storage.setItem(SESSION_PERSIST_KEY, json);
+    _lastSessionJson = json;
   } catch {
     // sessionStorage may be full or unavailable
   }
+}
+
+/** Test helper: reset skip-equal cache. */
+export function resetSessionWriteCache() {
+  _lastSessionJson = null;
 }

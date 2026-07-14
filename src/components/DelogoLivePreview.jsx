@@ -10,6 +10,11 @@ function createPreviewWorkspace() {
     source: { canvas: null, ctx: null },
     tiny: { canvas: null, ctx: null },
     temporalFrames: [],
+    // Scratch channel buffers for temporal median (reused every pixel).
+    medianRs: null,
+    medianGs: null,
+    medianBs: null,
+    medianWork: null,
   };
 }
 
@@ -267,12 +272,6 @@ function quickselectMedian(a) {
   return Math.round((maxLo + a[k]) / 2);
 }
 
-/** Resolve the median function based on the current perf flag value so
- *  `reloadPerfFlags()` takes effect at runtime (not just at module load). */
-function pickMedianFn() {
-  return PERF_FLAGS.delogoQuickselect ? quickselectMedian : medianChannel;
-}
-
 function renderTemporal(ctx, video, region, screen, radius, ws) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
   const src = getSourceCanvas(sw, sh, ws);
@@ -291,22 +290,40 @@ function renderTemporal(ctx, video, region, screen, radius, ws) {
   const d = out.data;
   const buffers = ws.temporalFrames;
   const n = buffers.length;
-  const medianFn = pickMedianFn();
+  const useQuick = PERF_FLAGS.delogoQuickselect;
+
+  // Reuse fixed-length scratch arrays (no per-pixel alloc).
+  if (!ws.medianRs || ws.medianRs.length !== n) {
+    ws.medianRs = new Uint8ClampedArray(n);
+    ws.medianGs = new Uint8ClampedArray(n);
+    ws.medianBs = new Uint8ClampedArray(n);
+    ws.medianWork = new Uint8ClampedArray(n);
+  }
+  const rs = ws.medianRs;
+  const gs = ws.medianGs;
+  const bs = ws.medianBs;
+  const work = ws.medianWork;
 
   for (let i = 0; i < sw * sh; i++) {
     const o = i * 4;
-    const rs = [],
-      gs = [],
-      bs = [];
     for (let f = 0; f < n; f++) {
       const fd = buffers[f].data;
-      rs.push(fd[o]);
-      gs.push(fd[o + 1]);
-      bs.push(fd[o + 2]);
+      rs[f] = fd[o];
+      gs[f] = fd[o + 1];
+      bs[f] = fd[o + 2];
     }
-    d[o] = medianFn(rs);
-    d[o + 1] = medianFn(gs);
-    d[o + 2] = medianFn(bs);
+    if (useQuick) {
+      work.set(rs);
+      d[o] = quickselectMedian(work);
+      work.set(gs);
+      d[o + 1] = quickselectMedian(work);
+      work.set(bs);
+      d[o + 2] = quickselectMedian(work);
+    } else {
+      d[o] = medianChannel(Array.from(rs));
+      d[o + 1] = medianChannel(Array.from(gs));
+      d[o + 2] = medianChannel(Array.from(bs));
+    }
     d[o + 3] = 255;
   }
   sctx.putImageData(out, 0, 0);

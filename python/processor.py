@@ -503,9 +503,10 @@ def detect_hw_encoder(ffmpeg_path, *, force_test=False):
     candidates = [enc for enc in priority if enc in encoders_text]
 
     if force_test and candidates:
-        probe_parallel = (os.environ.get("BERU_HW_PROBE_PARALLEL") or "0").strip().lower() in (
-            "1", "true", "yes", "on",
-        )
+        # Default ON — set BERU_HW_PROBE_PARALLEL=0 to force sequential probes
+        # on GPUs that flake under concurrent 1-frame encodes.
+        raw_par = (os.environ.get("BERU_HW_PROBE_PARALLEL") or "1").strip().lower()
+        probe_parallel = raw_par not in ("0", "false", "no", "off")
         if probe_parallel and len(candidates) > 1:
             # Run all 1-frame test encodes concurrently, then pick the
             # highest-priority encoder that succeeded. Each probe can take up

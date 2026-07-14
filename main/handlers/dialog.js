@@ -1,4 +1,5 @@
 import { ipcMain, dialog } from "electron";
+import path from "path";
 import { getMainWindow } from "../shared-state.js";
 
 export function registerDialogHandlers(pathSecurity) {
@@ -44,5 +45,26 @@ export function registerDialogHandlers(pathSecurity) {
       console.error("[beru] Error opening output directory dialog:", err);
       return null;
     }
+  });
+
+  ipcMain.handle("dialog:saveExcel", async (_event, defaultName = "beru-export.xlsx") => {
+    const win = getMainWindow();
+    const safeName =
+      typeof defaultName === "string" && defaultName.trim()
+        ? defaultName.trim().replace(/[<>:"/\\|?*]/g, "_")
+        : "beru-export.xlsx";
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: "Exportar Excel",
+      defaultPath: safeName.endsWith(".xlsx") ? safeName : `${safeName}.xlsx`,
+      filters: [{ name: "Excel", extensions: ["xlsx"] }],
+    });
+    if (canceled || !filePath) return { canceled: true };
+    // File may not exist yet — register parent dir for shell/write allow checks.
+    try {
+      pathSecurity.registerOutputDirectory(path.dirname(filePath));
+    } catch {
+      /* best effort */
+    }
+    return { canceled: false, filePath };
   });
 }

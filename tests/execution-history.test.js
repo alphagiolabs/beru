@@ -73,6 +73,41 @@ describe("execution history", () => {
         { status: "error" },
         { status: "processing" },
       ]),
-    ).toEqual({ total: 3, succeeded: 2, failed: 1 });
+    ).toEqual({ total: 3, succeeded: 2, failed: 1, cancelled: 0 });
+  });
+
+  it("keeps cancelled count through normalize and finalize", () => {
+    const run = createExecutionRun({ kind: "batch", jobCount: 3 });
+    let history = prependExecutionRun([], run);
+    history = finalizeExecutionRun(history, run.id, {
+      total: 3,
+      succeeded: 1,
+      failed: 0,
+      cancelled: 2,
+    });
+    expect(history[0].summary).toEqual({
+      total: 3,
+      succeeded: 1,
+      failed: 0,
+      cancelled: 2,
+    });
+
+    const normalized = normalizeExecutionHistory(history);
+    expect(normalized[0].summary.cancelled).toBe(2);
+
+    const flat = flattenExecutionHistory(history);
+    expect(flat[0]).toMatch(/2 cancel/);
+  });
+
+  it("defaults missing cancelled to 0 for old history", () => {
+    const normalized = normalizeExecutionHistory([
+      {
+        id: "old",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        summary: { total: 1, succeeded: 1, failed: 0 },
+        lines: [],
+      },
+    ]);
+    expect(normalized[0].summary.cancelled).toBe(0);
   });
 });

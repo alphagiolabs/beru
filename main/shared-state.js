@@ -103,12 +103,14 @@ function armProcessingWatchdog(runId) {
     );
     // Notify the renderer so Zustand isProcessing is cleared; otherwise the UI
     // stays stuck while main already allows a new process:start.
+    // Capture runId before clear so a newer run can ignore this stale error.
+    const staleRunId = runId;
     import("./utils/renderer.js")
       .then(({ sendToRenderer }) => {
-        sendToRenderer(
-          "process:error",
-          "El procesamiento se interrumpió de forma inesperada. Puedes volver a intentarlo.",
-        );
+        sendToRenderer("process:error", {
+          error: "El procesamiento se interrumpió de forma inesperada. Puedes volver a intentarlo.",
+          runId: staleRunId,
+        });
       })
       .catch(() => {});
   }, PROCESSING_LOCK_MAX_MS);

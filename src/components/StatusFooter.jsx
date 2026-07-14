@@ -32,13 +32,14 @@ export default function StatusFooter() {
   const signOut = useEditorStore((s) => s.signOut);
   const updateModalOpen = useEditorStore((s) => s.updateModalOpen);
 
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const {
     isProcessing,
     progressDone,
     progressTotal,
     queueLength,
     jobProgress,
-    executionHistory,
     batchSummary,
     update,
   } = useEditorStore(
@@ -48,14 +49,16 @@ export default function StatusFooter() {
       progressTotal: s.progressTotal,
       queueLength: s.queue.length,
       jobProgress: s.jobProgress,
-      executionHistory: s.executionHistory,
       batchSummary: s.batchSummary,
       update: s.update,
     }),
     shallow,
   );
 
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // Only subscribe to the full history array while the panel is open. When
+  // closed the selector returns null (stable) so log batches do not re-render
+  // the footer (~20×/s during encode).
+  const executionHistory = useEditorStore((s) => (historyOpen ? s.executionHistory : null));
   const [upToDateOpen, setUpToDateOpen] = useState(false);
   const closeUpToDate = useCallback(() => setUpToDateOpen(false), []);
   const [runStartedAt, setRunStartedAt] = useState(null);
@@ -156,7 +159,7 @@ export default function StatusFooter() {
 
         {historyOpen && (
           <ExecutionHistoryPanel
-            history={executionHistory}
+            history={executionHistory || []}
             onExport={handleExportLogs}
             onClear={handleClearHistory}
             onClose={() => setHistoryOpen(false)}

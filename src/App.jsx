@@ -41,8 +41,10 @@ export default function App() {
   // preview (beru://) and process:start work after crash/relaunch.
   useEffect(() => {
     if (!api?.restoreSessionPaths) return;
-    const { outputDir, queue, excelPath } = useEditorStore.getState();
+    const { outputDir, queue, excelPath, watermark } = useEditorStore.getState();
     const videoPaths = (queue || []).map((item) => item?.path).filter(Boolean);
+    // Re-allow watermark image via videoPaths list (same registerAllowedPaths path).
+    if (watermark?.imagePath) videoPaths.push(watermark.imagePath);
     if (!outputDir && videoPaths.length === 0 && !excelPath) return;
     void api.restoreSessionPaths({ outputDir, videoPaths, excelPath });
   }, []);
@@ -89,6 +91,11 @@ export default function App() {
     e.preventDefault();
     dragDepthRef.current = 0;
     setIsDragging(false);
+
+    if (useEditorStore.getState().isProcessing) {
+      showToast({ kind: "warn", text: t("queue.processingBusy") });
+      return;
+    }
 
     const rawPaths = Array.from(e.dataTransfer.files)
       .map((f) => f.path)

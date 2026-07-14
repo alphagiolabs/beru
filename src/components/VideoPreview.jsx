@@ -52,10 +52,26 @@ export default function VideoPreview() {
     templateRegions,
     selectedTemplateRegionId,
     watermark,
-  } = useEditorStore(
-    (s) => ({
+  } = useEditorStore((s) => {
+    const item =
+      s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null;
+    // Narrow selected item: omit thumbnail/status/progress so import/probe
+    // patches do not re-render this ~1.3k-line tree (plan 018).
+    const sel = item
+      ? {
+          path: item.path,
+          src: item.src,
+          filename: item.filename,
+          width: item.width,
+          height: item.height,
+          duration: item.duration,
+          operations: item.operations,
+          customOutputName: item.customOutputName,
+        }
+      : null;
+    return {
       selectedIdx: s.selectedIdx,
-      sel: s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null,
+      sel,
       sidebarMode: s.sidebarMode,
       activeTool: s.activeTool,
       currentRegion: s.currentRegion,
@@ -65,9 +81,8 @@ export default function VideoPreview() {
       templateRegions: s.templateRegions,
       selectedTemplateRegionId: s.selectedTemplateRegionId,
       watermark: s.watermark,
-    }),
-    shallow,
-  );
+    };
+  }, shallow);
   const {
     setCurrentRegion,
     updateOperationRegion,

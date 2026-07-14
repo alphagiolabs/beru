@@ -14,11 +14,19 @@ import {
   writeSessionSnapshotToStorage,
 } from "../utils/session-persist.js";
 
-const QUEUE_PERSIST_DELAY_MS = 800;
+const QUEUE_PERSIST_DELAY_MS = 400;
 let _queuePersistTimer = null;
 
-function persistSession(getState) {
+function persistSession(getState, { immediate = false } = {}) {
   if (typeof window === "undefined") return;
+  if (immediate) {
+    if (_queuePersistTimer) {
+      clearTimeout(_queuePersistTimer);
+      _queuePersistTimer = null;
+    }
+    writeSessionSnapshotToStorage(getState());
+    return;
+  }
   if (_queuePersistTimer) clearTimeout(_queuePersistTimer);
   _queuePersistTimer = setTimeout(() => {
     _queuePersistTimer = null;
@@ -59,10 +67,23 @@ if (typeof window !== "undefined") {
       state.excelRows !== prev.excelRows ||
       state.excelMapping !== prev.excelMapping ||
       state.excelMatchStatus !== prev.excelMatchStatus ||
-      state.excelRowIndexByFilename !== prev.excelRowIndexByFilename;
+      state.excelRowIndexByFilename !== prev.excelRowIndexByFilename ||
+      state.watermark !== prev.watermark;
     prev = state;
     if (changed) persistSession(() => useEditorStore.getState());
   });
+
+  // Flush debounced snapshot before unload so crash recovery is not empty.
+  // Guard for Node/jsdom partial globals used by unit tests.
+  if (typeof window.addEventListener === "function") {
+    const flushSession = () => persistSession(() => useEditorStore.getState(), { immediate: true });
+    window.addEventListener("beforeunload", flushSession);
+    if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") flushSession();
+      });
+    }
+  }
 }
 
 export { SESSION_PERSIST_KEY };

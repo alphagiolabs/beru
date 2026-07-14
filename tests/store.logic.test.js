@@ -1184,7 +1184,12 @@ describe("useEditorStore logic regressions", () => {
     const { executionHistory } = useEditorStore.getState();
     expect(executionHistory).toHaveLength(2);
     expect(executionHistory[1].lines).toEqual(["first-run"]);
-    expect(executionHistory[1].summary).toEqual({ total: 2, succeeded: 2, failed: 0 });
+    expect(executionHistory[1].summary).toEqual({
+      total: 2,
+      succeeded: 2,
+      failed: 0,
+      cancelled: 0,
+    });
     expect(executionHistory[0].lines).toEqual(["second-run"]);
   });
 

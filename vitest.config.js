@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: false,
+    setupFiles: ["tests/setup.js"],
     include: ["tests/**/*.test.{js,jsx}"],
     testTimeout: 20000,
     coverage: {

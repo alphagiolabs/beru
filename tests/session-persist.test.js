@@ -3,15 +3,19 @@ import {
   SESSION_PERSIST_KEY,
   buildSessionSnapshot,
   parseSessionSnapshot,
+  writeSessionSnapshotToStorage,
+  resetSessionWriteCache,
 } from "../src/utils/session-persist.js";
 
 describe("session-persist", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    resetSessionWriteCache();
   });
 
   afterEach(() => {
     sessionStorage.clear();
+    resetSessionWriteCache();
   });
 
   it("builds a snapshot with queue, outputDir, and batch/excel context", () => {
@@ -109,5 +113,51 @@ describe("session-persist", () => {
     const restored = parseSessionSnapshot(JSON.parse(raw));
     expect(restored.outputDir).toBe("C:\\out");
     expect(restored.queue[0].path).toBe("C:\\v\\a.mp4");
+  });
+
+  it("skips sessionStorage setItem when snapshot JSON is unchanged", () => {
+    const state = {
+      queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }],
+      outputDir: "C:\\out",
+    };
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    writeSessionSnapshotToStorage(state);
+    writeSessionSnapshotToStorage(state);
+    writeSessionSnapshotToStorage(state);
+    expect(setItem).toHaveBeenCalledTimes(1);
+    setItem.mockRestore();
+  });
+
+  it("persists watermark settings without imageDataUrl", () => {
+    const snap = buildSessionSnapshot({
+      queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }],
+      outputDir: "C:\\out",
+      watermark: {
+        enabled: true,
+        type: "image",
+        text: "",
+        imagePath: "C:\\wm\\logo.png",
+        imageDataUrl: "data:image/png;base64,AAAA",
+        opacity: 0.4,
+        scale: 1.2,
+        position: "top-left",
+        fontSize: 20,
+        fontColor: "#fff",
+        fontFamily: "Arial",
+      },
+    });
+    expect(snap.watermark).toMatchObject({
+      enabled: true,
+      type: "image",
+      imagePath: "C:\\wm\\logo.png",
+      opacity: 0.4,
+    });
+    expect(snap.watermark.imageDataUrl).toBeUndefined();
+    const restored = parseSessionSnapshot(snap);
+    expect(restored.watermark).toMatchObject({
+      enabled: true,
+      imagePath: "C:\\wm\\logo.png",
+      imageDataUrl: "",
+    });
   });
 });

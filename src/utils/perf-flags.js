@@ -44,14 +44,14 @@ export const PERF_FLAGS = {
    * Virtualize the queue sidebar list (`@tanstack/react-virtual`) when the queue
    * exceeds `virtualizeThreshold` items.
    */
-  virtualize: flagBool("VITE_BERU_RENDER_VIRTUALIZE", false),
+  virtualize: flagBool("VITE_BERU_RENDER_VIRTUALIZE", true),
   virtualizeThreshold: flagNumber("VITE_BERU_RENDER_VIRTUALIZE_THRESHOLD", 100),
 
   /** Target FPS for the delogo live-preview RAF loop. 0 = uncapped (legacy). */
   delogoThrottleFps: flagNumber("VITE_BERU_DELGO_THROTTLE_FPS", 30),
 
   /** Use quickselect (O(n)) instead of full sort for the temporal median. */
-  delogoQuickselect: flagBool("VITE_BERU_DELGO_QUICKSELECT", false),
+  delogoQuickselect: flagBool("VITE_BERU_DELGO_QUICKSELECT", true),
 
   /** Coalesce `appendLog` calls in `useProcessing` into 50ms batches. */
   logBatch: flagBool("VITE_BERU_LOG_BATCH", true),
