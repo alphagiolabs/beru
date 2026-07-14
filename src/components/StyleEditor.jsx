@@ -200,6 +200,8 @@ export default function StyleEditor() {
                 value={letterSpacing ?? 0}
                 onChange={(e) => patch({ letterSpacing: Number(e.target.value) })}
                 className="inspector-type-metric-input"
+                min={-20}
+                max={80}
                 step={0.5}
               />
             </label>

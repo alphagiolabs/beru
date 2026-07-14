@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Table2, FileSpreadsheet } from "lucide-react";
+import { X, FileSpreadsheet } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { findTextOpForRegion } from "../utils/text-style";
@@ -68,13 +68,8 @@ export default function TableEditor() {
       setPlaying(false);
       tableRef.current?.focus();
     }
-    // Only reset focus when the editor opens, not when templateRegions.length
-    // changes while open (which would silently yank the user's focused cell).
   }, [showTableEditor, firstRegionId]);
 
-  // Mirror `seeking` into a ref so the video listener effect below does not
-  // depend on `seeking` — otherwise every scrub toggle tears down and re-adds
-  // all five listeners, dropping any timeupdate/play/pause in the gap.
   useEffect(() => {
     seekingRef.current = seeking;
   }, [seeking]);
@@ -281,56 +276,44 @@ export default function TableEditor() {
     }
   };
 
+  const metaParts = [
+    `${queue.length} ${t("table.metaVideos")}`,
+    `${templateRegions.length} ${t("table.metaRegions")}`,
+  ];
+  if (excelPath && excelRows.length > 0) {
+    metaParts.push(
+      `Excel ${excelRows.length}${excelMapping.idColumn ? ` · ${excelMapping.idColumn}` : ""}`,
+    );
+  }
+
   return (
     <div className="cap-modal-overlay" onClick={() => get().setShowTableEditor(false)}>
-      <div className="table-editor" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={t("table.title")}>
-        <header className="table-editor-header">
-          <div className="table-editor-title-block">
-            <span className="table-editor-icon" aria-hidden>
-              <Table2 size={14} strokeWidth={2} />
-            </span>
-            <div className="min-w-0">
-              <div className="table-editor-title">{t("table.title")}</div>
-              <div className="table-editor-meta">
-                <span className="table-editor-chip">
-                  {queue.length} {t("table.metaVideos")}
-                </span>
-                <span className="table-editor-chip">
-                  {templateRegions.length} {t("table.metaRegions")}
-                </span>
-                {excelPath && excelRows.length > 0 && (
-                  <span className="table-editor-chip" title={excelPath}>
-                    Excel · {excelRows.length} {t("table.metaRows")}
-                    {excelMapping.idColumn ? ` · ID ${excelMapping.idColumn}` : ""}
-                  </span>
-                )}
-              </div>
-            </div>
+      <div
+        className="table-editor"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("table.title")}
+      >
+        <header className="te-header">
+          <div className="te-header-left">
+            <h2 className="te-header-title">{t("table.title")}</h2>
+            <p className="te-header-meta">{metaParts.join(" · ")}</p>
           </div>
-
-          <div className="table-editor-header-actions">
+          <div className="te-header-right">
             <button
               type="button"
-              className="cap-btn-secondary text-[11px] !py-1 !px-2.5"
+              className="te-ghost-btn"
               disabled={!excelRows?.length}
               title={t("table.exportExcel")}
               onClick={handleExport}
             >
-              <FileSpreadsheet size={13} />
-              {t("table.exportExcel")}
+              <FileSpreadsheet size={14} />
+              <span>{t("table.exportExcel")}</span>
             </button>
-
-            <div className="table-editor-kbd-hint" aria-hidden>
-              <span className="table-editor-kbd">↑↓←→</span>
-              <span>{t("table.hintNav")}</span>
-              <span className="table-editor-kbd">⏎</span>
-              <span>{t("table.hintEdit")}</span>
-              <span className="table-editor-kbd">Esc</span>
-            </div>
-
             <button
               type="button"
-              className="table-editor-close"
+              className="te-icon-btn"
               onClick={() => get().setShowTableEditor(false)}
               aria-label={t("table.close")}
               title={t("table.close")}
@@ -340,54 +323,54 @@ export default function TableEditor() {
           </div>
         </header>
 
-        <div className="table-editor-body">
-          <TableEditorPreview
-            videoRef={videoRef}
-            focusedVideo={focusedVideo}
-            focused={focused}
-            templateRegions={templateRegions}
-            focusedOp={focusedOp}
-            playing={playing}
-            currentTime={currentTime}
-            duration={duration}
-            seeking={seeking}
-            setSeeking={setSeeking}
-            seekTo={seekTo}
-            setCurrentTime={setCurrentTime}
-            getBatchPreviewPayload={getBatchPreviewPayload}
-          />
+        <div className="te-workspace">
+          <div className="te-top">
+            <TableEditorPreview
+              videoRef={videoRef}
+              focusedVideo={focusedVideo}
+              focused={focused}
+              templateRegions={templateRegions}
+              focusedOp={focusedOp}
+              playing={playing}
+              currentTime={currentTime}
+              duration={duration}
+              setSeeking={setSeeking}
+              seekTo={seekTo}
+              setCurrentTime={setCurrentTime}
+              getBatchPreviewPayload={getBatchPreviewPayload}
+            />
+            <TableEditorFocusPanel
+              hasRegions={hasRegions}
+              focusedRegion={focusedRegion}
+              focusedVideo={focusedVideo}
+              focused={focused}
+              queueLength={queue.length}
+              focusedOp={focusedOp}
+              updateFocused={updateFocused}
+              createFocusedOp={createFocusedOp}
+              deleteFocusedOp={deleteFocusedOp}
+            />
+          </div>
 
-          <TableEditorFocusPanel
+          <TableEditorGrid
+            tableRef={tableRef}
             hasRegions={hasRegions}
-            focusedRegion={focusedRegion}
-            focusedVideo={focusedVideo}
+            queue={queue}
+            templateRegions={templateRegions}
+            excelPath={excelPath}
+            excelMapping={excelMapping}
+            excelMatchStatus={excelMatchStatus}
             focused={focused}
-            queueLength={queue.length}
-            focusedOp={focusedOp}
-            updateFocused={updateFocused}
-            createFocusedOp={createFocusedOp}
-            deleteFocusedOp={deleteFocusedOp}
+            setFocused={setFocused}
+            editingCell={editingCell}
+            editValue={editValue}
+            setEditValue={setEditValue}
+            startInlineEdit={startInlineEdit}
+            commitInlineEdit={commitInlineEdit}
+            cancelInlineEdit={cancelInlineEdit}
+            handleTableKey={handleTableKey}
           />
         </div>
-
-        <TableEditorGrid
-          tableRef={tableRef}
-          hasRegions={hasRegions}
-          queue={queue}
-          templateRegions={templateRegions}
-          excelPath={excelPath}
-          excelMapping={excelMapping}
-          excelMatchStatus={excelMatchStatus}
-          focused={focused}
-          setFocused={setFocused}
-          editingCell={editingCell}
-          editValue={editValue}
-          setEditValue={setEditValue}
-          startInlineEdit={startInlineEdit}
-          commitInlineEdit={commitInlineEdit}
-          cancelInlineEdit={cancelInlineEdit}
-          handleTableKey={handleTableKey}
-        />
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
-import { memo, useMemo } from "react";
+import { memo, useMemo, useCallback } from "react";
 import useEditorStore from "../../stores/useEditorStore";
 import { findTextOpForRegion } from "../../utils/text-style";
 import { useT } from "../../i18n/useT";
+import useOverlayScroll from "./useOverlayScroll";
 
 /**
  * Precompute the per-row, per-region cell text and derived flags once per
@@ -79,17 +80,17 @@ const TableRow = memo(
         className={isFocusedRow ? "is-row-focused" : undefined}
         data-row-focused={isFocusedRow ? "true" : undefined}
       >
-        <td className="table-editor-idx">{idx + 1}</td>
-        <td className="table-editor-filename" title={item.filename}>
+        <td className="te-td-idx">{idx + 1}</td>
+        <td className="te-td-file" title={item.filename}>
           {item.filename}
         </td>
         <td
-          className="table-editor-id"
+          className="te-td-id"
           title={matchStatus === "matched" ? t("table.excelLinked") : matchStatus || ""}
         >
           {displayId}
           {matchStatus === "unmatched" && excelPath && (
-            <span className="table-editor-unmatched" title={t("table.excelUnmatched")}>
+            <span className="te-warn" title={t("table.excelUnmatched")}>
               !
             </span>
           )}
@@ -136,17 +137,17 @@ const TableRow = memo(
                     }
                     e.stopPropagation();
                   }}
-                  className="table-editor-cell-input"
+                  className="te-cell-input"
                 />
               ) : cellText ? (
                 <div
-                  className={`table-editor-cell${fromExcelOnly ? " table-editor-cell--excel" : ""}`}
+                  className={`te-cell${fromExcelOnly ? " te-cell--excel" : ""}`}
                   title={fromExcelOnly ? t("table.fromExcel") : undefined}
                 >
                   {cellText}
                 </div>
               ) : (
-                <div className="table-editor-cell table-editor-cell--empty">+</div>
+                <div className="te-cell te-cell--empty">+</div>
               )}
             </td>
           );
@@ -197,6 +198,7 @@ export default function TableEditorGrid({
   handleTableKey,
 }) {
   const t = useT();
+  const bindScroll = useOverlayScroll();
   // Subscribe to the Excel state that drives getCellTextForRegion / getExcelDisplayId
   // so the precompute memo invalidates when they change (the previous code read
   // these via getState() per cell per render and never re-rendered on change).
@@ -211,24 +213,34 @@ export default function TableEditorGrid({
     excelRowIndexByFilename,
   );
 
+  const setGridNode = useCallback(
+    (node) => {
+      bindScroll(node);
+      if (!tableRef) return;
+      if (typeof tableRef === "function") tableRef(node);
+      else tableRef.current = node;
+    },
+    [bindScroll, tableRef],
+  );
+
   return (
     <div
-      ref={tableRef}
+      ref={setGridNode}
       tabIndex={0}
       onKeyDown={handleTableKey}
-      className="table-editor-grid"
+      className="te-grid table-editor-scroll"
       role="grid"
       aria-label={t("table.gridAria")}
     >
       {!hasRegions ? (
-        <div className="table-editor-grid-empty">{t("table.plainTextHint")}</div>
+        <div className="te-grid-empty">{t("table.plainTextHint")}</div>
       ) : (
-        <table className="table-editor-table">
+        <table className="te-table">
           <thead>
             <tr>
-              <th className="w-[40px]">#</th>
+              <th className="te-th-idx">#</th>
               <th>{t("table.colVideo")}</th>
-              <th className="w-[80px]">ID</th>
+              <th className="te-th-id">ID</th>
               {templateRegions.map((tr) => {
                 const excelCol = excelMapping.columns?.[tr.id];
                 const colFocused = focused.regionId === tr.id;
@@ -237,7 +249,9 @@ export default function TableEditorGrid({
                     key={tr.id}
                     className={colFocused ? "is-col-focused" : undefined}
                     onClick={() => setFocused((f) => ({ ...f, regionId: tr.id }))}
-                    title={excelCol ? t("table.excelCol", { col: excelCol }) : t("table.noExcelCol")}
+                    title={
+                      excelCol ? t("table.excelCol", { col: excelCol }) : t("table.noExcelCol")
+                    }
                     style={
                       colFocused
                         ? {
@@ -247,8 +261,8 @@ export default function TableEditorGrid({
                         : undefined
                     }
                   >
-                    <div>{tr.label}</div>
-                    {excelCol && <span className="table-editor-th-excel">→ {excelCol}</span>}
+                    <span className="te-th-label">{tr.label}</span>
+                    {excelCol ? <span className="te-th-excel">{excelCol}</span> : null}
                   </th>
                 );
               })}

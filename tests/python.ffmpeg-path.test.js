@@ -291,6 +291,69 @@ print(processor.build_drawtext({
     expect(filter).toContain("text='A\u200a\u200aB\u200a\u200aC'");
   });
 
+  it("emits native spacing for negative letter_spacing when supported", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+processor._DRAWTEXT_OPTIONS_CACHE = {"spacing"}
+processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
+print(processor.build_drawtext({
+    "mode": "text",
+    "text": "ABC",
+    "font_family": "Arial",
+    "letter_spacing": -3,
+    "region": {"x": 10, "y": 20, "w": 200, "h": 50},
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const filter = r.stdout.trim();
+    expect(filter).toContain("spacing=-3");
+    expect(filter).toContain("text='ABC'");
+  });
+
+  it("falls back to per-glyph drawtext for negative letter_spacing without native spacing", () => {
+    const code = `
+import processor
+processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+processor._DRAWTEXT_OPTIONS_CACHE = set()
+processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
+print(processor.build_drawtext({
+    "mode": "text",
+    "text": "ABC",
+    "font_family": "Arial",
+    "font_size": 32,
+    "letter_spacing": -2,
+    "region": {"x": 10, "y": 20, "w": 200, "h": 50},
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const filter = r.stdout.trim();
+    expect(filter).not.toContain("spacing=");
+    // One drawtext per glyph cluster, comma-chained
+    expect(filter).toContain("text='A'");
+    expect(filter).toContain("text='B'");
+    expect(filter).toContain("text='C'");
+    expect((filter.match(/drawtext=/g) || []).length).toBe(3);
+    // Layout box is region + box pad (default 4) → origin x=14,y=24.
+    // Advance ≈ 0.55*32 + (-2) ≈ 15.6 → second glyph near x=30.
+    expect(filter).toMatch(/x=14/);
+    expect(filter).toMatch(/x=30/);
+  });
+
   it("emits drawtext shadow options for text shadow styles", () => {
     const code = `
 import processor

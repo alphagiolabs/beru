@@ -1,4 +1,4 @@
-import { Play, Pause, SkipBack, SkipForward, FileVideo } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
 import TextOverlay from "../TextOverlay";
 import { regionToScreen, fmtTime } from "../../utils/video-utils";
 import { useT } from "../../i18n/useT";
@@ -21,17 +21,14 @@ export default function TableEditorPreview({
   const seekFrac = duration > 0 ? currentTime / duration : 0;
 
   return (
-    <div className="table-editor-preview">
-      <div className="table-editor-section-label">{t("table.preview")}</div>
-
-      <div className="table-editor-stage">
+    <div className="te-preview">
+      <div className="te-stage">
         {focusedVideo ? (
-          <div className="relative inline-block" style={{ maxWidth: "100%", maxHeight: "100%" }}>
+          <div className="te-stage-frame">
             <video
               ref={videoRef}
               src={focusedVideo.src || null}
-              className="max-h-full max-w-full block object-contain"
-              style={{ maxHeight: "calc(90vh - 380px)" }}
+              className="te-video"
               preload="metadata"
             />
             {templateRegions.map((tr) => {
@@ -48,19 +45,21 @@ export default function TableEditorPreview({
                   style={isCellFocused && focusedOp ? focusedOp : payload.style}
                   isFocused={isCellFocused}
                   showOutline
-                  label={isCellFocused && !payload.text ? `${tr.label} (${t("table.empty")})` : undefined}
+                  label={
+                    isCellFocused && !payload.text ? `${tr.label} (${t("table.empty")})` : undefined
+                  }
                   dimmed={!isCellFocused}
                 />
               );
             })}
           </div>
         ) : (
-          <div className="table-editor-stage-empty">{t("table.noVideo")}</div>
+          <div className="te-stage-empty">{t("table.noVideo")}</div>
         )}
       </div>
 
       {focusedVideo && (
-        <div className="table-editor-transport">
+        <div className="te-transport">
           <input
             type="range"
             min={0}
@@ -81,16 +80,14 @@ export default function TableEditorPreview({
               setCurrentTime(frac * duration);
               seekTo(frac);
             }}
-            className="table-editor-scrub"
+            className="te-scrub"
             style={{ "--te-seek": `${seekFrac * 100}%` }}
           />
-
-          <div className="table-editor-transport-row">
+          <div className="te-transport-row">
             <button
               type="button"
-              className="table-editor-transport-btn"
+              className="te-icon-btn te-icon-btn--sm"
               aria-label={t("table.seekStart")}
-              title={t("table.seekStart")}
               onClick={() => {
                 const v = videoRef.current;
                 if (v) v.currentTime = 0;
@@ -100,9 +97,8 @@ export default function TableEditorPreview({
             </button>
             <button
               type="button"
-              className="table-editor-transport-btn table-editor-transport-btn--primary"
+              className="te-icon-btn te-icon-btn--sm te-icon-btn--accent"
               aria-label={playing ? t("table.pause") : t("table.play")}
-              title={playing ? t("table.pause") : t("table.play")}
               onClick={() => {
                 const v = videoRef.current;
                 if (!v) return;
@@ -114,9 +110,8 @@ export default function TableEditorPreview({
             </button>
             <button
               type="button"
-              className="table-editor-transport-btn"
+              className="te-icon-btn te-icon-btn--sm"
               aria-label={t("table.seekEnd")}
-              title={t("table.seekEnd")}
               onClick={() => {
                 const v = videoRef.current;
                 if (v && duration > 0) v.currentTime = duration;
@@ -124,22 +119,15 @@ export default function TableEditorPreview({
             >
               <SkipForward size={13} />
             </button>
-
-            <span className="table-editor-time">
-              {fmtTime(currentTime)} / {fmtTime(duration)}
+            <span className="te-time">
+              {fmtTime(currentTime)}
+              <span className="te-time-sep">/</span>
+              {fmtTime(duration)}
             </span>
-
-            <div className="table-editor-file-meta">
-              <FileVideo size={11} aria-hidden />
-              <span className="table-editor-file-name" title={focusedVideo.filename}>
-                {focusedVideo.filename}
-              </span>
-              {focusedVideo.width > 0 && (
-                <span className="table-editor-time">
-                  {focusedVideo.width}×{focusedVideo.height}
-                </span>
-              )}
-            </div>
+            <span className="te-file" title={focusedVideo.filename}>
+              {focusedVideo.filename}
+              {focusedVideo.width > 0 ? ` · ${focusedVideo.width}×${focusedVideo.height}` : ""}
+            </span>
           </div>
         </div>
       )}

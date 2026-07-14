@@ -1,15 +1,21 @@
-import { Bold, Italic, Trash2, Plus, AlignLeft, AlignCenter, AlignRight } from "lucide-react";
+import { useState } from "react";
+import {
+  Bold,
+  Italic,
+  Trash2,
+  Plus,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  ChevronDown,
+} from "lucide-react";
 import { clampRegionToVideo } from "../../utils/video-utils";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS } from "../../utils/types";
 import { normalizeColor } from "../../utils/color-utils";
 import TextLayoutControls from "../TextLayoutControls";
-import {
-  InspectorGroup,
-  ToggleSwitch,
-  SegmentedToolbar,
-  FontFamilyPicker,
-} from "../inspector";
+import { ToggleSwitch } from "../inspector";
 import { useT } from "../../i18n/useT";
+import useOverlayScroll from "./useOverlayScroll";
 
 const COLOR_PRESETS = [
   "#ffffff",
@@ -35,9 +41,24 @@ const POS_PRESETS = [
 ];
 
 function AlignIcon({ value }) {
-  if (value === "center") return <AlignCenter size={12} />;
-  if (value === "right") return <AlignRight size={12} />;
-  return <AlignLeft size={12} />;
+  if (value === "center") return <AlignCenter size={13} strokeWidth={2} />;
+  if (value === "right") return <AlignRight size={13} strokeWidth={2} />;
+  return <AlignLeft size={13} strokeWidth={2} />;
+}
+
+function ToolBtn({ active, disabled, onClick, title, children }) {
+  return (
+    <button
+      type="button"
+      className={`te-tool${active ? " is-on" : ""}`}
+      disabled={disabled}
+      onClick={onClick}
+      title={title}
+      aria-pressed={!!active}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function TableEditorFocusPanel({
@@ -52,619 +73,517 @@ export default function TableEditorFocusPanel({
   deleteFocusedOp,
 }) {
   const t = useT();
-  const disabled = !focusedOp;
+  const bindScroll = useOverlayScroll();
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const breadcrumb = focusedVideo
+    ? `V${focused.videoIdx + 1}/${queueLength}${focusedRegion ? ` · ${focusedRegion.label}` : ""}`
+    : "";
 
   return (
-    <aside className="table-editor-focus">
-      <div className="table-editor-focus-header">
-        <div className="table-editor-section-label">{t("table.editRow")}</div>
-        {focusedVideo && (
-          <span className="table-editor-focus-index">
-            V{focused.videoIdx + 1}/{queueLength}
-            {focusedRegion ? ` · ${focusedRegion.label}` : ""}
-          </span>
-        )}
+    <aside className="te-side">
+      <div className="te-side-head">
+        <span className="te-side-title">{t("table.editRow")}</span>
+        {breadcrumb ? <span className="te-side-meta">{breadcrumb}</span> : null}
       </div>
 
-      <div className="table-editor-focus-body">
+      <div ref={bindScroll} className="te-side-body table-editor-scroll">
         {!hasRegions ? (
-          <div className="table-editor-empty">{t("table.noRegions")}</div>
+          <div className="te-blank">
+            <p>{t("table.noRegions")}</p>
+          </div>
         ) : !focusedRegion ? (
-          <div className="table-editor-empty">{t("table.selectCell")}</div>
+          <div className="te-blank">
+            <p>{t("table.selectCell")}</p>
+          </div>
+        ) : !focusedOp ? (
+          <div className="te-blank te-blank--action">
+            <p className="te-blank-kicker">{t("table.cellEmpty")}</p>
+            <p className="te-blank-copy">{t("table.emptyHint")}</p>
+            <button type="button" className="te-primary" onClick={createFocusedOp}>
+              <Plus size={14} strokeWidth={2.25} />
+              {t("table.create")}
+            </button>
+          </div>
         ) : (
-          <>
-            <div
-              className={`table-editor-status${focusedOp ? " table-editor-status--active" : ""}`}
-            >
-              <span className="table-editor-status-label">
-                <span className="table-editor-status-dot" aria-hidden />
-                {focusedOp ? t("table.opActive") : t("table.cellEmpty")}
-              </span>
-              {!focusedOp && (
-                <button
-                  type="button"
-                  onClick={createFocusedOp}
-                  className="cap-btn-primary !text-[10px] !py-0.5 !px-2"
+          <div className="te-form">
+            <textarea
+              value={focusedOp.text ?? ""}
+              onChange={(e) => updateFocused({ text: e.target.value })}
+              placeholder={t("table.textPlaceholder")}
+              rows={3}
+              className="te-textarea"
+              style={{ fontFamily: `"${focusedOp.fontFamily || "Arial"}", sans-serif` }}
+            />
+
+            <div className="te-toolbar" role="toolbar" aria-label={t("table.typography")}>
+              <div className="te-seg" role="radiogroup" aria-label={t("table.alignment")}>
+                {TEXT_ALIGNS.map((a) => (
+                  <ToolBtn
+                    key={a.value}
+                    active={(focusedOp.textAlign || "left") === a.value}
+                    onClick={() => updateFocused({ textAlign: a.value })}
+                    title={a.value}
+                  >
+                    <AlignIcon value={a.value} />
+                  </ToolBtn>
+                ))}
+              </div>
+              <div className="te-seg">
+                <ToolBtn
+                  active={!!focusedOp.bold}
+                  onClick={() => updateFocused({ bold: !focusedOp.bold })}
+                  title="Bold"
                 >
-                  <Plus size={10} /> {t("table.create")}
-                </button>
-              )}
+                  <Bold size={13} strokeWidth={2.25} />
+                </ToolBtn>
+                <ToolBtn
+                  active={!!focusedOp.italic}
+                  onClick={() => updateFocused({ italic: !focusedOp.italic })}
+                  title="Italic"
+                >
+                  <Italic size={13} strokeWidth={2.25} />
+                </ToolBtn>
+              </div>
             </div>
 
-            <InspectorGroup title={t("table.content")}>
-              <label className="table-editor-field">
-                <textarea
-                  value={focusedOp?.text ?? ""}
-                  onChange={(e) => updateFocused({ text: e.target.value })}
-                  disabled={disabled}
-                  placeholder={t("table.textPlaceholder")}
-                  rows={2}
-                  className="cap-input text-[11px] resize-y"
-                  style={{ fontFamily: `"${focusedOp?.fontFamily || "Arial"}", sans-serif` }}
-                />
+            <div className="te-row">
+              <label className="te-field te-field--grow">
+                <span className="te-label">{t("table.font")}</span>
+                <select
+                  className="te-select"
+                  value={focusedOp.fontFamily || "Arial"}
+                  onChange={(e) => updateFocused({ fontFamily: e.target.value })}
+                >
+                  {FONT_FAMILIES.map((f) => (
+                    <option key={f} value={f}>
+                      {f}
+                    </option>
+                  ))}
+                </select>
               </label>
-            </InspectorGroup>
-
-            <InspectorGroup title={t("table.alignment")}>
-              <SegmentedToolbar
-                ariaLabel={t("table.alignment")}
-                columns={3}
-                value={focusedOp?.textAlign || "left"}
-                disabled={disabled}
-                onChange={(value) => updateFocused({ textAlign: value })}
-                options={TEXT_ALIGNS.map((a) => ({
-                  value: a.value,
-                  title: a.value,
-                  icon: <AlignIcon value={a.value} />,
-                }))}
-              />
-              <div className="mt-2">
-                <TextLayoutControls
-                  values={{
-                    autoFit: focusedOp?.autoFit,
-                    lineHeight: focusedOp?.lineHeight,
-                    verticalAlign: focusedOp?.verticalAlign,
-                    textWrap: focusedOp?.textWrap,
-                    safeMargin: focusedOp?.safeMargin,
-                    truncate: focusedOp?.truncate,
+              <label className="te-field te-field--weight">
+                <span className="te-label">{t("table.weight")}</span>
+                <select
+                  className="te-select"
+                  value={focusedOp.fontWeight ?? 400}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    updateFocused({ fontWeight: value, bold: value >= 700 });
                   }}
-                  onPatch={updateFocused}
-                  disabled={disabled}
-                />
-              </div>
-            </InspectorGroup>
+                >
+                  {FONT_WEIGHTS.map((w) => (
+                    <option key={w.value} value={w.value}>
+                      {w.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
-            <InspectorGroup title={t("table.typography")}>
-              <FontFamilyPicker
-                value={focusedOp?.fontFamily || "Arial"}
-                options={FONT_FAMILIES}
-                onChange={(fontFamily) => updateFocused({ fontFamily })}
-                disabled={disabled}
-                label={t("table.font")}
-                ariaLabel={t("table.font")}
+            <div className="te-slider">
+              <span className="te-label">{t("table.size")}</span>
+              <input
+                type="range"
+                min={8}
+                max={200}
+                value={focusedOp.fontSize ?? 32}
+                onChange={(e) => updateFocused({ fontSize: Number(e.target.value) })}
               />
-              <div className="mt-2">
-                <SegmentedToolbar
-                  ariaLabel={t("table.weight")}
-                  columns={4}
-                  value={focusedOp?.fontWeight ?? 400}
-                  disabled={disabled}
-                  onChange={(value) => updateFocused({ fontWeight: value, bold: value >= 700 })}
-                  options={FONT_WEIGHTS.map((w) => ({
-                    value: w.value,
-                    title: w.label,
-                    label: "Aa",
-                    style: { fontWeight: w.value },
-                  }))}
-                />
-              </div>
-              <div className="table-editor-slider-row mt-2">
-                <span className="table-editor-slider-key">{t("table.size")}</span>
-                <input
-                  type="range"
-                  min={8}
-                  max={200}
-                  value={focusedOp?.fontSize ?? 32}
-                  onChange={(e) => updateFocused({ fontSize: Number(e.target.value) })}
-                  disabled={disabled}
-                />
-                <input
-                  type="number"
-                  value={focusedOp?.fontSize ?? 32}
-                  onChange={(e) => updateFocused({ fontSize: Number(e.target.value) })}
-                  disabled={disabled}
-                  min={8}
-                  max={400}
-                  className="cap-input table-editor-num"
-                />
-              </div>
-              <div className="table-editor-slider-row">
-                <span className="table-editor-slider-key">{t("table.tracking")}</span>
-                <input
-                  type="range"
-                  min={-5}
-                  max={30}
-                  value={focusedOp?.letterSpacing ?? 0}
-                  onChange={(e) => updateFocused({ letterSpacing: Number(e.target.value) })}
-                  disabled={disabled}
-                />
-                <input
-                  type="number"
-                  value={focusedOp?.letterSpacing ?? 0}
-                  onChange={(e) => updateFocused({ letterSpacing: Number(e.target.value) })}
-                  disabled={disabled}
-                  min={-20}
-                  max={60}
-                  step={0.5}
-                  className="cap-input table-editor-num"
-                />
-              </div>
-            </InspectorGroup>
+              <input
+                type="number"
+                className="te-num"
+                min={8}
+                max={400}
+                value={focusedOp.fontSize ?? 32}
+                onChange={(e) => updateFocused({ fontSize: Number(e.target.value) })}
+              />
+            </div>
 
-            <InspectorGroup title={t("table.color")}>
-              <div className="table-editor-color-row">
-                <div className="table-editor-color-inputs">
-                  <input
-                    type="color"
-                    value={normalizeColor(focusedOp?.fontColor) || "#ffffff"}
-                    onChange={(e) => updateFocused({ fontColor: e.target.value })}
-                    disabled={disabled}
-                    className="table-editor-swatch"
-                    aria-label={t("table.color")}
-                  />
-                  <input
-                    type="text"
-                    value={focusedOp?.fontColor || "#ffffff"}
-                    onChange={(e) => updateFocused({ fontColor: e.target.value })}
-                    disabled={disabled}
-                    className="cap-input flex-1 font-mono text-[10px]"
-                  />
-                </div>
-                <div className="table-editor-pct">
+            <div className="te-slider">
+              <span className="te-label">{t("table.tracking")}</span>
+              <input
+                type="range"
+                min={-5}
+                max={30}
+                value={focusedOp.letterSpacing ?? 0}
+                onChange={(e) => updateFocused({ letterSpacing: Number(e.target.value) })}
+              />
+              <input
+                type="number"
+                className="te-num"
+                min={-20}
+                max={80}
+                step={0.5}
+                value={focusedOp.letterSpacing ?? 0}
+                onChange={(e) => updateFocused({ letterSpacing: Number(e.target.value) })}
+              />
+            </div>
+
+            <div className="te-color-block">
+              <div className="te-color-main">
+                <input
+                  type="color"
+                  className="te-swatch"
+                  value={normalizeColor(focusedOp.fontColor) || "#ffffff"}
+                  onChange={(e) => updateFocused({ fontColor: e.target.value })}
+                  aria-label={t("table.color")}
+                />
+                <input
+                  type="text"
+                  className="te-hex"
+                  value={focusedOp.fontColor || "#ffffff"}
+                  onChange={(e) => updateFocused({ fontColor: e.target.value })}
+                />
+                <div className="te-opacity">
                   <input
                     type="number"
-                    value={Math.round((focusedOp?.textOpacity ?? 1) * 100)}
+                    className="te-num"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={Math.round((focusedOp.textOpacity ?? 1) * 100)}
                     onChange={(e) =>
                       updateFocused({
                         textOpacity: Math.max(0, Math.min(100, Number(e.target.value))) / 100,
                       })
                     }
-                    disabled={disabled}
-                    min={0}
-                    max={100}
-                    step={5}
-                    className="cap-input table-editor-num"
                   />
-                  %
+                  <span>%</span>
                 </div>
               </div>
-              <div className="table-editor-slider-row mt-1.5">
-                <span className="table-editor-slider-key">{t("table.opacity")}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={focusedOp?.textOpacity ?? 1}
-                  onChange={(e) => updateFocused({ textOpacity: parseFloat(e.target.value) })}
-                  disabled={disabled}
-                />
-              </div>
-              <div className="table-editor-presets mt-1.5">
+              <div className="te-presets">
                 {COLOR_PRESETS.map((c) => {
-                  const active = (focusedOp?.fontColor || "").toLowerCase() === c;
+                  const active = (focusedOp.fontColor || "").toLowerCase() === c;
                   return (
                     <button
                       key={c}
                       type="button"
-                      onClick={() => focusedOp && updateFocused({ fontColor: c })}
-                      disabled={disabled}
-                      className={`table-editor-preset${active ? " is-active" : ""}`}
+                      className={`te-preset${active ? " is-on" : ""}`}
                       style={{ background: c }}
                       title={c}
                       aria-label={c}
+                      onClick={() => updateFocused({ fontColor: c })}
                     />
                   );
                 })}
               </div>
-            </InspectorGroup>
+            </div>
 
-            <InspectorGroup
-              title={t("table.background")}
-              collapsible
-              forceOpen={focusedOp?.bgEnabled !== false}
-              collapseWhenOff
-              hideChevron
-              headerAccessory={
-                <ToggleSwitch
-                  checked={focusedOp?.bgEnabled !== false}
-                  onChange={(on) => updateFocused({ bgEnabled: on })}
-                  disabled={disabled}
-                  ariaLabel={t("table.background")}
-                />
-              }
+            <button
+              type="button"
+              className={`te-more-toggle${moreOpen ? " is-open" : ""}`}
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((v) => !v)}
             >
-              {focusedOp?.bgEnabled !== false && focusedOp && (
-                <>
-                  <div className="table-editor-color-row">
-                    <div className="table-editor-color-inputs">
-                      <input
-                        type="color"
-                        value={normalizeColor(focusedOp.bgColor) || "#000000"}
-                        onChange={(e) => updateFocused({ bgColor: e.target.value })}
-                        className="table-editor-swatch"
-                        aria-label={t("table.background")}
-                      />
-                      <input
-                        type="text"
-                        value={focusedOp.bgColor || "#000000"}
-                        onChange={(e) => updateFocused({ bgColor: e.target.value })}
-                        className="cap-input flex-1 font-mono text-[10px]"
-                      />
-                    </div>
-                    <div className="table-editor-pct">
-                      <input
-                        type="number"
-                        value={Math.round((focusedOp.bgOpacity ?? 0.65) * 100)}
-                        onChange={(e) =>
-                          updateFocused({
-                            bgOpacity: Math.max(0, Math.min(100, Number(e.target.value))) / 100,
-                          })
-                        }
-                        min={0}
-                        max={100}
-                        step={5}
-                        className="cap-input table-editor-num"
-                      />
-                      %
-                    </div>
-                  </div>
-                  <div className="table-editor-slider-row mt-1.5">
-                    <span className="table-editor-slider-key">{t("table.opacity")}</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={focusedOp.bgOpacity ?? 0.65}
-                      onChange={(e) => updateFocused({ bgOpacity: parseFloat(e.target.value) })}
-                    />
-                  </div>
-                  <div className="table-editor-slider-row">
-                    <span className="table-editor-slider-key">{t("table.padding")}</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={40}
-                      value={focusedOp.boxBorderWidth ?? 4}
-                      onChange={(e) => updateFocused({ boxBorderWidth: Number(e.target.value) })}
-                    />
-                    <input
-                      type="number"
-                      value={focusedOp.boxBorderWidth ?? 4}
-                      onChange={(e) => updateFocused({ boxBorderWidth: Number(e.target.value) })}
-                      min={0}
-                      max={80}
-                      className="cap-input table-editor-num"
-                    />
-                  </div>
-                </>
-              )}
-            </InspectorGroup>
+              <span>{t("table.moreOptions")}</span>
+              <ChevronDown size={14} strokeWidth={2} />
+            </button>
 
-            <InspectorGroup title={t("table.stroke")} collapsible defaultOpen={false}>
-              <div className="flex items-center justify-end gap-1 mb-2">
-                <button
-                  type="button"
-                  onClick={() => focusedOp && updateFocused({ bold: !focusedOp.bold })}
-                  disabled={disabled}
-                  className="cap-btn-secondary !px-1.5 !py-0.5"
-                  style={
-                    focusedOp?.bold
-                      ? {
-                          background: "var(--accent)",
-                          color: "var(--bg-app)",
-                          borderColor: "var(--accent)",
-                        }
-                      : undefined
-                  }
-                  title="Bold"
-                  aria-pressed={!!focusedOp?.bold}
-                >
-                  <Bold size={10} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => focusedOp && updateFocused({ italic: !focusedOp.italic })}
-                  disabled={disabled}
-                  className="cap-btn-secondary !px-1.5 !py-0.5"
-                  style={
-                    focusedOp?.italic
-                      ? {
-                          background: "var(--accent)",
-                          color: "var(--bg-app)",
-                          borderColor: "var(--accent)",
-                        }
-                      : undefined
-                  }
-                  title="Italic"
-                  aria-pressed={!!focusedOp?.italic}
-                >
-                  <Italic size={10} />
-                </button>
-              </div>
-              <div className="grid grid-cols-[auto_1fr] gap-1.5">
-                <input
-                  type="number"
-                  value={focusedOp?.borderWidth ?? 0}
-                  onChange={(e) => updateFocused({ borderWidth: Number(e.target.value) })}
-                  disabled={disabled}
-                  min={0}
-                  max={20}
-                  className="cap-input table-editor-num"
-                  aria-label={t("table.strokeWidth")}
-                />
-                <div className="table-editor-color-inputs">
-                  <input
-                    type="color"
-                    value={normalizeColor(focusedOp?.borderColor) || "#000000"}
-                    onChange={(e) => updateFocused({ borderColor: e.target.value })}
-                    disabled={disabled}
-                    className="table-editor-swatch"
-                    aria-label={t("table.strokeColor")}
-                  />
-                  <input
-                    type="text"
-                    value={focusedOp?.borderColor || "#000000"}
-                    onChange={(e) => updateFocused({ borderColor: e.target.value })}
-                    disabled={disabled}
-                    className="cap-input flex-1 font-mono text-[10px]"
+            {moreOpen ? (
+              <div className="te-more">
+                <div className="te-more-section">
+                  <span className="te-label">{t("table.layout")}</span>
+                  <TextLayoutControls
+                    values={{
+                      autoFit: focusedOp.autoFit,
+                      lineHeight: focusedOp.lineHeight,
+                      verticalAlign: focusedOp.verticalAlign,
+                      textWrap: focusedOp.textWrap,
+                      safeMargin: focusedOp.safeMargin,
+                      truncate: focusedOp.truncate,
+                    }}
+                    onPatch={updateFocused}
                   />
                 </div>
-              </div>
-            </InspectorGroup>
 
-            <InspectorGroup
-              title={t("table.shadow")}
-              collapsible
-              forceOpen={!!focusedOp?.textShadowEnabled}
-              collapseWhenOff
-              hideChevron
-              headerAccessory={
-                <ToggleSwitch
-                  checked={!!focusedOp?.textShadowEnabled}
-                  onChange={(on) => updateFocused({ textShadowEnabled: on })}
-                  disabled={disabled}
-                  ariaLabel={t("table.shadow")}
-                />
-              }
-            >
-              {focusedOp?.textShadowEnabled && (
-                <div className="flex flex-col gap-1.5">
-                  <div className="table-editor-color-inputs">
+                <div className="te-more-section">
+                  <div className="te-switch-row">
+                    <span className="te-label !mb-0">{t("table.background")}</span>
+                    <ToggleSwitch
+                      checked={focusedOp.bgEnabled !== false}
+                      onChange={(on) => updateFocused({ bgEnabled: on })}
+                      ariaLabel={t("table.background")}
+                    />
+                  </div>
+                  {focusedOp.bgEnabled !== false && (
+                    <div className="te-more-stack">
+                      <div className="te-color-main">
+                        <input
+                          type="color"
+                          className="te-swatch"
+                          value={normalizeColor(focusedOp.bgColor) || "#000000"}
+                          onChange={(e) => updateFocused({ bgColor: e.target.value })}
+                        />
+                        <input
+                          type="text"
+                          className="te-hex"
+                          value={focusedOp.bgColor || "#000000"}
+                          onChange={(e) => updateFocused({ bgColor: e.target.value })}
+                        />
+                      </div>
+                      <div className="te-slider">
+                        <span className="te-label">{t("table.opacity")}</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={focusedOp.bgOpacity ?? 0.65}
+                          onChange={(e) => updateFocused({ bgOpacity: parseFloat(e.target.value) })}
+                        />
+                      </div>
+                      <div className="te-slider">
+                        <span className="te-label">{t("table.padding")}</span>
+                        <input
+                          type="range"
+                          min={0}
+                          max={40}
+                          value={focusedOp.boxBorderWidth ?? 4}
+                          onChange={(e) =>
+                            updateFocused({ boxBorderWidth: Number(e.target.value) })
+                          }
+                        />
+                        <input
+                          type="number"
+                          className="te-num"
+                          min={0}
+                          max={80}
+                          value={focusedOp.boxBorderWidth ?? 4}
+                          onChange={(e) =>
+                            updateFocused({ boxBorderWidth: Number(e.target.value) })
+                          }
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="te-more-section">
+                  <span className="te-label">{t("table.stroke")}</span>
+                  <div className="te-color-main">
+                    <input
+                      type="number"
+                      className="te-num"
+                      min={0}
+                      max={20}
+                      value={focusedOp.borderWidth ?? 0}
+                      onChange={(e) => updateFocused({ borderWidth: Number(e.target.value) })}
+                      aria-label={t("table.strokeWidth")}
+                    />
                     <input
                       type="color"
-                      value={normalizeColor(focusedOp.textShadowColor) || "#000000"}
-                      onChange={(e) => updateFocused({ textShadowColor: e.target.value })}
-                      disabled={disabled}
-                      className="table-editor-swatch"
+                      className="te-swatch"
+                      value={normalizeColor(focusedOp.borderColor) || "#000000"}
+                      onChange={(e) => updateFocused({ borderColor: e.target.value })}
+                      aria-label={t("table.strokeColor")}
                     />
                     <input
                       type="text"
-                      value={focusedOp.textShadowColor || "#000000"}
-                      onChange={(e) => updateFocused({ textShadowColor: e.target.value })}
-                      disabled={disabled}
-                      className="cap-input flex-1 font-mono text-[10px]"
+                      className="te-hex"
+                      value={focusedOp.borderColor || "#000000"}
+                      onChange={(e) => updateFocused({ borderColor: e.target.value })}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <label className="table-editor-field">
-                      <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
-                        Offset X
-                      </span>
-                      <input
-                        type="number"
-                        value={focusedOp.textShadowOffsetX ?? 2}
-                        onChange={(e) =>
-                          updateFocused({ textShadowOffsetX: Number(e.target.value) })
-                        }
-                        disabled={disabled}
-                        min={-64}
-                        max={64}
-                        className="cap-input font-mono text-[10px] !py-0.5 text-center"
-                      />
-                    </label>
-                    <label className="table-editor-field">
-                      <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
-                        Offset Y
-                      </span>
-                      <input
-                        type="number"
-                        value={focusedOp.textShadowOffsetY ?? 2}
-                        onChange={(e) =>
-                          updateFocused({ textShadowOffsetY: Number(e.target.value) })
-                        }
-                        disabled={disabled}
-                        min={-64}
-                        max={64}
-                        className="cap-input font-mono text-[10px] !py-0.5 text-center"
-                      />
-                    </label>
-                  </div>
-                </div>
-              )}
-            </InspectorGroup>
-
-            {focusedOp?.region && (
-              <InspectorGroup title={t("table.position")} collapsible defaultOpen={false}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[9px] font-mono" style={{ color: "var(--text-dim)" }}>
-                    {Math.round(focusedOp.region.x * (focusedVideo?.width || 1))},
-                    {Math.round(focusedOp.region.y * (focusedVideo?.height || 1))}{" "}
-                    {Math.round(focusedOp.region.w * (focusedVideo?.width || 1))}×
-                    {Math.round(focusedOp.region.h * (focusedVideo?.height || 1))}
-                    {focusedVideo?.width > 0 && (
-                      <span style={{ color: "var(--text-muted, var(--text-dim))" }}>
-                        {" "}
-                        ({Math.round(focusedOp.region.x * 100)}%,{" "}
-                        {Math.round(focusedOp.region.y * 100)}%)
-                      </span>
-                    )}
-                  </span>
                 </div>
 
-                {focusedVideo?.width > 0 && focusedVideo?.height > 0 && (
-                  <div
-                    className="table-editor-mini-map"
-                    style={{
-                      aspectRatio: `${focusedVideo.width} / ${focusedVideo.height}`,
-                    }}
-                  >
-                    <div
-                      className="table-editor-mini-region"
-                      style={{
-                        left: `${focusedOp.region.x * 100}%`,
-                        top: `${focusedOp.region.y * 100}%`,
-                        width: `${focusedOp.region.w * 100}%`,
-                        height: `${focusedOp.region.h * 100}%`,
-                      }}
+                <div className="te-more-section">
+                  <div className="te-switch-row">
+                    <span className="te-label !mb-0">{t("table.shadow")}</span>
+                    <ToggleSwitch
+                      checked={!!focusedOp.textShadowEnabled}
+                      onChange={(on) => updateFocused({ textShadowEnabled: on })}
+                      ariaLabel={t("table.shadow")}
                     />
                   </div>
-                )}
-
-                <div className="table-editor-pos-grid">
-                  {POS_PRESETS.map((p) => {
-                    const w = focusedOp.region.w;
-                    const h = focusedOp.region.h;
-                    return (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() =>
-                          updateFocused({
-                            region: clampRegionToVideo({
-                              x: p.x,
-                              y: p.y,
-                              w,
-                              h,
-                            }),
-                          })
-                        }
-                        className="cap-btn-secondary !text-[10px] !px-0 !py-0.5"
-                        title={p.id}
-                      >
-                        {p.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  {[
-                    ["X", "x"],
-                    ["Y", "y"],
-                    ["W", "w"],
-                    ["H", "h"],
-                  ].map(([label, key]) => {
-                    const vw = focusedVideo?.width || 0;
-                    const vh = focusedVideo?.height || 0;
-                    const dimFor = (k) => (k === "x" || k === "w" ? vw : vh);
-                    const pxVal = Math.round((focusedOp.region[key] || 0) * (dimFor(key) || 1));
-                    return (
-                      <div key={key} className="table-editor-nudge-row">
-                        <span className="table-editor-nudge-key">{label}</span>
+                  {focusedOp.textShadowEnabled && (
+                    <div className="te-more-stack">
+                      <div className="te-color-main">
                         <input
-                          type="number"
-                          value={pxVal}
-                          onChange={(e) => {
-                            const px = Number(e.target.value);
-                            if (!Number.isFinite(px) || !dimFor(key)) return;
+                          type="color"
+                          className="te-swatch"
+                          value={normalizeColor(focusedOp.textShadowColor) || "#000000"}
+                          onChange={(e) => updateFocused({ textShadowColor: e.target.value })}
+                        />
+                        <input
+                          type="text"
+                          className="te-hex"
+                          value={focusedOp.textShadowColor || "#000000"}
+                          onChange={(e) => updateFocused({ textShadowColor: e.target.value })}
+                        />
+                      </div>
+                      <div className="te-row">
+                        <label className="te-field te-field--grow">
+                          <span className="te-label">X</span>
+                          <input
+                            type="number"
+                            className="te-select"
+                            min={-64}
+                            max={64}
+                            value={focusedOp.textShadowOffsetX ?? 2}
+                            onChange={(e) =>
+                              updateFocused({ textShadowOffsetX: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                        <label className="te-field te-field--grow">
+                          <span className="te-label">Y</span>
+                          <input
+                            type="number"
+                            className="te-select"
+                            min={-64}
+                            max={64}
+                            value={focusedOp.textShadowOffsetY ?? 2}
+                            onChange={(e) =>
+                              updateFocused({ textShadowOffsetY: Number(e.target.value) })
+                            }
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {focusedOp.region && (
+                  <div className="te-more-section">
+                    <span className="te-label">{t("table.position")}</span>
+                    {focusedVideo?.width > 0 && focusedVideo?.height > 0 && (
+                      <div
+                        className="te-minimap"
+                        style={{
+                          aspectRatio: `${focusedVideo.width} / ${focusedVideo.height}`,
+                        }}
+                      >
+                        <div
+                          className="te-minimap-region"
+                          style={{
+                            left: `${focusedOp.region.x * 100}%`,
+                            top: `${focusedOp.region.y * 100}%`,
+                            width: `${focusedOp.region.w * 100}%`,
+                            height: `${focusedOp.region.h * 100}%`,
+                          }}
+                        />
+                      </div>
+                    )}
+                    <div className="te-pos-grid">
+                      {POS_PRESETS.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          className="te-pos-btn"
+                          title={p.id}
+                          onClick={() =>
                             updateFocused({
                               region: clampRegionToVideo({
-                                ...focusedOp.region,
-                                [key]: px / dimFor(key),
+                                x: p.x,
+                                y: p.y,
+                                w: focusedOp.region.w,
+                                h: focusedOp.region.h,
                               }),
-                            });
-                          }}
-                          className="cap-input font-mono text-[10px] !py-0.5 flex-1 text-center"
-                        />
-                        <div className="table-editor-nudge-btns">
-                          {[-10, -1, 1, 10].map((step) => (
-                            <button
-                              key={step}
-                              type="button"
-                              onClick={() => {
-                                const d = dimFor(key) || 1;
+                            })
+                          }
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="te-more-stack">
+                      {[
+                        ["X", "x"],
+                        ["Y", "y"],
+                        ["W", "w"],
+                        ["H", "h"],
+                      ].map(([label, key]) => {
+                        const vw = focusedVideo?.width || 0;
+                        const vh = focusedVideo?.height || 0;
+                        const dim = key === "x" || key === "w" ? vw : vh;
+                        const pxVal = Math.round((focusedOp.region[key] || 0) * (dim || 1));
+                        return (
+                          <div key={key} className="te-nudge">
+                            <span className="te-nudge-key">{label}</span>
+                            <input
+                              type="number"
+                              className="te-num te-num--wide"
+                              value={pxVal}
+                              onChange={(e) => {
+                                const px = Number(e.target.value);
+                                if (!Number.isFinite(px) || !dim) return;
                                 updateFocused({
                                   region: clampRegionToVideo({
                                     ...focusedOp.region,
-                                    [key]: focusedOp.region[key] + step / d,
+                                    [key]: px / dim,
                                   }),
                                 });
                               }}
-                              className="cap-btn-secondary"
-                              title={`${step > 0 ? "+" : ""}${step}px`}
-                            >
-                              {step > 0 ? `+${step}` : step}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
+                            />
+                            <div className="te-nudge-btns">
+                              {[-10, -1, 1, 10].map((step) => (
+                                <button
+                                  key={step}
+                                  type="button"
+                                  className="te-nudge-btn"
+                                  onClick={() => {
+                                    const d = dim || 1;
+                                    updateFocused({
+                                      region: clampRegionToVideo({
+                                        ...focusedOp.region,
+                                        [key]: focusedOp.region[key] + step / d,
+                                      }),
+                                    });
+                                  }}
+                                >
+                                  {step > 0 ? `+${step}` : step}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="te-more-section">
+                  <span className="te-label">{t("table.time")}</span>
+                  <div className="te-row">
+                    <label className="te-field te-field--grow">
+                      <span className="te-label">{t("table.start")}</span>
+                      <input
+                        type="number"
+                        className="te-select"
+                        placeholder="0"
+                        value={focusedOp.startTime ?? ""}
+                        onChange={(e) =>
+                          updateFocused({
+                            startTime: e.target.value === "" ? null : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="te-field te-field--grow">
+                      <span className="te-label">{t("table.end")}</span>
+                      <input
+                        type="number"
+                        className="te-select"
+                        placeholder={t("table.endPlaceholder")}
+                        value={focusedOp.endTime ?? ""}
+                        onChange={(e) =>
+                          updateFocused({
+                            endTime: e.target.value === "" ? null : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
                 </div>
-              </InspectorGroup>
-            )}
-
-            <InspectorGroup title={t("table.time")} collapsible defaultOpen={false}>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="table-editor-field">
-                  <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
-                    {t("table.start")}
-                  </span>
-                  <input
-                    type="number"
-                    value={focusedOp?.startTime ?? ""}
-                    onChange={(e) =>
-                      updateFocused({
-                        startTime: e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                    disabled={disabled}
-                    placeholder="0"
-                    className="cap-input font-mono text-[11px]"
-                  />
-                </label>
-                <label className="table-editor-field">
-                  <span className="text-[9px]" style={{ color: "var(--text-dim)" }}>
-                    {t("table.end")}
-                  </span>
-                  <input
-                    type="number"
-                    value={focusedOp?.endTime ?? ""}
-                    onChange={(e) =>
-                      updateFocused({
-                        endTime: e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                    disabled={disabled}
-                    placeholder={t("table.endPlaceholder")}
-                    className="cap-input font-mono text-[11px]"
-                  />
-                </label>
               </div>
-            </InspectorGroup>
+            ) : null}
 
-            {focusedOp && (
-              <button
-                type="button"
-                onClick={deleteFocusedOp}
-                className="cap-btn-secondary table-editor-danger text-[11px]"
-              >
-                <Trash2 size={12} /> {t("table.deleteOp")}
-              </button>
-            )}
-          </>
+            <button type="button" className="te-danger" onClick={deleteFocusedOp}>
+              <Trash2 size={13} />
+              {t("table.deleteOp")}
+            </button>
+          </div>
         )}
       </div>
     </aside>

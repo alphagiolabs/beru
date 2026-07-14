@@ -64,6 +64,8 @@ export default function AppliedTextEditor({
             value={op.letterSpacing ?? 0}
             onChange={(e) => onPatch({ letterSpacing: Number(e.target.value) })}
             className="cap-input font-mono text-[11px]"
+            min={-20}
+            max={80}
             step={0.5}
           />
         </label>

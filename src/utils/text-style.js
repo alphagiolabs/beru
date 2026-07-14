@@ -1,6 +1,7 @@
 /** Shared text style shape for preview overlays, projects, batch jobs, and FFmpeg export. */
 
 import { clampNum } from "./clamp";
+import { LETTER_SPACING_MAX, LETTER_SPACING_MIN } from "./letter-spacing";
 
 const TEXT_STYLE_KEYS = [
   "fontSize",
@@ -112,7 +113,12 @@ export function normalizeTextStyle(style = {}, defaults = TEXT_STYLE_DEFAULTS) {
     fontColor: String(source.fontColor ?? defaults.fontColor).slice(0, 32),
     fontFamily: String(source.fontFamily ?? defaults.fontFamily).slice(0, 64),
     fontWeight: clampNum(source.fontWeight, 100, 900, defaults.fontWeight),
-    letterSpacing: clampNum(source.letterSpacing, 0, 80, defaults.letterSpacing),
+    letterSpacing: clampNum(
+      source.letterSpacing,
+      LETTER_SPACING_MIN,
+      LETTER_SPACING_MAX,
+      defaults.letterSpacing,
+    ),
     textAlign: ["left", "center", "right"].includes(source.textAlign)
       ? source.textAlign
       : defaults.textAlign,
