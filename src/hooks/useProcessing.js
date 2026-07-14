@@ -83,7 +83,20 @@ export default function useProcessing(api) {
       logFlushTimer = setTimeout(flushLogs, 50);
     };
 
+    /** Ignore terminal events from a superseded run (watchdog race, late close). */
+    const isStaleRunEvent = (msg) => {
+      const eventRunId = msg?.runId;
+      if (eventRunId == null || eventRunId === "") return false;
+      const active = useEditorStore.getState().activeProcessRunId;
+      // No active id yet (legacy start path) — accept event.
+      if (!active) return false;
+      return eventRunId !== active;
+    };
+
     const unsubs = [
+      bind(api.onRunStarted, (msg) => {
+        if (msg?.runId) useEditorStore.getState().setActiveProcessRunId(msg.runId);
+      }),
       bind(api.onProgress, (msg) => {
         useEditorStore.getState().updateProcessingProgress(msg);
       }),
@@ -108,6 +121,7 @@ export default function useProcessing(api) {
         useEditorStore.getState().markJobCancelled(msg);
       }),
       bind(api.onFinished, (msg) => {
+        if (isStaleRunEvent(msg)) return;
         cancelJobProgressFlush();
         flushJobProgress();
         const state = useEditorStore.getState();
@@ -126,6 +140,9 @@ export default function useProcessing(api) {
         }
       }),
       bind(api.onError, (msg) => {
+        // Normalize string legacy payloads and object { error, runId }.
+        const payload = typeof msg === "string" ? { error: msg } : msg || {};
+        if (isStaleRunEvent(payload)) return;
         pendingJobProgress.clear();
         cancelJobProgressFlush();
         const state = useEditorStore.getState();
@@ -133,8 +150,8 @@ export default function useProcessing(api) {
         // and reset in-flight rows so the UI is not stuck in "processing".
         state.finalizeActiveExecution();
         state.abortActiveProcessing();
-        console.error("[beru] Processing error:", msg);
-        state.showToast({ kind: "err", text: processingErrorText(msg) });
+        console.error("[beru] Processing error:", payload.error || msg);
+        state.showToast({ kind: "err", text: processingErrorText(payload.error || msg) });
       }),
       bind(api.onLog, (msg) => {
         if (logBatchEnabled) {

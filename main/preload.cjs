@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("api", {
   getVideoInfo: (path) => ipcRenderer.invoke("fs:getVideoInfo", path),
   getVideoInfoBatch: (paths) => ipcRenderer.invoke("fs:getVideoInfoBatch", paths),
   readExcel: (path) => ipcRenderer.invoke("fs:readExcel", path),
+  saveExcelDialog: (defaultName) => ipcRenderer.invoke("dialog:saveExcel", defaultName),
+  writeExcel: (path, base64Data) => ipcRenderer.invoke("fs:writeExcel", path, base64Data),
   startProcessing: (jobs) => ipcRenderer.invoke("process:start", jobs),
   cancelProcessing: () => ipcRenderer.invoke("process:cancel"),
   exportProcessingLogs: (text) => ipcRenderer.invoke("process:exportLogs", text),
@@ -104,6 +106,11 @@ contextBridge.exposeInMainWorld("api", {
     const handler = (_e, data) => cb(data);
     ipcRenderer.on("process:finished", handler);
     return () => ipcRenderer.removeListener("process:finished", handler);
+  },
+  onRunStarted: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on("process:runStarted", handler);
+    return () => ipcRenderer.removeListener("process:runStarted", handler);
   },
   onError: (cb) => {
     const handler = (_e, data) => cb(data);

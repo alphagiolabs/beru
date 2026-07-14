@@ -1,10 +1,9 @@
-import { useEffect, Suspense } from "react";
+import { useEffect, Suspense, lazy } from "react";
 import { Loader2 } from "lucide-react";
 import App from "./App";
 import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConfirmDialog from "./components/ConfirmDialog";
-import SettingsModal from "./components/SettingsModal";
 import AppToast from "./components/AppToast";
 import UpdatePrompt from "./components/UpdatePrompt";
 import useUpdater from "./hooks/useUpdater";
@@ -12,6 +11,8 @@ import useEditorStore from "./stores/useEditorStore";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import { useT } from "./i18n/useT";
 import { DesktopPet, PetPaletteModal, usePetKeyboard } from "./features/pets";
+
+const SettingsModal = lazy(() => import("./components/SettingsModal"));
 
 const api = window.api;
 
@@ -67,8 +68,8 @@ export default function BeruRoot() {
       <UpdatePrompt />
       <AppToast />
       <ConfirmDialog />
-      <SettingsModal />
       <Suspense fallback={null}>
+        <SettingsModal />
         <DesktopPet />
         <PetPaletteModal />
       </Suspense>

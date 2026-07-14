@@ -10,6 +10,7 @@ globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.ResizeObserver = class {
   observe() {}
+  unobserve() {}
   disconnect() {}
 };
 if (globalThis.HTMLCanvasElement) {

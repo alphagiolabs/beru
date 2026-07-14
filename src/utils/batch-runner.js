@@ -39,6 +39,13 @@ export function validateBatchReady({ queue, templateRegions = [], getCellText })
  * Start a batch processing run.
  * @param {{ api: object, jobs: Array, queue: Array, hooks: object }} args
  */
+function isAlreadyRunningFailure(result) {
+  if (!result || typeof result !== "object") return false;
+  if (result.code === "already_processing") return true;
+  const err = result.error || "";
+  return typeof err === "string" && /proceso en ejecución/i.test(err);
+}
+
 export async function runBatch({ api, jobs, queue, hooks }) {
   if (!api?.startProcessing) {
     return { ok: false, code: "api_unavailable" };
@@ -65,6 +72,14 @@ export async function runBatch({ api, jobs, queue, hooks }) {
   try {
     const result = await api.startProcessing(createJobManifest(jobs));
     if (!result?.success) {
+      // Another run owns the lock — do not tear down its UI/history.
+      if (isAlreadyRunningFailure(result)) {
+        return {
+          ok: false,
+          error: result.error || "Ya hay un proceso en ejecución",
+          code: result.code ?? "already_processing",
+        };
+      }
       return failStart(result?.error || "startProcessing failed", result?.code ?? null);
     }
     return { ok: true };
@@ -94,19 +109,34 @@ export async function runSingle({ api, job, videoIdx, queue, isProcessing = fals
   hooks.applyPatch?.(createSingleStartPatch({ queue, videoIdx }));
 
   let startError = null;
+  let ok = false;
   try {
     const result = await api.startProcessing(createJobManifest([job]));
-    const itemError = hooks.getQueue?.()?.[videoIdx]?.error;
+    const liveItem = hooks.getQueue?.()?.[videoIdx];
+    const itemError = liveItem?.error;
     if (!result?.success) {
       startError = result?.error || itemError || "startProcessing failed";
+      ok = false;
+    } else if (result?.cancelled) {
+      startError = result?.error || "Cancelled";
+      ok = false;
+    } else if (liveItem?.status === "error") {
+      // Process exit 0 but job failed via NDJSON — do not report success.
+      startError = itemError || "Procesamiento fallido";
+      ok = false;
+    } else {
+      // success + non-error row (done, or still processing/idle if IPC mock
+      // did not markJobDone — trust process success unless row is error).
+      ok = true;
     }
     return {
-      ok: !!result?.success,
+      ok,
       outputPath: job.output_path,
       error: startError || undefined,
     };
   } catch (e) {
     startError = e?.message || String(e);
+    ok = false;
     return { ok: false, error: startError };
   } finally {
     const currentQueue = hooks.getQueue?.() ?? queue;
@@ -115,12 +145,16 @@ export async function runSingle({ api, job, videoIdx, queue, isProcessing = fals
     if (startError) {
       const nextQueue = [...currentQueue];
       if (videoIdx >= 0 && videoIdx < nextQueue.length) {
-        nextQueue[videoIdx] = {
-          ...nextQueue[videoIdx],
-          status: "error",
-          progress: 0,
-          error: startError,
-        };
+        const row = nextQueue[videoIdx];
+        // Prefer leaving an already-marked error/done row alone when message matches.
+        if (row?.status !== "error") {
+          nextQueue[videoIdx] = {
+            ...row,
+            status: "error",
+            progress: 0,
+            error: startError,
+          };
+        }
       }
       hooks.applyPatch?.({ queue: nextQueue, isProcessing: false, jobProgress: {} });
     } else {

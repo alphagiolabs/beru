@@ -120,7 +120,10 @@ function dispatchProcessorLine(line) {
       } else {
         const translated = translateProcessorErrorMessage(errText);
         setLastProcessingError(translated);
-        sendToRenderer("process:error", translated);
+        sendToRenderer("process:error", {
+          error: translated,
+          runId: getProcessingRunId(),
+        });
       }
     } else if (msg.type === "summary") sendToRenderer("process:summary", msg);
     else sendToRenderer("process:log", trimmed);
@@ -285,7 +288,7 @@ export async function cancelActiveProcessing() {
       } catch {}
       if (getCurrentTmpFile() === currentTmp) setCurrentTmpFile(null);
     }
-    sendToRenderer("process:finished", { code: null, cancelled: true });
+    sendToRenderer("process:finished", { code: null, cancelled: true, runId });
   } else if (!runId && getPythonProcess() === proc) {
     setPythonProcess(null);
   }
@@ -351,6 +354,9 @@ export function registerProcessHandlers(pathSecurity) {
     if (!beginProcessingRun(runId)) {
       return { success: false, error: "Ya hay un proceso en ejecución" };
     }
+    // Tell the renderer which runId owns upcoming terminal events so stale
+    // watchdog/errors from a prior run can be ignored (plan 025).
+    sendToRenderer("process:runStarted", { runId });
     // Mark the probe phase active so the processing-lock watchdog rearms while
     // ffprobe is enriching the batch (no processor child exists yet, so
     // isPythonChildAlive() alone would let it fire mid-probe on large batches).
@@ -545,9 +551,9 @@ export function registerProcessHandlers(pathSecurity) {
         // Cancel owns terminal signalling: emit cancelled once here so
         // cancelActiveProcessing does not also emit after kill waits.
         if (cancellingThisRun) {
-          sendToRenderer("process:finished", { code: null, cancelled: true });
+          sendToRenderer("process:finished", { code: null, cancelled: true, runId });
           clearCancellingRunId(runId);
-          return settleRun({ success: false, code: null, cancelled: true });
+          return settleRun({ success: false, code: null, cancelled: true, runId });
         }
 
         const failed = code !== 0;
@@ -565,11 +571,15 @@ export function registerProcessHandlers(pathSecurity) {
         }
         // Include error on finished so the renderer can toast when no prior
         // process:error was emitted (crash / OOM / unexpected exit).
-        sendToRenderer("process:finished", failed ? { code, error: errMsg } : { code });
+        sendToRenderer(
+          "process:finished",
+          failed ? { code, error: errMsg, runId } : { code, runId },
+        );
         return settleRun({
           success: !failed,
           code,
           error: failed ? errMsg : undefined,
+          runId,
         });
       };
 
@@ -577,10 +587,10 @@ export function registerProcessHandlers(pathSecurity) {
         if (isCurrentRun()) {
           const translated = translateProcessorErrorMessage(err.message);
           setLastProcessingError(translated);
-          sendToRenderer("process:error", translated);
-          return settleRun({ success: false, code: 1, error: translated });
+          sendToRenderer("process:error", { error: translated, runId });
+          return settleRun({ success: false, code: 1, error: translated, runId });
         }
-        return settleRun({ success: false, code: 1, error: err.message });
+        return settleRun({ success: false, code: 1, error: err.message, runId });
       };
 
       proc.stdout.on("data", onStdoutData);

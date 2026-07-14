@@ -39,6 +39,7 @@ export default function Header() {
     exportFormat,
     encodeProfile,
     batchWorkers,
+    batchWorkersMode,
     batchRetryFailed,
     outputDir,
     queueLength,
@@ -57,6 +58,7 @@ export default function Header() {
       exportFormat: s.exportFormat,
       encodeProfile: s.encodeProfile,
       batchWorkers: s.batchWorkers,
+      batchWorkersMode: s.batchWorkersMode,
       batchRetryFailed: s.batchRetryFailed,
       outputDir: s.outputDir,
       queueLength: s.queue.length,
@@ -228,6 +230,10 @@ export default function Header() {
   };
 
   const handleAddVideos = async () => {
+    if (get().isProcessing) {
+      showToast({ kind: "warn", text: t("queue.processingBusy") });
+      return;
+    }
     if (!api?.openVideos) {
       showToast({ kind: "err", text: t("errors.noApi") });
       return;
@@ -261,6 +267,13 @@ export default function Header() {
     let queueForProcessing = get().queue;
     if (queueForProcessing.some((q) => !hasVideoDimensions(q))) {
       queueForProcessing = await get().refreshMissingVideoInfo(api);
+    }
+
+    // processSingle re-checks after the same await; mirror that so double-click
+    // during dimension refresh cannot start two concurrent runBatch paths.
+    if (get().isProcessing) {
+      showToast({ kind: "warn", text: t("queue.processingBusy") });
+      return;
     }
 
     const validation = validateBatchReady({
@@ -428,6 +441,17 @@ export default function Header() {
           <option value="5">5</option>
           <option value="6">6</option>
           <option value="8">8</option>
+        </select>
+
+        <select
+          value={batchWorkersMode === "conservative" ? "conservative" : "balanced"}
+          onChange={(e) => get().setBatchWorkersMode(e.target.value)}
+          className="app-header-select app-header-select--workers-mode cap-input !w-[100px] !py-1 text-[11px]"
+          disabled={isProcessing || Number(batchWorkers) > 0}
+          title={t("header.batchWorkersModeHint")}
+        >
+          <option value="balanced">{t("header.workersModeBalanced")}</option>
+          <option value="conservative">{t("header.workersModeConservative")}</option>
         </select>
 
         <label

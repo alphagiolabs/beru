@@ -57,7 +57,21 @@ export default function PropertiesPanel() {
   } = useEditorStore(
     (s) => ({
       selectedIdx: s.selectedIdx,
-      sel: s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null,
+      sel: (() => {
+        const item =
+          s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null;
+        if (!item) return null;
+        return {
+          path: item.path,
+          src: item.src,
+          filename: item.filename,
+          width: item.width,
+          height: item.height,
+          duration: item.duration,
+          operations: item.operations,
+          customOutputName: item.customOutputName,
+        };
+      })(),
       selectedOperationIdx: s.selectedOperationIdx,
       selectedOperation:
         s.selectedIdx >= 0 &&

@@ -11,10 +11,12 @@ import {
   Eye,
   Copy,
 } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import useEditorStore from "../stores/useEditorStore";
 import { fmtTime } from "../utils/video-utils";
 import MatchBadge from "./MatchBadge";
 import { useT } from "../i18n/useT";
+import { PERF_FLAGS } from "../utils/perf-flags.js";
 
 const api = window.api;
 
@@ -70,6 +72,7 @@ const QueueRow = memo(
   function QueueRow({
     item,
     idx,
+    thumbnail,
     isSelected,
     isTemplate,
     textOps,
@@ -98,7 +101,7 @@ const QueueRow = memo(
           background: isSelected ? "var(--bg-elevated)" : "transparent",
         }}
       >
-        <Thumbnail value={item.thumbnail} />
+        <Thumbnail value={thumbnail} />
         <div
           className="w-2 h-2 rounded-full flex-shrink-0"
           style={{ background: STATUS_COLORS[item.status] }}
@@ -226,6 +229,7 @@ const QueueRow = memo(
     return (
       prev.item === next.item &&
       prev.idx === next.idx &&
+      prev.thumbnail === next.thumbnail &&
       prev.isSelected === next.isSelected &&
       prev.isTemplate === next.isTemplate &&
       prev.textOps === next.textOps &&
@@ -250,6 +254,7 @@ const QueueRow = memo(
 
 export default function QueueSidebar() {
   const queue = useEditorStore((s) => s.queue);
+  const thumbnailsByPath = useEditorStore((s) => s.thumbnailsByPath);
   const selectedIdx = useEditorStore((s) => s.selectedIdx);
   const templateIdx = useEditorStore((s) => s.templateIdx);
   const excelMatchStatus = useEditorStore((s) => s.excelMatchStatus);
@@ -261,6 +266,15 @@ export default function QueueSidebar() {
   const t = useT();
   const [openMenuIdx, setOpenMenuIdx] = useState(-1);
   const menuRef = useRef(null);
+  const listParentRef = useRef(null);
+
+  const useVirtual = PERF_FLAGS.virtualize && queue.length >= PERF_FLAGS.virtualizeThreshold;
+  const rowVirtualizer = useVirtualizer({
+    count: useVirtual ? queue.length : 0,
+    getScrollElement: () => listParentRef.current,
+    estimateSize: () => 49,
+    overscan: 8,
+  });
 
   useEffect(() => {
     if (openMenuIdx < 0) return;
@@ -287,6 +301,10 @@ export default function QueueSidebar() {
   }, [isProcessing, showToast, t, get]);
 
   const handleAdd = useCallback(async () => {
+    if (isProcessing) {
+      showToast({ kind: "warn", text: t("queue.processingBusy") });
+      return;
+    }
     if (!api?.openVideos) {
       showToast({ kind: "err", text: t("errors.noApi") });
       return;
@@ -305,7 +323,7 @@ export default function QueueSidebar() {
         }),
       });
     }
-  }, [showToast, t, get]);
+  }, [isProcessing, showToast, t, get]);
 
   const handleProcessThis = useCallback(
     async (idx) => {
@@ -415,7 +433,8 @@ export default function QueueSidebar() {
           </button>
           <button
             onClick={handleAdd}
-            className="cap-btn-secondary !p-1"
+            disabled={isProcessing}
+            className="cap-btn-secondary !p-1 disabled:opacity-40"
             title={t("queue.addVideos")}
           >
             <Plus size={14} />
@@ -423,35 +442,91 @@ export default function QueueSidebar() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-        {queue.map((item, idx) => {
-          const derived = rows[idx];
-          return (
-            <QueueRow
-              key={item.path}
-              item={item}
-              idx={idx}
-              isSelected={idx === selectedIdx}
-              isTemplate={idx === templateIdx}
-              textOps={derived.textOps}
-              otherOps={derived.otherOps}
-              matchStatus={derived.matchStatus}
-              showMatch={Boolean(excelPath)}
-              isOpen={openMenuIdx === idx}
-              isProcessing={isProcessing}
-              hasOutputDir={hasOutputDir}
-              t={t}
-              menuRef={openMenuIdx === idx ? setMenuRef : null}
-              onSelect={handleSelect}
-              onToggleMenu={handleToggleMenu}
-              onProcessThis={handleProcessThis}
-              onReveal={handleReveal}
-              onOpenOutputDir={handleOpenOutputDir}
-              onCopyName={handleCopyName}
-              onRemove={handleRemove}
-            />
-          );
-        })}
+      <div ref={listParentRef} className="flex-1 overflow-y-auto">
+        {useVirtual ? (
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: "100%",
+              position: "relative",
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((vRow) => {
+              const idx = vRow.index;
+              const item = queue[idx];
+              const derived = rows[idx];
+              if (!item || !derived) return null;
+              return (
+                <div
+                  key={item.path}
+                  data-index={idx}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    transform: `translateY(${vRow.start}px)`,
+                  }}
+                >
+                  <QueueRow
+                    item={item}
+                    idx={idx}
+                    thumbnail={thumbnailsByPath?.[item.path] || null}
+                    isSelected={idx === selectedIdx}
+                    isTemplate={idx === templateIdx}
+                    textOps={derived.textOps}
+                    otherOps={derived.otherOps}
+                    matchStatus={derived.matchStatus}
+                    showMatch={Boolean(excelPath)}
+                    isOpen={openMenuIdx === idx}
+                    isProcessing={isProcessing}
+                    hasOutputDir={hasOutputDir}
+                    t={t}
+                    menuRef={openMenuIdx === idx ? setMenuRef : null}
+                    onSelect={handleSelect}
+                    onToggleMenu={handleToggleMenu}
+                    onProcessThis={handleProcessThis}
+                    onReveal={handleReveal}
+                    onOpenOutputDir={handleOpenOutputDir}
+                    onCopyName={handleCopyName}
+                    onRemove={handleRemove}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          queue.map((item, idx) => {
+            const derived = rows[idx];
+            return (
+              <QueueRow
+                key={item.path}
+                item={item}
+                idx={idx}
+                thumbnail={thumbnailsByPath?.[item.path] || null}
+                isSelected={idx === selectedIdx}
+                isTemplate={idx === templateIdx}
+                textOps={derived.textOps}
+                otherOps={derived.otherOps}
+                matchStatus={derived.matchStatus}
+                showMatch={Boolean(excelPath)}
+                isOpen={openMenuIdx === idx}
+                isProcessing={isProcessing}
+                hasOutputDir={hasOutputDir}
+                t={t}
+                menuRef={openMenuIdx === idx ? setMenuRef : null}
+                onSelect={handleSelect}
+                onToggleMenu={handleToggleMenu}
+                onProcessThis={handleProcessThis}
+                onReveal={handleReveal}
+                onOpenOutputDir={handleOpenOutputDir}
+                onCopyName={handleCopyName}
+                onRemove={handleRemove}
+              />
+            );
+          })
+        )}
       </div>
     </aside>
   );

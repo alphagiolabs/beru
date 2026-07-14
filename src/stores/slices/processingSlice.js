@@ -52,6 +52,8 @@ function processingHooks(set, get) {
 export function createProcessingSlice(set, get) {
   return {
     isProcessing: false,
+    /** Main-process processing run id (for ignoring stale process:error/finished). */
+    activeProcessRunId: null,
     encodeProfile: "balanced",
     batchWorkers: 0,
     batchWorkersMode: "balanced",
@@ -63,6 +65,8 @@ export function createProcessingSlice(set, get) {
     logLines: [],
     executionHistory: [],
     activeExecutionId: null,
+
+    setActiveProcessRunId: (runId) => set({ activeProcessRunId: runId || null }),
     /**
      * Standalone per-job progress map (0..100) used when
      * `VITE_BERU_RENDER_PROGRESS_MAP` is enabled. Keeps `queue` referentially
@@ -384,7 +388,13 @@ export function createProcessingSlice(set, get) {
         if (s.isProcessing && !isProcessing) {
           schedulePersistExecutionHistory(s.executionHistory);
         }
-        return s.isProcessing === isProcessing ? {} : { isProcessing };
+        if (s.isProcessing === isProcessing && (isProcessing || !s.activeProcessRunId)) {
+          return {};
+        }
+        return {
+          isProcessing,
+          ...(isProcessing ? {} : { activeProcessRunId: null }),
+        };
       }),
 
     /** Reset queue rows left mid-batch after user cancel or main-process abort. */
@@ -395,6 +405,7 @@ export function createProcessingSlice(set, get) {
           ...(queueChanged ? { queue } : {}),
           jobProgress: {},
           isProcessing: false,
+          activeProcessRunId: null,
         };
       }),
     setBatchSummary: (val) =>
@@ -434,6 +445,19 @@ export function createProcessingSlice(set, get) {
           await api.saveSettings({ batchWorkers: workers });
         } catch (e) {
           console.error("[beru] Failed to save batch workers:", e.message);
+        }
+      }
+    },
+
+    setBatchWorkersMode: async (val) => {
+      const batchWorkersMode = val === "conservative" ? "conservative" : "balanced";
+      set({ batchWorkersMode });
+      const api = window.api;
+      if (api?.saveSettings) {
+        try {
+          await api.saveSettings({ batchWorkersMode });
+        } catch (e) {
+          console.error("[beru] Failed to save batch workers mode:", e.message);
         }
       }
     },

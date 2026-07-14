@@ -17,6 +17,31 @@ import {
   textOpMatchesRegion,
 } from "../../utils/text-style";
 
+/** True when template-driven text ops match for incremental reapply (plan 020). */
+function excelTextOpsEqual(prevOps, nextOps, templateRegions) {
+  const prev = Array.isArray(prevOps) ? prevOps : [];
+  const next = Array.isArray(nextOps) ? nextOps : [];
+  if (prev.length !== next.length) return false;
+  for (let i = 0; i < next.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (!a || !b || a.mode !== b.mode) return false;
+    if (a.mode === "text") {
+      if (a.text !== b.text) return false;
+      if ((a.batchRegionId ?? null) !== (b.batchRegionId ?? null)) return false;
+      // Style fields that Excel reapply may rewrite
+      if (a.fontSize !== b.fontSize || a.fontColor !== b.fontColor) return false;
+      if (a.fontFamily !== b.fontFamily || a.fontWeight !== b.fontWeight) return false;
+    } else if (a !== b && a.id !== b.id) {
+      // Non-text ops should be preserved by reference; compare ids if present.
+      return false;
+    }
+  }
+  // Template region count must align with text ops from reapply
+  void templateRegions;
+  return true;
+}
+
 /** Template regions, Excel import/mapping, and batch table editor state. */
 export function createBatchSlice(set, get) {
   return {
@@ -207,6 +232,57 @@ export function createBatchSlice(set, get) {
         };
       });
       set({ queue: updated });
+    },
+
+    /**
+     * Export current in-memory excelHeaders/excelRows to a user-chosen .xlsx.
+     * Does not overwrite the source path unless the user picks it in the dialog.
+     */
+    exportExcel: async () => {
+      try {
+        const api = window.api;
+        if (!api?.saveExcelDialog || !api?.writeExcel) {
+          return { ok: false, error: "Excel export API not available" };
+        }
+        const { excelHeaders, excelRows, excelPath } = get();
+        if (!Array.isArray(excelRows) || excelRows.length === 0) {
+          return { ok: false, error: "No Excel rows to export" };
+        }
+        const defaultName = excelPath
+          ? String(excelPath)
+              .split(/[\\/]/)
+              .pop()
+              .replace(/\.(xlsx|xls)$/i, "") + "-export.xlsx"
+          : "beru-export.xlsx";
+        const pick = await api.saveExcelDialog(defaultName);
+        if (pick?.canceled || !pick?.filePath) return { ok: false, canceled: true };
+
+        const XLSX = await import("xlsx");
+        const headers =
+          Array.isArray(excelHeaders) && excelHeaders.length > 0
+            ? excelHeaders
+            : Object.keys(excelRows[0] || {});
+        const sheetRows = excelRows.map((row) => {
+          const out = {};
+          for (const h of headers) {
+            out[h] = row?.[h] ?? "";
+          }
+          // Include any extra keys present on the row
+          for (const k of Object.keys(row || {})) {
+            if (!(k in out)) out[k] = row[k];
+          }
+          return out;
+        });
+        const ws = XLSX.utils.json_to_sheet(sheetRows, { header: headers });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+        const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+        const res = await api.writeExcel(pick.filePath, base64);
+        if (!res?.success) return { ok: false, error: res?.error || "Write failed" };
+        return { ok: true, filePath: res.filePath || pick.filePath };
+      } catch (e) {
+        return { ok: false, error: e?.message || String(e) };
+      }
     },
 
     importExcel: async (excelPath) => {
@@ -431,17 +507,26 @@ export function createBatchSlice(set, get) {
       let matched = 0;
       let unmatched = 0;
       let duplicate = 0;
+      let queueChanged = false;
       const updated = queue.map((item, i) => {
         const id = normalizeMatchId(item.filename);
         const rowIdx = idToRowIdx.get(id);
         if (rowIdx === undefined) {
           status[i] = "unmatched";
           unmatched++;
+          if (item.status === "idle" && item.progress === 0 && !item.error) {
+            return item;
+          }
+          queueChanged = true;
           return { ...item, status: "idle", progress: 0, error: null };
         }
         if (duplicateIds.has(id)) {
           status[i] = "duplicate";
           duplicate++;
+          if (item.status === "idle" && item.progress === 0 && !item.error) {
+            return item;
+          }
+          queueChanged = true;
           return { ...item, status: "idle", progress: 0, error: null };
         }
         const row = excelRows[rowIdx];
@@ -468,10 +553,24 @@ export function createBatchSlice(set, get) {
         const ops = [...preservedOps, ...newTextOps];
         status[i] = "matched";
         matched++;
+        // Skip allocating a new item when already idle with identical text ops.
+        if (
+          item.status === "idle" &&
+          item.progress === 0 &&
+          !item.error &&
+          excelTextOpsEqual(item.operations, ops, templateRegions)
+        ) {
+          return item;
+        }
+        queueChanged = true;
         return { ...item, operations: ops, status: "idle", progress: 0, error: null };
       });
 
-      set({ queue: updated, excelMatchStatus: status });
+      if (queueChanged) {
+        set({ queue: updated, excelMatchStatus: status });
+      } else {
+        set({ excelMatchStatus: status });
+      }
       return { matched, unmatched, duplicate, total: queue.length };
     },
 

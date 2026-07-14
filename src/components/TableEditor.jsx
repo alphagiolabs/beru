@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Layers } from "lucide-react";
+import { X, Layers, FileSpreadsheet } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { findTextOpForRegion } from "../utils/text-style";
+import { useT } from "../i18n/useT";
 import TableEditorPreview from "./table-editor/TableEditorPreview";
 import TableEditorFocusPanel from "./table-editor/TableEditorFocusPanel";
 import TableEditorGrid from "./table-editor/TableEditorGrid";
@@ -15,6 +16,7 @@ function resolvedDuration(video, fallback) {
 }
 
 export default function TableEditor() {
+  const t = useT();
   const {
     showTableEditor,
     queue,
@@ -36,6 +38,7 @@ export default function TableEditor() {
     shallow,
   );
   const get = useEditorStore.getState;
+  const showToast = useEditorStore((s) => s.showToast);
   const [focused, setFocused] = useState({ videoIdx: 0, regionId: null });
   const [editingCell, setEditingCell] = useState(null);
   const [editValue, setEditValue] = useState("");
@@ -290,6 +293,28 @@ export default function TableEditor() {
             </span>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className="cap-btn-secondary text-[11px] flex items-center gap-1.5 !py-1"
+              disabled={!excelRows?.length}
+              title={t("table.exportExcel")}
+              onClick={async () => {
+                const res = await get().exportExcel();
+                if (res?.canceled) return;
+                if (res?.ok) {
+                  const name = (res.filePath || "").split(/[\\/]/).pop() || "export.xlsx";
+                  showToast({ kind: "ok", text: t("table.exportExcelOk", { name }) });
+                } else {
+                  showToast({
+                    kind: "err",
+                    text: res?.error || t("table.exportExcelFailed"),
+                  });
+                }
+              }}
+            >
+              <FileSpreadsheet size={13} />
+              {t("table.exportExcel")}
+            </button>
             <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
               ↑↓←→ navegar · Enter editar · Del eliminar · Esc cerrar
             </span>

@@ -53,7 +53,11 @@ describe("processing lock watchdog", () => {
 
     expect(sendToRenderer).toHaveBeenCalled();
     expect(sendToRenderer.mock.calls[0][0]).toBe("process:error");
-    expect(typeof sendToRenderer.mock.calls[0][1]).toBe("string");
+    const payload = sendToRenderer.mock.calls[0][1];
+    expect(payload).toMatchObject({
+      error: expect.stringMatching(/interrumpió|inesperada/i),
+      runId: "run-notify",
+    });
   });
 
   it("does not fire after a normal clearProcessingRun", () => {

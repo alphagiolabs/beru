@@ -127,6 +127,23 @@ describe("batch-runner", () => {
       });
       expect(result).toMatchObject({ ok: false, code: "api_unavailable" });
     });
+
+    it("does not clear processing when main reports already running", async () => {
+      api.startProcessing.mockResolvedValue({
+        success: false,
+        error: "Ya hay un proceso en ejecución",
+      });
+      const setProcessing = vi.fn();
+      const result = await runBatch({
+        api,
+        jobs: [{ id: 0 }],
+        queue: [item()],
+        hooks: { ...hooks, setProcessing },
+      });
+      expect(result).toMatchObject({ ok: false, code: "already_processing" });
+      expect(setProcessing).not.toHaveBeenCalled();
+      expect(hooks.finalizeActiveExecution).not.toHaveBeenCalled();
+    });
   });
 
   describe("runSingle", () => {
@@ -190,6 +207,38 @@ describe("batch-runner", () => {
         }),
       );
       expect(hooks.finalizeActiveExecution).toHaveBeenCalled();
+    });
+
+    it("returns not ok when process succeeds but queue row is error", async () => {
+      const api = { startProcessing: vi.fn(async () => ({ success: true })) };
+      const hooks = makeHooks({
+        getQueue: vi.fn(() => [item({ status: "error", error: "ffmpeg failed" })]),
+      });
+      const result = await runSingle({
+        api,
+        job: { id: 0, output_path: "C:\\out\\a.mp4" },
+        videoIdx: 0,
+        queue: [item()],
+        hooks,
+      });
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/ffmpeg failed/);
+    });
+
+    it("returns ok only when process succeeds and queue row is done", async () => {
+      const api = { startProcessing: vi.fn(async () => ({ success: true })) };
+      const hooks = makeHooks({
+        getQueue: vi.fn(() => [item({ status: "done" })]),
+      });
+      const result = await runSingle({
+        api,
+        job: { id: 0, output_path: "C:\\out\\a.mp4" },
+        videoIdx: 0,
+        queue: [item()],
+        hooks,
+      });
+      expect(result.ok).toBe(true);
+      expect(result.error).toBeUndefined();
     });
   });
 
