@@ -450,7 +450,7 @@ export default function Header() {
         <select
           value={batchWorkersMode === "conservative" ? "conservative" : "balanced"}
           onChange={(e) => get().setBatchWorkersMode(e.target.value)}
-          className="app-header-select app-header-select--workers-mode cap-input !w-[100px] !py-1 text-[11px]"
+          className="app-header-select app-header-select--workers-mode cap-input !w-[128px] !py-1 text-[11px]"
           disabled={isProcessing || Number(batchWorkers) > 0}
           title={t("header.batchWorkersModeHint")}
         >

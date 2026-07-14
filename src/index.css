@@ -1752,6 +1752,10 @@ label {
     width: 72px !important;
   }
 
+  .app-header-select--workers-mode {
+    width: 128px !important;
+  }
+
   .app-header-divider {
     margin-left: 0.15rem;
     margin-right: 0.15rem;
@@ -1801,6 +1805,10 @@ label {
 
   .app-header-select--workers {
     width: 64px !important;
+  }
+
+  .app-header-select--workers-mode {
+    width: 128px !important;
   }
 }
 
