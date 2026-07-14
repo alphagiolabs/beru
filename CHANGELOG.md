@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.46] - 2026-07-13
+
+### Added
+
+- **Table editor rediseñado (estilo Emil)** — Layout plano con modal y preview más grandes, scrollbars overlay, empty state en idle y opciones avanzadas colapsadas bajo un disclosure.
+- **Menú de idioma en header con shadcn** — Scaffold de shadcn (`dropdown-menu`) y control de idioma del header alineado al nuevo patrón de UI.
+
+### Changed
+
+- **Letter-spacing unificado** — Clamp compartido (-20..80) entre preview CSS y export FFmpeg para que el espaciado coincida al exportar.
+- **Segment control del inspector** — Quitar logo / Texto en lote unificados en un control deslizante estilo iOS; tokens purple corregidos en light/dark.
+
+### Fixed
+
+- **Select de workers del batch** — El modo conservador/equilibrado ya no se recorta en anchos por defecto ni compactos del header.
+
 ## [1.6.45] - 2026-07-08
 
 ### Fixed
