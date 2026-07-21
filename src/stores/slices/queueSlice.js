@@ -133,7 +133,8 @@ export function createQueueSlice(set, get) {
       });
     },
 
-    _thumbnailAbortController: null,
+    /** All live thumbnail-load controllers, so clearQueue can abort every batch. */
+    _thumbnailAbortControllers: new Set(),
     /** Display-only thumbnails keyed by video path — not on queue items (plan 018). */
     thumbnailsByPath: {},
 
@@ -144,7 +145,9 @@ export function createQueueSlice(set, get) {
       const MAX_THUMB_BATCHES_IN_FLIGHT = 2;
 
       const abortController = new AbortController();
-      set({ _thumbnailAbortController: abortController });
+      const registry = get()._thumbnailAbortControllers;
+      registry?.add(abortController);
+      const unregister = () => registry?.delete(abortController);
 
       const applyThumbResults = (paths, results, offset) => {
         if (abortController.signal.aborted) return;
@@ -167,50 +170,61 @@ export function createQueueSlice(set, get) {
       };
 
       const loadChunk = (paths, offset) => {
-        if (abortController.signal.aborted) return;
-        api
+        if (abortController.signal.aborted) return Promise.resolve();
+        return api
           .getThumbnailBatch(paths)
           .then((results) => applyThumbResults(paths, results, offset))
           .catch(() => {});
       };
 
       const firstCount = Math.min(4, toAdd.length);
-      loadChunk(toAdd.slice(0, firstCount), startIdx);
+      const firstPromise = loadChunk(toAdd.slice(0, firstCount), startIdx);
 
       const rest = toAdd.slice(firstCount);
-      if (rest.length === 0) return;
-
-      const loadRestInChunks = () => {
-        let nextOff = 0;
-        let inFlight = 0;
-
-        const pump = () => {
-          if (abortController.signal.aborted) return;
-          while (inFlight < MAX_THUMB_BATCHES_IN_FLIGHT && nextOff < rest.length) {
-            const off = nextOff;
-            nextOff += THUMB_CHUNK;
-            const slice = rest.slice(off, off + THUMB_CHUNK);
-            const offset = startIdx + firstCount + off;
-            inFlight++;
-            api
-              .getThumbnailBatch(slice)
-              .then((results) => applyThumbResults(slice, results, offset))
-              .catch(() => {})
-              .finally(() => {
-                inFlight--;
-                pump();
-              });
-          }
-        };
-
-        pump();
-      };
-
-      if (typeof requestIdleCallback === "function") {
-        requestIdleCallback(loadRestInChunks, { timeout: 2000 });
-      } else {
-        setTimeout(loadRestInChunks, 300);
+      if (rest.length === 0) {
+        firstPromise.then(unregister, unregister);
+        return;
       }
+
+      const loadRestInChunks = () =>
+        new Promise((resolve) => {
+          let nextOff = 0;
+          let inFlight = 0;
+
+          const pump = () => {
+            if (abortController.signal.aborted) return resolve();
+            while (inFlight < MAX_THUMB_BATCHES_IN_FLIGHT && nextOff < rest.length) {
+              const off = nextOff;
+              nextOff += THUMB_CHUNK;
+              const slice = rest.slice(off, off + THUMB_CHUNK);
+              const offset = startIdx + firstCount + off;
+              inFlight++;
+              api
+                .getThumbnailBatch(slice)
+                .then((results) => applyThumbResults(slice, results, offset))
+                .catch(() => {})
+                .finally(() => {
+                  inFlight--;
+                  if (nextOff >= rest.length && inFlight === 0) return resolve();
+                  pump();
+                });
+            }
+            if (nextOff >= rest.length && inFlight === 0) resolve();
+          };
+
+          pump();
+        });
+
+      const restPromise = new Promise((resolve) => {
+        const start = () => resolve(loadRestInChunks());
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(start, { timeout: 2000 });
+        } else {
+          setTimeout(start, 300);
+        }
+      });
+
+      Promise.all([firstPromise, restPromise]).then(unregister, unregister);
     },
 
     addVideos: async (paths, api) => {
@@ -309,9 +323,13 @@ export function createQueueSlice(set, get) {
     },
 
     clearQueue: () => {
-      const { queue, _thumbnailAbortController } = get();
+      const { queue, _thumbnailAbortControllers } = get();
       if (queue.length === 0) return false;
-      _thumbnailAbortController?.abort();
+      for (const controller of _thumbnailAbortControllers ?? []) {
+        try {
+          controller.abort();
+        } catch {}
+      }
       set((s) => ({
         queue: [],
         selectedIdx: -1,
@@ -323,7 +341,7 @@ export function createQueueSlice(set, get) {
         imageDataCache: pruneImageDataCache(s.imageDataCache, []),
         batchSummary: null,
         templateIdx: -1,
-        _thumbnailAbortController: null,
+        _thumbnailAbortControllers: new Set(),
         thumbnailsByPath: {},
       }));
       return true;
