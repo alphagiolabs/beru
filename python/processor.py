@@ -744,18 +744,28 @@ _RAM_PER_JOB_MB = {
 }
 
 
-def _memory_cap_workers(
-    hw_encoder,
-    job_count,
-    max_source_pixels,
-    desired_workers,
-    has_video_filters=False,
-    encode_profile="balanced",
-):
-    """Clamp worker count based on available RAM."""
-    avail_mb = _get_available_ram_mb()
-    if avail_mb <= 0:
-        return desired_workers
+# Slower x264 presets hold more reference/lookahead frames in RAM.
+_X264_PRESET_RAM_MULT = {
+    "ultrafast": 0.6,
+    "superfast": 0.7,
+    "veryfast": 0.8,
+    "faster": 0.9,
+    "fast": 1.0,
+    "medium": 1.3,
+    "slow": 1.6,
+    "slower": 1.9,
+    "veryslow": 2.2,
+}
+
+# Decoders that hold markedly more memory than 8-bit H.264.
+_HEAVY_DECODE_CODECS = frozenset({"hevc", "h265", "av1", "vp9", "prores", "wmv3"})
+
+# pix_fmt substrings indicating >8-bit sources (8-bit "nv12"/"yuv410p" must NOT match).
+_HIGH_BIT_DEPTH_PIX_TOKENS = ("p10", "p12", "p16", "10le", "10be", "12le", "12be", "16le", "16be")
+
+
+def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, source_pixels=0):
+    """Estimate peak RAM (MB) for one job, using job metadata when available."""
     profile = (encode_profile or "balanced").strip().lower()
     key = "software" if (has_video_filters and not profile_allows_hardware(profile)) else \
           "nvenc" if hw_encoder == "h264_nvenc" else \
@@ -765,17 +775,73 @@ def _memory_cap_workers(
           "vaapi" if hw_encoder == "h264_vaapi" else \
           "videotoolbox" if hw_encoder == "h264_videotoolbox" else "software"
     per_job = _RAM_PER_JOB_MB.get(key, 512)
+    job = job if isinstance(job, dict) else None
+    if key == "software":
+        preset = str(
+            (job or {}).get("speed_preset")
+            or (ENCODE_PROFILES.get(profile) or {}).get("preset")
+            or "fast"
+        ).strip().lower()
+        per_job = int(per_job * _X264_PRESET_RAM_MULT.get(preset, 1.0))
+    codec = str((job or {}).get("video_codec") or "").lower()
+    if codec in _HEAVY_DECODE_CODECS:
+        per_job = int(per_job * 1.25)
+    pix_fmt = str((job or {}).get("pix_fmt") or "").lower()
+    if any(token in pix_fmt for token in _HIGH_BIT_DEPTH_PIX_TOKENS):
+        per_job = int(per_job * 1.5)
     if has_video_filters:
         per_job = int(per_job * 1.5)
     if not profile_allows_hardware(profile) or (
         profile == "quality" and not hw_encoder
     ):
         per_job = int(per_job * 1.35)
+    pixels = source_pixels
+    if job:
+        w = int(job.get("source_width") or job.get("width") or 0)
+        h = int(job.get("source_height") or job.get("height") or 0)
+        if w > 0 and h > 0:
+            pixels = w * h
     # 4K+ needs more RAM per encode.
-    if max_source_pixels >= 3840 * 2160:
+    if pixels >= 3840 * 2160:
         per_job = int(per_job * 2.5)
-    elif max_source_pixels >= 1920 * 1080:
+    elif pixels >= 1920 * 1080:
         per_job = int(per_job * 1.5)
+    return max(64, per_job)
+
+
+def _memory_cap_workers(
+    hw_encoder,
+    job_count,
+    max_source_pixels,
+    desired_workers,
+    has_video_filters=False,
+    encode_profile="balanced",
+    jobs=None,
+):
+    """Clamp worker count based on available RAM."""
+    avail_mb = _get_available_ram_mb()
+    if avail_mb <= 0:
+        return desired_workers
+    estimates = (
+        [
+            _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile)
+            for job in jobs
+            if isinstance(job, dict)
+        ]
+        if jobs
+        else []
+    )
+    per_job = (
+        max(estimates)
+        if estimates
+        else _estimate_job_ram_mb(
+            None,
+            hw_encoder,
+            has_video_filters,
+            encode_profile,
+            source_pixels=max_source_pixels,
+        )
+    )
     # Leave 20% headroom for OS / other apps.
     cap = max(1, int((avail_mb * 0.8) / per_job))
     return max(1, min(cap, desired_workers, MAX_WORKERS_CAP))
@@ -789,6 +855,7 @@ def resolve_max_workers(
     consider_memory=True,
     has_video_filters=False,
     encode_profile=None,
+    jobs=None,
 ):
     """Pick parallel job count: env override, then GPU/CPU-aware caps (balanced | conservative)."""
     env_raw = os.environ.get("BERU_WORKERS", "0") or "0"
@@ -846,6 +913,7 @@ def resolve_max_workers(
             workers,
             has_video_filters=has_video_filters,
             encode_profile=profile,
+            jobs=jobs,
         )
 
     return workers
@@ -1112,6 +1180,9 @@ def ffprobe(path):
 _DRAWTEXT_CACHE = {}
 _DRAWTEXT_CACHE_LOCK = threading.Lock()
 _DRAWTEXT_CACHE_ENABLED = None
+# Bound memoized drawtext strings so the long-lived preview worker cannot grow
+# the cache without limit across many edit/preview cycles.
+_DRAWTEXT_CACHE_MAX = 512
 
 _ALLOWED_DRAWTEXT_PUNCTUATION = frozenset(
     " .,!?¿¡:;'\"()_-+/&@#%$€£¥={}*"
@@ -1148,6 +1219,14 @@ def _drawtext_cache_enabled():
             os.environ.get("BERU_DRAWTEXT_CACHE") or "0"
         ).strip().lower() in ("1", "true", "yes", "on")
     return _DRAWTEXT_CACHE_ENABLED
+
+
+def _drawtext_cache_store(cache_key, filter_str):
+    """Insert into the memo cache with FIFO eviction once the cap is reached."""
+    with _DRAWTEXT_CACHE_LOCK:
+        if len(_DRAWTEXT_CACHE) >= _DRAWTEXT_CACHE_MAX:
+            _DRAWTEXT_CACHE.pop(next(iter(_DRAWTEXT_CACHE)), None)
+        _DRAWTEXT_CACHE[cache_key] = filter_str
 
 
 def build_drawtext(op):
@@ -1346,8 +1425,7 @@ def build_drawtext(op):
             filter_str = ",".join(filters)
             logger.debug("drawtext tight spacing filter: %s", filter_str[:300])
             if cache_key is not None:
-                with _DRAWTEXT_CACHE_LOCK:
-                    _DRAWTEXT_CACHE[cache_key] = filter_str
+                _drawtext_cache_store(cache_key, filter_str)
             return filter_str
 
     # Single drawtext path (zero / positive hair-space / native spacing)
@@ -1358,8 +1436,7 @@ def build_drawtext(op):
     filter_str = "drawtext=" + ":".join(parts)
     logger.debug("drawtext filter: %s", filter_str[:300])
     if cache_key is not None:
-        with _DRAWTEXT_CACHE_LOCK:
-            _DRAWTEXT_CACHE[cache_key] = filter_str
+        _drawtext_cache_store(cache_key, filter_str)
     return filter_str
 
 
@@ -2146,14 +2223,56 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         return _job_failed_result(job_id, err or "Unknown error", max_workers=_BATCH_ACTIVE_WORKERS)
 
 
-def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True, hw_encoder=None):
+def _execute_batch(
+    jobs,
+    ffmpeg_path,
+    max_workers,
+    *,
+    emit_batch_progress=True,
+    hw_encoder=None,
+    per_job_ram_mb=0,
+):
     """Run one concurrent pass; returns per-job results and failure list."""
     total = len(jobs)
     results = {}
     state = {"succeeded": 0, "failed": 0, "cancelled": 0, "completed": 0}
     state_lock = threading.Lock()
+    admission = {"outstanding": 0}
+    admission_cond = threading.Condition()
+
+    def _memory_allows_another():
+        """RAM gate for dispatching the next job.
+
+        Always admits when no job is running (progress guarantee: even on a
+        permanently tight machine, one job at a time still finishes) and when
+        RAM cannot be measured. Worker sizing happens once at batch start via
+        _memory_cap_workers; this gate handles RAM drifting DURING the batch.
+        """
+        if per_job_ram_mb <= 0 or admission["outstanding"] <= 0:
+            return True
+        avail_mb = _get_available_ram_mb()
+        if avail_mb <= 0:
+            return True
+        return avail_mb >= per_job_ram_mb
+
+    def _await_admission():
+        """Block until a worker slot and RAM headroom free up, or cancel fires."""
+        while True:
+            if _check_cancelled():
+                return False
+            with admission_cond:
+                if admission["outstanding"] < max_workers and _memory_allows_another():
+                    admission["outstanding"] += 1
+                    return True
+                admission_cond.wait(timeout=1.0)
+
+    def _release_admission():
+        with admission_cond:
+            admission["outstanding"] -= 1
+            admission_cond.notify_all()
 
     def _on_done(fut):
+        _release_admission()
         try:
             result = fut.result()
         except Exception as e:
@@ -2189,34 +2308,41 @@ def _execute_batch(jobs, ffmpeg_path, max_workers, *, emit_batch_progress=True, 
                 }
                 _safe_print(json.dumps(progress_msg))
 
+    def _mark_cancelled(job, i):
+        job_id = job.get("id", i) if isinstance(job, dict) else i
+        with state_lock:
+            if job_id not in results:
+                results[job_id] = {"index": job_id, "status": "cancelled"}
+                state["cancelled"] += 1
+                state["completed"] += 1
+                if emit_batch_progress:
+                    fname = os.path.basename(job.get("input_path", "")) if isinstance(job, dict) else "?"
+                    _safe_print(json.dumps({
+                        "type": "progress",
+                        "current": state["completed"],
+                        "total": total,
+                        "file": fname,
+                        "succeeded": state["succeeded"],
+                        "failed": state["failed"],
+                    }))
+        _safe_print(json.dumps({
+            "type": "cancelled", "index": job_id,
+        }))
+
     global _BATCH_ACTIVE_WORKERS
     _BATCH_ACTIVE_WORKERS = max(1, max_workers)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         for i, job in enumerate(jobs):
-            if _check_cancelled():
-                job_id = job.get("id", i) if isinstance(job, dict) else i
-                with state_lock:
-                    if job_id not in results:
-                        results[job_id] = {"index": job_id, "status": "cancelled"}
-                        state["cancelled"] += 1
-                        state["completed"] += 1
-                        if emit_batch_progress:
-                            fname = os.path.basename(job.get("input_path", "")) if isinstance(job, dict) else "?"
-                            _safe_print(json.dumps({
-                                "type": "progress",
-                                "current": state["completed"],
-                                "total": total,
-                                "file": fname,
-                                "succeeded": state["succeeded"],
-                                "failed": state["failed"],
-                            }))
-                _safe_print(json.dumps({
-                    "type": "cancelled", "index": job_id,
-                }))
+            if _check_cancelled() or not _await_admission():
+                _mark_cancelled(job, i)
                 continue
-            fut = executor.submit(_process_one, i, job, ffmpeg_path, hw_encoder=hw_encoder)
+            try:
+                fut = executor.submit(_process_one, i, job, ffmpeg_path, hw_encoder=hw_encoder)
+            except Exception:
+                _release_admission()
+                raise
             fut._beru_job_pos = i
             fut.add_done_callback(_on_done)
             futures.append(fut)
@@ -2286,13 +2412,25 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
             max_pixels,
             has_video_filters=has_video_filters,
             encode_profile=encode_profile,
+            jobs=jobs,
         )
+
+    per_job_ram_mb = max(
+        (
+            _estimate_job_ram_mb(job, effective_hw, has_video_filters, encode_profile)
+            for job in jobs
+            if isinstance(job, dict)
+        ),
+        default=0,
+    )
 
     total = len(jobs)
     mode = (os.environ.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
     logger.info(
-        "Starting batch: %d jobs, %d workers (mode=%s, encoder=%s, max_px=%d), ffmpeg=%s",
-        total, max_workers, mode, effective_hw or "libx264", max_pixels, ffmpeg_path,
+        "Starting batch: %d jobs, %d workers (mode=%s, encoder=%s, max_px=%d, "
+        "est_ram_per_job=%dMB, avail_ram=%dMB), ffmpeg=%s",
+        total, max_workers, mode, effective_hw or "libx264", max_pixels,
+        per_job_ram_mb, _get_available_ram_mb(), ffmpeg_path,
     )
 
     pass1 = _execute_batch(
@@ -2301,6 +2439,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
         max_workers,
         emit_batch_progress=True,
         hw_encoder=effective_hw,
+        per_job_ram_mb=per_job_ram_mb,
     )
     succeeded = pass1["succeeded"]
     failed = pass1["failed"]
@@ -2332,6 +2471,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
             reduced_workers,
             emit_batch_progress=False,
             hw_encoder=effective_hw,
+            per_job_ram_mb=per_job_ram_mb,
         )
         for job in retry_candidates:
             job_id = job.get("id")
