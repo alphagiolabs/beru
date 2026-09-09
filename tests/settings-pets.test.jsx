@@ -76,6 +76,25 @@ describe("SettingsModal pets", () => {
     document.body.innerHTML = "";
   });
 
+  it("refreshes the gallery when installed pets change", async () => {
+    root = createRoot(document.getElementById("root"));
+    await act(async () => {
+      root.render(<SettingsModal />);
+    });
+    await act(async () => {
+      await import("../src/features/pets/settings/PetdexPanel.jsx");
+    });
+    expect(document.querySelectorAll(".settings-petdex-card-item")).toHaveLength(1);
+
+    await act(async () => {
+      useEditorStore.setState({
+        petInstalled: [{ slug: "local-pet", displayName: "Local Pet", kind: "creature" }],
+      });
+    });
+    expect(document.querySelectorAll(".settings-petdex-card-item")).toHaveLength(2);
+    expect(document.querySelector(".settings-petdex-body").textContent).toContain("Local Pet");
+  });
+
   it("installs and activates a pet from the gallery", async () => {
     const container = document.getElementById("root");
     root = createRoot(container);
@@ -84,7 +103,6 @@ describe("SettingsModal pets", () => {
       root.render(<SettingsModal />);
     });
 
-    // PetdexPanel is lazy-loaded; flush the Suspense boundary.
     await act(async () => {
       await import("../src/features/pets/settings/PetdexPanel.jsx");
     });

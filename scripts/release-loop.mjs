@@ -1,35 +1,4 @@
 #!/usr/bin/env node
-/**
- * Release Pipeline Loop — Beru
- * ==============================
- *
- * Trigger: ejecutar después de que un PR con `fix: ship v*` o `feat: ship v*`
- * se fusionó a main.
- *
- * Qué hace:
- *   1. Lee la versión de package.json
- *   2. Verifica que CHANGELOG.md tenga entrada para esta versión (HARD RULE)
- *   3. Verifica que estamos en main y el tree está limpio
- *   4. Ejecuta quality gate (lint + test)
- *   5. [Opcional] Corre npm run build (--build)
- *   6. Crea el git tag vX.Y.Z
- *   7. Pushea el tag → CI se encarga del build firmado + publish
- *   8. Crea GitHub Release con las notas del changelog
- *
- * STAGED ROLLOUT: To do a staged rollout, publish the GitHub Release as a
- * draft first, validate on a test machine, then make it public.
- * electron-updater only checks published releases, so drafts are invisible
- * to existing installations until you publish.
- *
- * Uso:
- *   node scripts/release-loop.mjs               # dry-run: valida todo, no taggea
- *   node scripts/release-loop.mjs --ship        # ejecuta el release completo
- *   node scripts/release-loop.mjs --ship --build # build local también
- *
- * Exit codes:
- *   0 = éxito (o dry-run sin errores)
- *   1 = validación fallida
- */
 
 import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdtempSync, readdirSync } from "node:fs";
@@ -37,15 +6,11 @@ import { resolve, dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-// ── Config ─────────────────────────────────────────────────────────────
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const DRY_RUN = !process.argv.includes("--ship");
 const SHOULD_BUILD = process.argv.includes("--build");
 const REPO = "alphagiolabs/beru";
-
-// ── Helpers ────────────────────────────────────────────────────────────
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf-8"));
@@ -105,19 +70,12 @@ function findFiles(dir, pattern) {
   return files.filter((f) => regex.test(f)).map((f) => join(dir, f));
 }
 
-// ── Changelog Parser ────────────────────────────────────────────────────
-
-/**
- * Busca la entrada de CHANGELOG.md para una versión específica.
- * Retorna el contenido de la entrada o null si no existe.
- */
 function getChangelogEntry(version) {
   const changelog = readFileSync(resolve(ROOT, "CHANGELOG.md"), "utf-8");
   const header = `## [${version}]`;
   const idx = changelog.indexOf(header);
   if (idx === -1) return null;
 
-  // Buscar el siguiente header de versión (## [X.Y.Z] o ## [Unreleased])
   const rest = changelog.slice(idx + header.length);
   const nextMatch = rest.match(/\n##\s\[/);
   const endIdx = nextMatch ? idx + header.length + nextMatch.index : changelog.length;
@@ -125,12 +83,9 @@ function getChangelogEntry(version) {
   return changelog.slice(idx, endIdx).trim();
 }
 
-// ── Validators ──────────────────────────────────────────────────────────
-
 function validateEnvironment() {
   section("1/8  Entorno");
 
-  // Verificar gh CLI
   try {
     const whoami = runCapture("gh auth status --show-token");
     if (!whoami.includes("alphagiolabs")) {
@@ -141,14 +96,12 @@ function validateEnvironment() {
     fail("gh CLI", "gh no está instalado o no autenticado. Corre: gh auth login");
   }
 
-  // Verificar remote
   const remote = runCapture("git remote get-url origin");
   if (!remote.includes("alphagiolabs/beru")) {
     fail("git remote", `Esperado alphagiolabs/beru, obtenido: ${remote}`);
   }
   ok(`remote: ${remote}`);
 
-  // Verificar que estamos en main
   const branch = runCapture("git rev-parse --abbrev-ref HEAD");
   if (branch !== "main") {
     fail(
@@ -158,14 +111,12 @@ function validateEnvironment() {
   }
   ok("branch: main");
 
-  // Tree limpio
   const status = runCapture("git status --porcelain");
   if (status) {
     fail("working tree", `Hay cambios sin commitear:\n${status}`);
   }
   ok("working tree limpio");
 
-  // Estamos al día con origin?
   let behind;
   try {
     behind = execFileSync("git", ["rev-list", "--count", "HEAD..origin/main"], {
@@ -189,19 +140,16 @@ function detectVersion() {
   const version = pkg.version;
   console.log(`  📦 package.json → v${version}`);
 
-  // Validar semver
   if (!/^\d+\.\d+\.\d+$/.test(version)) {
     fail("semver", `Formato inválido: ${version}`);
   }
   ok(`v${version}`);
 
-  // Validar que el tag no existe ya
   const existing = runCapture(`git tag -l "v${version}"`);
   if (existing) {
     fail("tag duplicado", `El tag v${version} ya existe localmente.`);
   }
 
-  // Verificar que no esté publicado ya en GitHub Releases
   try {
     execSync(`gh release view "v${version}"`, {
       cwd: ROOT,
@@ -211,7 +159,7 @@ function detectVersion() {
     });
     fail("release duplicada", `v${version} ya existe en GitHub Releases.`);
   } catch {
-    // gh release view falla si no existe — es lo esperado
+    // gh release view fails if the release does not exist
   }
 
   return version;
@@ -231,7 +179,6 @@ function validateChangelog(version) {
     );
   }
 
-  // Validar estructura mínima (Keep a Changelog)
   const hasDate = entry.includes("- 20"); // YYYY-MM-DD
   const hasSection = /###\s+(Added|Changed|Fixed|Removed|Deprecated|Security)/.test(entry);
 
@@ -284,7 +231,6 @@ function runBuild() {
   run("npm run build", { timeout: 600_000 });
   ok("build completo");
 
-  // Verificar instalador con readdirSync (funciona en Windows)
   const distDir = resolve(ROOT, "dist-installer");
   if (!existsSync(distDir)) {
     fail("dist-installer/", "No existe el directorio dist-installer/ después del build");
@@ -313,7 +259,6 @@ function createGitTag(version) {
     return tag;
   }
 
-  // Validar que estamos en el commit correcto
   const lastCommit = runCapture("git log -1 --pretty=%B");
   const isShipCommit = /^(fix|feat|chore):\s*ship\s+v/i.test(lastCommit);
   if (!isShipCommit) {
@@ -355,18 +300,15 @@ function createGitHubRelease(version) {
     fail("Changelog desapareció?", `La entrada para v${version} ya no está en CHANGELOG.md.`);
   }
 
-  // Extraer solo las notas (sin el header ## [X.Y.Z] - fecha)
   const lines = entry.split("\n");
   const notes = lines.slice(1).join("\n").trim();
 
-  // Escribir a archivo temporal para evitar problemas de escaping
   const tmpDir = mkdtempSync(join(tmpdir(), "beru-release-"));
   const notesFile = join(tmpDir, "release-notes.md");
   writeFileSync(notesFile, notes, "utf-8");
 
   const title = `${tag}`;
 
-  // Buscar installers si el build local se hizo
   const distDir = resolve(ROOT, "dist-installer");
   let assets = "";
   if (existsSync(distDir)) {
@@ -375,8 +317,6 @@ function createGitHubRelease(version) {
     const yamls = findFiles(distDir, "latest\\.yml$");
     const allAssets = [...exes, ...blockmaps, ...yamls];
     if (allAssets.length > 0) {
-      // Quote each asset path so paths with spaces don't break the shell
-      // command. Double-quote and escape any embedded double-quotes.
       assets = allAssets.map((p) => `"${String(p).replace(/"/g, '\\"')}"`).join(" ");
     }
   }
@@ -387,8 +327,6 @@ function createGitHubRelease(version) {
 
   console.log(`  🔗 https://github.com/${REPO}/releases/tag/${tag}`);
 }
-
-// ── Main ────────────────────────────────────────────────────────────────
 
 function main() {
   console.log(`

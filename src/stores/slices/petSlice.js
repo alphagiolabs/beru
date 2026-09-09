@@ -7,7 +7,6 @@ export const PET_SCALE_MIN = 0.1;
 export const PET_SCALE_MAX = 3;
 export const PET_SCALE_DEFAULT = 0.33;
 
-/** In-flight promise so concurrent ensurePetsReady callers share one init. */
 let petsInitPromise = null;
 
 function clampPetScale(value) {
@@ -26,7 +25,6 @@ async function persistPetSettings(partial) {
   }
 }
 
-/** Pet gallery, install flow, and floating companion state. */
 export function createPetSlice(set, get) {
   return {
     petEnabled: false,

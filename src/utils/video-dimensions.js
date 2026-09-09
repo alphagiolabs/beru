@@ -1,12 +1,9 @@
-/** Locked and display dimensions for a queue video. */
-
 export function getLockedDimensions(item) {
   const width = Number(item?.sourceWidth || item?.width || 0);
   const height = Number(item?.sourceHeight || item?.height || 0);
   return { width, height };
 }
 
-/** Apply probe result; source* is set once and never overwritten. */
 export function mergeProbeIntoQueueItem(item, info = {}) {
   const w = Number(info.width || 0);
   const h = Number(info.height || 0);

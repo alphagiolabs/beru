@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import useEditorStore from "../stores/useEditorStore";
+import { isTypingTarget } from "../utils/is-typing-target";
 
 const TOOL_KEYS = {
   1: "blur",
@@ -7,14 +8,6 @@ const TOOL_KEYS = {
   3: "text",
   4: "image",
   5: "delogo",
-};
-
-const isTypingTarget = (target) => {
-  if (!target) return false;
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  if (target.isContentEditable) return true;
-  return false;
 };
 
 export default function useKeyboard() {
@@ -41,10 +34,13 @@ export default function useKeyboard() {
 
       if (isTypingTarget(e.target)) return;
 
-      // Modals
       if (key === "Escape") {
         if (store.currentRegion) {
           store.setCurrentRegion(null);
+          return;
+        }
+        if (store.selectedOperationIdx != null) {
+          store.selectOperation(null);
           return;
         }
         return;
@@ -60,7 +56,6 @@ export default function useKeyboard() {
         return;
       }
 
-      // Project / history
       if (cmd && !shiftKey && key.toLowerCase() === "z") {
         e.preventDefault();
         store.undo();
@@ -82,7 +77,6 @@ export default function useKeyboard() {
         return;
       }
 
-      // Tool selection (1-5)
       if (!cmd && !shiftKey && !altKey && TOOL_KEYS[key]) {
         if (store.sidebarMode === "logo") {
           e.preventDefault();
@@ -91,7 +85,6 @@ export default function useKeyboard() {
         }
       }
 
-      // Playback
       if (key === " " || key === "Spacebar") {
         if (store.queue.length === 0) return;
         e.preventDefault();
@@ -131,7 +124,6 @@ export default function useKeyboard() {
         return;
       }
 
-      // Queue navigation
       if (key === "[" || (key === "ArrowUp" && !cmd)) {
         if (store.queue.length === 0) return;
         e.preventDefault();
@@ -145,7 +137,6 @@ export default function useKeyboard() {
         return;
       }
 
-      // Region / op
       if (key === "n" && !cmd) {
         e.preventDefault();
         store.setCurrentRegion(null);
@@ -155,6 +146,14 @@ export default function useKeyboard() {
         if (store.currentRegion) {
           e.preventDefault();
           store.setCurrentRegion(null);
+          return;
+        }
+        const selOpIdx = store.selectedOperationIdx;
+        const selOp =
+          selOpIdx != null ? store.queue[store.selectedIdx]?.operations?.[selOpIdx] : null;
+        if (selOp && (selOp.mode === "blur" || selOp.mode === "delogo" || selOp.mode === "crop")) {
+          e.preventDefault();
+          store.removeOperation(selOpIdx);
         }
         return;
       }

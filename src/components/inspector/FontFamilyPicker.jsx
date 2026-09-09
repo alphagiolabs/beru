@@ -2,10 +2,6 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import useCloseOnOutsideClick from "../../hooks/useCloseOnOutsideClick";
 
-/**
- * Dark-theme font family picker for the inspector.
- * Replaces native <select> so the menu matches the app UI (not OS chrome).
- */
 export default function FontFamilyPicker({
   value,
   options = [],

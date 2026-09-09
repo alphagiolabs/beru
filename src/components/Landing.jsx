@@ -1,6 +1,8 @@
 import { Upload } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
+import { importVideosFromDialog } from "../utils/import-videos";
+import { Button } from "./ui/Button";
 
 const api = window.api;
 
@@ -8,40 +10,17 @@ export default function Landing() {
   const t = useT();
 
   const handleSelect = async () => {
-    if (!api?.openVideos) {
-      useEditorStore.getState().showToast({ kind: "err", text: t("errors.noApi") });
-      return;
-    }
-    try {
-      const paths = await api.openVideos();
-      if (!paths?.length) return;
-      await useEditorStore.getState().addVideos(paths, api);
-      useEditorStore.getState().showToast({
-        kind: "ok",
-        text: t("drop.added", { count: paths.length }),
-      });
-    } catch (err) {
-      console.error("[beru] Video import failed:", err);
-      useEditorStore.getState().showToast({
-        kind: "err",
-        text: t("errors.importVideosFailed", {
-          message: err?.message || t("errors.unknown"),
-        }),
-      });
-    }
+    await importVideosFromDialog({ api, store: useEditorStore.getState(), t });
   };
 
   return (
     <div
-      className="flex-1 w-full h-full flex items-center justify-center min-h-0"
+      className="landing-surface flex-1 w-full h-full flex items-center justify-center min-h-0"
       style={{ background: "var(--bg-app)" }}
     >
-      <div className="flex flex-col items-center gap-4 text-center max-w-sm">
-        <div
-          className="w-20 h-20 rounded-2xl flex items-center justify-center mb-2"
-          style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-        >
-          <svg viewBox="0 0 300 400" width="40" height="52" aria-label="Beru">
+      <section className="landing-card" aria-labelledby="landing-title">
+        <div className="landing-mark" aria-hidden="true">
+          <svg viewBox="0 0 300 400" width="40" height="52">
             <path
               fill="currentColor"
               fillRule="evenodd"
@@ -49,18 +28,26 @@ export default function Landing() {
             />
           </svg>
         </div>
-        <h1 className="text-lg font-bold" style={{ color: "var(--text-primary)" }}>
+        <p className="landing-eyebrow">{t("landing.eyebrow")}</p>
+        <h1 id="landing-title" className="landing-title">
           {t("landing.title")}
         </h1>
-        <div className="flex gap-2 mt-2">
-          <button onClick={handleSelect} className="cap-btn-primary text-[12px] px-5 py-2">
+        <p className="landing-description">{t("landing.description")}</p>
+        <div className="landing-actions">
+          <Button
+            type="button"
+            onClick={handleSelect}
+            variant="primary"
+            size="lg"
+            className="landing-primary-action"
+            title={t("landing.import")}
+          >
             <Upload size={16} /> {t("landing.import")}
-          </button>
+          </Button>
         </div>
-        <p className="text-[11px] mt-2" style={{ color: "var(--text-dim)" }}>
-          {t("landing.hint")}
-        </p>
-      </div>
+        <p className="landing-hint">{t("landing.shortcut")}</p>
+        <p className="landing-formats">{t("landing.hint")}</p>
+      </section>
     </div>
   );
 }

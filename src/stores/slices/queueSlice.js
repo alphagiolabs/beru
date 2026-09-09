@@ -1,16 +1,5 @@
-// ARCHITECTURE NOTE: This slice has cross-slice dependencies on batchSlice.
-// Methods like syncTextToExcel, getCellTextForRegion, materializeBatchTextOps,
-// and getExcelDisplayId are defined in batchSlice but called from queueSlice
-// via get(). This works because all slices merge into a single store, but
-// creates implicit coupling. If extracting to separate stores, these calls
-// must be refactored to receive the dependencies as parameters.
-import {
-  createOperation,
-  createQueueItem,
-  uid,
-  denormalizeRegion,
-  ensureNormalized,
-} from "../../utils/types";
+import { createQueueItem, uid, ensureNormalized } from "../../utils/types";
+import { createOperation } from "../../utils/operation";
 import { clampRegionToVideo, isRegionUsable, stripExt } from "../../utils/video-utils";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { sanitizeOperation } from "../../utils/delogo-ops";
@@ -44,7 +33,6 @@ function pruneImageDataCache(cache, queue) {
   return next;
 }
 
-/** Desired basename for a queue item (before batch collision suffixes). */
 function desiredOutputNameFor(item, get) {
   if (!item) return null;
   const { exportFormat, templateRegions } = get();
@@ -69,7 +57,6 @@ function desiredOutputNameFor(item, get) {
   return outputName || `${stem}_beru.${exportFormat}`;
 }
 
-/** Video queue, region drawing, per-video operations, and undo/redo. */
 export function createQueueSlice(set, get) {
   return {
     queue: [],
@@ -79,8 +66,6 @@ export function createQueueSlice(set, get) {
     imageDataCache: {},
     undoStack: [],
     redoStack: [],
-
-    /* ── Computed helpers ────────────────────────────────────────────── */
 
     selected: () => {
       const { queue, selectedIdx } = get();
@@ -92,13 +77,10 @@ export function createQueueSlice(set, get) {
       return getLockedDimensions(s);
     },
 
-    /* Compute the output file path for a queue item. */
     outputPathFor: (item) => {
       if (!item) return null;
       const { outputDir, queue } = get();
       let outputName = desiredOutputNameFor(item, get);
-      // When several queue items share the same basename, keep the first and
-      // suffix later ones (__2, __3, ...) so batch export does not overwrite.
       let count = 0;
       let rank = -1;
       for (const q of queue) {
@@ -117,8 +99,6 @@ export function createQueueSlice(set, get) {
       return `${base}${sep}${outputName}`;
     },
 
-    /* ── Queue management ───────────────────────────────────────────── */
-
     _patchQueueVideoInfo: (startIdx, pathList, infos) => {
       if (!Array.isArray(infos) || infos.length === 0) return;
       set((s) => {
@@ -133,9 +113,7 @@ export function createQueueSlice(set, get) {
       });
     },
 
-    /** All live thumbnail-load controllers, so clearQueue can abort every batch. */
     _thumbnailAbortControllers: new Set(),
-    /** Display-only thumbnails keyed by video path — not on queue items (plan 018). */
     thumbnailsByPath: {},
 
     _scheduleThumbnailLoads: (api, toAdd, startIdx) => {
@@ -275,11 +253,6 @@ export function createQueueSlice(set, get) {
         });
     },
 
-    /**
-     * Prime `imageDataCache` for a path that isn't tied to a queue op yet.
-     * Used by the delogo "cover" picker so the live preview can render the
-     * chosen image before the user commits the operation.
-     */
     cacheImageData: (imagePath, dataUrl) => {
       if (!imagePath || !dataUrl) return;
       set((s) => ({
@@ -295,7 +268,6 @@ export function createQueueSlice(set, get) {
         if (sel >= next.length) sel = next.length - 1;
         else if (sel === idx) sel = Math.min(idx, next.length - 1);
         else if (sel > idx) sel = sel - 1;
-        // Rebuild excelMatchStatus with re-indexed keys
         const newStatus = {};
         Object.entries(s.excelMatchStatus).forEach(([k, v]) => {
           const ki = Number(k);
@@ -376,10 +348,6 @@ export function createQueueSlice(set, get) {
       }
     },
 
-    /* ── Region operations ──────────────────────────────────────────── */
-    /* All regions are stored NORMALIZED (0..1) so the same region can be reused
-     * across videos of any resolution. */
-
     setCurrentRegion: (region) => {
       if (!region) {
         set({ currentRegion: null });
@@ -425,8 +393,6 @@ export function createQueueSlice(set, get) {
       }
       set({ currentRegion: next });
     },
-
-    /* ── Operations ─────────────────────────────────────────────────── */
 
     selectOperation: (opIdx) => {
       const { queue, selectedIdx } = get();
@@ -592,7 +558,6 @@ export function createQueueSlice(set, get) {
     updateOperationRegion: (opIdx, region, { recordHistory = true } = {}) => {
       const { queue, selectedIdx } = get();
       if (selectedIdx < 0) return;
-      // Live drag passes recordHistory:false and snapshots once on pointerdown.
       if (recordHistory) get()._saveUndo();
       const updated = [...queue];
       const ops = [...updated[selectedIdx].operations];
@@ -627,7 +592,6 @@ export function createQueueSlice(set, get) {
       if (videoIdx < 0 || videoIdx >= queue.length) return -1;
       const tr = templateRegions.find((r) => r.id === regionId);
       if (!tr) return -1;
-      // Match materializeBatchTextOps / _reapplyExcel: global + template style.
       const style = mergeTextStyles(getGlobalTextStyleFromState(get()), tr.style);
       const op = createOperation({
         mode: "text",
@@ -645,13 +609,6 @@ export function createQueueSlice(set, get) {
       set({ queue: updated });
       return updated[videoIdx].operations.length - 1;
     },
-
-    /* ── Undo / Redo ────────────────────────────────────────────────── */
-    /* DESIGN: Undo/redo is per-video, not global. Switching videos resets the
-     * stack (see selectVideo). This is a deliberate trade-off: it keeps the
-     * implementation simple and avoids cross-video state confusion, but means
-     * users can't undo an operation after switching to another video. A global
-     * undo that tracks the affected video index is a future enhancement. */
 
     undo: () => {
       const { undoStack, queue, selectedIdx } = get();

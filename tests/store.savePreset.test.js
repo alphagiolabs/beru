@@ -1,12 +1,8 @@
-// Regression test for the "PresetManager savePreset" bug:
-// `useEditorStore.savePreset` must be the async, disk-backed version.
-// A duplicate sync/localStorage `savePreset` in the store would win because
-// of object-literal key shadowing and silently bypass the IPC + UI refresh.
-
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
 const getItemSpy = vi.spyOn(Storage.prototype, "getItem");
+const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
 
 const mockApi = {
   savePreset: vi.fn(async (_name, _json) => ({ success: true, fileName: "test.beru.json" })),
@@ -21,6 +17,7 @@ describe("useEditorStore.savePreset", () => {
   beforeEach(() => {
     setItemSpy.mockClear();
     getItemSpy.mockClear();
+    removeItemSpy.mockClear();
     mockApi.savePreset.mockClear();
     mockApi.listPresets.mockClear();
   });
@@ -50,5 +47,30 @@ describe("useEditorStore.savePreset", () => {
     const res = await useEditorStore.getState().savePreset("   ");
     expect(res).toEqual(expect.objectContaining({ ok: false }));
     expect(mockApi.savePreset).not.toHaveBeenCalled();
+  });
+});
+
+describe("legacy beru-presets migration", () => {
+  beforeEach(() => {
+    getItemSpy.mockClear();
+    removeItemSpy.mockClear();
+  });
+
+  it("hydrates from localStorage only when disk presets are empty", () => {
+    const legacy = [{ name: "old", filename: "old.beru.json" }];
+    getItemSpy.mockReturnValue(JSON.stringify(legacy));
+    useEditorStore.setState({ presets: [] });
+    useEditorStore.getState().loadPresetsFromStorage();
+    expect(useEditorStore.getState().presets).toEqual(legacy);
+    expect(removeItemSpy).toHaveBeenCalledWith("beru-presets");
+  });
+
+  it("drops the localStorage key when disk presets already exist", () => {
+    const disk = [{ name: "disk", filename: "disk.beru.json" }];
+    getItemSpy.mockReturnValue(JSON.stringify([{ name: "old", filename: "old.beru.json" }]));
+    useEditorStore.setState({ presets: disk });
+    useEditorStore.getState().loadPresetsFromStorage();
+    expect(useEditorStore.getState().presets).toEqual(disk);
+    expect(removeItemSpy).toHaveBeenCalledWith("beru-presets");
   });
 });

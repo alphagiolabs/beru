@@ -1,8 +1,3 @@
-/**
- * Integration: 2.mp4 + Plantilla.xlsx batch text export matches CSS preview contract.
- * Verifies the FFmpeg filter graph uses a full-region drawbox (not a glyph box)
- * and that preview-frame rendering succeeds with real assets.
- */
 import { describe, it, expect, beforeEach } from "vitest";
 import { spawnSync } from "child_process";
 import path from "path";

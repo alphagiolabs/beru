@@ -8,7 +8,6 @@ input was.
 """
 import sys
 import os
-import json
 import subprocess
 import tempfile
 from pathlib import Path
@@ -29,7 +28,6 @@ def resolve_ffmpeg():
 
 
 FFMPEG = resolve_ffmpeg()
-FFPROBE = str(FFMPEG).replace("ffmpeg.exe", "ffprobe.exe")
 
 
 def run(cmd):
@@ -56,7 +54,6 @@ def bake_logo(path_in, path_out, region):
     `region`. The right half stays clean — that's what `mirror` will
     reflect to fill the left half."""
     x, y, w, h = region["x"], region["y"], region["w"], region["h"]
-    # Logo only covers the left half
     cmd = [
         str(FFMPEG), "-y",
         "-i", str(path_in),
@@ -73,7 +70,6 @@ def bake_logo(path_in, path_out, region):
 def sample_region(video, region, t=0.5):
     """Extract the average RGB of a region in `video` at time `t`."""
     x, y, w, h = region["x"], region["y"], region["w"], region["h"]
-    # Use a unique output path to avoid Windows file locking issues.
     out = Path(tempfile.mkdtemp()) / "sample.ppm"
     cmd = [
         str(FFMPEG), "-y",
@@ -93,7 +89,6 @@ def sample_region(video, region, t=0.5):
             out.unlink()
         except OSError:
             pass
-    # PPM header: P6\nWxH\n255\n then raw RGB (3 bytes for 1x1 image)
     idx = data.find(b"255\n")
     if idx < 0:
         return None
@@ -110,9 +105,6 @@ def main():
     truth = tmp / "truth.mp4"
     with_logo = tmp / "with_logo.mp4"
 
-    # Try each method and verify the pipeline runs end-to-end without
-    # crashing. Visual quality depends on the method's suitability for
-    # the content; this test only checks pipeline correctness.
     methods = [
         ("temporal", {"delogo_method": "temporal", "temporal_radius": 3, "edge_feather": 6}),
         ("mirror", {"delogo_method": "mirror", "mirror_side": "right", "edge_feather": 6}),
@@ -157,8 +149,6 @@ def main():
         print(f"  [OK] {name}: {out.stat().st_size} bytes")
 
     print("[4/4] Verify mirror removes logo on half-covered region...")
-    # For mirror to be effective, the logo should NOT cover the entire
-    # region. We use a wider region with logo on one side only.
     half_region = {"x": 50, "y": 30, "w": 200, "h": 60}
     half_logo = tmp / "with_half_logo.mp4"
     bake_logo(truth, half_logo, half_region)  # covers left half only
@@ -191,9 +181,9 @@ def main():
         print(f"  distance input  -> truth: {d_in:.1f}")
         print(f"  distance output -> truth: {d_out:.1f}")
         if d_out < d_in:
-            print(f"  [PASS] mirror output is closer to truth than logo'd input")
+            print("  [PASS] mirror output is closer to truth than logo'd input")
         else:
-            print(f"  [INFO] mirror not closer on this case (test design dependent)")
+            print("  [INFO] mirror not closer on this case (test design dependent)")
 
     print("\n[ALL PASSED] Delogo pipeline runs end-to-end for all methods")
     return 0

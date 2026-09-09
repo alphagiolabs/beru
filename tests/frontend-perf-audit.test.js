@@ -1,13 +1,3 @@
-/**
- * Frontend performance audit tests.
- *
- * These tests validate that performance-critical patterns are present and
- * correct in the codebase. They do NOT modify any source files — they are
- * read-only assertions that guard against regressions.
- *
- * Run: npm test -- frontend-perf-audit
- */
-
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "fs";
 import { join, dirname } from "path";
@@ -20,8 +10,6 @@ function readSrc(rel) {
 }
 
 describe("Frontend performance audit", () => {
-  /* ── Store subscriptions ────────────────────────────────────────── */
-
   describe("Store subscription patterns", () => {
     it("uses createWithEqualityFn with Object.is for selective subscriptions", () => {
       const store = readSrc("src/stores/useEditorStore.js");
@@ -52,8 +40,6 @@ describe("Frontend performance audit", () => {
     });
   });
 
-  /* ── Bundle optimization ────────────────────────────────────────── */
-
   describe("Bundle optimization", () => {
     it("splits xlsx into a manual chunk", () => {
       const vite = readSrc("vite.config.js");
@@ -71,8 +57,6 @@ describe("Frontend performance audit", () => {
       expect(app).toContain("Suspense");
     });
   });
-
-  /* ── Render optimization ────────────────────────────────────────── */
 
   describe("Render optimization", () => {
     it("VideoPreview memoizes activeOpsWithScreen", () => {
@@ -102,8 +86,6 @@ describe("Frontend performance audit", () => {
       expect(uc).toContain("useCallback(");
     });
   });
-
-  /* ── DelogoLivePreview RAF loop ─────────────────────────────────── */
 
   describe("DelogoLivePreview performance", () => {
     it("pauses the RAF loop when video is paused", () => {
@@ -135,8 +117,6 @@ describe("Frontend performance audit", () => {
     });
   });
 
-  /* ── Processing progress batching ───────────────────────────────── */
-
   describe("Processing progress batching", () => {
     it("useProcessing batches job progress with RAF", () => {
       const up = readSrc("src/hooks/useProcessing.js");
@@ -152,8 +132,6 @@ describe("Frontend performance audit", () => {
     });
   });
 
-  /* ── Auto-update throttle ───────────────────────────────────────── */
-
   describe("Auto-update", () => {
     it("throttles update checks to 30 minutes", () => {
       const uu = readSrc("src/hooks/useUpdater.js");
@@ -167,8 +145,6 @@ describe("Frontend performance audit", () => {
       expect(uu).toContain("2500");
     });
   });
-
-  /* ── Dependency alignment ───────────────────────────────────────── */
 
   describe("Dependency alignment", () => {
     it("React 19 is installed and used in main.jsx with StrictMode", () => {
@@ -188,20 +164,13 @@ describe("Frontend performance audit", () => {
     });
   });
 
-  /* ── Known performance gaps (informational, not blocking) ───────── */
-
   describe("Known performance gaps", () => {
     it("PERF_FLAGS default to safe, proven performance values", () => {
       const pf = readSrc("src/utils/perf-flags.js");
-      // Progress map keeps queue stable during batch processing (enabled by default).
       expect(pf).toContain('flagBool("VITE_BERU_RENDER_PROGRESS_MAP", true)');
-      // Virtualization wired with @tanstack/react-virtual (on by default above threshold).
       expect(pf).toContain('flagBool("VITE_BERU_RENDER_VIRTUALIZE", true)');
-      // Delogo preview throttled to 30 FPS to reduce CPU while remaining smooth.
       expect(pf).toContain('flagNumber("VITE_BERU_DELGO_THROTTLE_FPS", 30)');
-      // Quickselect reduces temporal median complexity but requires validation.
       expect(pf).toContain('flagBool("VITE_BERU_DELGO_QUICKSELECT", true)');
-      // Log batching coalesces rapid processing logs into 50 ms store updates.
       expect(pf).toContain('flagBool("VITE_BERU_LOG_BATCH", true)');
     });
 

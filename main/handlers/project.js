@@ -1,39 +1,16 @@
 import { ipcMain, dialog } from "electron";
 import fs from "fs";
 import { getMainWindow } from "../shared-state.js";
+import { validateProjectDocument } from "../../shared/project-document.js";
 
-const REQUIRED_PROJECT_FIELDS = ["version", "queue"];
-const REQUIRED_QUEUE_ITEM_FIELDS = ["id", "path", "filename"];
-
-function validateQueueItem(item) {
-  if (!item || typeof item !== "object") return false;
-  for (const field of REQUIRED_QUEUE_ITEM_FIELDS) {
-    if (!(field in item)) return false;
+async function readValidatedProject(resolvedPath) {
+  const raw = await fs.promises.readFile(resolvedPath, "utf8");
+  const data = JSON.parse(raw);
+  const validation = validateProjectDocument(data);
+  if (!validation.valid) {
+    return { success: false, error: validation.error };
   }
-  if (typeof item.path !== "string" || !item.path.trim()) return false;
-  if (typeof item.filename !== "string" || !item.filename.trim()) return false;
-  if (item.operations && !Array.isArray(item.operations)) return false;
-  return true;
-}
-
-function validateProjectStructure(data) {
-  if (!data || typeof data !== "object") {
-    return { valid: false, error: "El proyecto debe ser un objeto" };
-  }
-  for (const field of REQUIRED_PROJECT_FIELDS) {
-    if (!(field in data)) {
-      return { valid: false, error: `Campo requerido faltante: ${field}` };
-    }
-  }
-  if (!Array.isArray(data.queue)) {
-    return { valid: false, error: "queue debe ser un array" };
-  }
-  for (let i = 0; i < data.queue.length; i++) {
-    if (!validateQueueItem(data.queue[i])) {
-      return { valid: false, error: `Item de queue inválido en posición ${i}` };
-    }
-  }
-  return { valid: true };
+  return { success: true, filePath: resolvedPath, data };
 }
 
 export function registerProjectHandlers(pathSecurity) {
@@ -46,11 +23,11 @@ export function registerProjectHandlers(pathSecurity) {
     });
     if (canceled || !filePath) return { success: false, canceled: true };
     try {
-      const validation = validateProjectStructure(payload);
+      const validation = validateProjectDocument(payload);
       if (!validation.valid) {
         return { success: false, error: validation.error };
       }
-      fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf8");
+      await fs.promises.writeFile(filePath, JSON.stringify(payload, null, 2), "utf8");
       return { success: true, filePath };
     } catch (e) {
       return { success: false, error: e.message };
@@ -69,13 +46,7 @@ export function registerProjectHandlers(pathSecurity) {
     const check = pathSecurity.validateReadableFile(filePaths[0], "project");
     if (!check.ok) return { success: false, error: check.error };
     try {
-      const raw = fs.readFileSync(check.resolvedPath, "utf8");
-      const data = JSON.parse(raw);
-      const validation = validateProjectStructure(data);
-      if (!validation.valid) {
-        return { success: false, error: validation.error };
-      }
-      return { success: true, filePath: check.resolvedPath, data };
+      return await readValidatedProject(check.resolvedPath);
     } catch (e) {
       return { success: false, error: e.message };
     }
@@ -85,18 +56,14 @@ export function registerProjectHandlers(pathSecurity) {
     const check = pathSecurity.validateReadableFile(filePath, "project");
     if (!check.ok) return { success: false, error: check.error };
     try {
-      if (!fs.existsSync(check.resolvedPath)) {
+      const loaded = await readValidatedProject(check.resolvedPath);
+      if (!loaded.success) return loaded;
+      pathSecurity.registerAllowedPath(check.resolvedPath, "project");
+      return loaded;
+    } catch (e) {
+      if (e?.code === "ENOENT") {
         return { success: false, error: "Archivo no encontrado", missing: true };
       }
-      const raw = fs.readFileSync(check.resolvedPath, "utf8");
-      const data = JSON.parse(raw);
-      const validation = validateProjectStructure(data);
-      if (!validation.valid) {
-        return { success: false, error: validation.error };
-      }
-      pathSecurity.registerAllowedPath(check.resolvedPath, "project");
-      return { success: true, filePath: check.resolvedPath, data };
-    } catch (e) {
       return { success: false, error: e.message };
     }
   });

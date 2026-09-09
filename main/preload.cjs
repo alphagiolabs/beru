@@ -1,5 +1,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+function subscribe(channel, callback) {
+  const handler = (_event, payload) => callback(payload);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
+
 contextBridge.exposeInMainWorld("api", {
   openVideos: () => ipcRenderer.invoke("dialog:openVideos"),
   openExcel: () => ipcRenderer.invoke("dialog:openExcel"),
@@ -48,23 +54,10 @@ contextBridge.exposeInMainWorld("api", {
   syncPetOverlayState: (state) => ipcRenderer.invoke("petOverlay:sync", state),
   getPetOverlayState: () => ipcRenderer.invoke("petOverlay:getState"),
   popInPetOverlay: () => ipcRenderer.invoke("petOverlay:popIn"),
-  movePetOverlay: (position) => ipcRenderer.invoke("petOverlay:move", position),
   dragPetOverlayBy: (delta) => ipcRenderer.invoke("petOverlay:dragBy", delta),
-  onPetOverlayState: (cb) => {
-    const handler = (_e, payload) => cb(payload);
-    ipcRenderer.on("petOverlay:state", handler);
-    return () => ipcRenderer.removeListener("petOverlay:state", handler);
-  },
-  onPetOverlayEvent: (cb) => {
-    const handler = (_e, payload) => cb(payload);
-    ipcRenderer.on("petOverlay:event", handler);
-    return () => ipcRenderer.removeListener("petOverlay:event", handler);
-  },
-  onUpdaterEvent: (cb) => {
-    const handler = (_e, payload) => cb(payload);
-    ipcRenderer.on("updater:event", handler);
-    return () => ipcRenderer.removeListener("updater:event", handler);
-  },
+  onPetOverlayState: (cb) => subscribe("petOverlay:state", cb),
+  onPetOverlayEvent: (cb) => subscribe("petOverlay:event", cb),
+  onUpdaterEvent: (cb) => subscribe("updater:event", cb),
   readImage: (path) => ipcRenderer.invoke("image:read", path),
   pickImage: () => ipcRenderer.invoke("image:pick"),
   resolveDroppedPaths: (paths) => ipcRenderer.invoke("fs:resolveDroppedPaths", paths),
@@ -72,54 +65,14 @@ contextBridge.exposeInMainWorld("api", {
   getThumbnailBatch: (paths) => ipcRenderer.invoke("video:thumbnailBatch", paths),
   renderPreviewFrame: (payload) => ipcRenderer.invoke("video:renderPreviewFrame", payload),
 
-  onProgress: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:progress", handler);
-    return () => ipcRenderer.removeListener("process:progress", handler);
-  },
-  onJobProgress: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:jobProgress", handler);
-    return () => ipcRenderer.removeListener("process:jobProgress", handler);
-  },
-  onComplete: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:complete", handler);
-    return () => ipcRenderer.removeListener("process:complete", handler);
-  },
-  onSummary: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:summary", handler);
-    return () => ipcRenderer.removeListener("process:summary", handler);
-  },
-  onJobError: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:jobError", handler);
-    return () => ipcRenderer.removeListener("process:jobError", handler);
-  },
-  onJobCancelled: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:jobCancelled", handler);
-    return () => ipcRenderer.removeListener("process:jobCancelled", handler);
-  },
-  onFinished: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:finished", handler);
-    return () => ipcRenderer.removeListener("process:finished", handler);
-  },
-  onRunStarted: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:runStarted", handler);
-    return () => ipcRenderer.removeListener("process:runStarted", handler);
-  },
-  onError: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:error", handler);
-    return () => ipcRenderer.removeListener("process:error", handler);
-  },
-  onLog: (cb) => {
-    const handler = (_e, data) => cb(data);
-    ipcRenderer.on("process:log", handler);
-    return () => ipcRenderer.removeListener("process:log", handler);
-  },
+  onProgress: (cb) => subscribe("process:progress", cb),
+  onJobProgress: (cb) => subscribe("process:jobProgress", cb),
+  onComplete: (cb) => subscribe("process:complete", cb),
+  onSummary: (cb) => subscribe("process:summary", cb),
+  onJobError: (cb) => subscribe("process:jobError", cb),
+  onJobCancelled: (cb) => subscribe("process:jobCancelled", cb),
+  onFinished: (cb) => subscribe("process:finished", cb),
+  onRunStarted: (cb) => subscribe("process:runStarted", cb),
+  onError: (cb) => subscribe("process:error", cb),
+  onLog: (cb) => subscribe("process:log", cb),
 });

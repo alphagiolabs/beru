@@ -34,7 +34,6 @@ async function persistThemeSettings(partial) {
   }
 }
 
-/** Theme, language, toasts, shortcuts, recents, and app updater. */
 export function createUiSlice(set, get) {
   return {
     theme: "dark",

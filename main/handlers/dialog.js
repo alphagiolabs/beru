@@ -59,12 +59,6 @@ export function registerDialogHandlers(pathSecurity) {
       filters: [{ name: "Excel", extensions: ["xlsx"] }],
     });
     if (canceled || !filePath) return { canceled: true };
-    // File may not exist yet — register parent dir for shell/write allow checks.
-    try {
-      pathSecurity.registerOutputDirectory(path.dirname(filePath));
-    } catch {
-      /* best effort */
-    }
     return { canceled: false, filePath };
   });
 }

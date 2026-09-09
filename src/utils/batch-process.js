@@ -1,10 +1,5 @@
-/** Helpers for batch text (Texto en lote) processing validation. */
+export { hasVideoDimensions } from "../../shared/has-video-dimensions.js";
 
-export function hasVideoDimensions(item) {
-  return Number(item?.width || 0) > 0 && Number(item?.height || 0) > 0;
-}
-
-/** True when the queue item has at least one non-empty text value for a template region. */
 export function videoHasBatchText(videoIdx, templateRegions, getCellTextForRegion) {
   if (!templateRegions?.length) return true;
   return templateRegions.some(
@@ -12,7 +7,6 @@ export function videoHasBatchText(videoIdx, templateRegions, getCellTextForRegio
   );
 }
 
-/** Videos in batch mode that still have no text in any template column. */
 export function listVideosMissingBatchText(queue, templateRegions, getCellTextForRegion) {
   if (!templateRegions?.length) return [];
   return queue
@@ -40,14 +34,4 @@ export function buildIdTextOutputName(idValue, textValue, exportFormat) {
   const ext = sanitizeFilenamePart(exportFormat || "mp4") || "mp4";
   if (!id || !text) return "";
   return `${id}_${text}.${ext.replace(/^\.+/, "") || "mp4"}`;
-}
-
-/** Filter operations sent to FFmpeg — drop blank drawtext ops. */
-export function filterOperationsForExport(operations) {
-  if (!Array.isArray(operations)) return [];
-  return operations.filter((op) => {
-    if (op?.mode === "text") return String(op.text ?? "").trim().length > 0;
-    if (op?.mode === "image") return String(op.imagePath ?? "").trim().length > 0;
-    return true;
-  });
 }

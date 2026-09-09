@@ -1,4 +1,3 @@
-/** Semantic theme token keys — map 1:1 to CSS custom properties. */
 export const THEME_TOKEN_KEYS = [
   "bgApp",
   "bgSurface",
@@ -35,7 +34,6 @@ export const CSS_VAR_MAP = {
   modalShadow: "--modal-shadow",
 };
 
-/** i18n key suffix for each token label in the theme editor. */
 export const TOKEN_LABEL_KEYS = {
   bgApp: "theme.token.bgApp",
   bgSurface: "theme.token.bgSurface",

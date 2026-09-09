@@ -1,7 +1,4 @@
-// TECH DEBT: This component is ~1200 lines (timeline, controls, FFmpeg compare,
-// batch-text drag still inlined). useZoomPan + video-preview/utils are extracted.
-// Do not re-add parallel extract modules unless they are wired as the live UI.
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo, Fragment } from "react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import useCanvas from "../hooks/useCanvas";
@@ -12,6 +9,7 @@ import DelogoLivePreview from "./DelogoLivePreview";
 import Landing from "./Landing";
 import TextOverlay from "./TextOverlay";
 import TextRegionFrame from "./TextRegionFrame";
+import RegionBlurPreview from "./video-preview/RegionBlurPreview";
 import { useT } from "../i18n/useT";
 import { findTextOpForRegion, getGlobalTextStyleFromState } from "../utils/text-style";
 import {
@@ -25,10 +23,10 @@ import {
   EyeOff,
   ScanEye,
   X,
-  Loader2,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import { Button } from "./ui/Button";
 import {
   opModeColor,
   isOpActive,
@@ -37,6 +35,35 @@ import {
   MAX_ZOOM,
 } from "./video-preview/utils";
 import useZoomPan from "./video-preview/useZoomPan";
+
+const REGION_EDIT_MODES = new Set(["blur", "delogo", "crop"]);
+
+const REGION_EDIT_LABEL = {
+  blur: "Desenfoque",
+  delogo: "Quitar logo",
+  crop: "Recorte",
+};
+
+function RegionHitLayer({ screen, selected, dragging, disabled, onDragStart }) {
+  if (!screen || disabled) return null;
+  return (
+    <div
+      className={`absolute ${dragging ? "cursor-grabbing" : "cursor-grab"}`}
+      style={{
+        left: screen.x,
+        top: screen.y,
+        width: screen.w,
+        height: screen.h,
+        zIndex: 40,
+        pointerEvents: "auto",
+        background: "transparent",
+        outline: selected ? "none" : "1px dashed transparent",
+      }}
+      onMouseDown={onDragStart}
+      title="Arrastra para mover. Usa las esquinas para redimensionar."
+    />
+  );
+}
 
 export default function VideoPreview() {
   const t = useT();
@@ -52,11 +79,10 @@ export default function VideoPreview() {
     templateRegions,
     selectedTemplateRegionId,
     watermark,
+    selectedOperationIdx,
   } = useEditorStore((s) => {
     const item =
       s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null;
-    // Narrow selected item: omit thumbnail/status/progress so import/probe
-    // patches do not re-render this ~1.3k-line tree (plan 018).
     const sel = item
       ? {
           path: item.path,
@@ -81,6 +107,7 @@ export default function VideoPreview() {
       templateRegions: s.templateRegions,
       selectedTemplateRegionId: s.selectedTemplateRegionId,
       watermark: s.watermark,
+      selectedOperationIdx: s.selectedOperationIdx,
     };
   }, shallow);
   const {
@@ -99,9 +126,6 @@ export default function VideoPreview() {
     }),
     shallow,
   );
-  // Subscribe to the global text style so the logo/batch live text preview
-  // re-renders on style edits without reading the whole store via getState()
-  // during render (which also caused stale inputs after preset apply/undo).
   const globalTextStyle = useEditorStore(
     (s) =>
       getGlobalTextStyleFromState({
@@ -154,10 +178,6 @@ export default function VideoPreview() {
   const [previewCompareMode, setPreviewCompareMode] = useState("ffmpeg");
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef);
 
-  // Active operations with their screen-space coords, memoized so the overlay
-  // geometry (regionToScreen) only recomputes when the operations or the video
-  // layout change — not on every `timeupdate` / progress tick. The `currentTime`
-  // filter still runs on each tick (cheap), but regionToScreen is avoided.
   const activeOpsWithScreen = useMemo(() => {
     if (!sel?.operations) return [];
     const videoEl = videoRef.current;
@@ -169,14 +189,8 @@ export default function VideoPreview() {
       out.push({ op, opIdx: i, screen });
     }
     return out;
-    // `currentTime` filters which ops are active; `sel.operations` / `layoutTick`
-    // gate the regionToScreen recomputation. eslint sees currentTime as a dep
-    // that "should" be split, but keeping one memo is simpler and the filter is O(n).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sel?.operations, layoutTick, currentTime]);
 
-  // Batch-mode per-region preview payloads with screen coords, memoized so
-  // getBatchPreviewPayload + regionToScreen don't run on every render.
   const batchRegionPreviews = useMemo(() => {
     if (sidebarMode !== "batch" || selectedIdx < 0 || !templateRegions?.length) return [];
     const videoEl = videoRef.current;
@@ -189,10 +203,6 @@ export default function VideoPreview() {
       out.push({ tr, payload, screen });
     }
     return out;
-    // getBatchPreviewPayload reads queue/style state from the store; the memo
-    // invalidates when the inputs that affect its output change. `layoutTick`
-    // covers video element resize.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sidebarMode, selectedIdx, templateRegions, sel, globalTextStyle, layoutTick]);
 
   const isSplitCompare = showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "split";
@@ -214,18 +224,13 @@ export default function VideoPreview() {
   const showFfmpegOverlay =
     showFfmpegPreview && ffmpegPreviewUrl && previewCompareMode === "ffmpeg";
 
-  // DOM resize/move frame whenever there is a usable text region (batch draft,
-  // selected template, or logo text tool). Previously required selectedTemplateRegionId
-  // which left draft regions with canvas outline only and NO resize handles.
   const textSelectionActive =
     !!currentRegion &&
     isRegionUsable(currentRegion) &&
-    !showFfmpegOverlay &&
+    !showFfmpegPreview &&
     activeTool !== "pan" &&
     (sidebarMode === "batch" || activeTool === "text");
 
-  // Live drag: only touch currentRegion (cheap). Commit on pointerup fans out to
-  // template/ops once — updateTemplateRegion on every mousemove was freezing the UI.
   const previewTextRegion = useCallback((region) => {
     useEditorStore.setState({ currentRegion: region });
   }, []);
@@ -241,8 +246,6 @@ export default function VideoPreview() {
   const textSelectionScreen = useMemo(() => {
     if (!textSelectionActive) return null;
     return regionToScreen(currentRegion, videoRef.current);
-    // layoutTick invalidates when the video element resizes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textSelectionActive, currentRegion, layoutTick]);
   const textSelectionLabel =
     sidebarMode === "batch" && selectedTemplateRegionId != null
@@ -272,7 +275,6 @@ export default function VideoPreview() {
     }
   }, [sel?.path]);
 
-  /* Video event listeners */
   const seekingRef = useRef(false);
   seekingRef.current = seeking;
   useEffect(() => {
@@ -299,7 +301,6 @@ export default function VideoPreview() {
     };
   }, [sel?.path, sel?.duration]);
 
-  /* Keyboard commands dispatched by useKeyboard (play/pause, seek) */
   useEffect(() => {
     const onCommand = (e) => {
       const v = videoRef.current;
@@ -336,14 +337,12 @@ export default function VideoPreview() {
     setPanBoth({ x: 0, y: 0 });
   }, [sel?.path, setZoomBoth, setPanBoth]);
 
-  // Drag handlers for image operations
   const handleImageDragStart = (op, opIdx, e) => {
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
     const content = getContentPx(video);
     if (!content) return;
-    // One undo snapshot for the whole drag — not one per mousemove.
     useEditorStore.getState()._saveUndo?.();
     setDraggingOp({ op, opIdx });
     setDragStart({
@@ -391,6 +390,69 @@ export default function VideoPreview() {
     setDragStart(null);
   }, []);
 
+  const handleRegionOpDragStart = (opIdx, e) => {
+    e.stopPropagation();
+    const video = videoRef.current;
+    if (!video || showFfmpegPreview) return;
+    const content = getContentPx(video);
+    if (!content) return;
+    const st = useEditorStore.getState();
+    const op = st.queue[st.selectedIdx]?.operations?.[opIdx];
+    if (!op?.region) return;
+    if (st.selectedOperationIdx !== opIdx) st.selectOperation(opIdx);
+    st._saveUndo?.();
+    setDraggingOp({ op, opIdx });
+    setDragStart({
+      mouseX: e.clientX,
+      mouseY: e.clientY,
+      regionX: op.region.x,
+      regionY: op.region.y,
+      contentW: content.width,
+      contentH: content.height,
+    });
+  };
+
+  const selectedRegionOp = useMemo(() => {
+    if (currentRegion || selectedOperationIdx == null || showFfmpegPreview || activeTool === "pan")
+      return null;
+    const op = sel?.operations?.[selectedOperationIdx];
+    if (!op || !op.region || !REGION_EDIT_MODES.has(op.mode)) return null;
+    return { op, opIdx: selectedOperationIdx };
+  }, [sel?.operations, selectedOperationIdx, currentRegion, showFfmpegPreview, activeTool]);
+
+  const patchSelectedRegionOp = useCallback((region) => {
+    const idx = useEditorStore.getState().selectedOperationIdx;
+    if (idx == null) return;
+    useEditorStore.getState().updateOperationRegion(idx, region, { recordHistory: false });
+  }, []);
+
+  const selectedRegionOpGesture = useRegionGesture({
+    videoEl: videoRef,
+    enabled: !!selectedRegionOp,
+    onChange: patchSelectedRegionOp,
+    onCommit: patchSelectedRegionOp,
+  });
+
+  const selectedRegionOpGestureWrapped = useMemo(
+    () => ({
+      ...selectedRegionOpGesture,
+      beginMove: (e, region) => {
+        useEditorStore.getState()._saveUndo?.();
+        selectedRegionOpGesture.beginMove(e, region);
+      },
+      beginResize: (e, region, handle) => {
+        useEditorStore.getState()._saveUndo?.();
+        selectedRegionOpGesture.beginResize(e, region, handle);
+      },
+    }),
+    [selectedRegionOpGesture],
+  );
+
+  const selectedRegionOpScreen = useMemo(() => {
+    if (!selectedRegionOp) return null;
+    return regionToScreen(selectedRegionOp.op.region, videoRef.current);
+  }, [selectedRegionOp, layoutTick]);
+
   const handleBatchTextDragStart = (tr, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -419,7 +481,6 @@ export default function VideoPreview() {
     const content = getContentPx(video);
     if (!content) return;
 
-    // One undo snapshot for the whole drag — not one per mousemove.
     useEditorStore.getState()._saveUndo?.();
     setDraggingBatchText({ videoIdx, opIdx, regionId: tr.id });
     setBatchTextDragStart({
@@ -454,8 +515,6 @@ export default function VideoPreview() {
           { region: nextRegion },
           { recordHistory: false },
         );
-      // Direct setState: avoid setCurrentRegion which would rewrite the template
-      // for all videos. Free drag is per-video only.
       useEditorStore.setState({ currentRegion: nextRegion });
     },
     [draggingBatchText, batchTextDragStart],
@@ -466,15 +525,11 @@ export default function VideoPreview() {
     setBatchTextDragStart(null);
   }, []);
 
-  // Keep a stable ref mirror of dragging states so the global window
-  // drag listener can read the latest state without re-registering on every
-  // state change. Also guarantees cleanup on unmount.
   draggingRef.current.image = { move: handleImageDragMove, end: handleImageDragEnd };
   draggingRef.current.batch = { move: handleBatchTextDragMove, end: handleBatchTextDragEnd };
 
   useEffect(() => {
     const onMouseMove = (e) => {
-      // Only run the active free-drag path (handlers early-return when idle).
       draggingRef.current.image?.move(e);
       draggingRef.current.batch?.move(e);
     };
@@ -508,8 +563,6 @@ export default function VideoPreview() {
       const video = videoRef.current;
       if (video && !video.paused) video.pause();
 
-      // Ensure probe dimensions exist so regions denormalize to pixels
-      // (same guard as processSingle / batch export).
       let idx = selectedIdx;
       if (!(sel.width > 0 && sel.height > 0) && api.getVideoInfo) {
         try {
@@ -518,14 +571,9 @@ export default function VideoPreview() {
           idx = useEditorStore.getState().selectedIdx;
         } catch {
           if (gen !== ffmpegPreviewGenRef.current) return;
-          /* fall through — Python may still probe from the file */
         }
       }
 
-      // ts uses video.currentTime first (always current after a seek via
-      // seekTo), falling back to the React currentTime state. Both are updated
-      // during seek: video.currentTime by seekTo(), and React currentTime by
-      // the range input's onChange handler. Neither is stale after seek.
       const ts = video?.currentTime ?? currentTime;
       const job = buildPreviewFrameJob(idx, ts);
       if (!job) {
@@ -607,8 +655,7 @@ export default function VideoPreview() {
               }
         }
       >
-        {/* Shared zoom layer: video + overlays + canvas + text frame must share
-            the same CSS scale so DOM handles stay aligned with the picture. */}
+        {/* Same CSS scale as the picture so DOM handles stay aligned. */}
         <div
           className={
             isSplitCompare ? "relative flex-1 min-w-0 self-center" : "relative inline-block"
@@ -674,67 +721,85 @@ export default function VideoPreview() {
             </div>
           )}
 
-          {/* Operation overlays — coords memoized so they don't recompute on
-              every playback timeupdate tick, only when ops or layout change. */}
           {activeOpsWithScreen.map(({ op, opIdx, screen: s }) => {
             if (!s) return null;
             if (op.mode === "blur") {
+              const isSelected = selectedOperationIdx === opIdx;
+              const isDragging = draggingOp?.opIdx === opIdx;
               return (
-                <div
-                  key={op.id}
-                  className="absolute pointer-events-none z-10"
-                  style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
-                >
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      background:
-                        "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
-                      border: "2px solid rgba(0,240,234,0.6)",
-                      borderRadius: "2px",
-                    }}
+                <Fragment key={op.id}>
+                  <RegionBlurPreview
+                    videoRef={videoRef}
+                    region={op.region}
+                    blurStrength={op.blurStrength}
+                    outline={isSelected ? "none" : "2px solid rgba(0,240,234,0.6)"}
                   />
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      backdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
-                      WebkitBackdropFilter: `blur(${(op.blurStrength || 20) * s.sy}px)`,
-                    }}
+                  <RegionHitLayer
+                    screen={s}
+                    selected={isSelected}
+                    dragging={isDragging}
+                    disabled={showFfmpegPreview || activeTool === "pan"}
+                    onDragStart={(e) => handleRegionOpDragStart(opIdx, e)}
                   />
-                </div>
+                </Fragment>
               );
             }
             if (op.mode === "crop") {
+              const isSelected = selectedOperationIdx === opIdx;
+              const isDragging = draggingOp?.opIdx === opIdx;
               return (
-                <div
-                  key={op.id}
-                  className="absolute pointer-events-none z-10"
-                  style={{
-                    left: s.x,
-                    top: s.y,
-                    width: s.w,
-                    height: s.h,
-                    outline: "2px dashed var(--amber)",
-                    outlineOffset: "-1px",
-                  }}
-                />
+                <Fragment key={op.id}>
+                  <div
+                    className="absolute pointer-events-none z-10"
+                    style={{
+                      left: s.x,
+                      top: s.y,
+                      width: s.w,
+                      height: s.h,
+                      outline: isSelected ? "none" : "2px dashed var(--amber)",
+                      outlineOffset: "-1px",
+                    }}
+                  />
+                  <RegionHitLayer
+                    screen={s}
+                    selected={isSelected}
+                    dragging={isDragging}
+                    disabled={showFfmpegPreview || activeTool === "pan"}
+                    onDragStart={(e) => handleRegionOpDragStart(opIdx, e)}
+                  />
+                </Fragment>
               );
             }
             if (op.mode === "delogo") {
-              const dm = op.delogoMethod || "inpaint";
+              const dm = op.delogoMethod || "blur";
+              const isSelected = selectedOperationIdx === opIdx;
+              const isDragging = draggingOp?.opIdx === opIdx;
+              const hitLayer = (
+                <RegionHitLayer
+                  screen={s}
+                  selected={isSelected}
+                  dragging={isDragging}
+                  disabled={showFfmpegPreview || activeTool === "pan"}
+                  onDragStart={(e) => handleRegionOpDragStart(opIdx, e)}
+                />
+              );
               let overlayStyle = { left: s.x, top: s.y, width: s.w, height: s.h };
               if (dm === "inpaint") {
                 overlayStyle.background =
                   "repeating-conic-gradient(rgba(239,68,68,0.15) 0% 25%, transparent 0% 50%) 0 0 / 16px 16px";
                 overlayStyle.outline = "2px solid rgba(239,68,68,0.7)";
               } else if (dm === "blur") {
-                overlayStyle.background =
-                  "repeating-linear-gradient(135deg, rgba(59,130,246,0.10) 0px, rgba(59,130,246,0.10) 2px, transparent 2px, transparent 8px)";
-                overlayStyle.backdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
-                overlayStyle.WebkitBackdropFilter = `blur(${(op.blurStrength || 20) * s.sy}px)`;
-                overlayStyle.outline = "2px dashed rgba(59,130,246,0.7)";
+                return (
+                  <Fragment key={op.id}>
+                    <RegionBlurPreview
+                      videoRef={videoRef}
+                      region={op.region}
+                      blurStrength={op.blurStrength}
+                      outline={isSelected ? "none" : "2px dashed rgba(59,130,246,0.7)"}
+                    />
+                    {hitLayer}
+                  </Fragment>
+                );
               } else if (dm === "fill") {
                 overlayStyle.background = `${op.delogoFillColor || "black"}`;
                 overlayStyle.opacity = op.delogoFillOpacity ?? 1;
@@ -749,44 +814,42 @@ export default function VideoPreview() {
                 overlayStyle.outline = "2px dashed rgba(34,197,94,0.7)";
               } else if (dm === "cover" && op.delogoImagePath) {
                 const coverDataUrl = imageDataCache?.[op.delogoImagePath];
-                overlayStyle.outline = "2px solid rgba(16,185,129,0.7)";
+                overlayStyle.outline = isSelected ? "none" : "2px solid rgba(16,185,129,0.7)";
                 overlayStyle.overflow = "hidden";
                 return (
-                  <div
-                    key={op.id}
-                    className="absolute pointer-events-none z-10"
-                    style={overlayStyle}
-                  >
-                    {coverDataUrl ? (
-                      <img
-                        src={coverDataUrl}
-                        alt=""
-                        className="w-full h-full"
-                        style={{ objectFit: "contain" }}
-                        draggable={false}
-                      />
-                    ) : (
-                      <div
-                        className="w-full h-full flex items-center justify-center text-[10px]"
-                        style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
-                      >
-                        {op.delogoImagePath.split(/[\\/]/).pop()}
-                      </div>
-                    )}
-                  </div>
+                  <Fragment key={op.id}>
+                    <div className="absolute pointer-events-none z-10" style={overlayStyle}>
+                      {coverDataUrl ? (
+                        <img
+                          src={coverDataUrl}
+                          alt=""
+                          className="w-full h-full"
+                          style={{ objectFit: "contain" }}
+                          draggable={false}
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full flex items-center justify-center text-[10px]"
+                          style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
+                        >
+                          {op.delogoImagePath.split(/[\\/]/).pop()}
+                        </div>
+                      )}
+                    </div>
+                    {hitLayer}
+                  </Fragment>
                 );
               } else {
-                // temporal (and any unknown) — "restored area" indicator
                 overlayStyle.background =
                   "repeating-linear-gradient(45deg, rgba(239,68,68,0.10) 0px, rgba(239,68,68,0.10) 2px, transparent 2px, transparent 8px)";
-                overlayStyle.outline = "2px dashed rgba(239,68,68,0.6)";
+                overlayStyle.outline = isSelected ? "none" : "2px dashed rgba(239,68,68,0.6)";
               }
+              if (isSelected) overlayStyle.outline = "none";
               return (
-                <div
-                  key={op.id}
-                  className="absolute pointer-events-none z-10"
-                  style={overlayStyle}
-                />
+                <Fragment key={op.id}>
+                  <div className="absolute pointer-events-none z-10" style={overlayStyle} />
+                  {hitLayer}
+                </Fragment>
               );
             }
             if (op.mode === "image" && op.imagePath) {
@@ -829,8 +892,6 @@ export default function VideoPreview() {
               );
             }
             if (op.mode === "text" && op.text && sidebarMode !== "batch" && !showFfmpegOverlay) {
-              // Same stacking rule as batch: free → above canvas for drag; editing
-              // a new region (currentRegion set) → under canvas so handles work.
               const textInteractive = !currentRegion;
               const isDragging = draggingOp?.opIdx === opIdx;
               return (
@@ -839,7 +900,8 @@ export default function VideoPreview() {
                   screen={s}
                   text={op.text}
                   style={op}
-                  showOutline={textInteractive}
+                  showOutline={!showFfmpegPreview && textInteractive}
+                  showOverflowWarning={!showFfmpegPreview}
                   interactive={textInteractive}
                   cursor={textInteractive ? (isDragging ? "grabbing" : "grab") : undefined}
                   zIndex={textInteractive ? 40 : 20}
@@ -852,46 +914,15 @@ export default function VideoPreview() {
             return null;
           })}
 
-          {/* Live blur preview while configuring */}
-          {sidebarMode === "logo" &&
-            activeTool === "blur" &&
-            currentRegion &&
-            (() => {
-              const s = regionToScreen(currentRegion, videoRef.current);
-              if (!s) return null;
-              const blurPx = Math.max(1, (blurStrength || 20) * (s.sy || 1));
-              return (
-                <div
-                  className="absolute pointer-events-none z-10"
-                  style={{ left: s.x, top: s.y, width: s.w, height: s.h }}
-                >
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      background:
-                        "repeating-linear-gradient(45deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 8px)",
-                      border: "2px solid rgba(0,240,234,0.6)",
-                      borderRadius: "2px",
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      backdropFilter: `blur(${blurPx}px)`,
-                      WebkitBackdropFilter: `blur(${blurPx}px)`,
-                      borderRadius: "2px",
-                    }}
-                  />
-                </div>
-              );
-            })()}
+          {sidebarMode === "logo" && activeTool === "blur" && currentRegion && (
+            <RegionBlurPreview
+              videoRef={videoRef}
+              region={currentRegion}
+              blurStrength={blurStrength}
+              outline="2px solid rgba(0,240,234,0.8)"
+            />
+          )}
 
-          {/* Live text preview while configuring (logo mode). Always show a
-              placeholder if Contenedo is empty — otherwise the user only sees
-              an empty selection box over the video burn-in (date/NIS) and thinks
-              the overlay "disappeared". zIndex above canvas (30). */}
           {sidebarMode === "logo" &&
             activeTool === "text" &&
             currentRegion &&
@@ -906,9 +937,7 @@ export default function VideoPreview() {
                   text={draftText}
                   style={{
                     ...globalTextStyle,
-                    // Skip autoFit measure thrash while rubber-banding
                     autoFit: false,
-                    // Dim placeholder so real content is obvious once typed
                     textOpacity: String(textInput ?? "").trim()
                       ? (globalTextStyle.textOpacity ?? 1)
                       : 0.55,
@@ -920,13 +949,11 @@ export default function VideoPreview() {
               );
             })()}
 
-          {/* Batch: live text preview per template region (coords memoized) */}
           {sidebarMode === "batch" &&
             selectedIdx >= 0 &&
             !showFfmpegOverlay &&
             batchRegionPreviews.map(({ tr, payload, screen: baseScreen }) => {
               const isSelected = selectedTemplateRegionId === tr.id;
-              // Follow live currentRegion while the DOM frame is dragging (preview only).
               const screen =
                 isSelected && currentRegion
                   ? regionToScreen(currentRegion, videoRef.current) || baseScreen
@@ -934,9 +961,6 @@ export default function VideoPreview() {
               if (!screen) return null;
               const isDragging =
                 draggingBatchText?.videoIdx === selectedIdx && draggingBatchText.regionId === tr.id;
-              // Selected region with currentRegion is owned by TextRegionFrame (DOM
-              // handles at z=50). Other regions stay interactive so the user can
-              // click/drag them without the canvas stealing events.
               const underDomFrame = textSelectionActive && isSelected;
               const batchOverlayInteractive = !underDomFrame;
               const previewText =
@@ -948,13 +972,12 @@ export default function VideoPreview() {
                   text={previewText}
                   style={payload.style}
                   isFocused={isSelected}
-                  showOutline={!underDomFrame}
+                  showOutline={!showFfmpegPreview && !underDomFrame}
                   label={tr.label}
                   interactive={batchOverlayInteractive}
                   cursor={batchOverlayInteractive ? (isDragging ? "grabbing" : "grab") : undefined}
-                  // Always above canvas (z=30) so text is never hidden under the rubber-band
                   zIndex={underDomFrame ? 45 : 40}
-                  showOverflowWarning={!textRegionGesture.active}
+                  showOverflowWarning={!showFfmpegPreview && !textRegionGesture.active}
                   onMouseDown={
                     batchOverlayInteractive ? (e) => handleBatchTextDragStart(tr, e) : undefined
                   }
@@ -962,7 +985,6 @@ export default function VideoPreview() {
               );
             })}
 
-          {/* Batch: draft region before "Agregar región" — show sample text above canvas */}
           {sidebarMode === "batch" &&
             currentRegion &&
             !selectedTemplateRegionId &&
@@ -984,20 +1006,15 @@ export default function VideoPreview() {
               );
             })()}
 
-          {/* Global watermark preview (hidden under FFmpeg frame — already burned in) */}
           {watermark?.enabled &&
             !showFfmpegOverlay &&
             (() => {
               const video = videoRef.current;
               if (!video) return null;
-              const vw = video.videoWidth || 1;
               const vh = video.videoHeight || 1;
-              // Use layout size (pre-zoom), same basis as regionToScreen /
-              // contentRectLayout — getBoundingClientRect grows with CSS zoom
-              // and would double-scale the watermark inside the zoom layer.
+              // Layout size, not getBoundingClientRect: CSS zoom would double-scale.
               const layoutW = video.offsetWidth || 1;
               const layoutH = video.offsetHeight || 1;
-              const sx = layoutW / vw;
               const sy = layoutH / vh;
               const margin = 10;
               const pos = watermark.position || "bottom-right";
@@ -1016,8 +1033,7 @@ export default function VideoPreview() {
                 },
                 "bottom-right": { right: margin, bottom: margin },
               };
-              // Match FFmpeg export margins (H-h-margin). zIndex above the
-              // player controls (z-30) so bottom watermarks stay visible.
+              // FFmpeg overlay uses H-h-margin. z-35 sits above player controls.
               const posStyle = posMap[pos] || posMap["bottom-right"];
               const boxStyle = {
                 position: "absolute",
@@ -1051,11 +1067,7 @@ export default function VideoPreview() {
                 );
               }
               if (watermark.type === "image" && watermark.imageDataUrl) {
-                // FFmpeg scales the watermark to target_h = 80 * scale (in
-                // native video pixels). To represent that size on screen we
-                // multiply by sy (screen_height / video_height), so the
-                // watermark occupies the same fraction of the frame in preview
-                // as it will in export. This is WYSIWYG-correct.
+                // FFmpeg target_h = 80 * scale in native pixels. sy maps that to screen.
                 const baseSize = 80 * sy;
                 const scaledSize = baseSize * (watermark.scale || 1);
                 return (
@@ -1081,11 +1093,8 @@ export default function VideoPreview() {
               return null;
             })()}
 
-          {/* Live preview of the in-progress delogo effect (under the selection handles) */}
           {!showFfmpegOverlay && <DelogoLivePreview videoRef={videoRef} />}
 
-          {/* Drawing canvas — used to draw new regions / non-text tools.
-              Text selection chrome is DOM (TextRegionFrame) above this layer. */}
           <canvas
             ref={canvasRef}
             className="absolute top-0 left-0"
@@ -1100,7 +1109,6 @@ export default function VideoPreview() {
             onMouseUp={onMouseUp}
           />
 
-          {/* Clean Figma-style DOM handles for the active text region */}
           {textSelectionActive && textSelectionScreen && (
             <TextRegionFrame
               screen={textSelectionScreen}
@@ -1111,6 +1119,17 @@ export default function VideoPreview() {
                 sidebarMode === "batch" ? "var(--purple, #a855f7)" : "var(--accent-brand, #00b4b0)"
               }
               zIndex={50}
+            />
+          )}
+
+          {selectedRegionOp && selectedRegionOpScreen && (
+            <TextRegionFrame
+              screen={selectedRegionOpScreen}
+              region={selectedRegionOp.op.region}
+              gesture={selectedRegionOpGestureWrapped}
+              label={REGION_EDIT_LABEL[selectedRegionOp.op.mode] || selectedRegionOp.op.mode}
+              color={opModeColor[selectedRegionOp.op.mode] || "var(--rose, #f43f5e)"}
+              zIndex={45}
             />
           )}
         </div>
@@ -1142,38 +1161,42 @@ export default function VideoPreview() {
               { id: "ffmpeg", label: "FFmpeg" },
               { id: "split", label: "Lado a lado" },
             ].map(({ id, label }) => (
-              <button
+              <Button
                 key={id}
                 type="button"
+                variant="tertiary"
+                size="sm"
                 onClick={() => setPreviewCompareMode(id)}
-                className="px-2 py-0.5 rounded text-[9px] font-medium transition-colors"
+                className="video-preview-compare-btn !h-6 !min-h-6 !rounded !px-2 !text-[9px]"
+                aria-pressed={previewCompareMode === id}
                 style={{
                   background: previewCompareMode === id ? "var(--accent)" : "transparent",
                   color: previewCompareMode === id ? "var(--bg-app)" : "var(--text-secondary)",
                 }}
               >
                 {label}
-              </button>
+              </Button>
             ))}
-            <button
+            <Button
               type="button"
+              variant="tertiary"
+              size="icon"
+              className="video-preview-icon-btn video-preview-compare-close !ml-0.5 !h-6 !min-h-6 !w-6 !min-w-6 !p-0"
               onClick={dismissFfmpegPreview}
-              className="p-0.5 ml-0.5 rounded hover:bg-white/10"
               style={{ color: "var(--text-dim)" }}
-              title="Cerrar comparación"
+              title={t("preview.closeRenderFrame")}
+              aria-label={t("preview.closeRenderFrame")}
             >
               <X size={12} />
-            </button>
+            </Button>
           </div>
         )}
       </div>
 
-      {/* Video Player Controls */}
       <div
         className="absolute bottom-0 left-0 right-0 z-30"
         style={{ background: "linear-gradient(transparent, rgba(0,0,0,0.85))", paddingTop: "24px" }}
       >
-        {/* Seek bar with timeline markers */}
         <div className="px-3 pb-1 relative">
           {showTimeline &&
             duration > 0 &&
@@ -1228,48 +1251,60 @@ export default function VideoPreview() {
             }}
           />
         </div>
-        {/* Buttons & time */}
         <div className="flex items-center gap-2 px-3 pb-2">
-          <button
+          <Button
+            type="button"
+            variant="tertiary"
+            size="icon"
+            className="video-preview-icon-btn !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
             onClick={() => {
               const v = videoRef.current;
               if (v) v.currentTime = 0;
             }}
-            className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
             title={t("preview.jumpStart")}
             aria-label={t("preview.jumpStart")}
           >
             <SkipBack size={14} />
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="tertiary"
+            size="icon"
+            className="video-preview-icon-btn video-preview-play-btn !h-7 !min-h-7 !w-7 !min-w-7 !p-0 !rounded-full"
             onClick={() => {
               const v = videoRef.current;
               if (!v) return;
               if (v.paused) v.play();
               else v.pause();
             }}
-            className="p-1.5 rounded-full hover:bg-white/15"
             style={{ color: "var(--accent)" }}
             title={t("preview.playPause")}
             aria-label={t("preview.playPause")}
           >
             {playing ? <Pause size={16} /> : <Play size={16} />}
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="tertiary"
+            size="icon"
+            className="video-preview-icon-btn !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
             onClick={() => {
               const v = videoRef.current;
               const d = resolvedDuration(v, sel?.duration);
               if (v && d) v.currentTime = d;
             }}
-            className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
             title={t("preview.jumpEnd")}
             aria-label={t("preview.jumpEnd")}
           >
             <SkipForward size={14} />
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="tertiary"
+            size="icon"
+            className="video-preview-icon-btn !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
             onClick={() => {
               const v = videoRef.current;
               if (v) {
@@ -1277,36 +1312,38 @@ export default function VideoPreview() {
                 setMuted(v.muted);
               }
             }}
-            className="p-1 rounded hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
             title={muted ? t("preview.unmute") : t("preview.mute")}
             aria-label={muted ? t("preview.unmute") : t("preview.mute")}
           >
             {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="tertiary"
+            size="icon"
+            className="video-preview-icon-btn !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
             onClick={() => setShowTimeline((v) => !v)}
-            className="p-1 rounded hover:bg-white/10"
             style={{ color: showTimeline ? "var(--accent)" : "var(--text-dim)" }}
             title={showTimeline ? t("preview.hideTimeline") : t("preview.showTimeline")}
             aria-label={showTimeline ? t("preview.hideTimeline") : t("preview.showTimeline")}
           >
             {showTimeline ? <Eye size={14} /> : <EyeOff size={14} />}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="tertiary"
+            size="icon"
+            loading={ffmpegPreviewLoading}
             onClick={(e) => {
               e.stopPropagation();
-              // Looks like a toggle (accent when on): second click closes.
-              // Click again after close re-renders with latest styles/time.
               if (showFfmpegPreview && !ffmpegPreviewLoading) {
                 dismissFfmpegPreview();
                 return;
               }
               handleRenderPreviewFrame();
             }}
-            disabled={ffmpegPreviewLoading}
-            className="p-1 rounded hover:bg-white/10 disabled:opacity-40"
+            className="video-preview-icon-btn !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
             style={{
               color: showFfmpegPreview ? "var(--accent)" : "var(--text-dim)",
             }}
@@ -1316,12 +1353,8 @@ export default function VideoPreview() {
             }
             aria-pressed={showFfmpegPreview}
           >
-            {ffmpegPreviewLoading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <ScanEye size={14} />
-            )}
-          </button>
+            {!ffmpegPreviewLoading && <ScanEye size={14} />}
+          </Button>
           <span className="text-[10px] font-mono ml-1" style={{ color: "var(--text-secondary)" }}>
             {fmtTime(currentTime)} / {fmtTime(duration)}
           </span>
@@ -1331,44 +1364,50 @@ export default function VideoPreview() {
               className="flex items-center gap-1 px-1.5 py-1 rounded-lg border border-white/10 shadow-sm backdrop-blur-md transition-all"
               style={{ background: "rgba(0,0,0,0.5)" }}
             >
-              <button
+              <Button
                 type="button"
+                variant="tertiary"
+                size="icon"
+                className="video-preview-icon-btn !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
                 onClick={zoomOut}
                 disabled={zoom <= MIN_ZOOM}
-                className="p-1 rounded hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:active:scale-100 transition-all"
                 style={{ color: "var(--text-secondary, #a3a3a3)" }}
                 title={t("preview.zoomOut")}
                 aria-label={t("preview.zoomOut")}
               >
                 <ZoomOut size={14} />
-              </button>
+              </Button>
 
               <div className="w-[1px] h-3 bg-white/10 mx-0.5"></div>
 
-              <button
+              <Button
                 type="button"
+                variant="tertiary"
+                size="sm"
                 onClick={zoomReset}
-                className="px-2 py-0.5 rounded text-[10px] font-mono hover:bg-white/10 active:scale-95 transition-all min-w-[48px] text-center font-medium"
+                className="video-preview-zoom-reset !h-7 !min-h-7 !min-w-[48px] !px-2 !py-0.5 !text-[10px] !font-mono !font-medium"
                 style={{ color: zoom > 1 ? "var(--accent)" : "var(--text-secondary, #a3a3a3)" }}
                 title={t("preview.zoomReset")}
                 aria-label={t("preview.zoomReset")}
               >
                 {Math.round(zoom * 100)}%
-              </button>
+              </Button>
 
               <div className="w-[1px] h-3 bg-white/10 mx-0.5"></div>
 
-              <button
+              <Button
                 type="button"
+                variant="tertiary"
+                size="icon"
+                className="video-preview-icon-btn !h-7 !min-h-7 !w-7 !min-w-7 !p-0"
                 onClick={zoomIn}
                 disabled={zoom >= MAX_ZOOM}
-                className="p-1 rounded hover:bg-white/10 active:scale-95 disabled:opacity-30 disabled:active:scale-100 transition-all"
                 style={{ color: "var(--text-secondary, #a3a3a3)" }}
                 title={t("preview.zoomIn")}
                 aria-label={t("preview.zoomIn")}
               >
                 <ZoomIn size={14} />
-              </button>
+              </Button>
             </div>
           )}
           <span className="text-[9px] font-mono" style={{ color: "var(--text-dim)" }}>

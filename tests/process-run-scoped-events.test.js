@@ -13,8 +13,8 @@ describe("run-scoped terminal events (plan 025)", () => {
     expect(processSrc).toMatch(/process:finished[\s\S]*runId/);
     expect(processSrc).toMatch(/process:error[\s\S]*runId/);
 
-    const shared = readFileSync(join(__dirname, "../main/shared-state.js"), "utf8");
-    expect(shared).toContain("runId: staleRunId");
+    const processingRun = readFileSync(join(__dirname, "../main/processing-run.js"), "utf8");
+    expect(processingRun).toContain("runId: staleRunId");
 
     const preload = readFileSync(join(__dirname, "../main/preload.cjs"), "utf8");
     expect(preload).toContain("onRunStarted");
@@ -33,7 +33,6 @@ describe("useProcessing stale-run helper (unit)", () => {
   });
 
   it("store tracks activeProcessRunId and clears on abort", async () => {
-    // Lightweight store smoke without mounting React: import slice via editor store.
     const { default: useEditorStore } = await import("../src/stores/useEditorStore.js");
     useEditorStore.setState({
       isProcessing: true,

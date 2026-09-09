@@ -7,9 +7,6 @@ export async function runWithConcurrency(items, limit, worker, fallback, shouldC
       if (cancelled) return;
       const idx = cursor++;
       if (idx >= items.length) return;
-      // Stop dispatching new items once the caller signals cancellation. Items
-      // already in flight still complete, but no new work is launched — bounding
-      // wasted effort (e.g. ffprobe probes after a batch cancel) to `limit`.
       if (shouldCancel && shouldCancel()) {
         cancelled = true;
         return;

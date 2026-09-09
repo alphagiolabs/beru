@@ -5,8 +5,6 @@ describe("main/updater.js cancel before quitAndInstall", () => {
   let harness;
 
   beforeEach(() => {
-    // Fake timers must be installed before the harness VM captures setTimeout/
-    // setImmediate, otherwise grace-period tests cannot advance INSTALL_GRACE_MS.
     vi.useFakeTimers({ toFake: ["setImmediate", "setTimeout"] });
     harness = createUpdaterHarness();
   });
@@ -30,7 +28,6 @@ describe("main/updater.js cancel before quitAndInstall", () => {
     const result = harness.updater.install();
     expect(result.ok).toBe(true);
 
-    // scheduleInstall uses setImmediate → cancel → quitAndInstall
     await vi.runAllTimersAsync();
 
     expect(harness.cancelActiveProcessing).toHaveBeenCalled();
@@ -44,21 +41,17 @@ describe("main/updater.js cancel before quitAndInstall", () => {
     const result = harness.updater.install();
     expect(result.ok).toBe(true);
 
-    // Advance past setImmediate so quitAndInstall runs, but quit does not exit
-    // the process in this harness — grace timeout should abort the sticky flags.
     await vi.runAllTimersAsync();
 
     expect(harness.setAppIsQuitting).toHaveBeenCalledWith(true);
     expect(harness.setAppIsQuitting).toHaveBeenCalledWith(false);
     expect(harness.events.some((e) => e.type === "error")).toBe(true);
-    // Retry must be allowed after grace abort.
     expect(harness.updater.isQuittingForUpdate()).toBe(false);
   });
 
   it("resets appIsQuitting when quitAndInstall throws", async () => {
     await downloadReady();
 
-    // Replace quitAndInstall after download so install() can still load the module.
     harness.autoUpdater.quitAndInstall = vi.fn(() => {
       throw new Error("install spawn failed");
     });

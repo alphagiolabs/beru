@@ -1,9 +1,3 @@
-/**
- * Decide whether a python/ filesystem event should restart Electron in
- * `scripts/dev.mjs`. Only runtime processor modules matter — tests, scratch
- * scripts, and build helpers must not bounce the app window.
- */
-
 const RUNTIME_PROCESSOR_MODULES = new Set([
   "processor.py",
   "batch_errors.py",

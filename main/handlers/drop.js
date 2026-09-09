@@ -1,6 +1,6 @@
 import { ipcMain } from "electron";
 import fs from "fs";
-import { collectVideoFilesSync, VIDEO_EXT } from "../utils/drop-resolver.js";
+import { collectVideoFiles, VIDEO_EXT } from "../utils/drop-resolver.js";
 
 export function registerDropHandlers(pathSecurity) {
   ipcMain.handle("fs:resolveDroppedPaths", async (_event, inputPaths) => {
@@ -16,14 +16,14 @@ export function registerDropHandlers(pathSecurity) {
       }
       let stat;
       try {
-        stat = fs.statSync(p);
+        stat = await fs.promises.stat(p);
       } catch {
         ignoredCount++;
         continue;
       }
       if (stat.isDirectory()) {
         const before = videoPaths.length;
-        collectVideoFilesSync(p, 0, videoPaths);
+        await collectVideoFiles(p, 0, videoPaths);
         if (videoPaths.length === before) ignoredCount++;
       } else if (stat.isFile()) {
         if (VIDEO_EXT.test(p)) videoPaths.push(p);

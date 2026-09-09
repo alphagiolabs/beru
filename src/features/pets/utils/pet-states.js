@@ -17,8 +17,6 @@ export const defaultPetState = petStates[0];
 
 export const ATLAS_SHEET_WIDTH = 1536;
 export const ATLAS_SHEET_HEIGHT = 1872;
-export const PET_FRAME_WIDTH = 192;
-export const PET_FRAME_HEIGHT = 208;
 
 /** @param {PetStateId} stateId */
 export function resolvePetState(stateId) {

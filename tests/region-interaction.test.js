@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   applyMove,
   applyResize,
+  applyResizeRaw,
   cursorForHandle,
   pointerDeltaToNorm,
   RESIZE_HANDLES,
@@ -62,5 +63,25 @@ describe("region-interaction", () => {
     expect(next.y).toBeCloseTo(0.3);
     expect(next.w).toBeCloseTo(0.4);
     expect(next.h).toBeCloseTo(0.2);
+  });
+
+  it("applyResizeRaw grows from br without clamping past the frame", () => {
+    const edge = { x: 0.7, y: 0.7, w: 0.2, h: 0.2 };
+    const raw = applyResizeRaw(edge, "br", 0.2, 0.2);
+    expect(raw.x).toBeCloseTo(0.7);
+    expect(raw.y).toBeCloseTo(0.7);
+    expect(raw.w).toBeCloseTo(0.4);
+    expect(raw.h).toBeCloseTo(0.4);
+    expect(raw.x + raw.w).toBeGreaterThan(1);
+
+    const clamped = applyResize(edge, "br", 0.2, 0.2);
+    expect(clamped.x + clamped.w).toBeLessThanOrEqual(1.0001);
+    expect(clamped.y + clamped.h).toBeLessThanOrEqual(1.0001);
+  });
+
+  it("applyResizeRaw keeps min size from the top-left handle", () => {
+    const raw = applyResizeRaw(start, "tl", 0.5, 0.5);
+    expect(raw.w).toBeGreaterThanOrEqual(0.01);
+    expect(raw.h).toBeGreaterThanOrEqual(0.01);
   });
 });

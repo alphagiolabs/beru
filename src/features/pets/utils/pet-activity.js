@@ -1,8 +1,6 @@
 /** @typedef {import("./pet-states.js").PetStateId} PetStateId */
 
 /**
- * Hermes-style activity resolver for Beru.
- *
  * @param {{
  *   isProcessing?: boolean,
  *   confirmOpen?: boolean,
@@ -35,7 +33,6 @@ export function resolveBatchCelebration(summary) {
   return null;
 }
 
-/** @param {PetStateId} stateId */
 export function celebrationDurationMs(stateId) {
   switch (stateId) {
     case "failed":
@@ -49,7 +46,6 @@ export function celebrationDurationMs(stateId) {
   }
 }
 
-/** @param {PetStateId} stateId */
 export function petBubbleKey(stateId) {
   switch (stateId) {
     case "running":

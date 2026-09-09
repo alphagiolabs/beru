@@ -1,6 +1,7 @@
 import { useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, X } from "lucide-react";
+import { Button } from "../ui/Button";
 
 export default function UpToDateDialog({ onClose, onCheckForUpdates, t }) {
   const closeBtnRef = useRef(null);
@@ -31,15 +32,17 @@ export default function UpToDateDialog({ onClose, onCheckForUpdates, t }) {
         className="status-footer-up-to-date-panel"
         onClick={(event) => event.stopPropagation()}
       >
-        <button
+        <Button
           ref={closeBtnRef}
           type="button"
           className="status-footer-up-to-date-close"
           onClick={onClose}
           aria-label={t("common.close")}
+          variant="tertiary"
+          size="icon"
         >
           <X size={16} />
-        </button>
+        </Button>
         <CheckCircle2 className="status-footer-up-to-date-icon" size={25} strokeWidth={2.25} />
         <h2 id="up-to-date-title" className="status-footer-up-to-date-title">
           {t("footer.upToDateTitle")}
@@ -48,13 +51,15 @@ export default function UpToDateDialog({ onClose, onCheckForUpdates, t }) {
           {t("footer.upToDateBody")}
         </p>
         {onCheckForUpdates && (
-          <button
+          <Button
             type="button"
             className="status-footer-up-to-date-check"
             onClick={onCheckForUpdates}
+            variant="tertiary"
+            size="sm"
           >
             {t("footer.checkForUpdates")}
-          </button>
+          </Button>
         )}
       </div>
     </div>,

@@ -1,19 +1,12 @@
 import { X, Type, Image as ImageIcon, Upload } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
-
-const POSITIONS = [
-  { key: "top-left", label: "↖" },
-  { key: "top-center", label: "↑" },
-  { key: "top-right", label: "↗" },
-  { key: "center-left", label: "←" },
-  { key: "center", label: "⊕" },
-  { key: "center-right", label: "→" },
-  { key: "bottom-left", label: "↙" },
-  { key: "bottom-center", label: "↓" },
-  { key: "bottom-right", label: "↘" },
-];
+import { useT } from "../i18n/useT";
+import { WATERMARK_POSITIONS } from "../utils/watermark-position";
+import { Button } from "./ui/Button";
+import { PositionIcon } from "./ui/PositionIcon";
 
 export default function WatermarkModal() {
+  const t = useT();
   const show = useEditorStore((s) => s.showWatermarkModal);
   const wm = useEditorStore((s) => s.watermark);
   const setWatermark = useEditorStore((s) => s.setWatermark);
@@ -27,24 +20,26 @@ export default function WatermarkModal() {
   return (
     <div className="cap-modal-overlay" onClick={close}>
       <div className="cap-modal-panel max-w-[420px] w-full" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3 border-b"
           style={{ borderColor: "var(--border)" }}
         >
-          <span className="text-sm font-semibold">Marca de agua</span>
-          <button
+          <span className="text-sm font-semibold">{t("header.watermark")}</span>
+          <Button
+            type="button"
             onClick={close}
-            className="p-1 rounded hover:bg-white/10"
+            variant="tertiary"
+            size="icon"
+            className="text-[var(--text-dim)] hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
+            title={t("common.close")}
+            aria-label={t("common.close")}
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
-        {/* Content */}
         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
-          {/* Enable toggle */}
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -57,34 +52,40 @@ export default function WatermarkModal() {
             </span>
           </label>
 
-          {/* Type tabs */}
           <div
             className="flex rounded overflow-hidden border"
             style={{ borderColor: "var(--border)" }}
           >
-            <button
+            <Button
+              type="button"
               onClick={() => setWatermark({ type: "text" })}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-medium transition-colors"
+              variant="tertiary"
+              size="sm"
+              className="watermark-type-btn flex-1 !rounded-none !py-2 !text-[11px]"
+              aria-pressed={isText}
               style={{
                 background: isText ? "var(--accent)" : "transparent",
                 color: isText ? "var(--bg-app)" : "var(--text-dim)",
               }}
             >
               <Type size={13} /> Texto
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={() => setWatermark({ type: "image" })}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 text-[11px] font-medium transition-colors"
+              variant="tertiary"
+              size="sm"
+              className="watermark-type-btn flex-1 !rounded-none !py-2 !text-[11px]"
+              aria-pressed={!isText}
               style={{
                 background: !isText ? "var(--accent)" : "transparent",
                 color: !isText ? "var(--bg-app)" : "var(--text-dim)",
               }}
             >
               <ImageIcon size={13} /> Imagen
-            </button>
+            </Button>
           </div>
 
-          {/* Text config */}
           {isText && (
             <div className="space-y-3">
               <label>
@@ -142,7 +143,6 @@ export default function WatermarkModal() {
             </div>
           )}
 
-          {/* Image config */}
           {!isText && (
             <div className="space-y-3">
               <div>
@@ -160,13 +160,11 @@ export default function WatermarkModal() {
                     readOnly
                     className="cap-input flex-1 font-mono text-[10px] truncate"
                   />
-                  <button
+                  <Button
+                    type="button"
                     onClick={async () => {
                       const res = await window.api?.pickImage();
                       if (!res || res.canceled) {
-                        // User cancelled: clear any stale imageDataUrl from a
-                        // previous selection so the preview doesn't show the
-                        // old image while imagePath is empty.
                         setWatermark({ imagePath: "", imageDataUrl: "" });
                         return;
                       }
@@ -177,11 +175,6 @@ export default function WatermarkModal() {
                         });
                         return;
                       }
-                      // Read the image BEFORE setting imagePath so the store
-                      // stays consistent. If readImage fails, we don't leave
-                      // imagePath set with a stale/empty imageDataUrl — that
-                      // would break the CSS preview while FFmpeg still draws
-                      // the watermark (WYSIWYG divergence).
                       const r = await window.api?.readImage(res.path);
                       if (r?.success) {
                         setWatermark({ imagePath: res.path, imageDataUrl: r.dataUrl });
@@ -193,18 +186,25 @@ export default function WatermarkModal() {
                         setWatermark({ imagePath: "", imageDataUrl: "" });
                       }
                     }}
-                    className="cap-btn-secondary !text-[10px] !px-2 flex items-center gap-1"
+                    variant="secondary"
+                    size="sm"
+                    className="!text-[10px] !px-2"
                   >
                     <Upload size={12} /> Elegir
-                  </button>
+                  </Button>
                   {wm.imagePath && (
-                    <button
+                    <Button
+                      type="button"
                       onClick={() => setWatermark({ imagePath: "", imageDataUrl: "" })}
-                      className="cap-btn-secondary !text-[10px] !px-2"
+                      variant="tertiary"
+                      size="icon"
+                      title={t("common.remove")}
+                      aria-label={t("common.remove")}
+                      className="text-[var(--rose)]"
                       style={{ color: "var(--rose)" }}
                     >
-                      ×
-                    </button>
+                      <X size={12} />
+                    </Button>
                   )}
                 </div>
                 {wm.imageDataUrl && (
@@ -249,7 +249,6 @@ export default function WatermarkModal() {
             </div>
           )}
 
-          {/* Shared controls: opacity + position */}
           <div>
             <span
               className="text-[9px] font-semibold tracking-wider uppercase mb-1 block"
@@ -284,21 +283,27 @@ export default function WatermarkModal() {
               Posición
             </span>
             <div className="grid grid-cols-3 gap-1">
-              {POSITIONS.map((pos) => (
-                <button
-                  key={pos.key}
-                  onClick={() => setWatermark({ position: pos.key })}
-                  className="cap-btn-secondary !text-xs !p-2"
-                  style={{
-                    background: wm.position === pos.key ? "var(--accent)" : "var(--bg-elevated)",
-                    color: wm.position === pos.key ? "var(--bg-app)" : "var(--text-dim)",
-                    borderColor: wm.position === pos.key ? "var(--accent)" : "var(--border)",
-                  }}
-                  title={pos.key}
-                >
-                  {pos.label}
-                </button>
-              ))}
+              {WATERMARK_POSITIONS.map((pos) => {
+                return (
+                  <Button
+                    type="button"
+                    key={pos.key}
+                    onClick={() => setWatermark({ position: pos.key })}
+                    variant="secondary"
+                    size="sm"
+                    className="!text-xs !p-2"
+                    style={{
+                      background: wm.position === pos.key ? "var(--accent)" : "var(--bg-elevated)",
+                      color: wm.position === pos.key ? "var(--bg-app)" : "var(--text-dim)",
+                      borderColor: wm.position === pos.key ? "var(--accent)" : "var(--border)",
+                    }}
+                    title={pos.key}
+                    aria-label={pos.key}
+                  >
+                    <PositionIcon position={pos.key} size={14} strokeWidth={2} />
+                  </Button>
+                );
+              })}
             </div>
           </div>
         </div>

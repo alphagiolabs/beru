@@ -1,81 +1,88 @@
 import fs from "fs";
 
-/**
- * Verifies that input_path points to a real, locally-readable file.
- *
- * fs.existsSync / fs.statSync can return true for OneDrive "Files On-Demand"
- * placeholders and similar reparse points where the actual content is not
- * present locally. Passing such a path to ffmpeg triggers a raw ENOENT from
- * the subprocess, which is unhelpful to the user. We try to open the file
- * for reading to confirm the content is actually accessible.
- */
-export function validateInputPathReadable(inputPath) {
-  if (typeof inputPath !== "string" || !inputPath.trim()) {
-    return { ok: false, code: "missing", message: "Ruta de video vacía" };
-  }
-  let stat;
-  try {
-    stat = fs.statSync(inputPath);
-  } catch {
-    return { ok: false, code: "missing", message: "Archivo no encontrado" };
-  }
+function missingInput() {
+  return { ok: false, code: "missing", message: "Archivo no encontrado" };
+}
+
+function validateInputPath(inputPath) {
+  return typeof inputPath === "string" && inputPath.trim()
+    ? null
+    : { ok: false, code: "missing", message: "Ruta de video vacía" };
+}
+
+function validateInputStat(stat) {
   if (!stat.isFile()) {
     return { ok: false, code: "not_file", message: "La ruta no es un archivo" };
   }
   if (stat.size === 0) {
+    return { ok: false, code: "empty", message: "El archivo está vacío (0 bytes)" };
+  }
+  return null;
+}
+
+function unreadableInput(error) {
+  if (error?.code === "ENOENT") {
     return {
       ok: false,
-      code: "empty",
-      message: "El archivo está vacío (0 bytes)",
+      code: "cloud_only",
+      message:
+        "El video no está disponible localmente. Si está en OneDrive, espere a que se descargue o desactive 'Archivos a petición'.",
     };
   }
-  // Probe open() — OneDrive cloud placeholders can stat fine but fail to open.
+  return {
+    ok: false,
+    code: "unreadable",
+    message: `No se puede leer el archivo: ${error.message}`,
+  };
+}
+
+function unreadableIssue(inputPath, check) {
+  return check.ok ? null : { inputPath, ...check };
+}
+
+export async function validateInputPathReadableAsync(inputPath) {
+  const pathError = validateInputPath(inputPath);
+  if (pathError) return pathError;
+  let stat;
+  try {
+    stat = await fs.promises.stat(inputPath);
+  } catch {
+    return missingInput();
+  }
+  const statError = validateInputStat(stat);
+  if (statError) return statError;
   let handle;
   try {
-    handle = fs.openSync(inputPath, "r");
-  } catch (e) {
-    if (e?.code === "ENOENT") {
-      return {
-        ok: false,
-        code: "cloud_only",
-        message:
-          "El video no está disponible localmente. Si está en OneDrive, espere a que se descargue o desactive 'Archivos a petición'.",
-      };
-    }
-    return {
-      ok: false,
-      code: "unreadable",
-      message: `No se puede leer el archivo: ${e.message}`,
-    };
+    handle = await fs.promises.open(inputPath, "r");
+  } catch (error) {
+    return unreadableInput(error);
   } finally {
-    if (handle != null) {
+    if (handle) {
       try {
-        fs.closeSync(handle);
+        await handle.close();
       } catch {}
     }
   }
   return { ok: true, size: stat.size };
 }
 
-export function findUnreadableInputs(jobs) {
-  const issues = [];
-  for (const job of jobs) {
-    const inputPath = job?.input_path;
-    if (!inputPath) continue;
-    const check = validateInputPathReadable(inputPath);
-    if (!check.ok) {
-      issues.push({ inputPath, ...check });
+export async function findUnreadableInputsAsync(jobs, limit = 8) {
+  const results = new Array(jobs.length);
+  let cursor = 0;
+  const inspect = async () => {
+    while (true) {
+      const index = cursor++;
+      if (index >= jobs.length) return;
+      const inputPath = jobs[index]?.input_path;
+      if (!inputPath) continue;
+      const check = await validateInputPathReadableAsync(inputPath);
+      results[index] = unreadableIssue(inputPath, check);
     }
-  }
-  return issues;
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, inspect));
+  return results.filter(Boolean);
 }
 
-/**
- * Translates raw subprocess error text (Python / ffmpeg stderr) into a message
- * the user can act on. Currently handles ENOENT, which usually means a cloud
- * sync placeholder (OneDrive, Dropbox, Google Drive) whose content is not
- * present locally.
- */
 export function translateProcessorErrorMessage(msg) {
   if (typeof msg !== "string" || !msg) return msg;
   if (/spawn .* enoent/i.test(msg) && /py\b|python/i.test(msg)) {
@@ -86,10 +93,6 @@ export function translateProcessorErrorMessage(msg) {
     );
   }
   if (/ENOENT/.test(msg) || /No such file or directory/i.test(msg)) {
-    // Font / drawtext ENOENT: ffmpeg could not open the fontfile referenced in
-    // the overlay filter.  Mirror python/batch_errors.py so the JS and Python
-    // surfaces agree regardless of whether the error arrives as a formatted
-    // per-job message or as a raw stderr snippet.
     const lower = msg.toLowerCase();
     if (lower.includes("fontfile") || lower.includes("drawtext") || lower.includes("font")) {
       return (
@@ -98,7 +101,6 @@ export function translateProcessorErrorMessage(msg) {
         "(Arial, Times New Roman, etc.) y vuelve a intentar."
       );
     }
-    // Cloud guidance only when the message looks cloud-related; else generic ENOENT.
     if (/onedrive|dropbox|google drive|gdrive|files on-?demand|cloud/i.test(msg)) {
       return (
         "El video no está disponible localmente. " +

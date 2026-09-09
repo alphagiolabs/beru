@@ -20,14 +20,13 @@ def test_watermark_only_builds_drawtext_filter():
         "fontColor": "white",
         "fontFamily": "Arial",
     }
-    graph, label, paths = build_filter_complex([], 640, 360, watermark=wm)
+    graph, label, _paths = build_filter_complex([], 640, 360, watermark=wm)
     assert graph is not None
     assert "drawtext" in graph
     assert label is not None
 
 
 def test_stream_copy_gate_requires_no_watermark():
-    # Source contract: _process_one only stream-copies when ops empty AND no wm.
     src = (HERE / "processor.py").read_text(encoding="utf-8")
     assert "wm_enabled" in src
     assert "not raw_operations and not wm_enabled" in src

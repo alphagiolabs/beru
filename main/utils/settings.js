@@ -1,7 +1,8 @@
 import { app } from "electron";
 import path from "path";
 import fs from "fs";
-import { spawnSync } from "child_process";
+import { spawn } from "child_process";
+import { writeJsonAtomic } from "./atomic-json.js";
 import { getFfmpegPath } from "./paths.js";
 import { pickHwEncoderFromEncodersText } from "../workerPolicy.js";
 
@@ -48,12 +49,8 @@ const SETTINGS_DEFAULTS = {
 };
 
 let cachedHwEncoder = null;
+let hwEncoderPromise = null;
 
-// --- Settings cache (opt-in) ------------------------------------------------
-// readSettings() is called on many IPC handlers; each call does
-// existsSync + readFileSync + JSON.parse on the main thread. The cache holds
-// the parsed object in memory and is invalidated on writeSettings.
-// Enable with BERU_SETTINGS_CACHE=1. Default off = current behavior.
 let settingsCache = null;
 
 function settingsCacheEnabled() {
@@ -61,7 +58,6 @@ function settingsCacheEnabled() {
 }
 
 export function readSettings() {
-  // Always return a shallow copy so callers cannot mutate the cached object.
   if (settingsCacheEnabled() && settingsCache) return { ...settingsCache };
   let parsed;
   try {
@@ -81,29 +77,55 @@ export function readSettings() {
 
 export function writeSettings(obj) {
   const file = path.join(app.getPath("userData"), "settings.json");
-  // Atomic write: write to a sibling temp file then rename. A crash or power
-  // loss mid-write otherwise leaves a truncated settings.json, silently
-  // resetting the user to defaults on next read.
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(obj, null, 2), "utf8");
-  fs.renameSync(tmp, file);
-  // Store a copy so external mutations after write do not corrupt the cache.
+  writeJsonAtomic(file, obj);
   if (settingsCacheEnabled()) settingsCache = { ...obj };
+}
+
+function readFfmpegEncoders(ffmpeg) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(ffmpeg, ["-hide_banner", "-encoders"], { windowsHide: true });
+    let output = "";
+    let settled = false;
+    let timeout;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve(output);
+    };
+    const append = (chunk) => {
+      output += chunk.toString();
+    };
+    proc.stdout.on("data", append);
+    proc.stderr.on("data", append);
+    proc.once("error", finish);
+    proc.once("close", () => finish());
+    timeout = setTimeout(() => {
+      try {
+        proc.kill();
+      } catch {}
+      finish(new Error("FFmpeg encoder detection timed out"));
+    }, 15000);
+  });
+}
+
+async function detectHwEncoder() {
+  try {
+    const text = await readFfmpegEncoders(getFfmpegPath());
+    return pickHwEncoderFromEncodersText(text) || "";
+  } catch {
+    return "";
+  }
 }
 
 export async function detectHwEncoderCached() {
   if (cachedHwEncoder !== null) return cachedHwEncoder || null;
-  const ffmpeg = getFfmpegPath();
+  if (!hwEncoderPromise) hwEncoderPromise = detectHwEncoder();
   try {
-    const r = spawnSync(ffmpeg, ["-hide_banner", "-encoders"], {
-      encoding: "utf8",
-      timeout: 15000,
-      windowsHide: true,
-    });
-    const text = `${r.stdout || ""}${r.stderr || ""}`;
-    cachedHwEncoder = pickHwEncoderFromEncodersText(text) || "";
-  } catch {
-    cachedHwEncoder = "";
+    cachedHwEncoder = await hwEncoderPromise;
+    return cachedHwEncoder || null;
+  } finally {
+    hwEncoderPromise = null;
   }
-  return cachedHwEncoder || null;
 }

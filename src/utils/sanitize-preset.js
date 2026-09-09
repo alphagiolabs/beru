@@ -1,6 +1,6 @@
 import { clampRegionToVideo, isRegionUsable } from "./video-utils";
 import { ensureNormalized, isNormalizedRegion } from "./types";
-import { normalizeTextStyle, pickTextStyle } from "./text-style";
+import { hydrateGlobalTextStyle, pickTextStyle } from "./text-style";
 import { clampNum } from "./clamp";
 import { VALID_DELOGO_METHODS, DELOGO_FIELD_BOUNDS, sanitizeMirrorSide } from "./delogo-ops";
 
@@ -45,50 +45,33 @@ export function sanitizeTemplateRegions(regions) {
 }
 
 export function sanitizeTextStyle(textStyle = {}) {
-  const style = normalizeTextStyle({
-    fontSize: textStyle.textFontSize,
-    fontColor: textStyle.textFontColor,
-    fontFamily: textStyle.fontFamily,
-    fontWeight: textStyle.fontWeight,
-    letterSpacing: textStyle.letterSpacing,
-    textAlign: textStyle.textAlign,
-    textOpacity: textStyle.textOpacity,
-    bold: textStyle.bold,
-    italic: textStyle.italic,
-    bgEnabled: textStyle.bgEnabled,
-    bgColor: textStyle.bgColor,
-    bgOpacity: textStyle.bgOpacity,
-    boxBorderWidth: textStyle.boxBorderWidth,
-    borderWidth: textStyle.borderWidth,
-    borderColor: textStyle.borderColor,
-    textShadowEnabled: textStyle.textShadowEnabled,
-    textShadowColor: textStyle.textShadowColor,
-    textShadowOffsetX: textStyle.textShadowOffsetX,
-    textShadowOffsetY: textStyle.textShadowOffsetY,
-  });
   return {
     textInput: String(textStyle.textInput ?? "").slice(0, MAX_TEXT_INPUT_LEN),
-    textFontSize: style.fontSize,
-    textFontColor: style.fontColor,
-    fontFamily: style.fontFamily,
-    fontWeight: style.fontWeight,
-    letterSpacing: style.letterSpacing,
-    textAlign: style.textAlign,
-    textOpacity: style.textOpacity,
-    bold: style.bold,
-    italic: style.italic,
-    bgEnabled: style.bgEnabled,
-    bgColor: style.bgColor,
-    bgOpacity: style.bgOpacity,
-    boxBorderWidth: style.boxBorderWidth,
-    borderWidth: style.borderWidth,
-    borderColor: style.borderColor,
-    textShadowEnabled: style.textShadowEnabled,
-    textShadowColor: style.textShadowColor,
-    textShadowOffsetX: style.textShadowOffsetX,
-    textShadowOffsetY: style.textShadowOffsetY,
+    ...hydrateGlobalTextStyle(textStyle),
   };
 }
+export function persistWatermark(wm) {
+  if (!wm || typeof wm !== "object") return null;
+  return {
+    enabled: !!wm.enabled,
+    type: wm.type === "image" ? "image" : "text",
+    text: typeof wm.text === "string" ? wm.text : "",
+    imagePath: typeof wm.imagePath === "string" ? wm.imagePath : "",
+    opacity: Number.isFinite(Number(wm.opacity)) ? Number(wm.opacity) : 0.5,
+    scale: Number.isFinite(Number(wm.scale)) ? Number(wm.scale) : 1,
+    position: typeof wm.position === "string" ? wm.position : "bottom-right",
+    fontSize: Number.isFinite(Number(wm.fontSize)) ? Number(wm.fontSize) : 18,
+    fontColor: typeof wm.fontColor === "string" ? wm.fontColor : "#ffffff",
+    fontFamily: typeof wm.fontFamily === "string" ? wm.fontFamily : "Arial",
+  };
+}
+
+export function restoreWatermark(wm) {
+  const persisted = persistWatermark(wm);
+  if (!persisted) return null;
+  return { ...persisted, imageDataUrl: "" };
+}
+
 export function sanitizeDefaults(defaults = {}) {
   return {
     blurStrength: clampNum(
@@ -97,9 +80,7 @@ export function sanitizeDefaults(defaults = {}) {
       DELOGO_FIELD_BOUNDS.blurStrength.max,
       DELOGO_FIELD_BOUNDS.blurStrength.default,
     ),
-    delogoMethod: VALID_DELOGO_METHODS.has(defaults.delogoMethod)
-      ? defaults.delogoMethod
-      : "temporal",
+    delogoMethod: VALID_DELOGO_METHODS.has(defaults.delogoMethod) ? defaults.delogoMethod : "blur",
     delogoFillColor: String(defaults.delogoFillColor ?? "black").slice(0, 32),
     delogoFillOpacity: clampNum(defaults.delogoFillOpacity, 0, 1, 1),
     delogoImagePath: typeof defaults.delogoImagePath === "string" ? defaults.delogoImagePath : "",

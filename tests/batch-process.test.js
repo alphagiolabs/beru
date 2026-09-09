@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   buildIdTextOutputName,
-  filterOperationsForExport,
   hasVideoDimensions,
   listVideosMissingBatchText,
   sanitizeFilenamePart,
   videoHasBatchText,
 } from "../src/utils/batch-process.js";
+import { filterOperationsForExport } from "../src/utils/operation.js";
 
 describe("batch-process helpers", () => {
   describe("filterOperationsForExport", () => {

@@ -47,7 +47,6 @@ def style_header(ws, row, cols):
 def build():
     wb = Workbook()
 
-    # ---------- Instrucciones ----------
     ws_i = wb.active
     ws_i.title = "Instrucciones"
     ws_i["A1"] = "Plantilla: Texto en lote"
@@ -89,7 +88,6 @@ def build():
         ws_i.column_dimensions[c].width = 25
     ws_i.row_dimensions[1].height = 24
 
-    # ---------- Datos (hoja que se importa) ----------
     ws_d = wb.create_sheet("Datos")
     headers = ["id"] + REGION_LABELS
     ws_d.append(headers)
@@ -106,12 +104,10 @@ def build():
         ws_d.column_dimensions[get_column_letter(2 + i)].width = 28
     ws_d.freeze_panes = "B2"
 
-    # Dropdown para el encabezado de la columna A (aliases)
     dv_id = DataValidation(type="list", formula1='"' + ",".join(ID_ALIASES) + '"', allow_blank=False)
     dv_id.add("A1")
     ws_d.add_data_validation(dv_id)
 
-    # ---------- Validacion (formulas de chequeo) ----------
     ws_v = wb.create_sheet("Validacion")
     v_headers = ["id_original", "id_normalizado", "estado", "veces", "TEXT_1_recuento"]
     ws_v.append(v_headers)
@@ -124,16 +120,13 @@ def build():
         ws_v.cell(row=r, column=2,
                   value=f'=IF(TRIM(Datos!A{r})="","",LOWER(TRIM(Datos!A{r})))'
                   ).border = BORDER
-        # estado: vacio | duplicado | ok
         ws_v.cell(row=r, column=3,
                   value=(f'=IF(TRIM(Datos!A{r})="","VACIO",'
                          f'IF(COUNTIF(Datos!A:A,Datos!A{r})>1,"DUPLICADO","OK"))')
                   ).border = BORDER
-        # veces que aparece
         ws_v.cell(row=r, column=4,
                   value=f'=IF(TRIM(Datos!A{r})="",0,COUNTIF(Datos!A:A,Datos!A{r}))'
                   ).border = BORDER
-        # longitud del texto en TEXT_1 como sanity check
         ws_v.cell(row=r, column=5,
                   value=f'=LEN(Datos!B{r})'
                   ).border = BORDER
@@ -153,7 +146,6 @@ def build():
     ws_v.column_dimensions["E"].width = 16
     ws_v.freeze_panes = "A2"
 
-    # Resumen arriba (KPIs)
     ws_v.insert_rows(1)
     ws_v.cell(row=1, column=1, value="Resumen").font = Font(bold=True)
     ws_v.cell(row=1, column=2,
@@ -163,7 +155,6 @@ def build():
                      f'&COUNTIF(C3:C{n+2},"VACIO")'))
     ws_v.merge_cells(start_row=1, start_column=2, end_row=1, end_column=5)
     ws_v.row_dimensions[1].height = 20
-    # re-aplicar estilo de header en la fila 2 (que ahora es la de encabezados real)
     style_header(ws_v, 2, [1, 2, 3, 4, 5])
 
     wb.save(OUT)

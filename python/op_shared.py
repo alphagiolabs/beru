@@ -52,9 +52,9 @@ def _normalize_operation(op):
     if mode != "delogo":
         return out
 
-    method = out.get("delogo_method") or out.get("delogoMethod") or "temporal"
+    method = out.get("delogo_method") or out.get("delogoMethod") or "blur"
     method = str(method).lower()
-    out["delogo_method"] = method if method in VALID_DELOGO_METHODS else "temporal"
+    out["delogo_method"] = method if method in VALID_DELOGO_METHODS else "blur"
 
     pairs = (
         ("temporal_radius", "temporalRadius"),
@@ -102,18 +102,14 @@ def _optimize_delogo_for_speed(op, video_w, video_h):
     if rw <= 0 or rh <= 0:
         return op
 
-    if video_w > 0 and video_h > 0 and rw <= 1 and rh <= 1:
-        area_ratio = rw * rh
+    if _region_looks_normalized(region, video_w, video_h):
         px = float(region.get("x", 0))
         py = float(region.get("y", 0))
-        # Pixel coords: use absolute edges for flush-edge check
-        edge_x0, edge_y0 = px, py
-        edge_x1, edge_y1 = px + rw, py + rh
-        if rw <= 1 and rh <= 1 and px <= 1 and py <= 1:
-            edge_x0 = px * video_w
-            edge_y0 = py * video_h
-            edge_x1 = (px + rw) * video_w
-            edge_y1 = (py + rh) * video_h
+        area_ratio = rw * rh
+        edge_x0 = px * video_w
+        edge_y0 = py * video_h
+        edge_x1 = (px + rw) * video_w
+        edge_y1 = (py + rh) * video_h
     elif video_w > 0 and video_h > 0:
         area_ratio = (rw * rh) / (video_w * video_h)
         edge_x0 = float(region.get("x", 0))
@@ -128,8 +124,7 @@ def _optimize_delogo_for_speed(op, video_w, video_h):
     if area_ratio > 0.25:
         return op
 
-    # FFmpeg delogo needs a band around the box; edge logos fail as inpaint.
-    # Keep temporal when flush to any frame edge.
+    # FFmpeg delogo fails flush to the frame edge. Keep temporal there.
     band = 1.0
     if video_w > 0 and video_h > 0:
         if (
@@ -148,6 +143,31 @@ def _optimize_delogo_for_speed(op, video_w, video_h):
     return optimized
 
 
+def _region_looks_normalized(region, video_w, video_h):
+    """True when a region is fractional (normalized) rather than pixel-sized.
+
+    Single source of truth for both `_region_to_pixels` and
+    `_optimize_delogo_for_speed`, which previously disagreed about 1x1 boxes:
+    a 1x1 region is real pixels; only widths/heights with a proper fraction
+    (w < 1 or h < 1) are normalized.
+    """
+    if not region or video_w <= 0 or video_h <= 0:
+        return False
+    x = float(region.get("x", 0))
+    y = float(region.get("y", 0))
+    w = float(region.get("w", 0))
+    h = float(region.get("h", 0))
+    if w <= 0 or h <= 0:
+        return False
+    return (
+        0 <= x <= 1
+        and 0 <= y <= 1
+        and 0 < w <= 1
+        and 0 < h <= 1
+        and (w < 1 or h < 1)
+    )
+
+
 def _region_to_pixels(region, video_w, video_h):
     """Convert a normalized (0..1) or pixel region to integer pixel coords.
 
@@ -163,25 +183,12 @@ def _region_to_pixels(region, video_w, video_h):
     h = float(region.get("h", 0))
     if w <= 0 or h <= 0:
         return None
-    # Fractional size → normalized 0..1 coords from the UI.
-    looks_normalized = (
-        video_w > 0
-        and video_h > 0
-        and 0 <= x <= 1
-        and 0 <= y <= 1
-        and 0 < w <= 1
-        and 0 < h <= 1
-        and (w < 1 or h < 1)
-    )
-    if looks_normalized:
+    if _region_looks_normalized(region, video_w, video_h):
         px = max(0, int(round(x * video_w)))
         py = max(0, int(round(y * video_h)))
         pw = max(1, min(video_w - px, int(round(w * video_w))))
         ph = max(1, min(video_h - py, int(round(h * video_h))))
         return {"x": px, "y": py, "w": pw, "h": ph}
-    # Unit square {0,0,1,1} with integer 1×1 size: prefer full-frame only when
-    # both axes are exactly 1.0 and video is multi-pixel — but Electron always
-    # denormalizes full frames to video_w×video_h, so 1×1 is a 1px box.
     px = max(0, int(round(x)))
     py = max(0, int(round(y)))
     pw = max(1, min(video_w - px, int(round(w)))) if video_w > 0 else max(1, int(round(w)))

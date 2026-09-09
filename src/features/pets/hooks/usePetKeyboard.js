@@ -1,16 +1,7 @@
 import { useEffect } from "react";
 import useEditorStore from "../../../stores/useEditorStore";
+import { isTypingTarget } from "../../../utils/is-typing-target";
 
-function isTypingTarget(target) {
-  if (!target) return false;
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return !!target.isContentEditable;
-}
-
-/**
- * Pet-only shortcuts. Mounted from BeruRoot so useKeyboard stays editor-pure.
- */
 export default function usePetKeyboard() {
   useEffect(() => {
     const handler = (e) => {

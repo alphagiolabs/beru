@@ -60,8 +60,6 @@ export default function useProcessing(api) {
       if (Number.isInteger(index)) pendingJobProgress.delete(index);
     };
 
-    // Log batching: coalesce rapid onLog calls into a single store update every
-    // 50ms (flag-gated). Legacy path appends one line at a time.
     const logBatchEnabled = PERF_FLAGS.logBatch;
     const pendingLogs = [];
     let logFlushTimer = null;
@@ -69,7 +67,6 @@ export default function useProcessing(api) {
       logFlushTimer = null;
       if (pendingLogs.length === 0) return;
       const state = useEditorStore.getState();
-      // Prefer a batched append when available; otherwise fall back per-line.
       if (typeof state.appendLogBatch === "function") {
         state.appendLogBatch(pendingLogs.splice(0, pendingLogs.length));
       } else {
@@ -83,12 +80,10 @@ export default function useProcessing(api) {
       logFlushTimer = setTimeout(flushLogs, 50);
     };
 
-    /** Ignore terminal events from a superseded run (watchdog race, late close). */
     const isStaleRunEvent = (msg) => {
       const eventRunId = msg?.runId;
       if (eventRunId == null || eventRunId === "") return false;
       const active = useEditorStore.getState().activeProcessRunId;
-      // No active id yet (legacy start path) — accept event.
       if (!active) return false;
       return eventRunId !== active;
     };
@@ -129,7 +124,6 @@ export default function useProcessing(api) {
         if (msg?.cancelled) {
           state.abortActiveProcessing();
         } else if (msg?.code != null && msg.code !== 0) {
-          // Crash / unexpected non-zero exit without a prior process:error.
           state.abortActiveProcessing();
           state.showToast({
             kind: "err",
@@ -140,14 +134,11 @@ export default function useProcessing(api) {
         }
       }),
       bind(api.onError, (msg) => {
-        // Normalize string legacy payloads and object { error, runId }.
         const payload = typeof msg === "string" ? { error: msg } : msg || {};
         if (isStaleRunEvent(payload)) return;
         pendingJobProgress.clear();
         cancelJobProgressFlush();
         const state = useEditorStore.getState();
-        // Fatal errors may arrive without process:finished — finalize history
-        // and reset in-flight rows so the UI is not stuck in "processing".
         state.finalizeActiveExecution();
         state.abortActiveProcessing();
         console.error("[beru] Processing error:", payload.error || msg);

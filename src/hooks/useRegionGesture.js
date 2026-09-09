@@ -6,10 +6,6 @@ import {
   pointerDeltaToNorm,
 } from "../utils/region-interaction";
 
-/**
- * Window-level pointer session for DOM region move/resize.
- * Samples content size once at gesture start so mid-drag layout thrash does not jitter.
- */
 export default function useRegionGesture({ videoEl, onChange, onCommit, enabled = true }) {
   const sessionRef = useRef(null);
   const onChangeRef = useRef(onChange);
@@ -41,7 +37,6 @@ export default function useRegionGesture({ videoEl, onChange, onCommit, enabled 
           : applyResize(s.startRegion, s.handle, dx, dy);
       if (!next) return;
       s.lastRegion = next;
-      // Coalesce store updates to one per frame for a smoother feel
       if (s.raf != null) return;
       s.raf = requestAnimationFrame(() => {
         s.raf = null;
@@ -74,12 +69,11 @@ export default function useRegionGesture({ videoEl, onChange, onCommit, enabled 
   const beginSession = useCallback(
     (e, region, mode, handle) => {
       if (!enabled || !region) return false;
-      // Primary button only (mouse). Touch/pen often report button 0 on down.
+      // Pointer Events: touch/pen often report button 0 on down.
       if (typeof e.button === "number" && e.button !== 0) return false;
 
       const video = videoEl?.current;
       let contentPx = getContentPx(video);
-      // Fallback: full element box if intrinsic video size not ready yet
       if (!contentPx && video) {
         const br = video.getBoundingClientRect();
         if (br.width > 0 && br.height > 0) {
@@ -92,9 +86,7 @@ export default function useRegionGesture({ videoEl, onChange, onCommit, enabled 
       e.stopPropagation();
       try {
         e.currentTarget?.setPointerCapture?.(e.pointerId);
-      } catch {
-        /* ignore capture errors */
-      }
+      } catch {}
       if (video && !video.paused) video.pause();
 
       sessionRef.current = {

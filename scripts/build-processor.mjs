@@ -1,5 +1,3 @@
-// Builds bin/beru-processor(.exe) with PyInstaller so the Windows installer
-// does not require users to install Python separately.
 
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";

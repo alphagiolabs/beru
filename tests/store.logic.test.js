@@ -199,6 +199,67 @@ describe("useEditorStore logic regressions", () => {
     refreshSpy.mockRestore();
   });
 
+  it("processAll starts a job manifest on the happy path", async () => {
+    useEditorStore.setState({
+      queue: [queueItem({ path: "C:\\videos\\demo.mp4", filename: "demo.mp4" })],
+      outputDir: "C:\\output",
+      sidebarMode: "logo",
+    });
+
+    const res = await useEditorStore.getState().processAll();
+
+    expect(res).toEqual({ ok: true });
+    expect(mockApi.startProcessing).toHaveBeenCalledTimes(1);
+    const manifest = mockApi.startProcessing.mock.calls[0][0];
+    expect(manifest).toMatchObject({ type: "beru-job-manifest", version: 1 });
+    expect(manifest.jobs[0]).toMatchObject({
+      id: 0,
+      input_path: "C:\\videos\\demo.mp4",
+    });
+  });
+
+  it("processAll materializes excel text into export jobs", async () => {
+    useEditorStore.setState({
+      queue: [queueItem({ path: "C:\\videos\\clip.mp4", filename: "clip.mp4" })],
+      outputDir: "C:\\output",
+      sidebarMode: "logo",
+      templateRegions: [{ id: "r1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } }],
+      excelRows: [{ id: "clip", TEXT_1: "Desde Excel" }],
+      excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
+    });
+
+    const res = await useEditorStore.getState().processAll();
+
+    expect(res.ok).toBe(true);
+    const job = mockApi.startProcessing.mock.calls[0][0].jobs[0];
+    expect(job.operations.some((op) => op.mode === "text" && op.text === "Desde Excel")).toBe(true);
+  });
+
+  it("processAll returns missing_dimensions when probe cannot fill size", async () => {
+    mockApi.getVideoInfoBatch.mockResolvedValue([{ width: 0, height: 0 }]);
+    useEditorStore.setState({
+      queue: [queueItem({ width: 0, height: 0, filename: "nodims.mp4" })],
+    });
+
+    const res = await useEditorStore.getState().processAll();
+
+    expect(res.ok).toBe(false);
+    expect(res.code).toBe("missing_dimensions");
+    expect(mockApi.startProcessing).not.toHaveBeenCalled();
+  });
+
+  it("processAll returns busy when a run is already active", async () => {
+    useEditorStore.setState({
+      queue: [queueItem()],
+      isProcessing: true,
+    });
+
+    const res = await useEditorStore.getState().processAll();
+
+    expect(res).toEqual({ ok: false, code: "busy" });
+    expect(mockApi.startProcessing).not.toHaveBeenCalled();
+  });
+
   it("uses ID_TEXT as the output name for batch text jobs", () => {
     useEditorStore.setState({
       queue: [queueItem({ path: "C:\\videos\\promo.mp4", filename: "promo.mp4" })],
@@ -340,6 +401,12 @@ describe("useEditorStore logic regressions", () => {
       textShadowColor: "#222222",
       textShadowOffsetX: 8,
       textShadowOffsetY: 9,
+      autoFit: true,
+      lineHeight: 1.5,
+      verticalAlign: "bottom",
+      textWrap: false,
+      safeMargin: 12,
+      truncate: "ellipsis",
     });
 
     const project = useEditorStore.getState().serializeProject();
@@ -355,6 +422,12 @@ describe("useEditorStore logic regressions", () => {
         textShadowColor: "#222222",
         textShadowOffsetX: 8,
         textShadowOffsetY: 9,
+        autoFit: true,
+        lineHeight: 1.5,
+        verticalAlign: "bottom",
+        textWrap: false,
+        safeMargin: 12,
+        truncate: "ellipsis",
       }),
     );
 
@@ -368,6 +441,12 @@ describe("useEditorStore logic regressions", () => {
       textShadowColor: "black",
       textShadowOffsetX: 2,
       textShadowOffsetY: 2,
+      autoFit: false,
+      lineHeight: 1.2,
+      verticalAlign: "top",
+      textWrap: true,
+      safeMargin: 4,
+      truncate: "none",
     });
 
     const result = useEditorStore.getState()._applyProject({ ...project, excel: null });
@@ -384,6 +463,12 @@ describe("useEditorStore logic regressions", () => {
         textShadowColor: "#222222",
         textShadowOffsetX: 8,
         textShadowOffsetY: 9,
+        autoFit: true,
+        lineHeight: 1.5,
+        verticalAlign: "bottom",
+        textWrap: false,
+        safeMargin: 12,
+        truncate: "ellipsis",
       }),
     );
   });
@@ -766,18 +851,13 @@ describe("useEditorStore logic regressions", () => {
       ],
     });
 
-    // Simulate drag updating operation 0 on video 0
     useEditorStore.getState().updateOperation(0, 0, { region: nextRegion });
     useEditorStore.setState({ currentRegion: nextRegion });
 
     const state = useEditorStore.getState();
-    // 1. Current region is updated in UI
     expect(state.currentRegion).toEqual(nextRegion);
-    // 2. Video 0's operation has the new custom region
     expect(state.queue[0].operations[0].region).toEqual(nextRegion);
-    // 3. Template region remains at original position
     expect(state.templateRegions[0].region).toEqual(templateRegion);
-    // 4. Video 1's operation remains at original template position
     expect(state.queue[1].operations[0].region).toEqual(templateRegion);
   });
 
@@ -800,11 +880,9 @@ describe("useEditorStore logic regressions", () => {
       ],
     });
 
-    // Pointerdown: one snapshot
     useEditorStore.getState()._saveUndo();
     expect(useEditorStore.getState().undoStack).toHaveLength(1);
 
-    // Many mousemove updates must not flood the undo stack
     for (let i = 0; i < 20; i++) {
       useEditorStore
         .getState()
@@ -822,7 +900,6 @@ describe("useEditorStore logic regressions", () => {
     expect(useEditorStore.getState().undoStack).toHaveLength(1);
     expect(useEditorStore.getState().queue[0].operations[0].region.x).toBeCloseTo(0.29, 5);
 
-    // Default path still records history
     useEditorStore.getState().updateOperationRegion(0, { ...region, x: 0.5 });
     expect(useEditorStore.getState().undoStack).toHaveLength(2);
   });
@@ -871,6 +948,19 @@ describe("useEditorStore logic regressions", () => {
     expect(state.selectedTemplateRegionId).toBe("region-2");
     expect(state.excelMapping.columns).toEqual({ "region-2": "TEXT_2" });
     expect(state.queue[0].operations.map((op) => op.id)).toEqual(["manual-op", "blur-op"]);
+  });
+
+  it("serialized projects pass the shared document validator", async () => {
+    const { validateProjectDocument } = await import("../shared/project-document.js");
+    useEditorStore.setState({
+      templateRegions: [{ id: 1, label: "TEXT_1", region: { x: 0, y: 0, w: 0.2, h: 0.1 } }],
+      excelPath: null,
+    });
+    const project = useEditorStore.getState().serializeProject();
+    expect(project.queue).toBeUndefined();
+    expect(validateProjectDocument(project)).toEqual({ valid: true });
+    const preset = useEditorStore.getState().serializePreset();
+    expect(validateProjectDocument(preset)).toEqual({ valid: true });
   });
 
   it("persists per-region style in serialized projects", () => {
@@ -1229,9 +1319,6 @@ describe("useEditorStore logic regressions", () => {
     useEditorStore.getState().markJobError({ index: 1, error: "boom" });
     const state = useEditorStore.getState();
     expect(state.queue[1].status).toBe("error");
-    // The key MUST be absent (not present-with-undefined). A present undefined
-    // key makes hasOwnProperty-based consumers (e.g. getBatchProgress) read
-    // NaN and makes future applyJobProgressMap copies carry stale entries.
     expect(Object.prototype.hasOwnProperty.call(state.jobProgress, 1)).toBe(false);
     expect(state.jobProgress).toEqual({});
   });

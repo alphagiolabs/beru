@@ -5,6 +5,7 @@ import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import { textOpMatchesRegion } from "../utils/text-style";
 import { InspectorGroup } from "./inspector";
+import { Button } from "./ui/Button";
 
 const api = window.api;
 
@@ -44,7 +45,6 @@ export default function BatchPanel() {
   }, [excelMatchStatus, queueLength]);
 
   const handleImportExcel = async () => {
-    // Warn when Excel will replace text ops linked to template regions (_reapplyExcel preserves non-text ops)
     const hasLinkedTextToOverwrite = get().queue.some((v) =>
       v.operations.some(
         (op) =>
@@ -161,14 +161,16 @@ export default function BatchPanel() {
 
       <InspectorGroup title="Excel">
         <div className="flex gap-1.5">
-          <button
+          <Button
             type="button"
             onClick={handleImportExcel}
-            className="cap-btn-secondary flex-1 !text-[11px]"
+            variant="secondary"
+            size="sm"
+            className="flex-1 !text-[11px]"
           >
             <FileSpreadsheet size={13} />
             {excelPath ? "Reimportar Excel" : "Importar Excel"}
-          </button>
+          </Button>
           {excelPath && (
             <button
               type="button"

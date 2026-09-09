@@ -20,12 +20,8 @@ describe("main/updater.js event race guard", () => {
     expect(harness.events.at(-1).type).toBe("available");
     expect(harness.events.at(-1).version).toBe("1.6.99");
 
-    // A duplicate or stale check emits update-not-available.
     harness.emit("update-not-available", { version: "1.6.36" });
 
-    // The renderer still shows the update as available. A user clicking
-    // "Update now" calls startDownload. It must proceed directly to downloading
-    // without re-checking (which would require network and could lose the update).
     const downloadPromise = harness.updater.startDownload();
 
     expect(harness.events.at(-1).type).toBe("downloading");
@@ -49,7 +45,6 @@ describe("main/updater.js event race guard", () => {
     });
 
     const checkPromise = harness.updater.checkForUpdates();
-    // The pending-version guard should re-emit available without calling au.checkForUpdates.
     await checkPromise;
 
     const available = harness.events.filter((s) => s.type === "available");

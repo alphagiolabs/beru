@@ -2,27 +2,10 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 import { shouldRestartElectronForPythonChange } from "../scripts/dev-python-watch.mjs";
-
-/**
- * Regression: `scripts/dev.mjs` restarted Electron on ANY `.py` change under
- * `python/`, including test files and scratch scripts. Editing tests while
- * `npm run dev` was running closed and reopened the app repeatedly.
- *
- * Only runtime processor modules should trigger an Electron restart.
- */
+import { extractLocalImports } from "./helpers/python-imports.js";
 
 const pythonDir = path.join(process.cwd(), "python");
 const processorPath = path.join(pythonDir, "processor.py");
-
-function extractLocalImports(pySrc) {
-  const imports = new Set();
-  const fromRe = /^\s*from\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+import\b/gm;
-  let m;
-  while ((m = fromRe.exec(pySrc)) !== null) imports.add(m[1]);
-  const impRe = /^\s*import\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/gm;
-  while ((m = impRe.exec(pySrc)) !== null) imports.add(m[1]);
-  return [...imports].filter((mod) => fs.existsSync(path.join(pythonDir, `${mod}.py`)));
-}
 
 describe("shouldRestartElectronForPythonChange", () => {
   it("restarts for processor.py and its local modules", () => {

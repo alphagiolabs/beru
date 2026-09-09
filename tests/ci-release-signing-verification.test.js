@@ -33,14 +33,10 @@ describe(".github/workflows/ci-release.yml: post-build signing verification", ()
 
   it("uses Get-AuthenticodeSignature to inspect the installer", () => {
     expect(src).toMatch(/Get-AuthenticodeSignature/);
-    // The step must report the signature status to the workflow log.
     expect(src).toMatch(/Signature status/);
   });
 
   it("does not hard-fail when the installer is unsigned (cert secret is optional)", () => {
-    // The pre-existing "Verify signing secrets" gate was removed so the
-    // pipeline can publish without a cert. The post-build step must warn,
-    // not error, when the signature is not Valid.
     expect(src).not.toMatch(/WINDOWS_CERTIFICATE_BASE64 secret is missing.*cannot sign/i);
     expect(src).toMatch(/Write-Warning.*signature is not Valid/i);
   });

@@ -1,14 +1,4 @@
-/**
- * iOS / macOS-style segmented control. Props-only — no store knowledge.
- * Equal-width segments + CSS-driven sliding thumb (no layout measurement).
- */
-export default function SegmentedControl({
-  options = [],
-  value,
-  onChange,
-  ariaLabel,
-  size = "md",
-}) {
+export default function SegmentedControl({ options = [], value, onChange, ariaLabel }) {
   const count = Math.max(options.length, 1);
   const index = Math.max(
     0,
@@ -17,7 +7,7 @@ export default function SegmentedControl({
 
   return (
     <div
-      className={`inspector-segmented inspector-segmented--${size}`}
+      className="inspector-segmented"
       role="radiogroup"
       aria-label={ariaLabel}
       data-value={value}

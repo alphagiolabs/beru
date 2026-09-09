@@ -6,10 +6,6 @@ import {
   createSingleStartPatch,
 } from "./export-pipeline.js";
 
-/**
- * Validate queue readiness before starting a batch export.
- * @returns {{ ok: true } | { ok: false, code: string, details?: object }}
- */
 export function validateBatchReady({ queue, templateRegions = [], getCellText }) {
   const list = Array.isArray(queue) ? queue : [];
   const missingDims = list.filter((q) => !hasVideoDimensions(q));
@@ -35,10 +31,6 @@ export function validateBatchReady({ queue, templateRegions = [], getCellText })
   return { ok: true };
 }
 
-/**
- * Start a batch processing run.
- * @param {{ api: object, jobs: Array, queue: Array, hooks: object }} args
- */
 function isAlreadyRunningFailure(result) {
   if (!result || typeof result !== "object") return false;
   if (result.code === "already_processing") return true;
@@ -58,7 +50,6 @@ export async function runBatch({ api, jobs, queue, hooks }) {
   hooks.applyPatch?.(createBatchStartPatch({ queue, jobCount: jobs.length }));
 
   const clearProcessing = () => {
-    // Prefer setProcessing so execution-history persistence still runs on stop.
     if (typeof hooks.setProcessing === "function") hooks.setProcessing(false);
     else hooks.applyPatch?.({ isProcessing: false });
   };
@@ -72,7 +63,6 @@ export async function runBatch({ api, jobs, queue, hooks }) {
   try {
     const result = await api.startProcessing(createJobManifest(jobs));
     if (!result?.success) {
-      // Another run owns the lock — do not tear down its UI/history.
       if (isAlreadyRunningFailure(result)) {
         return {
           ok: false,
@@ -88,9 +78,6 @@ export async function runBatch({ api, jobs, queue, hooks }) {
   }
 }
 
-/**
- * Run a single-video processing job (test current / sidebar process).
- */
 export async function runSingle({ api, job, videoIdx, queue, isProcessing = false, hooks }) {
   if (!api?.startProcessing) {
     return { ok: false, code: "api_unavailable", error: "API de procesamiento no disponible" };
@@ -121,12 +108,9 @@ export async function runSingle({ api, job, videoIdx, queue, isProcessing = fals
       startError = result?.error || "Cancelled";
       ok = false;
     } else if (liveItem?.status === "error") {
-      // Process exit 0 but job failed via NDJSON — do not report success.
       startError = itemError || "Procesamiento fallido";
       ok = false;
     } else {
-      // success + non-error row (done, or still processing/idle if IPC mock
-      // did not markJobDone — trust process success unless row is error).
       ok = true;
     }
     return {
@@ -146,7 +130,6 @@ export async function runSingle({ api, job, videoIdx, queue, isProcessing = fals
       const nextQueue = [...currentQueue];
       if (videoIdx >= 0 && videoIdx < nextQueue.length) {
         const row = nextQueue[videoIdx];
-        // Prefer leaving an already-marked error/done row alone when message matches.
         if (row?.status !== "error") {
           nextQueue[videoIdx] = {
             ...row,
@@ -163,14 +146,10 @@ export async function runSingle({ api, job, videoIdx, queue, isProcessing = fals
   }
 }
 
-/**
- * Cancel in-flight processing and reset mid-batch queue rows.
- */
 export async function cancelBatch({ api, hooks }) {
   if (api?.cancelProcessing) {
     await api.cancelProcessing();
   }
-  // Prefer the store abort helper when provided (same path as useProcessing).
   if (typeof hooks.abortActiveProcessing === "function") {
     hooks.abortActiveProcessing();
     return { ok: true };

@@ -134,23 +134,16 @@ try {
   let electronExitHandler = (code) => shutdown(code ?? 0);
   electron.on("exit", electronExitHandler);
 
-  // Watch runtime processor modules — restart Electron (not Vite) when they
-  // change. Ignore test_*.py / scratch scripts so editing tests does not
-  // bounce the app window (see scripts/dev-python-watch.mjs).
   const pythonDir = path.join(root, "python");
   let restartTimer = null;
   try {
     fs.watch(pythonDir, { recursive: false }, (_eventType, filename) => {
       if (!shouldRestartElectronForPythonChange(filename)) return;
-      // Debounce rapid saves
       if (restartTimer) clearTimeout(restartTimer);
       restartTimer = setTimeout(() => {
         restartTimer = null;
         if (shuttingDown || !electron) return;
         console.log(`[dev] Python file changed (${filename}), restarting Electron...`);
-        // Remove the OLD exit handler before killing so the old process's
-        // exit (triggered by killTree) doesn't call shutdown() and tear down
-        // Vite + the new Electron we're about to spawn.
         const oldProc = electron;
         const oldHandler = electronExitHandler;
         if (oldProc) oldProc.removeListener("exit", oldHandler);

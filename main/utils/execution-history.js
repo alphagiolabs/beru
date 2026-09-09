@@ -1,6 +1,7 @@
 import { app } from "electron";
 import path from "path";
 import fs from "fs";
+import { writeJsonAtomic } from "./atomic-json.js";
 
 const HISTORY_MAX = 40;
 
@@ -28,9 +29,5 @@ export function writeExecutionHistory(runs) {
   const safe = Array.isArray(runs)
     ? runs.filter((run) => run && typeof run.id === "string").slice(0, HISTORY_MAX)
     : [];
-  // Atomic write (sibling tmp + rename) so a crash mid-write cannot truncate
-  // the history file and silently wipe the user's execution history.
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(safe, null, 2), "utf8");
-  fs.renameSync(tmp, file);
+  writeJsonAtomic(file, safe);
 }

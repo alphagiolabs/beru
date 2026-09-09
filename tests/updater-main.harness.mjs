@@ -4,29 +4,16 @@ import { fileURLToPath } from "url";
 import vm from "vm";
 import { vi } from "vitest";
 
-/**
- * Test harness for main/updater.js.
- *
- * We run the real source in a VM with mocked electron and electron-updater so we
- * can deterministically reproduce the event sequences that cause update flow bugs.
- */
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(__dirname, "..", "main", "updater.js");
 
 function buildSource() {
   let src = fs.readFileSync(sourcePath, "utf-8");
-  // Replace the static electron import with a variable that the VM will inject.
   src = src.replace('import { app } from "electron";', "const app = globalThis.__mockElectronApp;");
   src = src.replace(
     'import { createRequire } from "module";',
     "const createRequire = globalThis.__mockCreateRequire;",
   );
-  // The updater reads the live window from shared-state instead of a captured
-  // ref (so it survives window recreation). Inject a mock getter that returns
-  // the test's fake window. Wrapped in a function so the lookup happens at call
-  // time (fakeWindow is created after runInContext, so binding the value at
-  // module top-level would capture undefined).
   src = src.replace(
     /import\s*\{[^}]*getMainWindow[^}]*\}\s*from\s*["']\.\/shared-state\.js["'];?/,
     [
@@ -35,14 +22,11 @@ function buildSource() {
       "const setAppIsQuitting = (v) => { globalThis.__mockSetAppIsQuitting && globalThis.__mockSetAppIsQuitting(v); };",
     ].join("\n"),
   );
-  // scheduleInstall cancels active processing before quitAndInstall.
   src = src.replace(
     /import\s*\{\s*cancelActiveProcessing\s*\}\s*from\s*["']\.\/handlers\/process\.js["'];?/,
     "const cancelActiveProcessing = () => (globalThis.__mockCancelActiveProcessing ? globalThis.__mockCancelActiveProcessing() : Promise.resolve({ success: true, idle: true }));",
   );
-  // The source uses import.meta.url for createRequire. Replace with a fixed URL.
   src = src.replace(/import\.meta\.url/g, '"file:///test/updater.js"');
-  // Convert ESM export to CommonJS module.exports so vm.runInContext can return it.
   src = src.replace(
     /export\s*\{\s*([^}]+)\s*\};?/,
     (match, exports) => `module.exports = { ${exports} };`,
@@ -102,7 +86,6 @@ export function createUpdaterHarness() {
     Promise,
     vi,
   });
-  // Make the VM's globalThis point to itself so globalThis.__mockX works.
   context.globalThis = context;
   context.__mockElectronApp = fakeApp;
   context.__mockCreateRequire = createRequireMock;
@@ -126,8 +109,6 @@ export function createUpdaterHarness() {
       send: (_channel, payload) => events.push(payload),
     },
   };
-  // shared-state.getMainWindow() mock — returns the test's fake window so send()
-  // (which now reads the live window instead of a captured ref) targets it.
   context.__mockGetMainWindow = () => fakeWindow;
 
   function emit(event, ...args) {

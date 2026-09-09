@@ -3,10 +3,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { createPathSecurity } from "../main/pathSecurity.js";
-import {
-  sanitizeJobMedia,
-  prepareJobsForProcessor,
-} from "../main/utils/process-media-validation.js";
+import { sanitizeJobMedia } from "../main/utils/process-media-validation.js";
 
 const fakeApp = {
   getPath: (name) => {
@@ -47,9 +44,7 @@ describe("process-media-validation", () => {
   afterEach(() => {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   });
 
   it("sanitizeJobMedia sets input_root and asset_roots for preview (no output dir)", () => {
@@ -70,7 +65,6 @@ describe("process-media-validation", () => {
   });
 
   it("sanitizeJobMedia rejects unauthorized overlay images", () => {
-    // Path under a denied system prefix (same pattern as path-security.test.js).
     const outsideImage =
       process.platform === "win32"
         ? "C:\\Windows\\System32\\beru-evil-overlay.png"
@@ -86,19 +80,17 @@ describe("process-media-validation", () => {
     ).toThrow(/Imagen no permitida/i);
   });
 
-  it("prepareJobsForProcessor still requires output directory and derives output_path", () => {
+  it("sanitizeJobMedia derives output_path when outputDirectory is provided", () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "beru-out-"));
     try {
-      const [job] = prepareJobsForProcessor(
-        [
-          {
-            input_path: videoFile,
-            output_path: "out.mp4",
-            operations: [{ mode: "image", image_path: imageFile }],
-          },
-        ],
-        outDir,
+      const job = sanitizeJobMedia(
+        {
+          input_path: videoFile,
+          output_path: "out.mp4",
+          operations: [{ mode: "image", image_path: imageFile }],
+        },
         security,
+        { outputDirectory: outDir },
       );
       expect(job.output_root).toBe(outDir);
       expect(job.output_path).toBe(path.join(outDir, "out.mp4"));

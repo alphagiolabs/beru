@@ -1,13 +1,27 @@
-import { createOperation } from "../../utils/types";
-import { pickTextStyle, regionsMatch, textOpMatchesRegion } from "../../utils/text-style";
+import { createOperation } from "../../utils/operation";
+import {
+  getGlobalTextStyleFromState,
+  persistGlobalTextStyle,
+  pickTextStyle,
+  regionsMatch,
+  textOpMatchesRegion,
+} from "../../utils/text-style";
 import {
   sanitizeTemplateRegions,
   sanitizeTextStyle,
   sanitizeDefaults,
+  persistWatermark,
+  restoreWatermark,
 } from "../../utils/sanitize-preset";
+import {
+  COMPATIBLE_PROJECT_VERSIONS,
+  PRESET_TYPE,
+  PROJECT_TYPE,
+  PROJECT_VERSION,
+  isProjectOrPreset,
+} from "../../../shared/project-document.js";
 import { swallow } from "../../utils/swallow.js";
 
-/** Project/preset serialization, persistence, and apply/load helpers. */
 export function createProjectSlice(set, get) {
   return {
     presets: [],
@@ -17,7 +31,6 @@ export function createProjectSlice(set, get) {
       const api = window.api;
       if (!api?.deletePreset) return { ok: false, error: "API no disponible" };
       const p = preset || {};
-      // Bundled presets are read-only and cannot be deleted.
       if (p.source === "bundled") {
         return { ok: false, error: "Los presets incluidos no se pueden eliminar" };
       }
@@ -27,7 +40,6 @@ export function createProjectSlice(set, get) {
       }
       const res = await api.deletePreset(filename);
       if (!res.success) return { ok: false, error: res.error };
-      // Refresh from disk so the list reflects the real state.
       if (api.listPresets) {
         try {
           const r = await api.listPresets();
@@ -44,13 +56,17 @@ export function createProjectSlice(set, get) {
     loadPresetsFromStorage: () => {
       try {
         const raw = localStorage.getItem("beru-presets");
-        if (raw) set({ presets: JSON.parse(raw) });
+        if (!raw) return;
+        localStorage.removeItem("beru-presets");
+        if ((get().presets || []).length > 0) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) set({ presets: parsed });
       } catch (e) {
-        console.error("[beru] Failed to load presets from storage:", e.message);
+        swallow("beru-presets-migrate", e);
         try {
           localStorage.removeItem("beru-presets");
-        } catch (e) {
-          swallow("localStorage.removeItem", e);
+        } catch (err) {
+          swallow("localStorage.removeItem", err);
         }
       }
     },
@@ -59,43 +75,12 @@ export function createProjectSlice(set, get) {
       const s = get();
       const wm = s.watermark || {};
       return {
-        type: "beru-project",
-        version: "1.3.0",
+        type: PROJECT_TYPE,
+        version: PROJECT_VERSION,
         savedAt: new Date().toISOString(),
         templateRegions: sanitizeTemplateRegions(s.templateRegions),
-        textStyle: {
-          textInput: s.textInput,
-          textFontSize: s.textFontSize,
-          textFontColor: s.textFontColor,
-          fontFamily: s.fontFamily,
-          fontWeight: s.fontWeight,
-          letterSpacing: s.letterSpacing,
-          textAlign: s.textAlign,
-          textOpacity: s.textOpacity,
-          bold: s.bold,
-          italic: s.italic,
-          bgEnabled: s.bgEnabled,
-          bgColor: s.bgColor,
-          bgOpacity: s.bgOpacity,
-          boxBorderWidth: s.boxBorderWidth,
-          borderWidth: s.borderWidth,
-          borderColor: s.borderColor,
-          textShadowEnabled: s.textShadowEnabled,
-          textShadowColor: s.textShadowColor,
-          textShadowOffsetX: s.textShadowOffsetX,
-          textShadowOffsetY: s.textShadowOffsetY,
-        },
-        defaults: {
-          blurStrength: s.blurStrength,
-          delogoMethod: s.delogoMethod,
-          delogoFillColor: s.delogoFillColor,
-          delogoFillOpacity: s.delogoFillOpacity,
-          delogoImagePath: s.delogoImagePath,
-          temporalRadius: s.temporalRadius,
-          mosaicSize: s.mosaicSize,
-          mirrorSide: s.mirrorSide,
-          edgeFeather: s.edgeFeather,
-        },
+        textStyle: persistGlobalTextStyle(s),
+        defaults: sanitizeDefaults(s),
         excel: s.excelPath
           ? {
               path: s.excelPath,
@@ -104,18 +89,7 @@ export function createProjectSlice(set, get) {
               mapping: s.excelMapping,
             }
           : null,
-        watermark: {
-          enabled: !!wm.enabled,
-          type: wm.type === "image" ? "image" : "text",
-          text: typeof wm.text === "string" ? wm.text : "",
-          imagePath: typeof wm.imagePath === "string" ? wm.imagePath : "",
-          opacity: Number.isFinite(Number(wm.opacity)) ? Number(wm.opacity) : 0.5,
-          scale: Number.isFinite(Number(wm.scale)) ? Number(wm.scale) : 1,
-          position: typeof wm.position === "string" ? wm.position : "bottom-right",
-          fontSize: Number.isFinite(Number(wm.fontSize)) ? Number(wm.fontSize) : 18,
-          fontColor: typeof wm.fontColor === "string" ? wm.fontColor : "#ffffff",
-          fontFamily: typeof wm.fontFamily === "string" ? wm.fontFamily : "Arial",
-        },
+        watermark: persistWatermark(wm),
       };
     },
 
@@ -134,7 +108,7 @@ export function createProjectSlice(set, get) {
       const project = get().serializeProject();
       return {
         ...project,
-        type: "beru-preset",
+        type: PRESET_TYPE,
         excel: null,
       };
     },
@@ -182,40 +156,13 @@ export function createProjectSlice(set, get) {
         currentRegion: null,
         templateIdx: -1,
         imageDataCache: {},
-        textInput: textStyle.textInput,
-        textFontSize: textStyle.textFontSize,
-        textFontColor: textStyle.textFontColor,
-        fontFamily: textStyle.fontFamily,
-        fontWeight: textStyle.fontWeight,
-        letterSpacing: textStyle.letterSpacing,
-        textAlign: textStyle.textAlign,
-        textOpacity: textStyle.textOpacity,
-        bold: textStyle.bold,
-        italic: textStyle.italic,
-        bgEnabled: textStyle.bgEnabled,
-        bgColor: textStyle.bgColor,
-        bgOpacity: textStyle.bgOpacity,
-        boxBorderWidth: textStyle.boxBorderWidth,
-        borderWidth: textStyle.borderWidth,
-        borderColor: textStyle.borderColor,
-        textShadowEnabled: textStyle.textShadowEnabled,
-        textShadowColor: textStyle.textShadowColor,
-        textShadowOffsetX: textStyle.textShadowOffsetX,
-        textShadowOffsetY: textStyle.textShadowOffsetY,
-        blurStrength: defaults.blurStrength,
-        delogoMethod: defaults.delogoMethod,
-        delogoFillColor: defaults.delogoFillColor,
-        delogoFillOpacity: defaults.delogoFillOpacity,
-        delogoImagePath: defaults.delogoImagePath,
-        temporalRadius: defaults.temporalRadius,
-        mosaicSize: defaults.mosaicSize,
-        mirrorSide: defaults.mirrorSide,
-        edgeFeather: defaults.edgeFeather,
+        ...textStyle,
+        ...defaults,
       });
     },
 
     _applyProject: (data) => {
-      if (!data || (data.type !== "beru-project" && data.type !== "beru-preset")) {
+      if (!isProjectOrPreset(data)) {
         return { ok: false, error: "Archivo no es un proyecto Beru" };
       }
       const warnings = [];
@@ -242,57 +189,32 @@ export function createProjectSlice(set, get) {
           excelMatchStatus: {},
         });
       }
-      if (data.watermark && typeof data.watermark === "object") {
-        const wm = data.watermark;
-        get().setWatermark({
-          enabled: !!wm.enabled,
-          type: wm.type === "image" ? "image" : "text",
-          text: typeof wm.text === "string" ? wm.text : "",
-          imagePath: typeof wm.imagePath === "string" ? wm.imagePath : "",
-          imageDataUrl: "",
-          opacity: Number.isFinite(Number(wm.opacity)) ? Number(wm.opacity) : 0.5,
-          scale: Number.isFinite(Number(wm.scale)) ? Number(wm.scale) : 1,
-          position: typeof wm.position === "string" ? wm.position : "bottom-right",
-          fontSize: Number.isFinite(Number(wm.fontSize)) ? Number(wm.fontSize) : 18,
-          fontColor: typeof wm.fontColor === "string" ? wm.fontColor : "#ffffff",
-          fontFamily: typeof wm.fontFamily === "string" ? wm.fontFamily : "Arial",
-        });
-      }
-      if (data.version && data.version !== "1.3.0" && data.version !== "1.2.0") {
-        warnings.push(`Versión del proyecto: ${data.version} (actual 1.3.0)`);
+      const watermark = restoreWatermark(data.watermark);
+      if (watermark) get().setWatermark(watermark);
+      if (data.version && !COMPATIBLE_PROJECT_VERSIONS.has(data.version)) {
+        warnings.push(`Versión del proyecto: ${data.version} (actual ${PROJECT_VERSION})`);
       }
       return { ok: true, warnings };
     },
 
     applyPreset: (data) => {
-      if (!data || (data.type !== "beru-preset" && data.type !== "beru-project")) {
+      if (!isProjectOrPreset(data)) {
         return { ok: false, error: "Preset inválido" };
       }
-      // Before replacing templateRegions, snapshot the old ones so we can
-      // re-map excelMapping.columns from old region IDs to new region IDs.
-      // A preset created from a different project will have fresh region IDs
-      // that don't exist in the user's current excelMapping.columns — without
-      // re-mapping, columns[tr.id] is undefined for every region and ALL text
-      // ops come out empty, silently destroying the user's Excel content.
       const oldTemplateRegions = get().templateRegions;
       const oldColumns = get().excelMapping?.columns || {};
 
       get()._applyTemplateState(data);
 
-      // Re-map excelMapping.columns from old IDs to new IDs by matching regions
-      // geometrically. Only re-map if the new templateRegions have IDs that are
-      // NOT already in oldColumns (the common case when loading a foreign preset).
       const newTemplateRegions = get().templateRegions;
       const needsRemap = newTemplateRegions.some((tr) => !(tr.id in oldColumns));
       if (needsRemap && Object.keys(oldColumns).length > 0) {
         const newColumns = {};
         for (const newTr of newTemplateRegions) {
-          // Direct hit: the new ID was already mapped (rare but possible).
           if (newTr.id in oldColumns) {
             newColumns[newTr.id] = oldColumns[newTr.id];
             continue;
           }
-          // Geometric match: find an old region with the same coordinates.
           const oldMatch = oldTemplateRegions.find(
             (oldTr) => oldTr.region && regionsMatch(oldTr.region, newTr.region),
           );
@@ -300,9 +222,6 @@ export function createProjectSlice(set, get) {
             newColumns[newTr.id] = oldColumns[oldMatch.id];
           }
         }
-        // Only update if we successfully mapped at least one region; otherwise
-        // leave the mapping untouched and let _reapplyExcel produce unmatched
-        // status (honest failure rather than silent empty text).
         if (Object.keys(newColumns).length > 0) {
           set((s) => ({
             excelMapping: { ...s.excelMapping, columns: newColumns },
@@ -327,25 +246,7 @@ export function createProjectSlice(set, get) {
                 batchRegionId: r.id,
                 region: { ...r.region },
                 text: get().textInput || "",
-                fontSize: get().textFontSize,
-                fontColor: get().textFontColor,
-                fontFamily: get().fontFamily,
-                fontWeight: get().fontWeight,
-                letterSpacing: get().letterSpacing,
-                textAlign: get().textAlign,
-                textOpacity: get().textOpacity,
-                bold: get().bold,
-                italic: get().italic,
-                bgEnabled: get().bgEnabled,
-                bgColor: get().bgColor,
-                bgOpacity: get().bgOpacity,
-                boxBorderWidth: get().boxBorderWidth,
-                borderWidth: get().borderWidth,
-                borderColor: get().borderColor,
-                textShadowEnabled: get().textShadowEnabled,
-                textShadowColor: get().textShadowColor,
-                textShadowOffsetX: get().textShadowOffsetX,
-                textShadowOffsetY: get().textShadowOffsetY,
+                ...pickTextStyle(getGlobalTextStyleFromState(get())),
               }),
             );
             return {

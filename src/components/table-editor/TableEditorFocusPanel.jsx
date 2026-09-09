@@ -16,6 +16,8 @@ import TextLayoutControls from "../TextLayoutControls";
 import { ToggleSwitch } from "../inspector";
 import { useT } from "../../i18n/useT";
 import useOverlayScroll from "./useOverlayScroll";
+import { Button } from "../ui/Button";
+import { PositionIcon } from "../ui/PositionIcon";
 
 const COLOR_PRESETS = [
   "#ffffff",
@@ -29,15 +31,15 @@ const COLOR_PRESETS = [
 ];
 
 const POS_PRESETS = [
-  { id: "tl", label: "↖", x: 0.05, y: 0.05 },
-  { id: "tc", label: "↑", x: 0.3, y: 0.05 },
-  { id: "tr", label: "↗", x: 0.55, y: 0.05 },
-  { id: "ml", label: "←", x: 0.05, y: 0.45 },
-  { id: "cc", label: "⊕", x: 0.3, y: 0.45 },
-  { id: "mr", label: "→", x: 0.55, y: 0.45 },
-  { id: "bl", label: "↙", x: 0.05, y: 0.85 },
-  { id: "bc", label: "↓", x: 0.3, y: 0.85 },
-  { id: "br", label: "↘", x: 0.55, y: 0.85 },
+  { id: "tl", x: 0.05, y: 0.05 },
+  { id: "tc", x: 0.3, y: 0.05 },
+  { id: "tr", x: 0.55, y: 0.05 },
+  { id: "ml", x: 0.05, y: 0.45 },
+  { id: "cc", x: 0.3, y: 0.45 },
+  { id: "mr", x: 0.55, y: 0.45 },
+  { id: "bl", x: 0.05, y: 0.85 },
+  { id: "bc", x: 0.3, y: 0.85 },
+  { id: "br", x: 0.55, y: 0.85 },
 ];
 
 function AlignIcon({ value }) {
@@ -48,8 +50,10 @@ function AlignIcon({ value }) {
 
 function ToolBtn({ active, disabled, onClick, title, children }) {
   return (
-    <button
+    <Button
       type="button"
+      variant="tertiary"
+      size="icon"
       className={`te-tool${active ? " is-on" : ""}`}
       disabled={disabled}
       onClick={onClick}
@@ -57,7 +61,7 @@ function ToolBtn({ active, disabled, onClick, title, children }) {
       aria-pressed={!!active}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -100,10 +104,16 @@ export default function TableEditorFocusPanel({
           <div className="te-blank te-blank--action">
             <p className="te-blank-kicker">{t("table.cellEmpty")}</p>
             <p className="te-blank-copy">{t("table.emptyHint")}</p>
-            <button type="button" className="te-primary" onClick={createFocusedOp}>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              className="te-primary"
+              onClick={createFocusedOp}
+            >
               <Plus size={14} strokeWidth={2.25} />
               {t("table.create")}
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="te-form">
@@ -472,6 +482,7 @@ export default function TableEditorFocusPanel({
                           type="button"
                           className="te-pos-btn"
                           title={p.id}
+                          aria-label={p.id}
                           onClick={() =>
                             updateFocused({
                               region: clampRegionToVideo({
@@ -483,7 +494,7 @@ export default function TableEditorFocusPanel({
                             })
                           }
                         >
-                          {p.label}
+                          <PositionIcon position={p.id} size={14} strokeWidth={2} />
                         </button>
                       ))}
                     </div>
@@ -579,10 +590,16 @@ export default function TableEditorFocusPanel({
               </div>
             ) : null}
 
-            <button type="button" className="te-danger" onClick={deleteFocusedOp}>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              className="te-danger"
+              onClick={deleteFocusedOp}
+            >
               <Trash2 size={13} />
               {t("table.deleteOp")}
-            </button>
+            </Button>
           </div>
         )}
       </div>

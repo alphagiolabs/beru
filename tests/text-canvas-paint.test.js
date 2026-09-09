@@ -48,10 +48,7 @@ describe("drawRegionOnCanvas text tool", () => {
     const video = mockVideo();
     drawRegionOnCanvas(canvas, video, { x: 0.1, y: 0.1, w: 0.3, h: 0.2 }, "text");
 
-    // Text mode: outline only (strokeRect), never the cyan fillRect body paint
     const fillCalls = ctx.fillRect.mock.calls;
-    // clearRect may use fill-like path via clearRect only — fillRect should not paint region body
-    // (handle dots also use fillRect — text mode must skip handles entirely)
     expect(fillCalls.length).toBe(0);
     expect(ctx.strokeRect).toHaveBeenCalled();
     expect(ctx.setLineDash).toHaveBeenCalled();

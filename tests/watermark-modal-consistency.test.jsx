@@ -62,7 +62,6 @@ describe("WatermarkModal — image picker consistency", () => {
 
     await act(async () => {
       btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      // Let both pickImage and readImage resolve
       await new Promise((r) => setTimeout(r, 10));
     });
 
@@ -84,14 +83,11 @@ describe("WatermarkModal — image picker consistency", () => {
     });
 
     const state = useEditorStore.getState().watermark;
-    // The bug: imagePath was set but imageDataUrl was empty → preview broken,
-    // export worked. The fix: don't set imagePath if readImage fails.
     expect(state.imagePath).toBe("");
     expect(state.imageDataUrl).toBe("");
   });
 
   it("clears stale imageDataUrl when user cancels image pick", async () => {
-    // Start with a previously-selected image
     useEditorStore.setState({
       watermark: {
         enabled: true,

@@ -6,13 +6,10 @@ AND that ffmpeg accepts the graph via a no-op real run (libavfilter level
 parsing only — no decoding).
 """
 import sys
-import os
-import json
 import subprocess
 import tempfile
 from pathlib import Path
 
-# Add python/ to path so we can import processor
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
@@ -34,7 +31,7 @@ def show(name, graph, label):
     print(f"\n=== {name} ===")
     print(f"--- filter complex ({label}) ---")
     print(graph)
-    print(f"--- end ---")
+    print("--- end ---")
 
 
 def run_ffmpeg_parse(graph, out_label, images=None):
@@ -45,9 +42,7 @@ def run_ffmpeg_parse(graph, out_label, images=None):
         return True
     images = images or []
     cmd = [str(FFMPEG), "-y"]
-    # Main video input (filter graph references it as [0:v])
     cmd += ["-f", "lavfi", "-i", "color=c=black:s=640x360:d=1:r=30"]
-    # Cover/overlay images referenced by [1:v], [2:v], etc.
     for img in images:
         cmd += ["-loop", "1", "-i", str(img)]
     cmd += [
@@ -58,9 +53,8 @@ def run_ffmpeg_parse(graph, out_label, images=None):
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     if proc.returncode == 0:
-        print(f"  [OK] ffmpeg accepted graph")
+        print("  [OK] ffmpeg accepted graph")
         return True
-    # Show relevant error lines
     err_lines = [
         l.strip() for l in proc.stderr.splitlines()
         if l.strip() and ("error" in l.lower() or "invalid" in l.lower()
@@ -87,55 +81,48 @@ def create_test_image(path):
 
 
 CASES = [
-    ("temporal default", [make_op("temporal")], 0),
-    ("temporal radius 5", [make_op("temporal", temporal_radius=5)], 0),
-    ("temporal + feather 0", [make_op("temporal", edge_feather=0)], 0),
-    ("temporal + time range", [make_op("temporal", startTime=0.5, endTime=2.0)], 0),
-    ("mosaic", [make_op("mosaic", mosaic_size=16)], 0),
-    ("mirror right", [make_op("mirror", mirror_side="right")], 0),
-    ("mirror left", [make_op("mirror", mirror_side="left")], 0),
-    ("mirror top", [make_op("mirror", mirror_side="top")], 0),
-    ("mirror bottom", [make_op("mirror", mirror_side="bottom")], 0),
-    ("inpaint", [make_op("inpaint")], 0),
-    ("blur", [make_op("blur", blur_strength=30)], 0),
-    ("fill red", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=0.5)], 0),
-    ("fill opacity 0", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=0)], 0),
-    ("fill opacity clamped", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=-0.5)], 0),
-    # Multiple ops chained (delogo + delogo)
+    ("temporal default", [make_op("temporal")]),
+    ("temporal radius 5", [make_op("temporal", temporal_radius=5)]),
+    ("temporal + feather 0", [make_op("temporal", edge_feather=0)]),
+    ("temporal + time range", [make_op("temporal", startTime=0.5, endTime=2.0)]),
+    ("mosaic", [make_op("mosaic", mosaic_size=16)]),
+    ("mirror right", [make_op("mirror", mirror_side="right")]),
+    ("mirror left", [make_op("mirror", mirror_side="left")]),
+    ("mirror top", [make_op("mirror", mirror_side="top")]),
+    ("mirror bottom", [make_op("mirror", mirror_side="bottom")]),
+    ("inpaint", [make_op("inpaint")]),
+    ("blur", [make_op("blur", blur_strength=30)]),
+    ("fill red", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=0.5)]),
+    ("fill opacity 0", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=0)]),
+    ("fill opacity clamped", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=-0.5)]),
     ("two temporal ops + feather", [
         make_op("temporal", edge_feather=10),
         make_op("temporal", edge_feather=10,
                 region={"x": 400, "y": 200, "w": 100, "h": 80}),
-    ], 0),
-    # Mixed methods
+    ]),
     ("temporal + mosaic", [
         make_op("temporal", region={"x": 50, "y": 30, "w": 200, "h": 60}),
         make_op("mosaic", region={"x": 300, "y": 250, "w": 150, "h": 50}, mosaic_size=20),
-    ], 0),
-    # Degenerate region (should be skipped)
-    ("zero-size region", [make_op("temporal", region={"x": 0, "y": 0, "w": 0, "h": 0})], 0),
-    # Region at video edge
-    ("edge region top-left", [make_op("temporal", region={"x": 0, "y": 0, "w": 100, "h": 60})], 0),
-    # Region at video bottom-right corner
-    ("edge region bottom-right", [make_op("mirror", region={"x": 540, "y": 300, "w": 100, "h": 60})], 0),
+    ]),
+    ("zero-size region", [make_op("temporal", region={"x": 0, "y": 0, "w": 0, "h": 0})]),
+    ("edge region top-left", [make_op("temporal", region={"x": 0, "y": 0, "w": 100, "h": 60})]),
+    ("edge region bottom-right", [make_op("mirror", region={"x": 540, "y": 300, "w": 100, "h": 60})]),
 ]
 
 
 def main():
     temp_img = None
     try:
-        # Create a temporary image for the cover method test.
         temp_img = Path(tempfile.gettempdir()) / "beru_test_cover.png"
         if create_test_image(temp_img):
-            CASES.append(("cover with image", [make_op("cover", delogo_image_path=str(temp_img))], 0))
+            CASES.append(("cover with image", [make_op("cover", delogo_image_path=str(temp_img))]))
         else:
             print("  (skip cover case — ffmpeg not available to create test image)")
 
         passed = 0
         failed = 0
-        for name, ops, _ in CASES:
+        for name, ops in CASES:
             fc, label, _images = build_filter_complex(ops, 640, 360)
-            # Some degenerate cases (zero-size region) intentionally return None.
             expect_none = (name == "zero-size region")
             if expect_none:
                 if fc is None:

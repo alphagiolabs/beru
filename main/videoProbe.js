@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
 import fs from "fs";
+import { hasVideoDimensions } from "../shared/has-video-dimensions.js";
 
 const DEFAULT_PIX_FMT = "yuv420p";
 
@@ -18,9 +19,7 @@ function emptyVideoInfo(overrides = {}) {
   };
 }
 
-export function hasVideoDimensions(info) {
-  return Number(info?.width || 0) > 0 && Number(info?.height || 0) > 0;
-}
+export { hasVideoDimensions };
 
 function parseFrameRate(rateStr) {
   if (!rateStr) return 0;
@@ -91,8 +90,6 @@ export function parseFfmpegOutput(output) {
   const fpsMatch =
     videoLine.match(/,\s*([0-9]+(?:\.[0-9]+)?)\s*fps\b/i) ||
     videoLine.match(/,\s*([0-9]+(?:\.[0-9]+)?)\s*tbr\b/i);
-  /* Audio line format: "Audio: aac, 44100 Hz, stereo, fltp, 192 kb/s"
-   * The channel layout (mono/stereo/5.1/7.1) appears before the sample format. */
   const channelLayoutMap = {
     mono: 1,
     "1.0": 1,

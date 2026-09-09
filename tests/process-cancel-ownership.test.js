@@ -2,22 +2,24 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
-/**
- * Regression: cancel must emit a single terminal event, never abort a newer
- * run, and never spawn an unowned processor after cancel during writeFile.
- */
-
 const processSrc = fs.readFileSync(
   path.join(process.cwd(), "main", "handlers", "process.js"),
   "utf-8",
 );
+const runSrc = fs.readFileSync(path.join(process.cwd(), "main", "processing-run.js"), "utf-8");
 const sharedSrc = fs.readFileSync(path.join(process.cwd(), "main", "shared-state.js"), "utf-8");
 
 describe("cancel ownership contract (source)", () => {
-  it("shared-state exposes cancelling run id helpers", () => {
-    expect(sharedSrc).toMatch(/getCancellingRunId/);
-    expect(sharedSrc).toMatch(/setCancellingRunId/);
-    expect(sharedSrc).toMatch(/clearCancellingRunId/);
+  it("processing-run exposes cancelling run id helpers", () => {
+    expect(runSrc).toMatch(/getCancellingRunId/);
+    expect(runSrc).toMatch(/setCancellingRunId/);
+    expect(runSrc).toMatch(/clearCancellingRunId/);
+  });
+
+  it("shared-state does not own processing run identity", () => {
+    expect(sharedSrc).not.toMatch(/beginProcessingRun/);
+    expect(sharedSrc).not.toMatch(/_pythonProcess/);
+    expect(sharedSrc).not.toMatch(/_cancellingRunId/);
   });
 
   it("cancelActiveProcessing no-ops when idle without finished emit", () => {

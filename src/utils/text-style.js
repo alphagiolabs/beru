@@ -1,7 +1,13 @@
-/** Shared text style shape for preview overlays, projects, batch jobs, and FFmpeg export. */
-
 import { clampNum } from "./clamp";
-import { LETTER_SPACING_MAX, LETTER_SPACING_MIN } from "./letter-spacing";
+
+export const LETTER_SPACING_MIN = -20;
+export const LETTER_SPACING_MAX = 80;
+
+export function letterSpacingToPx(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(LETTER_SPACING_MAX, Math.max(LETTER_SPACING_MIN, n));
+}
 
 const TEXT_STYLE_KEYS = [
   "fontSize",
@@ -66,31 +72,9 @@ export const TEXT_STYLE_DEFAULTS = Object.freeze({
 
 export const GLOBAL_TEXT_STYLE_DEFAULTS = Object.freeze({
   textInput: "Sample Text",
-  textFontSize: TEXT_STYLE_DEFAULTS.fontSize,
-  textFontColor: TEXT_STYLE_DEFAULTS.fontColor,
-  fontFamily: TEXT_STYLE_DEFAULTS.fontFamily,
-  fontWeight: TEXT_STYLE_DEFAULTS.fontWeight,
-  letterSpacing: TEXT_STYLE_DEFAULTS.letterSpacing,
-  textAlign: TEXT_STYLE_DEFAULTS.textAlign,
-  textOpacity: TEXT_STYLE_DEFAULTS.textOpacity,
-  bold: TEXT_STYLE_DEFAULTS.bold,
-  italic: TEXT_STYLE_DEFAULTS.italic,
-  bgEnabled: TEXT_STYLE_DEFAULTS.bgEnabled,
-  bgColor: TEXT_STYLE_DEFAULTS.bgColor,
-  bgOpacity: TEXT_STYLE_DEFAULTS.bgOpacity,
-  boxBorderWidth: TEXT_STYLE_DEFAULTS.boxBorderWidth,
-  borderWidth: TEXT_STYLE_DEFAULTS.borderWidth,
-  borderColor: TEXT_STYLE_DEFAULTS.borderColor,
-  textShadowEnabled: TEXT_STYLE_DEFAULTS.textShadowEnabled,
-  textShadowColor: TEXT_STYLE_DEFAULTS.textShadowColor,
-  textShadowOffsetX: TEXT_STYLE_DEFAULTS.textShadowOffsetX,
-  textShadowOffsetY: TEXT_STYLE_DEFAULTS.textShadowOffsetY,
-  autoFit: TEXT_STYLE_DEFAULTS.autoFit,
-  lineHeight: TEXT_STYLE_DEFAULTS.lineHeight,
-  verticalAlign: TEXT_STYLE_DEFAULTS.verticalAlign,
-  textWrap: TEXT_STYLE_DEFAULTS.textWrap,
-  safeMargin: TEXT_STYLE_DEFAULTS.safeMargin,
-  truncate: TEXT_STYLE_DEFAULTS.truncate,
+  ...Object.fromEntries(
+    Object.entries(TEXT_STYLE_DEFAULTS).map(([key, value]) => [GLOBAL_KEY_MAP[key] || key, value]),
+  ),
 });
 
 function clampBool(val, fallback = false) {
@@ -145,6 +129,23 @@ export function normalizeTextStyle(style = {}, defaults = TEXT_STYLE_DEFAULTS) {
     truncate: ["none", "ellipsis", "clip"].includes(source.truncate)
       ? source.truncate
       : defaults.truncate,
+  };
+}
+
+export function hydrateGlobalTextStyle(textStyle = {}) {
+  const picked = pickTextStyle(textStyle);
+  for (const [opKey, globalKey] of Object.entries(GLOBAL_KEY_MAP)) {
+    if (picked[opKey] === undefined && textStyle[globalKey] !== undefined) {
+      picked[opKey] = textStyle[globalKey];
+    }
+  }
+  return patchToGlobalState(normalizeTextStyle(picked));
+}
+
+export function persistGlobalTextStyle(s) {
+  return {
+    textInput: s.textInput,
+    ...patchToGlobalState(getGlobalTextStyleFromState(s)),
   };
 }
 
@@ -213,7 +214,6 @@ export function textStyleToPythonPayload(style = {}) {
   };
 }
 
-/** Map operation-style patch keys to global store field names. */
 export function patchToGlobalState(patch) {
   const global = {};
   for (const [k, v] of Object.entries(patch)) {
@@ -273,7 +273,6 @@ export function textOpMatchesRegion(op, region, regionId = null) {
   return !!op.region && regionsMatch(op.region, region);
 }
 
-/** Find the text operation whose region matches a template/table region. */
 export function findTextOpForRegion(operations, region, regionId = null) {
   if (!region || !Array.isArray(operations)) return { op: null, opIdx: -1 };
   const idx = operations.findIndex((o) => textOpMatchesRegion(o, region, regionId));

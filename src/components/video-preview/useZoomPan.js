@@ -1,24 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP } from "./utils";
 
-/**
- * Encapsulates zoom & pan state, refs, callbacks, and effects for VideoPreview.
- *
- * Uses a dual state+ref pattern (zoom/zoomRef, pan/panRef) to avoid stale
- * closures in native window event handlers (pan drag, wheel zoom).
- *
- * @param {React.RefObject<HTMLVideoElement>} videoRef - shared video element ref
- * @param {boolean} isSplitCompare - whether split-compare mode is active
- *   (zoom is disabled and reset to fit while true)
- * @param {{ panToolActive?: boolean }} options
- * @returns {{
- *   outerRef, wrapperRef, zoom, pan, isPanning,
- *   zoomIn, zoomOut, zoomReset, onPanMouseDown,
- *   isSplitCompareRef, setZoomBoth, setPanBoth,
- * }}
- */
 export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = false } = {}) {
-  /* Zoom & pan refs (avoid stale closures in native event handlers) */
   const outerRef = useRef(null);
   const wrapperRef = useRef(null);
   const zoomRef = useRef(1);
@@ -62,7 +45,6 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     };
   }, []);
 
-  /* Zoom while keeping the given screen point (or the wrapper center) stable. */
   const applyZoom = useCallback(
     (nextZ, screenPoint) => {
       if (isSplitCompareRef.current) return;
@@ -75,7 +57,7 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
       if (z1 === z0) return;
       const baseW = v.offsetWidth || w.offsetWidth || 1;
       const baseH = v.offsetHeight || w.offsetHeight || 1;
-      const wr = w.getBoundingClientRect(); // includes current pan
+      const wr = w.getBoundingClientRect();
       const sx = screenPoint ? screenPoint.x : wr.left + baseW / 2;
       const sy = screenPoint ? screenPoint.y : wr.top + baseH / 2;
       const relX = sx - wr.left;
@@ -104,7 +86,6 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     setPanBoth({ x: 0, y: 0 });
   }, [setZoomBoth, setPanBoth]);
 
-  /* Pan with middle-mouse drag, or primary drag while the explicit hand tool is active. */
   const onPanMouseDown = useCallback(
     (e) => {
       const primaryPan = panToolActive && e.button === 0;
@@ -151,7 +132,6 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     };
   }, [onPanMouseMove, onPanMouseUp]);
 
-  /* Ctrl + wheel zooms toward the cursor. */
   useEffect(() => {
     const el = outerRef.current;
     if (!el) return;
@@ -165,7 +145,6 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     return () => el.removeEventListener("wheel", handler);
   }, [applyZoom]);
 
-  /* Zoom is disabled in split-compare mode (reset to fit). */
   useEffect(() => {
     if (isSplitCompare) {
       setZoomBoth(1);

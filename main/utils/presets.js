@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import { isProjectOrPreset } from "../../shared/project-document.js";
 
 export function readPresetsFromDir(dir, source) {
   const out = [];
@@ -16,7 +17,7 @@ export function readPresetsFromDir(dir, source) {
     try {
       const raw = fs.readFileSync(full, "utf8");
       const data = JSON.parse(raw);
-      if (data && (data.type === "beru-preset" || data.type === "beru-project")) {
+      if (isProjectOrPreset(data)) {
         out.push({
           name: data.name || name.replace(/\.beru\.json$|\.json$/i, ""),
           description: data.description || "",

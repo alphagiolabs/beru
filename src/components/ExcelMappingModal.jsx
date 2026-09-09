@@ -4,6 +4,7 @@ import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { rowGet, normalizeMatchId } from "../utils/video-utils";
 import { useT } from "../i18n/useT";
+import { Button } from "./ui/Button";
 
 const PREVIEW_ROWS = 5;
 
@@ -30,7 +31,6 @@ export default function ExcelMappingModal() {
   const idCol = draft.idColumn || "";
   const sample = useMemo(() => excelRows.slice(0, PREVIEW_ROWS), [excelRows]);
 
-  /* Build per-video preview: shows which text would be injected for each region. */
   const videoPreview = useMemo(() => {
     if (!idCol) return [];
     return queue.map((item) => {
@@ -99,7 +99,6 @@ export default function ExcelMappingModal() {
         className="cap-modal-panel max-w-[960px] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
           style={{ borderColor: "var(--border)" }}
@@ -112,18 +111,21 @@ export default function ExcelMappingModal() {
               regiones
             </span>
           </div>
-          <button
+          <Button
+            type="button"
             onClick={() => getState().setShowMappingModal(false)}
-            className="p-1 rounded hover:bg-white/10"
+            variant="tertiary"
+            size="icon"
+            className="text-[var(--text-dim)] hover:bg-white/10"
             style={{ color: "var(--text-dim)" }}
+            title={t("common.close")}
+            aria-label={t("common.close")}
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* ID column selector */}
           <div>
             <div className="cap-input-label mb-1">{t("excel.idColumn")}</div>
             <select
@@ -143,7 +145,6 @@ export default function ExcelMappingModal() {
             </div>
           </div>
 
-          {/* Region → column mapping */}
           <div>
             <div className="cap-input-label mb-1.5">{t("excel.regionColumn")}</div>
             {templateRegions.length === 0 ? (
@@ -194,7 +195,6 @@ export default function ExcelMappingModal() {
             )}
           </div>
 
-          {/* Preview */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <div className="cap-input-label">{t("excel.preview")}</div>
@@ -305,7 +305,6 @@ export default function ExcelMappingModal() {
             </div>
           </div>
 
-          {/* Excel sample */}
           <details>
             <summary className="text-[10px] cursor-pointer" style={{ color: "var(--text-dim)" }}>
               Ver primeras {PREVIEW_ROWS} filas del Excel
@@ -351,28 +350,31 @@ export default function ExcelMappingModal() {
           </details>
         </div>
 
-        {/* Footer */}
         <div
           className="px-4 py-3 border-t flex items-center justify-between flex-shrink-0"
           style={{ borderColor: "var(--border)" }}
         >
-          <button onClick={handleReset} className="cap-btn-secondary text-[11px]">
-            <RotateCcw size={12} /> Auto-detectar
-          </button>
+          <Button type="button" onClick={handleReset} variant="secondary" size="sm">
+            <RotateCcw size={12} /> {t("excel.autoDetect")}
+          </Button>
           <div className="flex gap-2">
-            <button
+            <Button
+              type="button"
               onClick={() => getState().setShowMappingModal(false)}
-              className="cap-btn-secondary text-[11px]"
+              variant="secondary"
+              size="sm"
             >
               {t("common.cancel")}
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={handleApply}
               disabled={!draft.idColumn}
-              className="cap-btn-primary text-[11px]"
+              variant="primary"
+              size="sm"
             >
               {t("excel.apply")}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

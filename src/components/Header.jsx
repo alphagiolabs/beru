@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Upload,
   Play,
@@ -26,10 +26,9 @@ import { shallow } from "zustand/shallow";
 import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
 import useEditorStore from "../stores/useEditorStore";
 import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
-import { hasVideoDimensions } from "../utils/batch-process";
-import { buildExportJobs } from "../utils/export-pipeline";
-import { validateBatchReady, runBatch, cancelBatch } from "../utils/batch-runner";
 import { resolveThemeName } from "../theme/engine.js";
+import { importVideosFromDialog } from "../utils/import-videos";
+import { queueCapacityInput } from "../utils/batch-capacity";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +37,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { Button } from "./ui/Button";
 
 const api = window.api;
 
@@ -51,7 +51,6 @@ export default function Header() {
     batchRetryFailed,
     outputDir,
     queueLength,
-    templateRegions,
     selectedIdx,
     presets,
     themeActiveSlot,
@@ -60,6 +59,7 @@ export default function Header() {
     customThemes,
     language,
     recent,
+    batchSummary,
   } = useEditorStore(
     (s) => ({
       isProcessing: s.isProcessing,
@@ -70,7 +70,6 @@ export default function Header() {
       batchRetryFailed: s.batchRetryFailed,
       outputDir: s.outputDir,
       queueLength: s.queue.length,
-      templateRegions: s.templateRegions,
       selectedIdx: s.selectedIdx,
       presets: s.presets,
       themeActiveSlot: s.themeActiveSlot,
@@ -79,12 +78,17 @@ export default function Header() {
       customThemes: s.customThemes,
       language: s.language,
       recent: s.recent,
+      batchSummary: s.batchSummary,
     }),
     shallow,
   );
   const showToast = useEditorStore((s) => s.showToast);
   const canUndo = useEditorStore((s) => (s.undoStack?.length ?? 0) > 0);
   const canRedo = useEditorStore((s) => (s.redoStack?.length ?? 0) > 0);
+  const capacityInput = useEditorStore(
+    (s) => queueCapacityInput(s.queue, s.templateRegions),
+    shallow,
+  );
   const t = useT();
   const get = useEditorStore.getState;
   const [testResult, setTestResult] = useState(null);
@@ -97,32 +101,22 @@ export default function Header() {
   const savePresetInputRef = useRef(null);
   const recentRef = useRef(null);
 
-  const setPresetsOpenStable = useCallback((v) => setPresetsOpen(v), []);
-  const setRecentOpenStable = useCallback((v) => setRecentOpen(v), []);
-
-  useCloseOnOutsideClick(presetsRef, presetsOpen, setPresetsOpenStable);
-  useCloseOnOutsideClick(recentRef, recentOpen, setRecentOpenStable);
+  useCloseOnOutsideClick(presetsRef, presetsOpen, setPresetsOpen);
+  useCloseOnOutsideClick(recentRef, recentOpen, setRecentOpen);
 
   useEffect(() => {
     if (!api?.getBatchCapacity) return undefined;
     let cancelled = false;
     let timer = 0;
-    // Debounce: queue/template/profile can change in rapid bursts (e.g. when
-    // importing many videos or applying a preset); coalesce into one IPC call.
     timer = setTimeout(() => {
-      const currentQueue = get().queue;
-      const jobCount = Math.max(1, currentQueue.length);
-      let maxSourcePixels = 0;
-      for (const item of currentQueue) {
-        const w = Number(item.sourceWidth || item.width || 0);
-        const h = Number(item.sourceHeight || item.height || 0);
-        if (w > 0 && h > 0) maxSourcePixels = Math.max(maxSourcePixels, w * h);
-      }
-      const hasVideoFilters =
-        templateRegions.length > 0 ||
-        currentQueue.some((item) => (item.operations || []).length > 0);
       api
-        .getBatchCapacity({ jobCount, maxSourcePixels, hasVideoFilters, encodeProfile })
+        .getBatchCapacity({
+          jobCount: Math.max(1, capacityInput.queueLength),
+          maxSourcePixels: capacityInput.maxSourcePixels,
+          hasVideoFilters: capacityInput.hasVideoFilters,
+          jobs: capacityInput.jobs,
+          encodeProfile,
+        })
         .then((cap) => {
           if (!cancelled && Number(cap?.recommended) > 0) {
             setAutoWorkerHint(cap.recommended);
@@ -134,7 +128,12 @@ export default function Header() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [queueLength, templateRegions, encodeProfile]);
+  }, [
+    capacityInput.queueLength,
+    capacityInput.maxSourcePixels,
+    capacityInput.hasVideoFilters,
+    encodeProfile,
+  ]);
 
   const flashToast = (kind, text) => showToast({ kind, text });
 
@@ -234,111 +233,53 @@ export default function Header() {
   };
 
   const handleAddVideos = async () => {
-    if (get().isProcessing) {
-      showToast({ kind: "warn", text: t("queue.processingBusy") });
-      return;
-    }
-    if (!api?.openVideos) {
-      showToast({ kind: "err", text: t("errors.noApi") });
-      return;
-    }
-    try {
-      const paths = await api.openVideos();
-      if (!paths?.length) return;
-      await get().addVideos(paths, api);
-      showToast({ kind: "ok", text: t("drop.added", { count: paths.length }) });
-    } catch (err) {
-      console.error("[beru] Video import failed:", err);
-      showToast({
-        kind: "err",
-        text: t("errors.importVideosFailed", {
-          message: err?.message || t("errors.unknown"),
-        }),
-      });
-    }
+    await importVideosFromDialog({ api, store: get(), t, busy: isProcessing });
   };
 
   const handleProcessAll = async () => {
-    if (!api?.startProcessing) {
+    const result = await get().processAll();
+    if (!result || result.ok) return;
+    if (result.code === "api_unavailable") {
       showToast({ kind: "err", text: t("errors.noApi") });
       return;
     }
-    const { templateRegions, sidebarMode } = get();
-    if (sidebarMode === "batch" || templateRegions.length > 0) {
-      get().materializeBatchTextOps();
-    }
-
-    let queueForProcessing = get().queue;
-    if (queueForProcessing.some((q) => !hasVideoDimensions(q))) {
-      queueForProcessing = await get().refreshMissingVideoInfo(api);
-    }
-
-    // processSingle re-checks after the same await; mirror that so double-click
-    // during dimension refresh cannot start two concurrent runBatch paths.
-    if (get().isProcessing) {
+    if (result.code === "busy") {
       showToast({ kind: "warn", text: t("queue.processingBusy") });
       return;
     }
-
-    const validation = validateBatchReady({
-      queue: queueForProcessing,
-      templateRegions,
-      getCellText: (videoIdx, regionId) => get().getCellTextForRegion(videoIdx, regionId),
-    });
-    if (!validation.ok) {
-      if (validation.code === "missing_dimensions") {
-        const missing = validation.details.missing;
-        const names = missing
-          .slice(0, 3)
-          .map((q) => q.filename)
-          .join(", ");
-        const more = missing.length > 3 ? ` (+${missing.length - 3})` : "";
-        showToast({
-          kind: "err",
-          text: t("errors.missingVideoDimensions", { count: missing.length, names, more }),
-        });
-        return;
-      }
-      if (validation.code === "missing_batch_text") {
-        const missing = validation.details.missing;
-        const names = missing.slice(0, 3).join(", ");
-        const more = missing.length > 3 ? ` (+${missing.length - 3})` : "";
-        showToast({
-          kind: "err",
-          text: t("errors.batchTextMissing", { count: missing.length, names, more }),
-        });
-        return;
-      }
+    if (result.code === "missing_dimensions") {
+      const missing = result.details.missing;
+      const names = missing
+        .slice(0, 3)
+        .map((q) => q.filename)
+        .join(", ");
+      const more = missing.length > 3 ? ` (+${missing.length - 3})` : "";
+      showToast({
+        kind: "err",
+        text: t("errors.missingVideoDimensions", { count: missing.length, names, more }),
+      });
       return;
     }
-
-    const jobs = buildExportJobs(queueForProcessing, (q, i) => get()._buildJobFor(q, i));
-    // Fire-and-forget like before: process:start resolves when the batch ends.
-    void runBatch({
-      api,
-      jobs,
-      queue: get().queue,
-      hooks: {
-        startExecutionRun: (opts) => get().startExecutionRun(opts),
-        applyPatch: (patch) => useEditorStore.setState(patch),
-        setProcessing: (val) => get().setProcessing(val),
-        finalizeActiveExecution: (summary) => get().finalizeActiveExecution(summary),
-      },
-    }).then((result) => {
-      if (!result.ok) {
-        if (result.code === "no_jobs") {
-          showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
-          return;
-        }
-        // Runtime failures are toasted via useProcessing → onError; only pre-spawn errors here.
-        if (result.error && result.code == null) {
-          showToast({
-            kind: "err",
-            text: t("errors.processStartFailed", { message: result.error }),
-          });
-        }
-      }
-    });
+    if (result.code === "missing_batch_text") {
+      const missing = result.details.missing;
+      const names = missing.slice(0, 3).join(", ");
+      const more = missing.length > 3 ? ` (+${missing.length - 3})` : "";
+      showToast({
+        kind: "err",
+        text: t("errors.batchTextMissing", { count: missing.length, names, more }),
+      });
+      return;
+    }
+    if (result.code === "no_jobs") {
+      showToast({ kind: "warn", text: t("errors.noJobsToProcess") });
+      return;
+    }
+    if (result.error && result.code == null) {
+      showToast({
+        kind: "err",
+        text: t("errors.processStartFailed", { message: result.error }),
+      });
+    }
   };
 
   const handleTestCurrent = async () => {
@@ -353,12 +294,7 @@ export default function Header() {
   };
 
   const handleCancel = async () => {
-    await cancelBatch({
-      api,
-      hooks: {
-        abortActiveProcessing: () => get().abortActiveProcessing(),
-      },
-    });
+    await get().cancelProcessing();
   };
 
   const canTest = !isProcessing && selectedIdx >= 0 && selectedIdx < queueLength;
@@ -389,27 +325,34 @@ export default function Header() {
         data-testid="header-actions"
         className="app-header-actions flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2"
       >
-        <button
+        <Button
           onClick={handleAddVideos}
           disabled={isProcessing}
-          className="cap-btn-secondary text-[11px] whitespace-nowrap"
+          variant="secondary"
+          size="sm"
+          className="header-primary-action text-[11px] whitespace-nowrap"
+          title={t("header.importVideos")}
         >
-          <Upload size={14} /> Importar
-        </button>
+          <Upload size={14} /> {t("header.importVideos")}
+        </Button>
 
-        <button
+        <Button
           onClick={handleSelectOutput}
           disabled={isProcessing}
-          className="cap-btn-secondary text-[11px] whitespace-nowrap"
+          variant="secondary"
+          size="sm"
+          className="header-primary-action text-[11px] whitespace-nowrap"
           title={outputDir ? `Salida: ${outputDir}` : t("header.selectOutput")}
         >
-          <FolderOutput size={14} /> {outputDir ? "Salida ✓" : t("header.selectOutput")}
-        </button>
+          <FolderOutput size={14} />{" "}
+          {outputDir ? t("header.outputSelected") : t("header.selectOutput")}
+        </Button>
 
         <select
           value={exportFormat}
           onChange={(e) => get().setExportFormat(e.target.value)}
           className="app-header-select app-header-select--format cap-input !w-[72px] !py-1 text-[11px]"
+          aria-label={t("header.exportFormat")}
           disabled={isProcessing}
         >
           <option value="mp4">MP4</option>
@@ -421,6 +364,7 @@ export default function Header() {
           value={encodeProfile}
           onChange={(e) => get().setEncodeProfile(e.target.value)}
           className="app-header-select app-header-select--profile cap-input !w-[116px] !py-1 text-[11px]"
+          aria-label={t("header.encodeProfile")}
           disabled={isProcessing}
           title={t("header.encodeProfileHint")}
         >
@@ -434,6 +378,7 @@ export default function Header() {
           value={String(batchWorkers)}
           onChange={(e) => get().setBatchWorkers(e.target.value)}
           className="app-header-select app-header-select--workers cap-input !w-[88px] !py-1 text-[11px]"
+          aria-label={t("header.workerCount")}
           disabled={isProcessing}
           title={t("header.batchWorkersHint")}
         >
@@ -447,10 +392,21 @@ export default function Header() {
           <option value="8">8</option>
         </select>
 
+        {batchSummary?.workers != null && !isProcessing && (
+          <span
+            className="text-[10px] whitespace-nowrap"
+            style={{ color: "var(--text-dim)" }}
+            title={t("header.workersLastRunHint")}
+          >
+            {t("header.workersLastRun", { count: batchSummary.workers })}
+          </span>
+        )}
+
         <select
           value={batchWorkersMode === "conservative" ? "conservative" : "balanced"}
           onChange={(e) => get().setBatchWorkersMode(e.target.value)}
           className="app-header-select app-header-select--workers-mode cap-input !w-[128px] !py-1 text-[11px]"
+          aria-label={t("header.workerPolicy")}
           disabled={isProcessing || Number(batchWorkers) > 0}
           title={t("header.batchWorkersModeHint")}
         >
@@ -469,61 +425,71 @@ export default function Header() {
             onChange={(e) => get().setBatchRetryFailed(e.target.checked)}
             disabled={isProcessing}
             className="w-3 h-3 accent-[var(--accent)]"
+            aria-label={t("header.retryFailed")}
           />
           {t("header.batchRetry")}
         </label>
 
-        <button
+        <Button
           onClick={handleTestCurrent}
           disabled={!canTest}
-          className="cap-btn-secondary text-[11px] whitespace-nowrap"
-          title={
-            canTest ? "Renderiza sólo el video seleccionado" : "Selecciona un video de la lista"
-          }
+          variant="secondary"
+          size="sm"
+          className="header-secondary-action text-[11px] whitespace-nowrap"
+          title={t("header.processSelected")}
         >
           <FlaskConical size={14} /> {t("header.testRender")}
-        </button>
+        </Button>
 
         {!isProcessing ? (
-          <button
+          <Button
             data-testid="header-process-all"
             onClick={handleProcessAll}
             disabled={queueLength === 0}
-            className="cap-btn-primary whitespace-nowrap"
+            variant="primary"
+            className="header-process-action whitespace-nowrap"
           >
             <Play size={14} /> {t("header.processAll")}
-          </button>
+          </Button>
         ) : (
-          <button onClick={handleCancel} className="cap-btn-danger whitespace-nowrap">
+          <Button
+            onClick={handleCancel}
+            variant="danger"
+            className="header-process-action whitespace-nowrap"
+          >
             <Square size={14} /> {t("header.cancel")}
-          </button>
+          </Button>
         )}
 
         <div className="app-header-divider w-px h-5 mx-1" style={{ background: "var(--border)" }} />
 
-        <button
+        <Button
           onClick={get().undo}
           disabled={!canUndo}
-          className="cap-btn-secondary app-header-icon-btn !p-1.5"
+          variant="secondary"
+          size="icon"
+          className="app-header-icon-btn"
           title={`${t("header.undo")} (Ctrl+Z)`}
         >
           <Undo2 size={14} />
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={get().redo}
           disabled={!canRedo}
-          className="cap-btn-secondary app-header-icon-btn !p-1.5"
+          variant="secondary"
+          size="icon"
+          className="app-header-icon-btn"
           title={`${t("header.redo")} (Ctrl+Y)`}
         >
           <Redo2 size={14} />
-        </button>
+        </Button>
         <div className="relative" ref={presetsRef}>
-          <button
+          <Button
             type="button"
             onClick={handleTogglePresets}
-            className={`cap-btn-secondary app-header-icon-btn header-presets-trigger !p-1.5${
-              presetsOpen ? " is-open" : ""
-            }`}
+            variant="secondary"
+            size="icon"
+            className={`app-header-icon-btn header-presets-trigger${presetsOpen ? " is-open" : ""}`}
             title={t("header.presetsLibrary")}
             aria-haspopup="menu"
             aria-expanded={presetsOpen}
@@ -533,7 +499,7 @@ export default function Header() {
               size={10}
               className={`header-presets-chevron${presetsOpen ? " is-open" : ""}`}
             />
-          </button>
+          </Button>
           {presetsOpen && (
             <div className="header-presets-menu" role="menu" aria-label={t("header.presets")}>
               <div className="header-presets-menu-chrome">
@@ -586,23 +552,27 @@ export default function Header() {
             </div>
           )}
         </div>
-        <button
+        <Button
           onClick={handleLoadProject}
           disabled={isProcessing}
-          className="cap-btn-secondary app-header-icon-btn !p-1.5"
+          variant="secondary"
+          size="icon"
+          className="app-header-icon-btn"
           title={t("header.loadProject")}
         >
           <FolderInput size={14} />
-        </button>
+        </Button>
         <div className="relative" ref={recentRef}>
-          <button
+          <Button
             onClick={() => setRecentOpen((v) => !v)}
-            className="cap-btn-secondary app-header-icon-btn !p-1.5"
+            variant="secondary"
+            size="icon"
+            className="app-header-icon-btn"
             title={t("header.recent")}
           >
             <History size={14} />
             <ChevronDown size={10} />
-          </button>
+          </Button>
           {recentOpen && (
             <div
               className="absolute right-0 top-full mt-1 rounded shadow-lg z-50 w-[280px]"
@@ -618,7 +588,17 @@ export default function Header() {
                     <div
                       key={r.path}
                       onClick={() => handleOpenRecent(r)}
-                      className="group flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:opacity-80"
+                      onKeyDown={(e) => {
+                        if (e.target !== e.currentTarget) return;
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleOpenRecent(r);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={r.name}
+                      className="header-recent-item group flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:opacity-80"
                       style={{ opacity: r.exists === false ? 0.4 : 1 }}
                     >
                       <History
@@ -656,28 +636,34 @@ export default function Header() {
             </div>
           )}
         </div>
-        <button
+        <Button
           onClick={handleSaveProject}
-          className="cap-btn-secondary app-header-icon-btn !p-1.5"
+          variant="secondary"
+          size="icon"
+          className="app-header-icon-btn"
           title={t("header.saveProject")}
         >
           <Save size={14} />
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={openSavePreset}
-          className="cap-btn-secondary app-header-icon-btn !p-1.5"
+          variant="secondary"
+          size="icon"
+          className="app-header-icon-btn"
           title={t("header.savePreset")}
         >
           <BookmarkPlus size={14} />
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => get().toggleTheme()}
           onContextMenu={(e) => {
             e.preventDefault();
             get().setSettingsTab("appearance");
             get().setShowSettings(true);
           }}
-          className={`cap-btn-secondary app-header-icon-btn !p-1.5 header-theme-toggle ${
+          variant="secondary"
+          size="icon"
+          className={`app-header-icon-btn header-theme-toggle ${
             themeActiveSlot === 1 ? "header-theme-toggle--slot1" : "header-theme-toggle--slot2"
           }`}
           title={t("header.themeSwitchTo", {
@@ -689,18 +675,20 @@ export default function Header() {
           })}
         >
           {themeActiveSlot === 1 ? <Sun size={14} /> : <Moon size={14} />}
-        </button>
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
+            <Button
               type="button"
-              className="cap-btn-secondary app-header-icon-btn header-lang-trigger !p-1.5"
+              variant="secondary"
+              size="icon"
+              className="app-header-icon-btn header-lang-trigger"
               title={t("header.language")}
             >
               <Languages size={14} />
               <span className="header-lang-code">{language.toUpperCase()}</span>
               <ChevronDown size={10} className="header-lang-chevron" />
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" sideOffset={6} className="min-w-[168px]">
             <DropdownMenuLabel>{t("header.language")}</DropdownMenuLabel>
@@ -717,21 +705,25 @@ export default function Header() {
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
-        <button
+        <Button
           onClick={() => get().setShowWatermarkModal(true)}
-          className="cap-btn-secondary app-header-icon-btn !p-1.5"
-          title="Marca de agua"
+          variant="secondary"
+          size="icon"
+          className="app-header-icon-btn"
+          title={t("header.watermark")}
           disabled={isProcessing}
         >
           <Droplets size={15} />
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => get().setShowSettings(true)}
-          className="cap-btn-secondary app-header-icon-btn !p-1.5"
+          variant="secondary"
+          size="icon"
+          className="app-header-icon-btn"
           title={t("header.settings")}
         >
           <Settings size={14} />
-        </button>
+        </Button>
       </div>
 
       {testResult && (
@@ -747,13 +739,14 @@ export default function Header() {
                 {testResult.status === "error" && t("modal.testResult.error")}
               </h3>
               {testResult.status !== "running" && (
-                <button
+                <Button
                   onClick={() => setTestResult(null)}
-                  className="cap-btn-secondary !p-1"
-                  title="Cerrar"
+                  variant="secondary"
+                  size="icon"
+                  title={t("common.close")}
                 >
                   <X size={14} />
-                </button>
+                </Button>
               )}
             </div>
 
@@ -776,18 +769,22 @@ export default function Header() {
                   {testResult.outputPath}
                 </p>
                 <div className="flex gap-2 justify-end">
-                  <button
+                  <Button
                     onClick={() => api?.openPath(testResult.outputPath)}
-                    className="cap-btn-primary text-[11px]"
+                    variant="primary"
+                    size="sm"
+                    className="text-[11px]"
                   >
                     <ExternalLink size={12} /> {t("modal.testResult.openVideo")}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => api?.showItemInFolder(testResult.outputPath)}
-                    className="cap-btn-secondary text-[11px]"
+                    variant="secondary"
+                    size="sm"
+                    className="text-[11px]"
                   >
                     <FolderOpen size={12} /> {t("common.showInFolder")}
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -798,12 +795,9 @@ export default function Header() {
                   {testResult.error || t("modal.testResult.unknownError")}
                 </p>
                 <div className="flex justify-end">
-                  <button
-                    onClick={() => setTestResult(null)}
-                    className="cap-btn-secondary text-[11px]"
-                  >
+                  <Button onClick={() => setTestResult(null)} variant="secondary" size="sm">
                     {t("common.close")}
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -818,13 +812,14 @@ export default function Header() {
               <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
                 {t("modal.savePreset.title")}
               </h3>
-              <button
+              <Button
                 onClick={() => setSavePresetOpen(false)}
-                className="cap-btn-secondary !p-1"
+                variant="secondary"
+                size="icon"
                 title={t("common.close")}
               >
                 <X size={14} />
-              </button>
+              </Button>
             </div>
             <p className="text-[11px] mb-3" style={{ color: "var(--text-dim)" }}>
               {t("modal.savePreset.desc")}
@@ -847,19 +842,17 @@ export default function Header() {
               }}
             />
             <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setSavePresetOpen(false)}
-                className="cap-btn-secondary text-[11px]"
-              >
+              <Button onClick={() => setSavePresetOpen(false)} variant="secondary" size="sm">
                 {t("common.cancel")}
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleSavePresetSubmit}
                 disabled={!savePresetName.trim()}
-                className="cap-btn-primary text-[11px]"
+                variant="primary"
+                size="sm"
               >
                 <BookmarkPlus size={12} /> {t("common.save")}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

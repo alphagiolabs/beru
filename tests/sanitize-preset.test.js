@@ -3,6 +3,8 @@ import {
   sanitizeTemplateRegions,
   sanitizeTextStyle,
   sanitizeDefaults,
+  persistWatermark,
+  restoreWatermark,
 } from "../src/utils/sanitize-preset.js";
 
 describe("sanitize-preset", () => {
@@ -83,6 +85,27 @@ describe("sanitize-preset", () => {
       expect(style).toBeDefined();
       expect(typeof style.textFontSize).toBe("number");
     });
+
+    it("keeps layout fields used by Text Overlay", () => {
+      const style = sanitizeTextStyle({
+        autoFit: true,
+        lineHeight: 1.8,
+        verticalAlign: "center",
+        textWrap: false,
+        safeMargin: 10,
+        truncate: "clip",
+      });
+      expect(style).toEqual(
+        expect.objectContaining({
+          autoFit: true,
+          lineHeight: 1.8,
+          verticalAlign: "center",
+          textWrap: false,
+          safeMargin: 10,
+          truncate: "clip",
+        }),
+      );
+    });
   });
 
   describe("sanitizeDefaults", () => {
@@ -94,8 +117,8 @@ describe("sanitize-preset", () => {
 
     it("validates delogoMethod", () => {
       expect(sanitizeDefaults({ delogoMethod: "mirror" }).delogoMethod).toBe("mirror");
-      expect(sanitizeDefaults({ delogoMethod: "invalid" }).delogoMethod).toBe("temporal");
-      expect(sanitizeDefaults({ delogoMethod: null }).delogoMethod).toBe("temporal");
+      expect(sanitizeDefaults({ delogoMethod: "invalid" }).delogoMethod).toBe("blur");
+      expect(sanitizeDefaults({ delogoMethod: null }).delogoMethod).toBe("blur");
     });
 
     it("validates mirrorSide", () => {
@@ -124,6 +147,24 @@ describe("sanitize-preset", () => {
     it("uses fallback values for NaN inputs", () => {
       expect(sanitizeDefaults({ blurStrength: NaN }).blurStrength).toBe(20);
       expect(sanitizeDefaults({ temporalRadius: NaN }).temporalRadius).toBe(3);
+    });
+  });
+
+  describe("persistWatermark", () => {
+    it("drops imageDataUrl and restores an empty data URL", () => {
+      const persisted = persistWatermark({
+        enabled: true,
+        type: "image",
+        imagePath: "C:\\wm\\logo.png",
+        imageDataUrl: "data:image/png;base64,AAAA",
+        opacity: 0.4,
+      });
+      expect(persisted.imageDataUrl).toBeUndefined();
+      expect(restoreWatermark(persisted)).toMatchObject({
+        enabled: true,
+        imagePath: "C:\\wm\\logo.png",
+        imageDataUrl: "",
+      });
     });
   });
 });

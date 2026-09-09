@@ -7,7 +7,6 @@ import useEditorStore from "../src/stores/useEditorStore.js";
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-// Mock the image IPC channels the cover picker uses (same contract as file.js handlers).
 window.api = {
   pickImage: vi.fn(async () => ({ success: true, path: "C:\\imgs\\patch.png" })),
   readImage: vi.fn(async () => ({
@@ -48,7 +47,6 @@ describe("PropertiesPanel — delogo cover method", () => {
   it("renders an image picker when cover method is selected", () => {
     renderPanel();
 
-    // The cover picker exposes an "Elegir" button, mirroring WatermarkModal.
     const chooseBtn = Array.from(document.querySelectorAll("button")).find((b) =>
       /Elegir/.test(b.textContent || ""),
     );
@@ -72,9 +70,8 @@ describe("PropertiesPanel — delogo cover method", () => {
     expect(window.api.pickImage).toHaveBeenCalled();
     expect(useEditorStore.getState().delogoImagePath).toBe("C:\\imgs\\patch.png");
 
-    // Clear button (×) resets the path.
     const clearBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => (b.textContent || "").trim() === "×",
+      (b) => b.getAttribute("aria-label") === "Quitar",
     );
     expect(clearBtn).toBeTruthy();
     await act(async () => {
@@ -96,7 +93,6 @@ describe("PropertiesPanel — delogo cover method", () => {
 
     await act(async () => {
       chooseBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      // The handler awaits pickImage then readImage — flush both.
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
@@ -104,9 +100,6 @@ describe("PropertiesPanel — delogo cover method", () => {
       await Promise.resolve();
     });
 
-    // readImage must be called so the live preview can use the data URL
-    // directly instead of falling back to beru://local/<path> (which would
-    // require the protocol handler to serve a non-video file).
     expect(window.api.readImage).toHaveBeenCalledWith("C:\\imgs\\patch.png");
     expect(useEditorStore.getState().delogoImagePath).toBe("C:\\imgs\\patch.png");
     expect(useEditorStore.getState().imageDataCache["C:\\imgs\\patch.png"]).toBe(

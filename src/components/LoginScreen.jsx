@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Eye, EyeOff, Loader2, LogIn } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import { isSupabaseConfigured } from "../lib/supabaseClient";
+import { Button } from "./ui/Button";
 
 const VIDEO_URL = "https://res.cloudinary.com/dzhp64paw/video/upload/v1782516787/login.mp4";
 
@@ -83,14 +84,14 @@ export default function LoginScreen() {
             style={{ animationDelay: "300ms" }}
           >
             <BeruLogo className="h-10 md:h-12 w-auto text-white" />
-            <span className="text-2xl md:text-3xl font-semibold tracking-tight">BERU</span>
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight m-0">BERU</h1>
           </div>
 
           <div
             className="login-cinematic-form-card liquid-glass animate-blur-fade-up w-full"
             style={{ animationDelay: "400ms" }}
           >
-            <p className="text-center text-sm text-gray-400 mb-5 m-0">{t("auth.subtitle")}</p>
+            <p className="login-cinematic-subtitle">{t("auth.subtitle")}</p>
 
             {!isSupabaseConfigured ? (
               <div className="login-cinematic-alert login-cinematic-alert--warn">
@@ -103,7 +104,12 @@ export default function LoginScreen() {
                 <span>{t("auth.checkingSession")}</span>
               </div>
             ) : (
-              <form className="login-cinematic-form" onSubmit={handleSubmit} noValidate>
+              <form
+                className="login-cinematic-form"
+                onSubmit={handleSubmit}
+                noValidate
+                aria-busy={submitting}
+              >
                 {displayError && (
                   <div className="login-cinematic-alert login-cinematic-alert--error" role="alert">
                     {displayError}
@@ -135,31 +141,28 @@ export default function LoginScreen() {
                       disabled={submitting}
                       required
                     />
-                    <button
+                    <Button
                       type="button"
                       className="login-cinematic-password-toggle"
                       onClick={() => setShowPassword((v) => !v)}
-                      tabIndex={-1}
                       aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
+                      variant="tertiary"
+                      size="icon"
                     >
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
+                    </Button>
                   </div>
                 </label>
 
-                <button type="submit" className="login-cinematic-submit" disabled={submitting}>
-                  {submitting ? (
-                    <>
-                      <Loader2 size={16} className="login-cinematic-spin" />
-                      {t("auth.signingIn")}
-                    </>
-                  ) : (
-                    <>
-                      <LogIn size={16} />
-                      {t("auth.signIn")}
-                    </>
-                  )}
-                </button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  className="login-cinematic-submit"
+                  loading={submitting}
+                  disabled={submitting}
+                >
+                  {submitting ? t("auth.signingIn") : t("auth.signIn")}
+                </Button>
               </form>
             )}
           </div>

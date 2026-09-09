@@ -1,6 +1,7 @@
 import { app } from "electron";
 import path from "path";
 import fs from "fs";
+import { writeJsonAtomic } from "./atomic-json.js";
 
 const RECENT_MAX = 8;
 
@@ -20,10 +21,5 @@ export function readRecent() {
 }
 
 export function writeRecent(arr) {
-  const file = path.join(app.getPath("userData"), "recent.json");
-  // Atomic write (sibling tmp + rename) so a crash mid-write cannot truncate
-  // recent.json and silently wipe the user's recent-projects list.
-  const tmp = `${file}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(arr, null, 2), "utf8");
-  fs.renameSync(tmp, file);
+  writeJsonAtomic(path.join(app.getPath("userData"), "recent.json"), arr);
 }

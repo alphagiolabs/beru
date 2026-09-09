@@ -1,8 +1,3 @@
-// Regression test for the processing-lock watchdog (shared-state.js).
-// The lock must auto-release after PROCESSING_LOCK_MAX_MS so a future refactor
-// that throws between beginProcessingRun and clearProcessingRun cannot wedge
-// the app until restart.
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
@@ -19,7 +14,7 @@ const {
   getIsProcessing,
   setPythonProcess,
   PROCESSING_LOCK_MAX_MS,
-} = await import("../main/shared-state.js");
+} = await import("../main/processing-run.js");
 
 describe("processing lock watchdog", () => {
   beforeEach(() => {
@@ -64,7 +59,6 @@ describe("processing lock watchdog", () => {
     expect(beginProcessingRun("run-2")).toBe(true);
     expect(clearProcessingRun("run-2")).toBe(true);
 
-    // Advancing past the deadline must be a no-op (timer was cancelled).
     vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
 
     expect(getIsProcessing()).toBe(false);
@@ -73,11 +67,7 @@ describe("processing lock watchdog", () => {
   });
 
   it("releases a wedged run so a new one can start afterwards", async () => {
-    // Simulate the failure mode the watchdog exists for: beginProcessingRun
-    // succeeds but clearProcessingRun is never called (e.g. a refactor throws
-    // between the two). The watchdog must release the lock on its own.
     expect(beginProcessingRun("run-a")).toBe(true);
-    // No clearProcessingRun("run-a") here — that's the whole point.
 
     vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
     await vi.runAllTimersAsync();
@@ -85,7 +75,6 @@ describe("processing lock watchdog", () => {
     expect(getIsProcessing()).toBe(false);
     expect(getProcessingRunId()).toBe(null);
 
-    // After the watchdog frees the lock, a fresh run must be accepted.
     expect(beginProcessingRun("run-b")).toBe(true);
     clearProcessingRun("run-b");
   });
@@ -100,8 +89,6 @@ describe("processing lock watchdog", () => {
     expect(beginProcessingRun("run-live")).toBe(true);
     setPythonProcess({ exitCode: null, signalCode: null, killed: false });
 
-    // One watchdog tick rearms while the child is alive — do not runAllTimers
-    // (that would loop forever on the rearm).
     vi.advanceTimersByTime(PROCESSING_LOCK_MAX_MS + 1);
     expect(getIsProcessing()).toBe(true);
     expect(getProcessingRunId()).toBe("run-live");

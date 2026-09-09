@@ -127,9 +127,6 @@ export function summarizeQueue(queue = []) {
   const list = Array.isArray(queue) ? queue : [];
   const succeeded = list.filter((item) => item.status === "done").length;
   const failed = list.filter((item) => item.status === "error").length;
-  // Cancelled jobs are reset to idle with no error (plan 002); batch summary
-  // may also pass cancelled counts from Python. For queue-only summarize we
-  // cannot recover cancelled vs never-started idle — only count terminal rows.
   const terminal = succeeded + failed;
   if (terminal === 0) return null;
   return {

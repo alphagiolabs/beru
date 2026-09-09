@@ -2,15 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import useEditorStore from "../stores/useEditorStore";
 import { regionToScreen } from "../utils/video-utils";
 import { PERF_FLAGS } from "../utils/perf-flags.js";
-
-/* ── Per-preview workspace (released on unmount) ─────────────────────── */
+import { drawBlurredVideoRegion } from "./video-preview/draw-blurred-video-region.js";
 
 function createPreviewWorkspace() {
   return {
     source: { canvas: null, ctx: null },
     tiny: { canvas: null, ctx: null },
     temporalFrames: [],
-    // Scratch channel buffers for temporal median (reused every pixel).
     medianRs: null,
     medianGs: null,
     medianBs: null,
@@ -59,8 +57,6 @@ function getTinyCanvas(w, h, ws) {
   return c;
 }
 
-/* ── Region → source pixels in video coordinate space ─────────────────── */
-
 function sourceRect(region, video) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
@@ -71,8 +67,6 @@ function sourceRect(region, video) {
     sh: Math.max(1, Math.min(vh, Math.floor(region.h * vh))),
   };
 }
-
-/* ── Effect renderers (draw into the provided 2D context at screen size) ─ */
 
 function renderMosaic(ctx, video, region, screen, blockSize, ws) {
   const { sx, sy, sw, sh } = sourceRect(region, video);
@@ -126,7 +120,6 @@ function renderMosaic(ctx, video, region, screen, blockSize, ws) {
 
 function mirrorSampleRect(sx, sy, sw, sh, vw, vh, side) {
   const s = (side || "right").toLowerCase();
-  // flipAxis: "h" = horizontal flip (left/right), "v" = vertical (top/bottom)
   if (s === "right") {
     if (sx + sw + sw <= vw) return { srcX: sx + sw, srcY: sy, cw: sw, ch: sh, flipAxis: "h" };
     if (sx >= sw) return { srcX: sx - sw, srcY: sy, cw: sw, ch: sh, flipAxis: "h" };
@@ -164,8 +157,6 @@ function renderMirror(ctx, video, region, screen, side) {
   const vw = video.videoWidth;
   const vh = video.videoHeight;
   const sample = mirrorSampleRect(sx, sy, sw, sh, vw, vh, side);
-  // No context on the requested side: draw nothing (matches Python fallback
-  // to inpaint, which we can't replicate in a live canvas preview).
   if (!sample) {
     ctx.save();
     ctx.clearRect(0, 0, screen.w, screen.h);
@@ -237,10 +228,6 @@ function medianChannel(values) {
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
-/**
- * In-place quickselect median (O(n) avg). Mutates `a` (caller builds it fresh).
- * Used when VITE_BERU_DELGO_QUICKSELECT is enabled to avoid the per-pixel full sort.
- */
 function quickselectMedian(a) {
   const n = a.length;
   if (n === 0) return 0;
@@ -266,7 +253,6 @@ function quickselectMedian(a) {
     else break;
   }
   if (n % 2) return a[k];
-  // even n: a[k] is placed; a[k-1] is the max of the lower partition.
   let maxLo = a[0];
   for (let i = 1; i < k; i++) if (a[i] > maxLo) maxLo = a[i];
   return Math.round((maxLo + a[k]) / 2);
@@ -292,7 +278,6 @@ function renderTemporal(ctx, video, region, screen, radius, ws) {
   const n = buffers.length;
   const useQuick = PERF_FLAGS.delogoQuickselect;
 
-  // Reuse fixed-length scratch arrays (no per-pixel alloc).
   if (!ws.medianRs || ws.medianRs.length !== n) {
     ws.medianRs = new Uint8ClampedArray(n);
     ws.medianGs = new Uint8ClampedArray(n);
@@ -335,11 +320,7 @@ function renderTemporal(ctx, video, region, screen, radius, ws) {
   ctx.restore();
 }
 
-/* ── Component ────────────────────────────────────────────────────────── */
-
-/** Methods rendered via the canvas RAF loop (per-frame pixel work).
- *  All other valid methods (blur, fill, cover) use the CSS overlay path. */
-const CANVAS_METHODS = new Set(["temporal", "mirror", "mosaic", "inpaint"]);
+const CANVAS_METHODS = new Set(["temporal", "mirror", "mosaic", "inpaint", "blur"]);
 
 export default function DelogoLivePreview({ videoRef }) {
   const currentRegion = useEditorStore((s) => s.currentRegion);
@@ -367,13 +348,11 @@ export default function DelogoLivePreview({ videoRef }) {
 
   useEffect(() => () => releasePreviewWorkspace(workspaceRef.current), []);
 
-  /* Reset temporal buffer when region, method, or video source changes. */
   const videoSrc = videoRef?.current?.currentSrc || videoRef?.current?.src || "";
   useEffect(() => {
     workspaceRef.current.temporalFrames.length = 0;
   }, [currentRegion, delogoMethod, videoSrc]);
 
-  /* Canvas path — re-draws every frame while visible */
   useEffect(() => {
     if (!isCanvas) return;
     const canvas = canvasRef.current;
@@ -400,12 +379,10 @@ export default function DelogoLivePreview({ videoRef }) {
         timerId = setTimeout(draw, 1000);
         return;
       }
-      // Backoff when the video isn't ready instead of spinning at RAF rate.
       if (notReady) {
         timerId = setTimeout(draw, 100);
         return;
       }
-      // FPS throttle (flag-gated; 0 = uncapped legacy behaviour).
       if (throttleInterval > 0) {
         const now = performance.now();
         const remaining = throttleInterval - (now - lastDrawTs);
@@ -438,6 +415,7 @@ export default function DelogoLivePreview({ videoRef }) {
       if (method === "mosaic") renderMosaic(ctx, video, region, screen, mosaicSize, ws);
       else if (method === "mirror") renderMirror(ctx, video, region, screen, mirrorSide);
       else if (method === "inpaint") renderInpaint(ctx, video, region, screen, ws);
+      else if (method === "blur") drawBlurredVideoRegion(ctx, video, region, screen, blurStrength);
       else if (method === "temporal")
         renderTemporal(ctx, video, region, screen, temporalRadius, ws);
 
@@ -447,8 +425,6 @@ export default function DelogoLivePreview({ videoRef }) {
         label.style.top = Math.max(0, screen.y - 18) + "px";
       }
 
-      // Pause the loop while the video is paused — the frame is static, so
-      // redrawing only burns CPU. Resume on play/seeked.
       if (video.paused) {
         if (!pauseController) {
           pauseController = new AbortController();
@@ -469,9 +445,8 @@ export default function DelogoLivePreview({ videoRef }) {
       clearTimeout(timerId);
       if (pauseController) pauseController.abort();
     };
-  }, [isCanvas, videoRef, mosaicSize, mirrorSide, temporalRadius]);
+  }, [isCanvas, videoRef, mosaicSize, mirrorSide, temporalRadius, blurStrength]);
 
-  /* CSS path (blur / fill) — no RAF needed, browser composites the effect */
   useEffect(() => {
     if (isCanvas || !visible) return;
     const el = cssRef.current;
@@ -486,26 +461,12 @@ export default function DelogoLivePreview({ videoRef }) {
     el.style.height = screen.h + "px";
     el.style.display = "block";
 
-    if (delogoMethod === "blur") {
-      const scale = Math.max(screen.sx || 1, screen.sy || 1);
-      const px = Math.max(2, blurStrength * scale);
-      el.style.backdropFilter = `blur(${px}px)`;
-      el.style.WebkitBackdropFilter = `blur(${px}px)`;
-      el.style.background = "transparent";
-      el.style.outline = "1px dashed rgba(59,130,246,0.7)";
-      el.style.outlineOffset = "-1px";
-    } else if (delogoMethod === "fill") {
-      el.style.backdropFilter = "none";
-      el.style.WebkitBackdropFilter = "none";
+    if (delogoMethod === "fill") {
       el.style.background = delogoFillColor || "black";
       el.style.opacity = String(delogoFillOpacity ?? 1);
       el.style.outline = "1px dashed rgba(244,63,94,0.7)";
       el.style.outlineOffset = "-1px";
     } else if (delogoMethod === "cover") {
-      // Cover: show the user's image scaled to the logo box (contain fit,
-      // matching the Python pad=...:(ow-iw)/2:(oh-ih)/2 overlay).
-      el.style.backdropFilter = "none";
-      el.style.WebkitBackdropFilter = "none";
       el.style.background = "transparent";
       el.style.opacity = "1";
       el.style.outline = "1px dashed rgba(16,185,129,0.7)";
@@ -522,15 +483,12 @@ export default function DelogoLivePreview({ videoRef }) {
     visible,
     delogoMethod,
     currentRegion,
-    blurStrength,
     delogoFillColor,
     delogoFillOpacity,
     delogoImagePath,
     videoRef,
   ]);
 
-  /* Cover image: load on demand and render as a background-image on the CSS
-     overlay div so it scales with the region without a separate canvas. */
   useEffect(() => {
     if (!visible || delogoMethod !== "cover") {
       setCoverImgData(null);
@@ -540,8 +498,6 @@ export default function DelogoLivePreview({ videoRef }) {
       setCoverImgData(null);
       return;
     }
-    // Reuse the Electron-preloaded data URL cache when available (the image
-    // op path uses the same cache); fall back to a raw file URL.
     const cached = useEditorStore.getState().imageDataCache?.[delogoImagePath];
     if (cached) {
       setCoverImgData(cached);

@@ -30,11 +30,9 @@ def test_inpaint_feather0_with_time_no_boxblur():
     op = _op("inpaint", 0, 5, 10)
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     assert chain is not None
-    # The bug: boxblur=1 appeared even though feather=0.
     assert "boxblur=1" not in chain, (
         f"feather=0 must not apply boxblur, but chain contains boxblur=1: {chain!r}"
     )
-    # The fix: overlay the clean patch directly (no blur step).
     assert "overlay=" in chain
 
 
@@ -42,27 +40,27 @@ def test_inpaint_feather0_no_time_no_boxblur():
     op = _op("inpaint", 0)
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     assert chain is not None
-    # Fast path: just delogo, no split/overlay
     assert "boxblur" not in chain
 
 
-def test_inpaint_feather6_with_time_applies_boxblur6():
+def test_inpaint_feather6_with_time_applies_seamless_blend():
     op = _op("inpaint", 6, 5, 10)
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     assert chain is not None
-    assert "boxblur=6" in chain
+    # Seamless blend: interior streak-smoothing blur + grain match composited
+    # through an alpha ramp (no halo blur over the surroundings).
+    assert "luma_radius=min(6" in chain
+    assert "geq=" in chain
+    assert "noise=alls=" in chain
+    assert "overlay=" in chain and "enable=" in chain
 
 
 def test_mirror_fallback_feather0_with_time_no_boxblur():
-    # Mirror with no context falls back to inpaint. Use a region flush at the
-    # right edge so mirror has no source on the right side.
     op = _op("mirror", 0, 5, 10)
     op["region"] = {"x": 600, "y": 100, "w": 80, "h": 60}  # flush at right edge of 640
     op["mirror_side"] = "right"
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     if chain is None:
-        # If mirror path somehow succeeds, that's fine — we only assert the
-        # fallback path when it triggers.
         return
     assert "boxblur=1" not in chain, (
         f"feather=0 fallback must not apply boxblur=1, got: {chain!r}"
@@ -72,6 +70,6 @@ def test_mirror_fallback_feather0_with_time_no_boxblur():
 if __name__ == "__main__":
     test_inpaint_feather0_with_time_no_boxblur()
     test_inpaint_feather0_no_time_no_boxblur()
-    test_inpaint_feather6_with_time_applies_boxblur6()
+    test_inpaint_feather6_with_time_applies_seamless_blend()
     test_mirror_fallback_feather0_with_time_no_boxblur()
     print("OK: feather=0 with time bounds skips boxblur")

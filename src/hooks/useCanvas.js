@@ -1,11 +1,7 @@
 import { useCallback, useRef, useEffect } from "react";
 import useEditorStore from "../stores/useEditorStore";
-import {
-  toVideoCoordsNormalized,
-  drawRegionOnCanvas,
-  contentRect,
-  clampRegionToVideo,
-} from "../utils/video-utils";
+import { toVideoCoordsNormalized, drawRegionOnCanvas, contentRect } from "../utils/video-utils";
+import { applyMove, applyResizeRaw, cursorForHandle } from "../utils/region-interaction";
 
 const HANDLE_THRESHOLD_PX = 16;
 const MOVE_INSET_PX = 4;
@@ -13,13 +9,9 @@ const MOVE_INSET_PX = 4;
 export default function useCanvas(videoEl) {
   const currentRegion = useEditorStore((s) => s.currentRegion);
   const activeTool = useEditorStore((s) => s.activeTool);
-  const delogoMethod = useEditorStore((s) => s.delogoMethod);
   const sidebarMode = useEditorStore((s) => s.sidebarMode);
-  const selectedTemplateRegionId = useEditorStore((s) => s.selectedTemplateRegionId);
   const setCurrentRegion = useEditorStore((s) => s.setCurrentRegion);
   const get = useEditorStore.getState;
-  // Text move/resize is owned by TextRegionFrame (DOM). Canvas only draws
-  // new regions in those modes and never hit-tests the selection chrome.
   const canvasOwnsSelection = activeTool !== "text" && sidebarMode !== "batch";
   const canvasRef = useRef(null);
   const drawStart = useRef({ x: 0, y: 0 });
@@ -39,20 +31,12 @@ export default function useCanvas(videoEl) {
     canvas.style.height = h + "px";
   }, [videoEl]);
 
-  // Stable identity: read the live region/tool/method from the store on each
-  // call instead of closing over them. Otherwise currentRegion changes on every
-  // mousemove while drawing, producing a new redrawCanvas identity and causing
-  // the ResizeObserver effect below to disconnect/recreate the observer per move.
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const video = videoEl?.current;
     if (!canvas || !video) return;
-    const { currentRegion: cr, activeTool: at, delogoMethod: dm, sidebarMode: sm } = get();
-    // Batch text uses tool="text" for a dashed outline (no fill) so the live
-    // TextOverlay is not covered by a translucent canvas rect.
+    const { currentRegion: cr, activeTool: at, sidebarMode: sm } = get();
     const paintTool = sm === "batch" ? "text" : at;
-    // When DOM TextRegionFrame owns the selection, clear canvas chrome so handles
-    // are not double-drawn and do not steal the interaction model.
     const regionReady = cr && Math.abs(cr.w) >= 0.01 && Math.abs(cr.h) >= 0.01;
     const domChromeActive = regionReady && (sm === "batch" || at === "text");
     if (domChromeActive) {
@@ -60,7 +44,7 @@ export default function useCanvas(videoEl) {
       if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
       return;
     }
-    drawRegionOnCanvas(canvas, video, cr, paintTool, dm);
+    drawRegionOnCanvas(canvas, video, cr, paintTool);
   }, [videoEl, get]);
 
   useEffect(() => {
@@ -76,18 +60,9 @@ export default function useCanvas(videoEl) {
     return () => ro.disconnect();
   }, [videoEl, resizeCanvas, redrawCanvas]);
 
-  // Redraw when the region/tool/method change. redrawCanvas itself is now stable,
-  // so without these deps the canvas would never refresh on region edits.
   useEffect(() => {
     redrawCanvas();
-  }, [
-    redrawCanvas,
-    currentRegion,
-    activeTool,
-    delogoMethod,
-    sidebarMode,
-    selectedTemplateRegionId,
-  ]);
+  }, [redrawCanvas, currentRegion, activeTool, sidebarMode]);
 
   const getScreenRect = useCallback(() => {
     const r = currentRegion;
@@ -143,20 +118,6 @@ export default function useCanvas(videoEl) {
     [getScreenRect],
   );
 
-  const cursorForHandle = (h) => {
-    const m = {
-      tl: "nwse-resize",
-      tc: "ns-resize",
-      tr: "nesw-resize",
-      ml: "ew-resize",
-      mr: "ew-resize",
-      bl: "nesw-resize",
-      bc: "ns-resize",
-      br: "nwse-resize",
-    };
-    return m[h] || "move";
-  };
-
   const endGesture = useCallback(() => {
     isDrawing.current = false;
     resizeInfo.current = null;
@@ -171,58 +132,31 @@ export default function useCanvas(videoEl) {
       if (resizeInfo.current) {
         const v = toVideoCoordsNormalized(video, e.clientX, e.clientY);
         if (!v) return;
-        const sr = resizeInfo.current.startR;
-        const dx = v.x - resizeInfo.current.startNx;
-        const dy = v.y - resizeInfo.current.startNy;
-        const h = resizeInfo.current.handle;
-        const MIN = 0.01;
-        let nx = sr.x,
-          ny = sr.y,
-          nw = sr.w,
-          nh = sr.h;
-        if (h.includes("l")) {
-          nx = sr.x + dx;
-          nw = sr.w - dx;
-        }
-        if (h.includes("r")) {
-          nw = sr.w + dx;
-        }
-        if (h.includes("t") || h === "tc") {
-          ny = sr.y + dy;
-          nh = sr.h - dy;
-        }
-        if (h.includes("b") || h === "bc") {
-          nh = sr.h + dy;
-        }
-        if (nw < MIN) {
-          nw = MIN;
-          if (h.includes("l")) nx = sr.x + sr.w - MIN;
-        }
-        if (nh < MIN) {
-          nh = MIN;
-          if (h.includes("t") || h === "tc") ny = sr.y + sr.h - MIN;
-        }
-        setCurrentRegion({ x: nx, y: ny, w: nw, h: nh });
+        const next = applyResizeRaw(
+          resizeInfo.current.startR,
+          resizeInfo.current.handle,
+          v.x - resizeInfo.current.startNx,
+          v.y - resizeInfo.current.startNy,
+        );
+        if (next) setCurrentRegion(next);
         return;
       }
 
       if (moveInfo.current) {
         const v = toVideoCoordsNormalized(video, e.clientX, e.clientY);
         if (!v) return;
-        const sr = moveInfo.current.startR;
-        const dx = v.x - moveInfo.current.startNx;
-        const dy = v.y - moveInfo.current.startNy;
-        setCurrentRegion(
-          clampRegionToVideo({ x: sr.x + dx, y: sr.y + dy, w: sr.w, h: sr.h }, 1, 1),
+        const next = applyMove(
+          moveInfo.current.startR,
+          v.x - moveInfo.current.startNx,
+          v.y - moveInfo.current.startNy,
         );
+        if (next) setCurrentRegion(next);
         return;
       }
 
       if (isDrawing.current) {
         const v = toVideoCoordsNormalized(video, e.clientX, e.clientY);
         if (!v) return;
-        // Live draw must not fan out through batch template updates — only touch
-        // currentRegion until mouseup (setCurrentRegion still OK when no template selected).
         setCurrentRegion({
           x: Math.min(drawStart.current.x, v.x),
           y: Math.min(drawStart.current.y, v.y),
@@ -234,8 +168,6 @@ export default function useCanvas(videoEl) {
     [videoEl, setCurrentRegion],
   );
 
-  // Window-level move/up so rubber-band drawing is not cancelled when the cursor
-  // leaves the canvas (onMouseLeave previously aborted mid-draw).
   useEffect(() => {
     const onMove = (e) => {
       if (!isDrawing.current && !resizeInfo.current && !moveInfo.current) return;
@@ -255,12 +187,9 @@ export default function useCanvas(videoEl) {
       const video = videoEl?.current;
       if (!video) return;
       if (activeTool === "pan") return;
-      /* Only the primary button draws/resizes regions; middle button is
-       * reserved for zoom-pan (see VideoPreview). */
       if (e.button !== 0) return;
       if (!video.paused) video.pause();
 
-      /* Priority: handle > region interior > empty space (non-text tools only) */
       if (currentRegion && canvasOwnsSelection) {
         const handle = hitTestHandle(e.clientX, e.clientY);
         if (handle) {
@@ -282,7 +211,6 @@ export default function useCanvas(videoEl) {
         }
       }
 
-      /* No region or click outside: start drawing a new one */
       const v = toVideoCoordsNormalized(video, e.clientX, e.clientY);
       if (!v) return;
       drawStart.current = { x: v.x, y: v.y };
@@ -302,7 +230,6 @@ export default function useCanvas(videoEl) {
 
   const onMouseMove = useCallback(
     (e) => {
-      /* Cursor feedback only — gestures run on window listeners above. */
       const canvas = canvasRef.current;
       if (!canvas) return;
       if (activeTool === "pan") {

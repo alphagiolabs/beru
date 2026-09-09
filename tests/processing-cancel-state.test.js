@@ -1,5 +1,3 @@
-// Unit tests for cancellingRunId helpers in shared-state.js
-
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
@@ -11,7 +9,7 @@ const {
   setCancellingRunId,
   clearCancellingRunId,
   setPythonProcess,
-} = await import("../main/shared-state.js");
+} = await import("../main/processing-run.js");
 
 describe("cancelling run id state", () => {
   beforeEach(() => {

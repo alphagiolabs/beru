@@ -6,19 +6,10 @@ import { isDev } from "../shared-state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/**
- * Repo path to processor.py for development script mode only.
- * Production never ships loose .py files; it runs beru-processor from bin/
- * (see resolveProcessorSpawn / validateProcessorAvailable).
- */
 export function getPythonPath() {
   return path.join(__dirname, "..", "..", "python", "processor.py");
 }
 
-/**
- * Look up a binary by name on the system PATH.
- * Returns the resolved absolute path or null.
- */
 function _whichOnPath(binName) {
   if (process.platform === "win32") {
     try {
@@ -31,9 +22,7 @@ function _whichOnPath(binName) {
         .trim()
         .split(/\r?\n/)[0];
       if (first && fs.existsSync(first)) return first;
-    } catch {
-      // `where` not found or binary not on PATH — expected on many installs.
-    }
+    } catch {}
     return null;
   }
 
@@ -47,18 +36,12 @@ function _whichOnPath(binName) {
     });
     const resolved = String(output || "").trim();
     if (resolved && fs.existsSync(resolved)) return resolved;
-  } catch {
-    // Not on PATH.
-  }
+  } catch {}
   return null;
 }
 
 const _exe = process.platform === "win32" ? ".exe" : "";
 
-/**
- * Resolve a bundled binary (ffmpeg/ffprobe): dev bin → packaged bin → PATH.
- * Single source of truth for the resolution policy used by both binaries.
- */
 function resolveBinary(name) {
   const devBin = path.join(__dirname, "..", "..", "bin", `${name}${_exe}`);
   if (fs.existsSync(devBin)) return devBin;

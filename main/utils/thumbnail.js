@@ -5,8 +5,6 @@ import { getFfmpegPath } from "./paths.js";
 const THUMBNAIL_CACHE_MAX = 300;
 const MAX_THUMBNAIL_BYTES = 4 * 1024 * 1024;
 
-// Thumbnails are deterministic for (path, mtime, width) — cache like
-// video-cache.js so re-imports/selections don't respawn ffmpeg per file.
 const thumbnailCache = new Map();
 const pendingThumbnails = new Map();
 
@@ -27,7 +25,7 @@ function trimThumbnailCache() {
   }
 }
 
-function runThumbnailFfmpeg(ffmpeg, filePath, width) {
+function runThumbnailFfmpeg(ffmpeg, filePath, width, seekSeconds = 1) {
   return new Promise((resolve) => {
     const chunks = [];
     let totalBytes = 0;
@@ -38,7 +36,7 @@ function runThumbnailFfmpeg(ffmpeg, filePath, width) {
       "-loglevel",
       "error",
       "-ss",
-      "1",
+      String(seekSeconds),
       "-i",
       filePath,
       "-an",
@@ -67,8 +65,6 @@ function runThumbnailFfmpeg(ffmpeg, filePath, width) {
     };
     proc.stdout.on("data", (d) => {
       totalBytes += d.length;
-      // A healthy 80px mjpeg is a few KB; anything larger means the source is
-      // misbehaving — kill it instead of buffering unbounded output.
       if (totalBytes > MAX_THUMBNAIL_BYTES) return finish(null);
       chunks.push(d);
     });
@@ -97,7 +93,17 @@ export function extractThumbnail(filePath, width = 80) {
   const pending = pendingThumbnails.get(cacheKey);
   if (pending) return pending;
 
-  const task = runThumbnailFfmpeg(ffmpeg, filePath, width)
+  const task = (async () => {
+    const first = await runThumbnailFfmpeg(ffmpeg, filePath, width, 1);
+    if (first) return first;
+    // Short videos (< 1 s) have no frame at t=1; retry from 0.
+    try {
+      if (fs.statSync(filePath).size >= 50 * 1024 * 1024) return null;
+    } catch {
+      return null;
+    }
+    return runThumbnailFfmpeg(ffmpeg, filePath, width, 0);
+  })()
     .then((result) => {
       pendingThumbnails.delete(cacheKey);
       if (result && mtime >= 0) {

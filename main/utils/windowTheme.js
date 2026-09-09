@@ -1,4 +1,3 @@
-/** Window chrome colors — derived from theme tokens at runtime. */
 const WINDOW_THEME = {
   dark: {
     background: "#0a0a0a",
@@ -10,11 +9,6 @@ const WINDOW_THEME = {
   },
 };
 
-/**
- * Fully transparent WCO background so the renderer titlebar region shows through.
- * Using alpha=0 avoids Electron painting a separate caption color on Windows.
- * Fallback note: if a platform ignores #00000000, use #01000000 (see electron#51014).
- */
 export const TITLEBAR_OVERLAY_COLOR = "#00000000";
 
 export function resolveWindowTheme(themeOrColors) {

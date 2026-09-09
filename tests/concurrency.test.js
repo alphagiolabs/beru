@@ -57,7 +57,7 @@ describe("runWithConcurrency", () => {
     const results = await runWithConcurrency(
       [1, 2],
       2,
-      async (item) => {
+      async () => {
         throw new Error("fail");
       },
       (err, item, idx) => idx,

@@ -17,6 +17,8 @@ import { fmtTime } from "../utils/video-utils";
 import MatchBadge from "./MatchBadge";
 import { useT } from "../i18n/useT";
 import { PERF_FLAGS } from "../utils/perf-flags.js";
+import { importVideosFromDialog } from "../utils/import-videos";
+import { Button } from "./ui/Button";
 
 const api = window.api;
 
@@ -49,11 +51,6 @@ const Thumbnail = memo(function Thumbnail({ value }) {
   );
 });
 
-/**
- * Derived per-row data: counts of text vs non-text operations, plus the match
- * status. Computed once per queue change and passed as stable primitives to the
- * memoized row so an op edit on one row doesn't recompute badges for the others.
- */
 function deriveRow(item, idx, excelPath, excelMatchStatus) {
   let textOps = 0;
   let otherOps = 0;
@@ -95,6 +92,16 @@ const QueueRow = memo(
     return (
       <div
         onClick={() => onSelect(idx)}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onSelect(idx);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-pressed={isSelected}
         className="flex items-center gap-2 px-3 py-2 border-b cursor-pointer transition-colors group relative"
         style={{
           borderColor: "var(--border)",
@@ -146,11 +153,12 @@ const QueueRow = memo(
             <Edit3 size={12} style={{ color: "#a855f7" }} title={t("queue.templateBadge")} />
           )}
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               onToggleMenu(idx);
             }}
-            className="opacity-0 group-hover:opacity-100"
+            className="queue-row-menu opacity-0 group-hover:opacity-100"
             style={{ color: "var(--text-dim)" }}
             title={t("queue.contextMenu")}
           >
@@ -166,6 +174,7 @@ const QueueRow = memo(
             onClick={(e) => e.stopPropagation()}
           >
             <button
+              type="button"
               onClick={() => onProcessThis(idx)}
               disabled={isProcessing}
               className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
@@ -175,6 +184,7 @@ const QueueRow = memo(
             </button>
             {item.status === "error" && (
               <button
+                type="button"
                 onClick={() => onProcessThis(idx)}
                 disabled={isProcessing}
                 className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
@@ -185,6 +195,7 @@ const QueueRow = memo(
             )}
             <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
             <button
+              type="button"
               onClick={onOpenOutputDir}
               disabled={!hasOutputDir}
               className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
@@ -193,6 +204,7 @@ const QueueRow = memo(
               <FolderOpen size={11} /> {t("queue.menu.openFolder")}
             </button>
             <button
+              type="button"
               onClick={() => onReveal(idx)}
               disabled={!hasOutputDir}
               className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
@@ -201,6 +213,7 @@ const QueueRow = memo(
               <Eye size={11} /> {t("queue.menu.showInExplorer")}
             </button>
             <button
+              type="button"
               onClick={() => onCopyName(idx)}
               className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80"
               style={{ color: "var(--text-primary)" }}
@@ -209,6 +222,7 @@ const QueueRow = memo(
             </button>
             <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
             <button
+              type="button"
               onClick={() => onRemove(idx)}
               disabled={isProcessing}
               className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
@@ -222,10 +236,6 @@ const QueueRow = memo(
     );
   },
   (prev, next) => {
-    // Re-render only when a value the row actually reads changed. `item` is a
-    // store queue element compared by reference — the store only creates a new
-    // item object when that specific item mutates, so rows whose item didn't
-    // change are skipped entirely.
     return (
       prev.item === next.item &&
       prev.idx === next.idx &&
@@ -301,29 +311,8 @@ export default function QueueSidebar() {
   }, [isProcessing, showToast, t, get]);
 
   const handleAdd = useCallback(async () => {
-    if (isProcessing) {
-      showToast({ kind: "warn", text: t("queue.processingBusy") });
-      return;
-    }
-    if (!api?.openVideos) {
-      showToast({ kind: "err", text: t("errors.noApi") });
-      return;
-    }
-    try {
-      const paths = await api.openVideos();
-      if (!paths?.length) return;
-      await get().addVideos(paths, api);
-      showToast({ kind: "ok", text: t("drop.added", { count: paths.length }) });
-    } catch (err) {
-      console.error("[beru] Video import failed:", err);
-      showToast({
-        kind: "err",
-        text: t("errors.importVideosFailed", {
-          message: err?.message || t("errors.unknown"),
-        }),
-      });
-    }
-  }, [isProcessing, showToast, t, get]);
+    await importVideosFromDialog({ api, store: get(), t, busy: isProcessing });
+  }, [isProcessing, t, get]);
 
   const handleProcessThis = useCallback(
     async (idx) => {
@@ -387,16 +376,10 @@ export default function QueueSidebar() {
     (idx) => setOpenMenuIdx((prev) => (prev === idx ? -1 : idx)),
     [],
   );
-  // Only the row with the open menu receives the shared menuRef; the comparator
-  // above treats menuRef as identity, so a stable ref object keeps the open row
-  // from re-rendering when unrelated rows update.
   const setMenuRef = useCallback((el) => {
     menuRef.current = el;
   }, []);
 
-  // Precompute per-row derived data (op counts, match status) once per queue /
-  // excel state change. Only rows whose input changed get new objects, so the
-  // memoized QueueRow comparator can skip unchanged rows.
   const rows = useMemo(() => {
     const out = new Array(queue.length);
     for (let i = 0; i < queue.length; i++) {
@@ -409,41 +392,53 @@ export default function QueueSidebar() {
 
   return (
     <aside
-      className="w-[220px] flex-shrink-0 flex flex-col border-r relative"
+      className="queue-sidebar w-[220px] flex-shrink-0 flex flex-col border-r relative"
+      aria-labelledby="queue-title"
       style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
     >
       <div
         className="p-3 border-b flex items-center justify-between"
         style={{ borderColor: "var(--border)" }}
       >
-        <span
+        <h2
+          id="queue-title"
           className="text-[10px] font-semibold tracking-wider uppercase"
           style={{ color: "var(--text-dim)" }}
         >
           {t("queue.title")} ({queue.length})
-        </span>
+        </h2>
         <div className="flex items-center gap-1">
-          <button
+          <Button
+            type="button"
             onClick={handleClear}
             disabled={queue.length === 0 || isProcessing}
-            className="cap-btn-secondary !p-1 disabled:opacity-40"
+            variant="secondary"
+            size="icon"
             title={t("queue.clearQueue")}
           >
             <Trash2 size={14} />
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
             onClick={handleAdd}
             disabled={isProcessing}
-            className="cap-btn-secondary !p-1 disabled:opacity-40"
+            variant="secondary"
+            size="icon"
             title={t("queue.addVideos")}
           >
             <Plus size={14} />
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div ref={listParentRef} className="flex-1 overflow-y-auto">
-        {useVirtual ? (
+      <div ref={listParentRef} className="flex flex-1 min-h-0 flex-col overflow-y-auto">
+        {queue.length === 0 ? (
+          <div className="queue-empty" role="status">
+            <FileVideo size={18} aria-hidden="true" />
+            <strong>{t("queue.emptyTitle")}</strong>
+            <span>{t("queue.emptyHint")}</span>
+          </div>
+        ) : useVirtual ? (
           <div
             style={{
               height: `${rowVirtualizer.getTotalSize()}px`,

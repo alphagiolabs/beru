@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { filterOperationsForExport } from "../src/utils/batch-process.js";
+import { filterOperationsForExport } from "../src/utils/operation.js";
 
 const mockApi = {
   startProcessing: vi.fn(async () => ({ success: true })),
@@ -52,7 +52,6 @@ const BASE_STATE = {
   undoStack: [],
   redoStack: [],
   batchSummary: null,
-  // Text style defaults
   textInput: "Sample Text",
   textFontSize: 32,
   textFontColor: "white",
@@ -73,7 +72,6 @@ const BASE_STATE = {
   textShadowColor: "black",
   textShadowOffsetX: 2,
   textShadowOffsetY: 2,
-  // Delogo defaults
   blurStrength: 20,
   delogoMethod: "temporal",
   delogoFillColor: "black",
@@ -92,10 +90,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     mockApi.getVideoInfoBatch.mockResolvedValue([]);
     useEditorStore.setState(BASE_STATE);
   });
-
-  // ═══════════════════════════════════════════════════════════════════
-  // ELIMINAR LOGO — delogo operation export pipeline
-  // ═══════════════════════════════════════════════════════════════════
 
   it("builds valid delogo job for temporal method", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
@@ -120,12 +114,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
 
     expect(job).not.toBeNull();
     expect(job.operations).toHaveLength(1);
-    // Region should be denormalized to pixels
     expect(job.operations[0].region.x).toBe(192); // 0.1 * 1920
     expect(job.operations[0].region.y).toBe(216); // 0.2 * 1080
     expect(job.operations[0].region.w).toBe(576); // 0.3 * 1920
     expect(job.operations[0].region.h).toBe(108); // 0.1 * 1080
-    // Snake_case keys for Python
     expect(job.operations[0].delogo_method).toBe("temporal");
     expect(job.operations[0].temporal_radius).toBe(5);
     expect(job.operations[0].edge_feather).toBe(8);
@@ -185,7 +177,7 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
               id: "delogo-4",
               mode: "delogo",
               region,
-              delogoMethod: "invalid-method", // should fallback to "temporal"
+              delogoMethod: "invalid-method", // should fallback to "blur"
               temporalRadius: 999, // should clamp to 15
               mosaicSize: -5, // should clamp to 4
               edgeFeather: 100, // should clamp to 40
@@ -197,7 +189,7 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
-    expect(job.operations[0].delogo_method).toBe("temporal");
+    expect(job.operations[0].delogo_method).toBe("blur");
     expect(job.operations[0].temporal_radius).toBe(15);
     expect(job.operations[0].mosaic_size).toBe(4);
     expect(job.operations[0].edge_feather).toBe(40);
@@ -230,9 +222,7 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
-    // The declared method is honored; simpleDelogo no longer forces blur.
     expect(job.operations[0].delogo_method).toBe("inpaint");
-    // simpleDelogo must not leak into the backend job.
     expect(job.operations[0].simple_delogo).toBeUndefined();
     expect(job.operations[0].simpleDelogo).toBeUndefined();
   });
@@ -260,7 +250,7 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[0].delogo_image_path).toBe("C:\\\\img\\\\patch.png");
   });
 
-  it("cover method falls back to temporal when image path is missing", () => {
+  it("cover method falls back to blur when image path is missing", () => {
     const region = { x: 0.2, y: 0.2, w: 0.1, h: 0.1 };
     useEditorStore.setState({
       queue: [
@@ -279,7 +269,7 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
-    expect(job.operations[0].delogo_method).toBe("temporal");
+    expect(job.operations[0].delogo_method).toBe("blur");
   });
 
   it("mixes delogo + blur + text operations in a single job", () => {
@@ -350,10 +340,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[2].text_shadow_offset_y).toBe(4);
   });
 
-  // ═══════════════════════════════════════════════════════════════════
-  // TEXTO EN LOTE — batch text operations export pipeline
-  // ═══════════════════════════════════════════════════════════════════
-
   it("materializeBatchTextOps creates text ops with correct style from global + template", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     useEditorStore.setState({
@@ -368,7 +354,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
       ],
       excelRows: [{ id: "video_0", TEXT_1: "Nombre" }],
       excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
-      // Global style
       textFontSize: 32,
       textFontColor: "white",
       fontFamily: "Arial",
@@ -395,10 +380,8 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(ops).toHaveLength(1);
     expect(ops[0].mode).toBe("text");
     expect(ops[0].text).toBe("Nombre");
-    // Template style overrides global
     expect(ops[0].fontSize).toBe(48);
     expect(ops[0].fontColor).toBe("#ff0000");
-    // Global style fills in what template didn't specify
     expect(ops[0].fontWeight).toBe(700);
     expect(ops[0].letterSpacing).toBe(4);
     expect(ops[0].textAlign).toBe("center");
@@ -436,14 +419,12 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(report.matched).toBe(1);
     const op = useEditorStore.getState().queue[0].operations[0];
 
-    // This matches the exact assertion from the original store.logic.test.js
     expect(op.text).toBe("Hola Mundo");
     expect(op.fontWeight).toBe(700);
     expect(op.letterSpacing).toBe(4);
     expect(op.textAlign).toBe("center");
     expect(op.textOpacity).toBe(0.75);
     expect(op.boxBorderWidth).toBe(9);
-    // Template-specific overrides
     expect(op.fontSize).toBe(44);
     expect(op.fontColor).toBe("#abcdef");
   });
@@ -529,7 +510,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job).not.toBeNull();
     expect(job.operations).toHaveLength(2);
 
-    // Delogo op
     const delogo = job.operations[0];
     expect(delogo.mode).toBe("delogo");
     expect(delogo.delogo_method).toBe("inpaint");
@@ -539,7 +519,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(delogo.region.w).toBe(288); // 0.15 * 1920
     expect(delogo.region.h).toBe(54); // 0.05 * 1080 (may be rounded)
 
-    // Text op
     const text = job.operations[1];
     expect(text.mode).toBe("text");
     expect(text.text).toBe("Watermark");
@@ -552,7 +531,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(text.bg_color).toBe("black");
     expect(text.bg_opacity).toBe(0.5);
     expect(text.box_border_width).toBe(5);
-    // Denormalized region
     expect(text.region.x).toBe(192); // 0.1 * 1920
     expect(text.region.y).toBe(864); // 0.8 * 1080
   });
@@ -578,10 +556,8 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     });
 
     const job = useEditorStore.getState()._buildJobFor(useEditorStore.getState().queue[0], 0);
-    // The JS side sends the text as-is; Python escapes it during build_drawtext
     expect(job.operations[0].text).toBe("Price: ${99}");
 
-    // Verify Python handles the escaping (use raw string to avoid JS interpolation)
     const { spawnSync } = await import("child_process");
     const py = process.platform === "win32" ? "python" : "python3";
     const r = spawnSync(
@@ -634,11 +610,9 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(report.matched).toBe(1);
     const ops = useEditorStore.getState().queue[0].operations;
 
-    // Blur op should be preserved
     expect(ops).toHaveLength(2);
     expect(ops[0].mode).toBe("blur");
     expect(ops[0].blurStrength).toBe(25);
-    // Text op should be created
     expect(ops[1].mode).toBe("text");
     expect(ops[1].text).toBe("Batch Text");
   });
@@ -693,14 +667,11 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
       excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
     });
 
-    // Step 1: _reapplyExcel creates text ops
     const report = useEditorStore.getState()._reapplyExcel();
     expect(report.matched).toBe(5);
 
-    // Step 2: materialize ensures ops are complete
     useEditorStore.getState().materializeBatchTextOps();
 
-    // Step 3: build jobs
     const jobs = useEditorStore
       .getState()
       .queue.map((item, i) => useEditorStore.getState()._buildJobFor(item, i))
@@ -715,11 +686,9 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
       expect(job.operations[1].font_size).toBe(40); // from template style
     }
 
-    // Verify the text content varies per video
     expect(jobs[0].operations[1].text).toBe("Video 0");
     expect(jobs[4].operations[1].text).toBe("Video 4");
 
-    // Verify delogo regions are denormalized
     expect(jobs[0].operations[0].region.x).toBe(1344);
     expect(jobs[0].operations[0].region.y).toBe(0);
   });

@@ -28,6 +28,7 @@ import {
 } from "../../theme/engine.js";
 import { DEFAULT_SLOT1_PRESET, DEFAULT_SLOT2_PRESET } from "../../theme/tokens.js";
 import ThemeEditor from "./ThemeEditor.jsx";
+import { Button } from "../ui/Button";
 
 const PREVIEW_SWATCH_KEYS = ["accentBrand", "bgSurface", "amber", "purple"];
 
@@ -305,14 +306,14 @@ function ThemeSlot({
       </div>
       <ThemeRefSelect value={themeRef} customThemes={customThemes} t={t} onChange={onAssign} />
       <div className="settings-appearance-slot-actions">
-        <button type="button" className="cap-btn-secondary" onClick={onEdit}>
+        <Button type="button" variant="secondary" size="sm" onClick={onEdit}>
           <Pencil size={12} />
           {t("settings.appearance.editColors")}
-        </button>
+        </Button>
         {!isActive && (
-          <button type="button" className="cap-btn-secondary" onClick={onActivate}>
+          <Button type="button" variant="secondary" size="sm" onClick={onActivate}>
             {t("settings.appearance.applyNow")}
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -529,8 +530,10 @@ export default function AppearancePanel() {
             <span className="settings-users-count">{groupedPresets.total}</span>
           </div>
           <div className="settings-appearance-section-tools">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className="settings-appearance-tool-btn"
               title={t("settings.appearance.import")}
               aria-label={t("settings.appearance.import")}
@@ -538,9 +541,11 @@ export default function AppearancePanel() {
             >
               <Upload size={12} />
               <span>{t("settings.appearance.import")}</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="primary"
+              size="sm"
               className="settings-appearance-tool-btn settings-appearance-tool-btn--primary"
               title={t("settings.appearance.createTheme")}
               aria-label={t("settings.appearance.createTheme")}
@@ -548,7 +553,7 @@ export default function AppearancePanel() {
             >
               <Plus size={12} />
               <span>{t("settings.appearance.createTheme")}</span>
-            </button>
+            </Button>
           </div>
         </header>
 

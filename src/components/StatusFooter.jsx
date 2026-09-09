@@ -6,16 +6,12 @@ import { isSupabaseConfigured } from "../lib/supabaseClient";
 import { useT } from "../i18n/useT";
 import { getBatchProgress } from "../utils/batch-progress";
 import { APP_VERSION, formatFooterClock } from "../utils/appVersion";
+import { Button } from "./ui/Button";
 import FooterChip from "./status-footer/FooterChip";
 import SegmentedProgress from "./status-footer/SegmentedProgress";
 import ExecutionHistoryPanel from "./status-footer/ExecutionHistoryPanel";
 import UpToDateDialog from "./status-footer/UpToDateDialog";
 
-/**
- * Ticks a counter every `intervalMs` while `active` is true, so time-based UI
- * (run/session clocks) re-renders at a fixed cadence instead of on every store
- * change. Returns nothing — callers read `Date.now()` during render.
- */
 function useClock(active, intervalMs = 1000) {
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -34,30 +30,20 @@ export default function StatusFooter() {
 
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const {
-    isProcessing,
-    progressDone,
-    progressTotal,
-    queueLength,
-    jobProgress,
-    batchSummary,
-    update,
-  } = useEditorStore(
-    (s) => ({
-      isProcessing: s.isProcessing,
-      progressDone: s.progressDone,
-      progressTotal: s.progressTotal,
-      queueLength: s.queue.length,
-      jobProgress: s.jobProgress,
-      batchSummary: s.batchSummary,
-      update: s.update,
-    }),
-    shallow,
-  );
+  const { isProcessing, progressDone, progressTotal, jobProgress, batchSummary, update } =
+    useEditorStore(
+      (s) => ({
+        isProcessing: s.isProcessing,
+        progressDone: s.progressDone,
+        progressTotal: s.progressTotal,
+        queueLength: s.queue.length,
+        jobProgress: s.jobProgress,
+        batchSummary: s.batchSummary,
+        update: s.update,
+      }),
+      shallow,
+    );
 
-  // Only subscribe to the full history array while the panel is open. When
-  // closed the selector returns null (stable) so log batches do not re-render
-  // the footer (~20×/s during encode).
   const executionHistory = useEditorStore((s) => (historyOpen ? s.executionHistory : null));
   const [upToDateOpen, setUpToDateOpen] = useState(false);
   const closeUpToDate = useCallback(() => setUpToDateOpen(false), []);
@@ -131,20 +117,24 @@ export default function StatusFooter() {
     <footer className="status-footer cap-no-drag" role="contentinfo">
       <div className="status-footer-left">
         {isSupabaseConfigured && (
-          <button
+          <Button
             type="button"
             className="status-footer-icon-btn"
+            variant="tertiary"
+            size="icon"
             onClick={handleSignOut}
             title={t("auth.signOut")}
             aria-label={t("auth.signOut")}
           >
             <LogOut size={13} strokeWidth={2.2} />
-          </button>
+          </Button>
         )}
 
-        <button
+        <Button
           type="button"
           className={`status-footer-icon-btn${historyOpen ? " status-footer-icon-btn--active" : ""}`}
+          variant="tertiary"
+          size="icon"
           onClick={() => {
             setHistoryOpen((v) => !v);
             get().setUpdateModalOpen(false);
@@ -155,7 +145,7 @@ export default function StatusFooter() {
           aria-expanded={historyOpen}
         >
           <Command size={13} strokeWidth={2.2} />
-        </button>
+        </Button>
 
         {historyOpen && (
           <ExecutionHistoryPanel
@@ -222,9 +212,11 @@ export default function StatusFooter() {
 
       <div className="status-footer-right">
         <div className="status-footer-version-wrap">
-          <button
+          <Button
             type="button"
             className={`status-footer-version${hasUpdateBadge ? " status-footer-version--badge" : ""}${updateModalOpen || upToDateOpen ? " status-footer-version--open" : ""}`}
+            variant="tertiary"
+            size="sm"
             onClick={() => {
               if (hasUpdateBadge || updateStatus === "checking") {
                 const state = get();
@@ -254,7 +246,7 @@ export default function StatusFooter() {
             {updateStatus === "downloading" && (
               <span className="status-footer-version-dl">{Math.round(update?.percent || 0)}%</span>
             )}
-          </button>
+          </Button>
         </div>
       </div>
 

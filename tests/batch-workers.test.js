@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   resolveBatchWorkers,
   recommendBatchWorkers,
+  estimateJobRamMb,
+  memoryCapWorkers,
   AUTO_TARGET_WORKERS,
 } from "../main/workerPolicy.js";
+
+const PLENTY_OF_RAM_MB = 64 * 1024;
 
 describe("workerPolicy", () => {
   it("explicit workers override auto caps", () => {
@@ -12,6 +16,7 @@ describe("workerPolicy", () => {
         hwEncoder: "h264_nvenc",
         jobCount: 10,
         explicitWorkers: 5,
+        availableRamMb: PLENTY_OF_RAM_MB,
       }),
     ).toBe(5);
   });
@@ -22,6 +27,7 @@ describe("workerPolicy", () => {
         hwEncoder: "h264_nvenc",
         jobCount: 8,
         mode: "balanced",
+        availableRamMb: PLENTY_OF_RAM_MB,
       }),
     ).toBe(AUTO_TARGET_WORKERS);
   });
@@ -32,6 +38,7 @@ describe("workerPolicy", () => {
         hwEncoder: "h264_nvenc",
         jobCount: 8,
         mode: "conservative",
+        availableRamMb: PLENTY_OF_RAM_MB,
       }),
     ).toBe(2);
   });
@@ -42,6 +49,7 @@ describe("workerPolicy", () => {
         hwEncoder: "h264_mf",
         jobCount: 10,
         mode: "balanced",
+        availableRamMb: PLENTY_OF_RAM_MB,
       }),
     ).toBe(1);
   });
@@ -53,6 +61,7 @@ describe("workerPolicy", () => {
         jobCount: 10,
         maxSourcePixels: 3840 * 2160,
         mode: "balanced",
+        availableRamMb: PLENTY_OF_RAM_MB,
       }),
     ).toBe(2);
   });
@@ -66,6 +75,7 @@ describe("workerPolicy", () => {
         mode: "balanced",
         hasVideoFilters: true,
         encodeProfile: "quality",
+        availableRamMb: PLENTY_OF_RAM_MB,
       }),
     ).toBe(3);
   });
@@ -77,6 +87,7 @@ describe("workerPolicy", () => {
       mode: "balanced",
       hasVideoFilters: true,
       encodeProfile: "quality",
+      availableRamMb: PLENTY_OF_RAM_MB,
     });
 
     expect(r.encoder).toBe("h264_nvenc");
@@ -91,6 +102,7 @@ describe("workerPolicy", () => {
       mode: "balanced",
       hasVideoFilters: true,
       encodeProfile: "quality",
+      availableRamMb: PLENTY_OF_RAM_MB,
     });
 
     expect(r.encoder).toBeNull();
@@ -105,6 +117,7 @@ describe("workerPolicy", () => {
       mode: "balanced",
       hasVideoFilters: true,
       encodeProfile: "uquality",
+      availableRamMb: PLENTY_OF_RAM_MB,
     });
 
     expect(r.encoder).toBeNull();
@@ -122,6 +135,7 @@ describe("workerPolicy", () => {
         hasVideoFilters: true,
         encodeProfile: "quality",
         explicitWorkers: 4,
+        availableRamMb: PLENTY_OF_RAM_MB,
       }),
     ).toBe(4);
   });
@@ -131,8 +145,77 @@ describe("workerPolicy", () => {
       hwEncoder: "h264_mf",
       jobCount: 5,
       mode: "balanced",
+      availableRamMb: PLENTY_OF_RAM_MB,
     });
     expect(r.recommended).toBe(1);
     expect(r.reason).toBe("mf_single");
+  });
+
+  it("memory cap clamps balanced NVENC when RAM is tight", () => {
+    // 512 MB free -> floor(512*0.8/256) = 1 worker
+    expect(
+      resolveBatchWorkers({
+        hwEncoder: "h264_nvenc",
+        jobCount: 8,
+        mode: "balanced",
+        availableRamMb: 512,
+      }),
+    ).toBe(1);
+    // 1024 MB free -> floor(819/256) = 3 workers
+    expect(
+      resolveBatchWorkers({
+        hwEncoder: "h264_nvenc",
+        jobCount: 8,
+        mode: "balanced",
+        availableRamMb: 1024,
+      }),
+    ).toBe(3);
+  });
+
+  it("memory cap uses per-job estimates when jobEntries are provided", () => {
+    // 4K HEVC 10-bit software job: 512*1.25*1.5*2.5 = 2400 MB
+    // 1920 MB free -> floor(1536/2400) = 1 worker (binds below any cpu cap)
+    expect(
+      resolveBatchWorkers({
+        hwEncoder: null,
+        jobCount: 8,
+        mode: "balanced",
+        encodeProfile: "balanced",
+        jobEntries: [
+          { videoCodec: "hevc", pixFmt: "yuv420p10le", sourceWidth: 3840, sourceHeight: 2160 },
+        ],
+        availableRamMb: 1920,
+      }),
+    ).toBe(1);
+  });
+
+  it("estimateJobRamMb mirrors the processor math", () => {
+    expect(estimateJobRamMb({})).toBe(512);
+    expect(
+      estimateJobRamMb({
+        hwEncoder: "h264_nvenc",
+        hasVideoFilters: true,
+        encodeProfile: "quality",
+        sourcePixels: 1920 * 1080,
+      }),
+    ).toBe(576); // 256*1.5 (filters) *1.5 (1080p), no quality 1.35x with hw
+    expect(
+      estimateJobRamMb({
+        hwEncoder: null,
+        hasVideoFilters: true,
+        encodeProfile: "quality",
+        sourcePixels: 3840 * 2160,
+      }),
+    ).toBe(3362); // 512*1.3(medium preset)*1.5(filters)*1.35(quality, no hw)*2.5(4K), floor at each step
+    expect(
+      memoryCapWorkers({
+        hwEncoder: null,
+        hasVideoFilters: true,
+        encodeProfile: "quality",
+        maxSourcePixels: 3840 * 2160,
+        desiredWorkers: 8,
+        availableRamMb: 8405,
+      }),
+    ).toBe(2); // floor(8405*0.8/3362) = 2
   });
 });

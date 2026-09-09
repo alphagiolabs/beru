@@ -3,15 +3,7 @@ import fs from "fs";
 import path from "path";
 import { getMainWindow } from "../shared-state.js";
 import { OUTPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
-
-const IMAGE_MIMES = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".gif": "image/gif",
-  ".bmp": "image/bmp",
-};
+import { IMAGE_CONTENT_TYPES } from "../utils/beru-protocol.js";
 
 export function registerFileHandlers(pathSecurity) {
   ipcMain.handle("fs:readExcel", async (_event, filePath) => {
@@ -29,7 +21,6 @@ export function registerFileHandlers(pathSecurity) {
     }
   });
 
-  /** Write base64 workbook bytes to a user-chosen path (export Excel). */
   ipcMain.handle("fs:writeExcel", async (_event, filePath, base64Data) => {
     if (typeof base64Data !== "string" || !base64Data) {
       return { success: false, error: "Empty Excel data" };
@@ -41,14 +32,6 @@ export function registerFileHandlers(pathSecurity) {
     const ext = path.extname(resolved).toLowerCase();
     if (ext !== ".xlsx" && ext !== ".xls") {
       return { success: false, error: "Only .xlsx/.xls exports are allowed" };
-    }
-    // Dialog already picked the path; still refuse system dirs via shell check on parent.
-    const parent = path.dirname(resolved);
-    const parentCheck = pathSecurity.validateShellPath(parent);
-    if (!parentCheck.ok) {
-      // Parent may be a trusted user folder not yet registered — allow if under home-like roots
-      // by registering after write via absolute path under common user dirs.
-      // Fall through and let write fail if OS denies.
     }
     try {
       const buf = Buffer.from(base64Data, "base64");
@@ -68,7 +51,7 @@ export function registerFileHandlers(pathSecurity) {
     const check = pathSecurity.validateReadableFile(imagePath, "image");
     if (!check.ok) return { success: false, error: check.error };
     const ext = path.extname(check.resolvedPath).toLowerCase();
-    const mime = IMAGE_MIMES[ext];
+    const mime = IMAGE_CONTENT_TYPES[ext];
     if (!mime) {
       return { success: false, error: `Formato no soportado: ${ext}` };
     }
@@ -97,7 +80,6 @@ export function registerFileHandlers(pathSecurity) {
     const check = pathSecurity.validateShellPath(filePath);
     if (!check.ok) return { success: false, error: check.error };
     filePath = check.resolvedPath;
-    if (!filePath) return { success: false, error: "No path provided" };
     if (!fs.existsSync(filePath)) {
       return { success: false, error: "Archivo no existe" };
     }
@@ -117,10 +99,6 @@ export function registerFileHandlers(pathSecurity) {
     return { success: true };
   });
 
-  /**
-   * Re-register paths restored from sessionStorage after relaunch.
-   * Output dir must be registered for process:start; videos/excel for preview/read.
-   */
   ipcMain.handle("session:restorePaths", async (_event, payload = {}) => {
     const result = { ok: true, outputDir: null, videos: 0, excel: false, errors: [] };
     const outputDir = payload?.outputDir;
