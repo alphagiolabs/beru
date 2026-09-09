@@ -13,16 +13,12 @@ from processor import _extract_error_line  # noqa: E402
 
 
 def test_no_error_word_with_trailing_newline():
-    # Trailing newline → lines[-1]="" → old code returned lines[-2] (correct by
-    # accident). New code must still return the last non-empty line.
     stderr = "frame=  100 fps=30\nConversion failed!\n"
     result = _extract_error_line(stderr)
     assert result == "Conversion failed!", f"Expected 'Conversion failed!', got {result!r}"
 
 
 def test_no_error_word_without_trailing_newline():
-    # NO trailing newline → lines[-1] is the useful line. Old code returned
-    # lines[-2] (noise). New code must return lines[-1].
     stderr = "frame=  100 fps=30\nConversion failed!"
     result = _extract_error_line(stderr)
     assert result == "Conversion failed!", f"Expected 'Conversion failed!', got {result!r}"

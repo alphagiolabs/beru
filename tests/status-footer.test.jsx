@@ -89,6 +89,25 @@ describe("StatusFooter", () => {
     expect(document.querySelector(".status-footer-progress")).toBeTruthy();
   });
 
+  it("updates progress when only the queue length changes", async () => {
+    useEditorStore.setState({
+      isProcessing: true,
+      progressDone: 0,
+      progressTotal: 0,
+      jobProgress: {},
+      queue: [{ status: "idle" }],
+    });
+    await act(async () => {
+      root.render(<StatusFooter />);
+    });
+    expect(document.querySelector(".status-footer").textContent).toContain("0/1");
+
+    await act(async () => {
+      useEditorStore.setState({ queue: [{ status: "idle" }, { status: "idle" }] });
+    });
+    expect(document.querySelector(".status-footer").textContent).toContain("0/2");
+  });
+
   it("opens centered update modal from version badge when an update is available", async () => {
     window.api = {
       downloadUpdate: vi.fn(async () => ({ ok: true })),
@@ -147,10 +166,6 @@ describe("StatusFooter", () => {
   });
 
   it("surfaces the ready modal after the user authorizes a download; auto-install lives in main", async () => {
-    // Auto-install runs in the main process via quitAndInstall once the
-    // "update-downloaded" IPC event fires. The renderer's job here is just to show the "ready" modal
-    // and NOT call window.api.installUpdate (that path is for cached updates
-    // where the user has to opt in). This test pins the renderer-side contract.
     window.api = {
       downloadUpdate: vi.fn(async () => ({ ok: true })),
       installUpdate: vi.fn(async () => ({ ok: true })),
@@ -199,8 +214,6 @@ describe("StatusFooter", () => {
     });
 
     expect(document.body.textContent).toMatch(/Reiniciar e instalar/i);
-    // The renderer must never auto-call installUpdate — auto-install is
-    // owned by the main process (see main/updater.js scheduleInstall).
     expect(window.api.installUpdate).not.toHaveBeenCalled();
   });
 

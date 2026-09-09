@@ -1,31 +1,12 @@
 import { describe, expect, it } from "vitest";
 import fs from "fs";
 import path from "path";
+import { extractHiddenImports, extractLocalImports } from "./helpers/python-imports.js";
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8"));
 const pythonDir = path.join(process.cwd(), "python");
 const processorPath = path.join(pythonDir, "processor.py");
 const specPath = path.join(pythonDir, "beru-processor.spec");
-
-function extractLocalImports(pySrc) {
-  const imports = new Set();
-  const fromRe = /^\s*from\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+import\b/gm;
-  let m;
-  while ((m = fromRe.exec(pySrc)) !== null) imports.add(m[1]);
-  const impRe = /^\s*import\s+([a-zA-Z_][a-zA-Z0-9_]*)\b/gm;
-  while ((m = impRe.exec(pySrc)) !== null) imports.add(m[1]);
-  return [...imports].filter((mod) => fs.existsSync(path.join(pythonDir, `${mod}.py`)));
-}
-
-function extractHiddenImports(specSrc) {
-  const m = specSrc.match(/hiddenimports\s*=\s*\[([\s\S]*?)\]/);
-  if (!m) throw new Error("hiddenimports array not found in beru-processor.spec");
-  const out = [];
-  const re = /"([a-zA-Z_][a-zA-Z0-9_]*)"/g;
-  let mm;
-  while ((mm = re.exec(m[1])) !== null) out.push(mm[1]);
-  return out;
-}
 
 describe("installer packaging config", () => {
   it("keeps static ffmpeg packages out of runtime dependencies", () => {
@@ -45,9 +26,6 @@ describe("installer packaging config", () => {
   });
 
   it("ships the processor as beru-processor via bin/, not loose incomplete .py scripts", () => {
-    // Production always prefers/requires the PyInstaller binary under resources/bin.
-    // Shipping a partial python/ script set (missing op_shared, delogo_chains, …)
-    // confuses the mental model and would break if script mode were ever used.
     const pythonResource = pkg.build.extraResources.find(
       (entry) => entry && entry.from === "python",
     );
@@ -57,7 +35,6 @@ describe("installer packaging config", () => {
       expect.arrayContaining([expect.objectContaining({ from: "bin", to: "bin" })]),
     );
 
-    // beforeBuild must still build the exe into bin/ before packaging.
     expect(pkg.build.beforeBuild).toBe("scripts/build-processor.hook.cjs");
   });
 

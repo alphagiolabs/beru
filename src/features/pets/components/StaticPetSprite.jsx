@@ -1,14 +1,5 @@
 import { ATLAS_SHEET_HEIGHT, ATLAS_SHEET_WIDTH, resolvePetState } from "../utils/pet-states.js";
 
-/**
- * @param {{
- *   src: string,
- *   state?: import("../utils/pet-states.js").PetStateId,
- *   scale?: number,
- *   label?: string,
- *   className?: string,
- * }} props
- */
 export default function StaticPetSprite({ src, state = "idle", scale = 1, label, className = "" }) {
   const spriteState = resolvePetState(state);
 

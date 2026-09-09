@@ -1,16 +1,11 @@
 /**
- * Feedback loop for text move/resize interaction.
- *
- * Architecture (after fix):
- * - Shared CSS scale wraps video + overlays + TextRegionFrame (not video alone).
- * - Overlay/frame positions use layout space (offsetWidth via regionToScreen).
- * - Pointer deltas use visual content size (getBoundingClientRect via getContentPx).
- * - Text selection chrome is real DOM handles (no canvas hit-test for text).
+ * Pointer deltas use visual content size (getBoundingClientRect via getContentPx).
  */
 import { describe, it, expect } from "vitest";
 import {
   contentRect,
   contentRectLayout,
+  letterboxContent,
   regionToScreen,
   toVideoCoordsNormalized,
 } from "../src/utils/video-utils.js";
@@ -21,7 +16,6 @@ import {
   getContentPx,
 } from "../src/utils/region-interaction.js";
 
-/** Mock a video element with letterboxing + optional CSS zoom (scale from 0,0). */
 function mockVideo({
   layoutW,
   layoutH,
@@ -55,6 +49,24 @@ function mockVideo({
   };
 }
 
+describe("letterboxContent", () => {
+  it("fills a matching 16:9 container", () => {
+    const box = letterboxContent(800, 450, 1920, 1080);
+    expect(box.dw).toBeCloseTo(800, 5);
+    expect(box.dh).toBeCloseTo(450, 5);
+    expect(box.ox).toBeCloseTo(0, 5);
+    expect(box.oy).toBeCloseTo(0, 5);
+  });
+
+  it("pillarboxes a tall video in a wide container", () => {
+    const box = letterboxContent(800, 450, 1080, 1920);
+    expect(box.dh).toBeCloseTo(450, 5);
+    expect(box.dw).toBeCloseTo(450 * (1080 / 1920), 5);
+    expect(box.ox).toBeCloseTo((800 - box.dw) / 2, 5);
+    expect(box.oy).toBeCloseTo(0, 5);
+  });
+});
+
 describe("text region interaction — coordinate contract", () => {
   const region = { x: 0.25, y: 0.25, w: 0.5, h: 0.25 };
 
@@ -69,8 +81,6 @@ describe("text region interaction — coordinate contract", () => {
   });
 
   it("with shared CSS zoom layer, overlays stay in layout space", () => {
-    // Video + overlays + frame share transform: scale(zoom). Absolute positions
-    // are layout (offset) coords; the parent scale makes them match the picture.
     const zoom = 2;
     const video = mockVideo({ layoutW: 640, layoutH: 360, zoom });
     const screen = regionToScreen(region, video);
@@ -88,7 +98,6 @@ describe("text region interaction — coordinate contract", () => {
     const video = mockVideo({ layoutW: 640, layoutH: 360, zoom });
     const content = getContentPx(video);
     expect(content).not.toBeNull();
-    // Visual content is layout * zoom for a full-bleed 16:9 in 16:9 box
     expect(content.width).toBeCloseTo(640 * zoom, 5);
     expect(content.height).toBeCloseTo(360 * zoom, 5);
 
@@ -111,7 +120,6 @@ describe("text region interaction — coordinate contract", () => {
     });
     const content = getContentPx(video);
     expect(content).not.toBeNull();
-    // 16:9 inside 800×600 → content height = 800/(16/9)=450, width=800
     expect(content.width).toBeCloseTo(800, 5);
     expect(content.height).toBeCloseTo(450, 5);
 
@@ -137,10 +145,6 @@ describe("text region interaction — coordinate contract", () => {
 });
 
 describe("text region interaction — DOM chrome ownership", () => {
-  /**
-   * Mirrors useCanvas.domChromeActive so canvas + TextRegionFrame never double-paint.
-   * Logo text (no template id) must still suppress canvas chrome.
-   */
   function domChromeActive({ activeTool, sidebarMode, selectedTemplateRegionId, region }) {
     const regionReady = region && Math.abs(region.w) >= 0.01 && Math.abs(region.h) >= 0.01;
     return (
@@ -231,8 +235,6 @@ describe("text region interaction — pure geometry", () => {
   });
 
   it("applyResize from left edge works when start x is 0", () => {
-    // DOM path uses applyResize directly with explicit start snapshot — no
-    // truthy startNx=0 sentinel bug.
     const edge = { x: 0, y: 0.2, w: 0.4, h: 0.3 };
     const next = applyResize(edge, "ml", 0.1, 0);
     expect(next.w).toBeLessThan(edge.w);
@@ -259,7 +261,6 @@ describe("text region interaction — free-drag delta uses content width", () =>
       videoH: 1080,
       zoom: 1,
     });
-    // 16:9 in 2.5:1 → pillarbox sides
     const c = getContentPx(pillar);
     expect(c.height).toBeCloseTo(400, 5);
     expect(c.width).toBeCloseTo(400 * (1920 / 1080), 5);
@@ -269,7 +270,6 @@ describe("text region interaction — free-drag delta uses content width", () =>
     const correct = contentDragNormDelta(pillar, pixelDx, 0);
 
     expect(correct.dx).toBeCloseTo(0.1, 5);
-    // Full-element width under-reports — production must use content path.
     expect(freeWrong.dx).not.toBeCloseTo(correct.dx, 5);
     expect(correct.dx).toBeGreaterThan(freeWrong.dx);
   });

@@ -1,7 +1,4 @@
 // @ts-check
-/* ── Region normalization ─────────────────────────────────────────────── */
-
-import { TEXT_STYLE_DEFAULTS } from "./text-style";
 
 export function normalizeRegion(region, videoWidth, videoHeight) {
   if (!region) return null;
@@ -29,8 +26,6 @@ const NORM_EPS = 1e-6;
 
 export function isNormalizedRegion(region) {
   if (!region) return false;
-  // Epsilon on edge sums so float noise near the frame border (e.g. 0.81+0.2)
-  // is still treated as normalized 0..1 coords, not mis-detected as pixels.
   return (
     region.x >= -NORM_EPS &&
     region.y >= -NORM_EPS &&
@@ -57,13 +52,10 @@ function clampUnitRegion(region) {
 export function ensureNormalized(region, videoWidth, videoHeight) {
   if (!region) return null;
   if (isNormalizedRegion(region)) {
-    // Preserve identity when already a clean unit square; clamp float edge noise.
     const clean =
       region.x >= 0 && region.y >= 0 && region.x + region.w <= 1 && region.y + region.h <= 1;
     return clean ? region : clampUnitRegion(region);
   }
-  // Ambiguous 0..1-looking coords that failed the sum check: keep as
-  // normalized instead of dividing by video size (which collapses the box).
   const maybeNorm =
     region.x >= 0 &&
     region.y >= 0 &&
@@ -76,8 +68,6 @@ export function ensureNormalized(region, videoWidth, videoHeight) {
   if (maybeNorm) return region;
   return normalizeRegion(region, videoWidth, videoHeight);
 }
-
-/* ── Shared types for Beru ───────────────────────────────────────────── */
 
 let _idCounter = 0;
 export function uid() {
@@ -122,10 +112,16 @@ export const TEXT_ALIGNS = [
 
 export const DELOGO_METHODS = [
   {
+    id: "blur",
+    label: "Desenfoque",
+    description:
+      "Desenfoca la región seleccionada de forma robusta, similar a los removedores de logos online.",
+  },
+  {
     id: "temporal",
     label: "Temporal",
     description:
-      "Mediana entre N fotogramas: ideal para logos estáticos sobre video en movimiento. Indistinguible.",
+      "Mediana entre fotogramas para reducir variaciones; no elimina marcas estáticas completamente opacas.",
   },
   {
     id: "mirror",
@@ -142,12 +138,7 @@ export const DELOGO_METHODS = [
     id: "inpaint",
     label: "Inpaint",
     description:
-      "Interpolación 4-direcciones del filtro delogo de FFmpeg. Rápido, resultado decente.",
-  },
-  {
-    id: "blur",
-    label: "Desenfoque",
-    description: "Box blur. Suaviza la región pero deja una mancha visible.",
+      "Reconstruye la zona por interpolación, fusiona los bordes con el video e iguala el grano: el acabado más invisible. Recomendado.",
   },
   {
     id: "fill",
@@ -521,7 +512,6 @@ export const TEXT_STYLE_PRESETS = [
     textShadowOffsetX: 2,
     textShadowOffsetY: 2,
   },
-  // ── Additional presets (Apple / broadcast-inspired) ────────────────
   {
     id: "cinema",
     name: "Cinema",
@@ -876,29 +866,6 @@ export const TEXT_STYLE_PRESETS = [
   },
 ];
 
-/* ── Plain objects / shapes (no classes) ───────────────────────────── */
-
-export function createOperation(overrides = {}) {
-  return {
-    id: uid(),
-    mode: "blur",
-    region: null,
-    blurStrength: 20,
-    delogoMethod: "temporal",
-    delogoFillColor: "black",
-    delogoFillOpacity: 1,
-    delogoImagePath: "",
-    startTime: null,
-    endTime: null,
-    text: "",
-    batchRegionId: null,
-    ...TEXT_STYLE_DEFAULTS,
-    imagePath: "",
-    imageOpacity: 1,
-    ...overrides,
-  };
-}
-
 export function createQueueItem(overrides = {}) {
   return {
     path: "",
@@ -906,7 +873,6 @@ export function createQueueItem(overrides = {}) {
     filename: "",
     width: 0,
     height: 0,
-    /** Resolution at first successful import probe — used for export. */
     sourceWidth: 0,
     sourceHeight: 0,
     duration: 0,

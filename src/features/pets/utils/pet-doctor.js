@@ -1,6 +1,4 @@
 /**
- * Hermes-style pet setup diagnostics for Beru.
- *
  * @param {{
  *   petEnabled?: boolean,
  *   petActiveSlug?: string | null,

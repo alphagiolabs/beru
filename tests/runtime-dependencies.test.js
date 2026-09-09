@@ -5,8 +5,8 @@ import path from "path";
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
 
 import {
-  validateProcessorAvailable,
-  resolveProcessorSpawn,
+  validateProcessorAvailableAsync,
+  resolveProcessorSpawnAsync,
   getBundledProcessorPath,
 } from "../main/utils/processor-spawn.js";
 import {
@@ -17,38 +17,19 @@ import {
 } from "../main/utils/paths.js";
 import { translateProcessorErrorMessage } from "../main/utils/process-input-validation.js";
 
-/**
- * Runtime-dependency tests.
- *
- * These tests must NOT assume Python or FFmpeg are present on the machine.
- * On a fresh CI runner or a clean dev box the binaries may be absent, and
- * that is a valid state — the app is expected to surface a clear Spanish
- * error, not crash. So each presence assertion is paired with the absence
- * path: if the dependency is missing, we assert the helper reports a
- * helpful `ok: false` instead of throwing or returning undefined.
- */
 describe("processor-spawn", () => {
-  it("resolveProcessorSpawn returns a spawn spec or null (never throws)", () => {
-    const resolved = resolveProcessorSpawn([]);
-    if (resolved === null) {
-      // Valid on machines without Python — the app surfaces a clear error.
-      return;
+  it("resolves and validates the processor asynchronously", async () => {
+    const [resolved, check] = await Promise.all([
+      resolveProcessorSpawnAsync([]),
+      validateProcessorAvailableAsync(),
+    ]);
+    expect(check.ok).toBe(Boolean(resolved));
+    if (resolved) {
+      expect(check.command).toBe(resolved.command);
+      expect(check.args).toEqual(resolved.args);
+    } else {
+      expect(check.error).toMatch(/Python|instal|processor/i);
     }
-    expect(resolved.command).toBeTruthy();
-    expect(Array.isArray(resolved.args)).toBe(true);
-    expect(["bundled", "script"]).toContain(resolved.mode);
-  });
-
-  it("validateProcessorAvailable reports ok:true or a helpful error", () => {
-    const check = validateProcessorAvailable();
-    if (check.ok) {
-      expect(check.command).toBeTruthy();
-      return;
-    }
-    // Absence path: must be a string error mentioning Python / install.
-    expect(typeof check.error).toBe("string");
-    expect(check.error.length).toBeGreaterThan(0);
-    expect(/Python|instal|processor/i.test(check.error)).toBe(true);
   });
 
   it("bundled processor binary: present-and-valid OR absent (never partial)", () => {
@@ -66,8 +47,6 @@ describe("processor-spawn", () => {
   });
 
   it("production spawn path never uses resources/python (source contract)", () => {
-    // Guard against reintroducing a packaged .py fallback: prod must only
-    // return bundled mode or null (see resolveProcessorSpawn).
     const spawnSrc = fs.readFileSync(
       path.join(process.cwd(), "main", "utils", "processor-spawn.js"),
       "utf-8",
@@ -90,7 +69,6 @@ describe("paths media binaries", () => {
     const ffprobe = getFfprobePath();
     if (ffmpeg) expect(fs.existsSync(ffmpeg)).toBe(true);
     if (ffprobe) expect(fs.existsSync(ffprobe)).toBe(true);
-    // It is valid for both to be null on a machine without bundled/system binaries.
   });
 
   it("validateMediaBinaries reports ok:true or a helpful reinstall error", () => {

@@ -27,15 +27,6 @@ function useInViewport(rootMargin = "120px") {
   return { ref, visible };
 }
 
-/**
- * @param {{
- *   slug: string,
- *   remoteSrc?: string,
- *   installed?: boolean,
- *   scale?: number,
- *   label?: string,
- * }} props
- */
 export default function PetPreviewSprite({
   slug,
   remoteSrc = "",

@@ -2,6 +2,7 @@ import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import { clampRegionToVideo } from "../utils/video-utils";
 import { TEXT_ALIGNS } from "../utils/types";
 import TextLayoutControls from "./TextLayoutControls";
+import { Button } from "./ui/Button";
 
 export default function AppliedTextEditor({
   op,
@@ -77,11 +78,13 @@ export default function AppliedTextEditor({
           {TEXT_ALIGNS.map((a) => {
             const active = (op.textAlign || "left") === a.value;
             return (
-              <button
+              <Button
                 key={a.value}
                 type="button"
                 onClick={() => onPatch({ textAlign: a.value })}
-                className="cap-btn-secondary !text-[10px] !py-1"
+                variant="secondary"
+                size="sm"
+                className="!text-[10px] !py-1"
                 style={
                   active
                     ? {
@@ -96,7 +99,7 @@ export default function AppliedTextEditor({
                 {a.value === "left" && <AlignLeft size={12} />}
                 {a.value === "center" && <AlignCenter size={12} />}
                 {a.value === "right" && <AlignRight size={12} />}
-              </button>
+              </Button>
             );
           })}
         </div>

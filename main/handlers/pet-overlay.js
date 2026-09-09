@@ -6,7 +6,6 @@ import {
   getLastPetOverlayPayload,
   isPetOverlayOpen,
   reportOverlayPopIn,
-  reportOverlayPosition,
   syncPetOverlay,
 } from "../utils/pet-overlay.js";
 
@@ -41,11 +40,6 @@ export function registerPetOverlayHandlers() {
 
   ipcMain.handle("petOverlay:popIn", async () => {
     reportOverlayPopIn();
-    return { success: true };
-  });
-
-  ipcMain.handle("petOverlay:move", async (_event, position) => {
-    reportOverlayPosition(position);
     return { success: true };
   });
 

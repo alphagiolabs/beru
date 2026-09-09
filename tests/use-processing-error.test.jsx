@@ -1,4 +1,4 @@
-import React, { act, useEffect } from "react";
+import React, { act } from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import useProcessing from "../src/hooks/useProcessing.js";

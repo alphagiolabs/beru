@@ -11,7 +11,6 @@ const TEST_PROFILE = {
   is_active: true,
 };
 
-/** Bypass login gate in component tests. */
 export async function seedAuthenticatedAuth(overrides = {}) {
   const { default: useEditorStore } = await import("../../src/stores/useEditorStore.js");
   useEditorStore.setState({

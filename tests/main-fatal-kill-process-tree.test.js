@@ -2,12 +2,6 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
-/**
- * Regression: fatal uncaughtException / unhandledRejection used bare
- * proc.kill(), which on Windows does not kill grandchild ffmpeg.exe.
- * onFatalError must use the shared killProcessTree helper (taskkill /F /T).
- */
-
 const mainSrc = fs.readFileSync(path.join(process.cwd(), "main", "main.js"), "utf-8");
 const utilSrc = fs.readFileSync(
   path.join(process.cwd(), "main", "utils", "kill-process-tree.js"),

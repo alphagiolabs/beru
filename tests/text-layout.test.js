@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   binarySearchAutoFitFontSize,
+  drawtextLineSpacingPx,
   elementOverflows,
   getTextLayoutCss,
+  layoutExportText,
   verticalAlignToFlex,
   wrapTextToWidth,
 } from "../src/utils/text-layout.js";
@@ -37,6 +39,26 @@ describe("text-layout utilities", () => {
   it("wrapTextToWidth breaks long lines for export estimates", () => {
     const wrapped = wrapTextToWidth("one two three four five six", 80, 32);
     expect(wrapped.split("\n").length).toBeGreaterThan(1);
+  });
+
+  it("drawtextLineSpacingPx matches FFmpeg round(font_size * (line_height-1))", () => {
+    expect(drawtextLineSpacingPx(32, 1.2)).toBe(6);
+    expect(drawtextLineSpacingPx(24, 1.2)).toBe(5);
+    expect(drawtextLineSpacingPx(32, 1)).toBe(0);
+  });
+
+  it("layoutExportText wraps then keeps font size when autoFit is off", () => {
+    expect(
+      layoutExportText({
+        text: "one two three four five six",
+        regionW: 80,
+        regionH: 400,
+        fontSize: 32,
+      }),
+    ).toEqual({
+      fontSize: 32,
+      displayText: "one\ntwo\nthree\nfour\nfive\nsix",
+    });
   });
 
   it("can measure overflow against explicit usable bounds", () => {

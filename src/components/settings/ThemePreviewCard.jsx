@@ -1,10 +1,9 @@
-/** Mini UI preview for a theme token set. */
-export default function ThemePreviewCard({ tokens, compact = false, className = "" }) {
+export default function ThemePreviewCard({ tokens, className = "" }) {
   if (!tokens) return null;
 
   return (
     <div
-      className={`theme-preview-card ${compact ? "theme-preview-card--compact" : ""} ${className}`.trim()}
+      className={`theme-preview-card ${className}`.trim()}
       style={{
         background: tokens.bgApp,
         borderColor: tokens.border,

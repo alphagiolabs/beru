@@ -84,6 +84,7 @@ describe("encode profile contract (JS helpers)", () => {
         mode: "balanced",
         hasVideoFilters: true,
         encodeProfile: "quality",
+        availableRamMb: 64 * 1024,
       }),
     ).toBe(3);
   });

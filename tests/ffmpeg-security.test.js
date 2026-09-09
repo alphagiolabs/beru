@@ -58,6 +58,27 @@ describe("FFmpeg security validation", () => {
     expect(result.stdout.trim()).toBe("rejected");
   });
 
+  it("allows emoji and unicode symbols in drawtext text", () => {
+    const result = runPython(
+      [
+        "values = ['Hola 😀 mundo', '→ ½ ° «cita»', 'CJK: 世界']",
+        "results = []",
+        "for text in values:",
+        "    op = {'text': text, 'font_color': 'white', 'region': {'x': 0, 'y': 0, 'w': 400, 'h': 100}}",
+        "    try:",
+        "        processor.build_drawtext(op)",
+        "    except ValueError:",
+        "        results.append('rejected')",
+        "    else:",
+        "        results.append('accepted')",
+        "print(','.join(results))",
+      ].join("\n"),
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.trim()).toBe("accepted,accepted,accepted");
+  });
+
   it("rejects injected font and border colors", () => {
     const result = runPython(
       [

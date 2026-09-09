@@ -1,9 +1,3 @@
-/**
- * jsdom stubs for APIs used by production UI (@tanstack/react-virtual, etc.).
- * Loaded once via vitest.config.js setupFiles.
- * Always replace ResizeObserver — jsdom's partial implementation lacks unobserve.
- */
-
 class ResizeObserverStub {
   constructor(callback) {
     this.callback = callback;

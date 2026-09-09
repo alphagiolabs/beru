@@ -2,6 +2,7 @@ import { Droplet, Crop, Type, Eraser, Image, Hand } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
+import { Button } from "./ui/Button";
 
 const tools = [
   { id: "pan", icon: Hand, labelKey: "toolbar.pan" },
@@ -27,9 +28,9 @@ export default function ToolBar() {
 
   return (
     <div
-      className={`flex items-center gap-1 px-4 py-2 border-t flex-shrink-0${toolbarEnabled ? "" : " opacity-50"}`}
+      className={`editor-toolbar flex items-center gap-1 px-4 py-2 border-t flex-shrink-0${toolbarEnabled ? "" : " opacity-50"}`}
       style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
-      aria-hidden={toolbarEnabled ? undefined : true}
+      aria-label={t("toolbar.label")}
     >
       {tools.map((tool) => {
         const active = activeTool === tool.id;
@@ -43,12 +44,17 @@ export default function ToolBar() {
         };
         const Icon = tool.icon;
         return (
-          <button
+          <Button
             key={tool.id}
             type="button"
+            variant="tertiary"
+            size="sm"
             disabled={!toolbarEnabled}
             tabIndex={toolbarEnabled ? 0 : -1}
             onClick={() => useEditorStore.getState().setActiveTool(tool.id)}
+            title={t(tool.labelKey)}
+            aria-label={t(tool.labelKey)}
+            aria-pressed={active}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[11px] font-medium transition-all"
             style={{
               background: active ? "var(--bg-elevated)" : "transparent",
@@ -57,7 +63,7 @@ export default function ToolBar() {
             }}
           >
             <Icon size={14} /> {t(tool.labelKey)}
-          </button>
+          </Button>
         );
       })}
     </div>

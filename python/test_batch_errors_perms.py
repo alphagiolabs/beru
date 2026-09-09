@@ -28,7 +28,6 @@ def test_operation_not_permitted_yields_permissions_message():
     assert "permisos" in msg.lower(), (
         f"Expected permissions message for 'operation not permitted', got: {msg!r}"
     )
-    # And it must NOT mention hardware/GPU/drivers
     assert "hardware" not in msg.lower(), (
         f"Permissions error must not mention hardware, got: {msg!r}"
     )
@@ -36,7 +35,6 @@ def test_operation_not_permitted_yields_permissions_message():
 
 
 def test_real_hardware_errors_still_detected():
-    # Ensure removing "operation not permitted" didn't break real HW detection
     assert is_hardware_encode_error("h264_nvenc: encoder init failed")
     assert is_hardware_encode_error("Cannot load nvcuda.dll")
     assert is_hardware_encode_error("cuda error 999")

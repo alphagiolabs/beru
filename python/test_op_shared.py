@@ -10,7 +10,6 @@ from op_shared import _coerce_float  # noqa: E402
 
 
 def test_zero_is_preserved():
-    # Regression: the old `value or 1` pattern turned 0 into 1.
     assert _coerce_float(0, 1.0, 0.0, 1.0) == 0.0
     assert _coerce_float(0.0, 1.0, 0.0, 1.0) == 0.0
     assert _coerce_float("0", 1.0, 0.0, 1.0) == 0.0

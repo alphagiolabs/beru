@@ -5,6 +5,7 @@ import StyleEditor from "./StyleEditor";
 import PresetManager from "./PresetManager";
 import BatchPanel from "./BatchPanel";
 import AppliedTextEditor from "./AppliedTextEditor";
+import AppliedDelogoEditor from "./AppliedDelogoEditor";
 import { isRegionUsable } from "../utils/video-utils";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
 import { InspectorGroup, SegmentedControl } from "./inspector";
@@ -17,7 +18,10 @@ import {
   PaintBucket,
   Eye,
   Upload,
+  X,
 } from "lucide-react";
+import { Button } from "./ui/Button";
+import { PositionIcon } from "./ui/PositionIcon";
 
 const DELOGO_ICONS = {
   temporal: Timer,
@@ -101,10 +105,6 @@ export default function PropertiesPanel() {
       mosaicSize: s.mosaicSize,
       mirrorSide: s.mirrorSide,
       edgeFeather: s.edgeFeather,
-      // Subscribe to textInput/tempStart/tempEnd so the inputs re-render when
-      // the store mutates externally (preset apply, undo, Excel reapply, project
-      // load). Reading these via get() in JSX breaks reactivity — the input
-      // shows a stale value while the store already has the new one.
       textInput: s.textInput,
       tempStart: s.tempStart,
       tempEnd: s.tempEnd,
@@ -144,6 +144,9 @@ export default function PropertiesPanel() {
       <div className="inspector-body">
         {!currentRegion &&
           !(sidebarMode === "logo" && selectedOperation?.mode === "text") &&
+          !(sidebarMode === "logo" && selectedOperation?.mode === "blur") &&
+          !(sidebarMode === "logo" && selectedOperation?.mode === "delogo") &&
+          !(sidebarMode === "logo" && selectedOperation?.mode === "crop") &&
           !(sidebarMode === "batch" && selectedTemplateRegion) &&
           !(sidebarMode === "batch") && (
             <p className="inspector-empty">
@@ -190,14 +193,15 @@ export default function PropertiesPanel() {
 
             {sidebarMode === "batch" && (
               <div className="inspector-actions inspector-actions--region">
-                <button
+                <Button
                   type="button"
                   onClick={() => get().addTemplateRegion()}
                   disabled={!isRegionUsable(currentRegion)}
-                  className="cap-btn-primary w-full disabled:opacity-50"
+                  variant="primary"
+                  className="w-full"
                 >
                   Agregar región de texto
-                </button>
+                </Button>
                 <button
                   type="button"
                   onClick={() => get().cancelBatchRegionSelection()}
@@ -219,7 +223,7 @@ export default function PropertiesPanel() {
                     readOnly
                     className="cap-input flex-1 font-mono text-[10px] truncate"
                   />
-                  <button
+                  <Button
                     onClick={async () => {
                       const res = await window.api?.pickImage();
                       if (res?.success) {
@@ -233,21 +237,27 @@ export default function PropertiesPanel() {
                           });
                       }
                     }}
-                    className="cap-btn-secondary !text-[10px] !px-2"
+                    variant="secondary"
+                    size="sm"
+                    className="!text-[10px] !px-2"
                   >
                     Elegir
-                  </button>
+                  </Button>
                   {tempImagePath && (
-                    <button
+                    <Button
                       onClick={() => {
                         get().setTempImagePath("");
                         get().setTempImageDataUrl("");
                       }}
-                      className="cap-btn-secondary !text-[10px] !px-2"
+                      variant="tertiary"
+                      size="icon"
+                      className="text-[var(--rose)]"
                       style={{ color: "var(--rose)" }}
+                      title={t("common.remove")}
+                      aria-label={t("common.remove")}
                     >
-                      ×
-                    </button>
+                      <X size={12} />
+                    </Button>
                   )}
                 </div>
                 {tempImageDataUrl && (
@@ -323,18 +333,18 @@ export default function PropertiesPanel() {
                   <span className="cap-input-label">Posición rápida</span>
                   <div className="grid grid-cols-3 gap-1">
                     {[
-                      { label: "↖", x: 0.02, y: 0.02 },
-                      { label: "↑", x: 0.5, y: 0.02 },
-                      { label: "↗", x: 0.98, y: 0.02 },
-                      { label: "←", x: 0.02, y: 0.5 },
-                      { label: "⊕", x: 0.5, y: 0.5 },
-                      { label: "→", x: 0.98, y: 0.5 },
-                      { label: "↙", x: 0.02, y: 0.98 },
-                      { label: "↓", x: 0.5, y: 0.98 },
-                      { label: "↘", x: 0.98, y: 0.98 },
+                      { id: "top-left", x: 0.02, y: 0.02 },
+                      { id: "top-center", x: 0.5, y: 0.02 },
+                      { id: "top-right", x: 0.98, y: 0.02 },
+                      { id: "middle-left", x: 0.02, y: 0.5 },
+                      { id: "center", x: 0.5, y: 0.5 },
+                      { id: "middle-right", x: 0.98, y: 0.5 },
+                      { id: "bottom-left", x: 0.02, y: 0.98 },
+                      { id: "bottom-center", x: 0.5, y: 0.98 },
+                      { id: "bottom-right", x: 0.98, y: 0.98 },
                     ].map((pos) => (
                       <button
-                        key={pos.label}
+                        key={pos.id}
                         onClick={() => {
                           const w = currentRegion?.w || 0.15;
                           const h = currentRegion?.h || 0.15;
@@ -347,9 +357,10 @@ export default function PropertiesPanel() {
                           get().setCurrentRegion({ x, y, w, h, baseW: w, baseH: h });
                         }}
                         className="inspector-chip"
-                        title={pos.label}
+                        title={pos.id}
+                        aria-label={pos.id}
                       >
-                        {pos.label}
+                        <PositionIcon position={pos.id} size={14} strokeWidth={2} />
                       </button>
                     ))}
                   </div>
@@ -571,7 +582,7 @@ export default function PropertiesPanel() {
                         readOnly
                         className="cap-input flex-1 font-mono text-[10px] truncate"
                       />
-                      <button
+                      <Button
                         onClick={async () => {
                           const res = await window.api?.pickImage();
                           if (res?.success) {
@@ -587,23 +598,29 @@ export default function PropertiesPanel() {
                             });
                           }
                         }}
-                        className="cap-btn-secondary !text-[10px] !px-2 flex items-center gap-1"
+                        variant="secondary"
+                        size="sm"
+                        className="!text-[10px] !px-2"
                       >
                         <Upload size={12} /> Elegir
-                      </button>
+                      </Button>
                       {delogoImagePath && (
-                        <button
+                        <Button
                           onClick={() => get().setDelogoImagePath("")}
-                          className="cap-btn-secondary !text-[10px] !px-2"
+                          variant="tertiary"
+                          size="icon"
+                          className="text-[var(--rose)]"
                           style={{ color: "var(--rose)" }}
+                          title={t("common.remove")}
+                          aria-label={t("common.remove")}
                         >
-                          ×
-                        </button>
+                          <X size={12} />
+                        </Button>
                       )}
                     </div>
                     {!delogoImagePath && (
                       <p className="inspector-helper mt-1" style={{ color: "var(--rose)" }}>
-                        Selecciona una imagen o el método caerá a “Temporal”.
+                        Selecciona una imagen o el método caerá a “Desenfoque”.
                       </p>
                     )}
                   </div>
@@ -651,12 +668,12 @@ export default function PropertiesPanel() {
                 <InspectorGroup title="Posición automática" className="inspector-group--auto-pos">
                   <div className="inspector-auto-pos" role="group" aria-label="Posición automática">
                     {[
-                      ["top-left", "↖", { x: 0.05, y: 0.05, w: 0.4, h: 0.08 }],
-                      ["center", "⊕", { x: 0.3, y: 0.46, w: 0.4, h: 0.08 }],
-                      ["top-right", "↗", { x: 0.55, y: 0.05, w: 0.4, h: 0.08 }],
-                      ["bottom-left", "↙", { x: 0.05, y: 0.87, w: 0.4, h: 0.08 }],
-                      ["bottom-right", "↘", { x: 0.55, y: 0.87, w: 0.4, h: 0.08 }],
-                    ].map(([pos, label, region]) => (
+                      ["top-left", { x: 0.05, y: 0.05, w: 0.4, h: 0.08 }],
+                      ["center", { x: 0.3, y: 0.46, w: 0.4, h: 0.08 }],
+                      ["top-right", { x: 0.55, y: 0.05, w: 0.4, h: 0.08 }],
+                      ["bottom-left", { x: 0.05, y: 0.87, w: 0.4, h: 0.08 }],
+                      ["bottom-right", { x: 0.55, y: 0.87, w: 0.4, h: 0.08 }],
+                    ].map(([pos, region]) => (
                       <button
                         key={pos}
                         type="button"
@@ -665,7 +682,7 @@ export default function PropertiesPanel() {
                         title={pos}
                         aria-label={pos}
                       >
-                        {label}
+                        <PositionIcon position={pos} size={14} strokeWidth={2} />
                       </button>
                     ))}
                   </div>
@@ -716,10 +733,11 @@ export default function PropertiesPanel() {
 
             {sidebarMode === "logo" && (
               <div className="inspector-actions">
-                <button
+                <Button
                   type="button"
                   onClick={() => get().addOperation(activeTool)}
-                  className="cap-btn-primary w-full"
+                  variant="primary"
+                  className="w-full"
                 >
                   Aplicar{" "}
                   {activeTool === "blur"
@@ -731,7 +749,7 @@ export default function PropertiesPanel() {
                         : activeTool === "image"
                           ? "Imagen"
                           : "Texto"}
-                </button>
+                </Button>
                 <button
                   type="button"
                   onClick={() => get().setCurrentRegion(null)}
@@ -752,6 +770,19 @@ export default function PropertiesPanel() {
             onPatch={(patch) => get().updateOperation(selectedIdx, selectedOperationIdx, patch)}
           />
         )}
+
+        {!currentRegion &&
+          sidebarMode === "logo" &&
+          (selectedOperation?.mode === "blur" ||
+            selectedOperation?.mode === "delogo" ||
+            selectedOperation?.mode === "crop") && (
+            <AppliedDelogoEditor
+              op={selectedOperation}
+              videoIdx={selectedIdx}
+              opIdx={selectedOperationIdx}
+              video={sel}
+            />
+          )}
 
         {!currentRegion && sidebarMode === "batch" && selectedTemplateRegion && (
           <AppliedTextEditor

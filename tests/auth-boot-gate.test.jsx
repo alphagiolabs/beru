@@ -68,7 +68,6 @@ describe("Auth boot gate", () => {
       user: null,
       profile: null,
       authError: null,
-      // Stay loading: simulate a slow getSession / profile fetch on boot.
       initAuth: vi.fn(async () => new Promise(() => {})),
     });
 
@@ -78,7 +77,6 @@ describe("Auth boot gate", () => {
 
     expect(document.querySelector('[data-testid="auth-session-loading"]')).toBeTruthy();
     expect(document.body.textContent).toMatch(/Verificando sesión/i);
-    // Cinematic login chrome must not mount during session restore.
     expect(document.querySelector(".login-cinematic")).toBeNull();
     expect(document.querySelector(".login-cinematic-video")).toBeNull();
     expect(document.querySelector('input[type="email"]')).toBeNull();

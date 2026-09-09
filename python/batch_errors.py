@@ -15,11 +15,7 @@ def is_hardware_encode_error(stderr_text):
         "h264_mf",
         "hwaccel",
         "error code: -22",
-        # NOTE: "operation not permitted" (POSIX EPERM) was previously listed
-        # here, but it is a file/folder permission error, NOT a GPU failure.
-        # Classifying it as hardware gave users the wrong message ("update GPU
-        # drivers") for a permissions problem. It is handled by the
-        # permissions branch of format_processing_error instead.
+        # POSIX EPERM is a permission error, not GPU. See format_processing_error.
         "no capable devices",
         "cannot create cuda",
         "encoder init",
@@ -86,11 +82,7 @@ def format_processing_error(raw_error, *, max_workers=None):
         )
     if "no space left" in lower:
         return "No hay espacio libre suficiente en el disco de salida."
-    # Permission errors: "permission denied" (Linux/macOS), "access is denied"
-    # (Windows), and "operation not permitted" (POSIX EPERM — e.g. file is open
-    # in another process, or folder has restrictive ACLs). Previously
-    # "operation not permitted" fell through to the hardware branch and users
-    # got a misleading "update GPU drivers" message.
+    # POSIX EPERM is permission (file locked / ACL), not GPU.
     if (
         "permission denied" in lower
         or "access is denied" in lower
@@ -111,9 +103,12 @@ def format_processing_error(raw_error, *, max_workers=None):
             "El encoder de hardware falló. Beru intentará usar CPU; si persiste, cambia a modo "
             "Conservador o actualiza los drivers de video."
         )
-    # Font / resource ENOENT: FFmpeg drawtext can't find the font file referenced
-    # in the filter graph.  This typically means the font specified in the overlay
-    # is not installed on this machine.
+    if "fontconfig" in lower:
+        return (
+            "No se encontró una fuente tipográfica necesaria para el texto. "
+            "Instala la fuente indicada en el overlay o cambia a una fuente del sistema "
+            "(Arial, Times New Roman, etc.) y vuelve a intentar."
+        )
     if "enoent" in lower or "no such file" in lower:
         if "fontfile" in lower or "font" in lower or "drawtext" in lower:
             return (
@@ -125,5 +120,76 @@ def format_processing_error(raw_error, *, max_workers=None):
             "No se encontró un archivo necesario durante el procesamiento. "
             "Verifica que los archivos de entrada estén disponibles localmente "
             "(no en la nube) y vuelve a intentar."
+        )
+    if "drawtext" in lower and (
+        "forbidden" in lower or "control character" in lower or "invalid" in lower
+    ):
+        return (
+            "El texto del overlay contiene caracteres que el procesador no admite. "
+            "Revisa el texto (emojis y símbolos poco habituales pueden requerir otra fuente)."
+        )
+    if "forbidden characters" in lower and "font" in lower:
+        return "El nombre de la fuente contiene caracteres no permitidos. Elige una fuente del selector."
+    if any(
+        m in lower
+        for m in (
+            "error when evaluating the expression",
+            "invalid expression",
+            "parse error",
+            "syntax error",
+        )
+    ):
+        return (
+            "El filtro de una región no se pudo construir. "
+            "Revisa que cada región tenga al menos 2 px y esté dentro del video."
+        )
+    if any(m in lower for m in ("invalid too big or non positive size", "non positive size")):
+        return "El tamaño de una región no es válido. Ajusta la selección (mínimo 2 px de lado) y vuelve a intentar."
+    if "input link parameters" in lower:
+        return (
+            "Los formatos de las capas no coinciden al superponer. "
+            "Prueba con otra imagen o ajusta la región."
+        )
+    if any(
+        m in lower
+        for m in (
+            "moov atom not found",
+            "invalid data found when processing input",
+            "could not find codec parameters",
+        )
+    ):
+        return (
+            "El archivo de entrada está dañado o incompleto (p. ej. descarga parcial o "
+            "mp4 sin índice). Vuelve a exportarlo o usa otro archivo."
+        )
+    if any(
+        m in lower
+        for m in (
+            "unknown encoder",
+            "could not open codec",
+            "error while opening encoder",
+            "unsupported codec",
+            "no decoder",
+            "unsupported pixel format",
+            "incompatible pixel format",
+            "pixel format not supported",
+        )
+    ):
+        return (
+            "El códec o formato de píxeles del video no es compatible con la salida. "
+            "Prueba con el perfil 'balanced' o cambia la extensión de salida."
+        )
+    if any(
+        m in lower
+        for m in (
+            "too many packets buffered",
+            "muxing queue",
+            "unable to find a suitable output format",
+            "output format not found",
+        )
+    ):
+        return (
+            "No se pudo empaquetar el video en el formato de salida. "
+            "Prueba con .mp4 u otra extensión."
         )
     return raw[-400:]

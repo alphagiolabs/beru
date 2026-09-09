@@ -40,10 +40,6 @@ export function deriveOutputPath(selectedDirectory, rendererOutputPath) {
   return outputPath;
 }
 
-/**
- * Best-effort unlink of a partial cancel leftover. Never throws.
- * Refuses paths outside outputRoot, the output root itself, and inputPath.
- */
 export function removeIncompleteOutput(outputPath, { outputRoot, inputPath } = {}) {
   try {
     if (typeof outputPath !== "string" || !outputPath.trim()) return false;

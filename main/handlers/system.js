@@ -1,5 +1,4 @@
 import { ipcMain } from "electron";
-import os from "os";
 import { recommendBatchWorkers } from "../workerPolicy.js";
 import { normalizeEncodeProfile } from "../encodeProfiles.js";
 import { readSettings, detectHwEncoderCached } from "../utils/settings.js";
@@ -28,6 +27,7 @@ export function registerSystemHandlers() {
       explicitWorkers,
       hasVideoFilters,
       encodeProfile,
+      jobEntries: Array.isArray(opts.jobs) ? opts.jobs : [],
     });
     return {
       ...rec,

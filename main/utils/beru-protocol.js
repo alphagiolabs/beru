@@ -2,14 +2,8 @@ import fs from "fs";
 import path from "path";
 import { Readable } from "stream";
 
-// --- Stat cache (opt-in) ----------------------------------------------------
-// Every beru:// Range request during video scrubbing calls fs.statSync on the
-// main thread. For active scrubbing this is dozens of sync stats per second on
-// the same file. A short-TTL cache removes the redundant syscalls.
-// Enable with BERU_PROTOCOL_STAT_CACHE=1. Default off = current behavior.
 const statCache = new Map(); // filePath -> { size, mtimeMs, ts }
 
-// Flags are read at call time (not at module load) so tests can toggle them.
 function statCacheEnabled() {
   return process.env.BERU_PROTOCOL_STAT_CACHE === "1";
 }
@@ -18,7 +12,6 @@ function statCacheTtlMs() {
   return Number(process.env.BERU_PROTOCOL_STAT_CACHE_TTL_MS) || 5000;
 }
 
-/** Drop a cached stat entry (e.g. after a file is replaced). Safe to call always. */
 export function invalidateBeruStatCache(filePath) {
   if (filePath === undefined) statCache.clear();
   else statCache.delete(filePath);
@@ -51,7 +44,7 @@ const VIDEO_CONTENT_TYPES = {
   ".mpeg": "video/mpeg",
 };
 
-const IMAGE_CONTENT_TYPES = {
+export const IMAGE_CONTENT_TYPES = {
   ".webp": "image/webp",
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -70,11 +63,8 @@ export function filePathFromBeruUrl(requestUrl) {
   if (/^\/[A-Za-z]:[\\/]/.test(decoded)) {
     return decoded.slice(1);
   }
-  // Backslash UNC: the URL pathname root adds a leading "/", so an encoded
-  // \\server\share\... path decodes to "/\\server\share\...". Without stripping
-  // that "/", path.resolve on win32 turns it into "<currentDrive>:\server\share"
-  // and destroys the UNC — the file is never found. Forward-slash UNC
-  // (//server/share) is handled by the next branch.
+  // Backslash UNC: URL pathname adds a leading "/". win32 path.resolve would
+  // turn /\\server\share into <drive>:\server\share and lose the UNC.
   if (/^\/\\\\/.test(decoded)) {
     return decoded.slice(1);
   }

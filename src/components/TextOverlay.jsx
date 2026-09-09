@@ -1,20 +1,16 @@
-import { memo, useLayoutEffect, useRef, useState } from "react";
-import { letterSpacingToPx } from "../utils/letter-spacing";
+import { memo } from "react";
+import { letterSpacingToPx } from "../utils/text-style";
 import {
-  binarySearchAutoFitFontSize,
-  elementOverflows,
-  getTextLayoutCss,
+  drawtextLineSpacingPx,
+  exportTextOverflows,
+  layoutExportText,
   scaledSafeMargin,
   textBgEnabled,
   textBoxPad,
+  textLayoutBounds,
   verticalAlignToFlex,
 } from "../utils/text-layout";
 
-/**
- * Renders a text overlay aligned to a video region (preview only).
- * screen: return value of regionToScreen()
- * style: operation-style fields (fontSize, fontColor, …)
- */
 function TextOverlay({
   screen,
   text,
@@ -31,92 +27,46 @@ function TextOverlay({
   zIndex,
   showOverflowWarning = true,
 }) {
-  const measureRef = useRef(null);
-  const [hasOverflow, setHasOverflow] = useState(false);
-  const [resolvedFontPx, setResolvedFontPx] = useState(null);
+  const rawText = text != null ? String(text).trim() : "";
+  const displaySource = rawText.length > 0 ? rawText : null;
 
-  const displayText = text != null && String(text).length > 0 ? String(text) : null;
+  if (!screen) return null;
+  if (!displaySource && !label) return null;
 
-  const scaleX = screen?.sx || screen?.sy || 1;
-  const scaleY = screen?.sy || screen?.sx || 1;
-  const baseFontPx = Math.max(1, (style.fontSize || 24) * scaleY);
+  const scaleX = screen.sx || screen.sy || 1;
+  const scaleY = screen.sy || screen.sx || 1;
+  const nativeW = Math.round((screen.w || 0) / scaleX);
+  const nativeH = Math.round((screen.h || 0) / scaleY);
   const safeX = scaledSafeMargin(style.safeMargin, scaleX);
   const safeY = scaledSafeMargin(style.safeMargin, scaleY);
   const bgOn = textBgEnabled(style);
-  // Pure video-pixel → screen scale (matches Python _text_box_pad / _text_layout_bounds).
   const boxPad = textBoxPad(style);
   const boxPadX = boxPad * scaleX;
   const boxPadY = boxPad * scaleY;
-  const measureWidth = Math.max(0, (screen?.w || 0) - safeX * 2 - boxPadX * 2);
-  const measureHeight = Math.max(0, (screen?.h || 0) - safeY * 2 - boxPadY * 2);
+  const bounds = textLayoutBounds({ x: 0, y: 0, w: nativeW, h: nativeH }, style.safeMargin, boxPad);
+  const lineHeight = style.lineHeight ?? 1.2;
+  const layout = displaySource
+    ? layoutExportText({
+        text: displaySource,
+        regionW: bounds.w,
+        regionH: bounds.h,
+        fontSize: style.fontSize ?? 32,
+        lineHeight,
+        textWrap: style.textWrap,
+        autoFit: style.autoFit,
+        truncate: style.truncate,
+      })
+    : null;
+  const fontSizePx = layout ? Math.max(1, layout.fontSize * scaleY) : Math.max(1, 32 * scaleY);
+  const lineBoxPx = layout
+    ? fontSizePx + drawtextLineSpacingPx(layout.fontSize, lineHeight) * scaleY
+    : fontSizePx;
+  const hasOverflow =
+    !!layout &&
+    !style.autoFit &&
+    exportTextOverflows(layout.displayText, layout.fontSize, lineHeight, bounds.w, bounds.h);
+  const lines = layout ? String(layout.displayText).split("\n") : [];
 
-  useLayoutEffect(() => {
-    const el = measureRef.current;
-    if (!el || !displayText || !screen) {
-      setHasOverflow(false);
-      setResolvedFontPx(null);
-      return;
-    }
-
-    if (measureWidth <= 0 || measureHeight <= 0) {
-      setHasOverflow(true);
-      setResolvedFontPx(baseFontPx);
-      return;
-    }
-
-    const minPx = Math.max(6, 8 * scaleY);
-    const maxPx = baseFontPx;
-    const measureBounds = { width: measureWidth, height: measureHeight };
-
-    const applyFont = (px) => {
-      el.style.fontSize = `${px}px`;
-    };
-
-    if (style.autoFit) {
-      const fitted = binarySearchAutoFitFontSize(
-        (px) => {
-          applyFont(px);
-          return !elementOverflows(el, 1, measureBounds);
-        },
-        { minPx, maxPx },
-      );
-      applyFont(fitted);
-      setResolvedFontPx(fitted);
-      setHasOverflow(false);
-      return;
-    }
-
-    applyFont(maxPx);
-    setResolvedFontPx(maxPx);
-    setHasOverflow(elementOverflows(el, 1, measureBounds));
-  }, [
-    displayText,
-    style.autoFit,
-    style.lineHeight,
-    style.textWrap,
-    style.truncate,
-    style.safeMargin,
-    style.fontSize,
-    style.fontFamily,
-    style.fontWeight,
-    style.letterSpacing,
-    style.bold,
-    style.italic,
-    style.boxBorderWidth,
-    style.bgEnabled,
-    screen?.w,
-    screen?.h,
-    screen?.sx,
-    screen?.sy,
-    baseFontPx,
-    measureWidth,
-    measureHeight,
-  ]);
-
-  if (!screen) return null;
-  if (!displayText && !label) return null;
-
-  const fontSize = resolvedFontPx ?? baseFontPx;
   const baseWeight = style.fontWeight ?? (style.bold ? 700 : 400);
   const letterSpacing = letterSpacingToPx(style.letterSpacing) * scaleX;
   const textOpacity = style.textOpacity ?? 1;
@@ -127,14 +77,13 @@ function TextOverlay({
     ? `${shadowX}px ${shadowY}px 0 ${style.textShadowColor || "black"}`
     : "none";
 
-  const overflowActive = hasOverflow && !style.autoFit;
   const outlineStyle = showOutline
-    ? overflowActive
+    ? hasOverflow
       ? "2px solid var(--rose)"
       : isFocused
         ? `2px solid ${focusedOutlineColor}`
         : `1px dashed ${outlineColor}`
-    : overflowActive
+    : hasOverflow
       ? "2px solid var(--rose)"
       : "none";
 
@@ -156,7 +105,7 @@ function TextOverlay({
         opacity: dimmed ? 0.55 : 1,
       }}
     >
-      {label && !displayText && (
+      {label && !displaySource && (
         <div
           style={{
             position: "absolute",
@@ -175,38 +124,7 @@ function TextOverlay({
         </div>
       )}
 
-      {displayText && (
-        <div
-          ref={measureRef}
-          data-overflow-measurer="true"
-          aria-hidden="true"
-          style={{
-            ...getTextLayoutCss(style),
-            position: "absolute",
-            left: 0,
-            top: 0,
-            width: `${measureWidth}px`,
-            maxWidth: `${measureWidth}px`,
-            maxHeight: `${measureHeight}px`,
-            padding: 0,
-            visibility: "hidden",
-            pointerEvents: "none",
-            color: "transparent",
-            fontSize: `${fontSize}px`,
-            fontFamily: `"${style.fontFamily || "Arial"}", sans-serif`,
-            fontWeight: baseWeight,
-            fontStyle: style.italic ? "italic" : "normal",
-            letterSpacing: `${letterSpacing}px`,
-            textAlign: align,
-            textShadow: "none",
-            WebkitTextStroke: "none",
-          }}
-        >
-          {displayText}
-        </div>
-      )}
-
-      {showOverflowWarning && overflowActive && (
+      {showOverflowWarning && hasOverflow && (
         <div
           style={{
             position: "absolute",
@@ -228,21 +146,20 @@ function TextOverlay({
         </div>
       )}
 
-      {bgOn && displayText && (
+      {bgOn && displaySource && (
         <div
           style={{
             position: "absolute",
             inset: 0,
             background: style.bgColor || "black",
             opacity: style.bgOpacity ?? 0.65,
-            // Match FFmpeg drawbox (axis-aligned rect) — radius only made preview
-            // look softer/different from export.
+            // FFmpeg drawbox is axis-aligned. Radius made preview diverge from export.
             borderRadius: 0,
           }}
         />
       )}
 
-      {displayText && (
+      {displaySource && layout && (
         <div
           style={{
             position: "relative",
@@ -251,29 +168,27 @@ function TextOverlay({
             display: "flex",
             flexDirection: "column",
             justifyContent: verticalAlignToFlex(style.verticalAlign || "top"),
-            // Single combined inset = safeMargin + boxPad (same as Python layout)
             padding: `${safeY + boxPadY}px ${safeX + boxPadX}px`,
             boxSizing: "border-box",
             overflow: "hidden",
           }}
         >
           <div
+            data-export-layout="true"
+            data-display-text={layout.displayText}
+            data-font-size={String(layout.fontSize)}
             style={{
-              ...getTextLayoutCss(style),
-              // FFmpeg drawtext line box ≈ glyph metrics; line-height half-leading
-              // in CSS shifted glyphs vs export. Keep line-height for multi-line
-              // spacing via the layout helper, but pin leading so top/center align
-              // matches drawtext y_align=text + text_h centering.
-              lineHeight: style.lineHeight ?? 1.2,
+              width: "100%",
+              maxWidth: "100%",
+              margin: 0,
               color: style.fontColor || "white",
               opacity: textOpacity,
-              fontSize: `${fontSize}px`,
+              fontSize: `${fontSizePx}px`,
               fontFamily: `"${style.fontFamily || "Arial"}", sans-serif`,
               fontWeight: baseWeight,
               fontStyle: style.italic ? "italic" : "normal",
               letterSpacing: `${letterSpacing}px`,
               textAlign: align,
-              padding: 0,
               textShadow,
               WebkitTextStroke:
                 style.borderWidth > 0
@@ -281,7 +196,19 @@ function TextOverlay({
                   : "none",
             }}
           >
-            {displayText}
+            {lines.map((line, index) => (
+              <div
+                key={index}
+                style={{
+                  height: `${lineBoxPx}px`,
+                  lineHeight: `${fontSizePx}px`,
+                  whiteSpace: "pre",
+                  overflow: "hidden",
+                }}
+              >
+                {line}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -289,5 +216,4 @@ function TextOverlay({
   );
 }
 
-// Memoize so stable props (screen/style/text from memoized parents) skip re-render.
 export default memo(TextOverlay);

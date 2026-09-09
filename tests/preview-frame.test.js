@@ -5,7 +5,7 @@ import os from "os";
 import path from "path";
 import readline from "readline";
 import useEditorStore from "../src/stores/useEditorStore.js";
-import { buildBatchTextOperationsForPreview } from "../src/utils/preview-frame-job.js";
+import { buildBatchTextOperationsForPreview } from "../src/utils/batch-text-ops.js";
 import { disposePreviewFrameWorker, renderPreviewFrame } from "../main/utils/preview-frame.js";
 import { createPathSecurity } from "../main/pathSecurity.js";
 import { sanitizeJobMedia } from "../main/utils/process-media-validation.js";
@@ -147,8 +147,6 @@ describe("preview frame job", () => {
       excelMapping: { idColumn: null, columns: {} },
     });
 
-    // CSS live preview falls back to the region label; FFmpeg must match so the
-    // ScanEye control is not a no-op empty frame when Excel is not linked yet.
     const cssText = useEditorStore.getState().getBatchPreviewText(0, "r1");
     expect(cssText).toBe("TEXT_1");
 
@@ -198,9 +196,7 @@ describe("preview media path parity with batch asset_roots", () => {
   afterEach(() => {
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   });
 
   it("rejects unauthorized overlay images outside trusted roots", () => {
@@ -254,11 +250,6 @@ print(json.dumps(processor.render_preview_frame({"input_path": "__missing__.mp4"
   });
 });
 
-// The two worker tests below need the Python preview worker to actually start,
-// which requires ffmpeg/ffprobe on PATH. preview_frame_worker_main() bails with
-// {type:"ready", ok:false, error:"ffmpeg not found"} otherwise, so we skip the
-// whole block when ffmpeg is missing. The CI workflow installs ffmpeg via
-// apt-get so these run there; developer machines without ffmpeg will skip.
 describeIfFfmpeg("preview frame worker (requires ffmpeg)", () => {
   it("keeps the preview worker alive across requests and malformed input", async () => {
     const proc = spawn(PY, [...PY_ARGS, PROCESSOR, "--preview-frame-worker"], {
@@ -299,6 +290,24 @@ describeIfFfmpeg("preview frame worker (requires ffmpeg)", () => {
       expect(first.error).toMatch(/missing_client_a/i);
       expect(second).toMatchObject({ ok: false });
       expect(second.error).toMatch(/missing_client_b/i);
+    } finally {
+      disposePreviewFrameWorker();
+    }
+  });
+
+  it("keeps only the newest preview waiting behind the active request", async () => {
+    try {
+      const [first, superseded, newest] = await Promise.all([
+        renderPreviewFrame({ input_path: "__missing_queue_a__.mp4" }),
+        renderPreviewFrame({ input_path: "__missing_queue_b__.mp4" }),
+        renderPreviewFrame({ input_path: "__missing_queue_c__.mp4" }),
+      ]);
+
+      expect(first).toMatchObject({ ok: false });
+      expect(superseded).toMatchObject({ ok: false, cancelled: true });
+      expect(superseded.error).toMatch(/sustituido/i);
+      expect(newest).toMatchObject({ ok: false });
+      expect(newest.error).toMatch(/missing_queue_c/i);
     } finally {
       disposePreviewFrameWorker();
     }

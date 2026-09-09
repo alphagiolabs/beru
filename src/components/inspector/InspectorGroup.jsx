@@ -1,20 +1,13 @@
 import { useEffect, useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-/**
- * Presentational inset group for the right inspector.
- * Optional collapse: auto-expands when `forceOpen` becomes true (active feature).
- * `headerAccessory` stays outside the inert collapse panel (e.g. master toggles).
- */
 export default function InspectorGroup({
   title,
   children,
   collapsible = false,
   defaultOpen = true,
   forceOpen = false,
-  /** When true, collapses automatically if forceOpen becomes false (toggle sections). */
   collapseWhenOff = false,
-  /** Hide the expand chevron (useful when a switch already drives open state). */
   hideChevron = false,
   headerAccessory = null,
   className = "",

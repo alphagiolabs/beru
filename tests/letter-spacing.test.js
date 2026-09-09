@@ -3,8 +3,9 @@ import {
   letterSpacingToPx,
   LETTER_SPACING_MAX,
   LETTER_SPACING_MIN,
-} from "../src/utils/letter-spacing.js";
-import { normalizeTextStyle, textStyleToPythonPayload } from "../src/utils/text-style.js";
+  normalizeTextStyle,
+  textStyleToPythonPayload,
+} from "../src/utils/text-style.js";
 
 describe("letterSpacingToPx", () => {
   describe("valid inputs", () => {

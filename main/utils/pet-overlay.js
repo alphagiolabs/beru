@@ -10,10 +10,6 @@ const BUILD_OVERLAY = path.join(__dirname, "..", "..", "build", "pet-overlay.htm
 let overlayWindow = null;
 let lastSyncPayload = null;
 
-export function getPetOverlayWindow() {
-  return overlayWindow;
-}
-
 export function getLastPetOverlayPayload() {
   return lastSyncPayload;
 }
@@ -105,10 +101,6 @@ export function closePetOverlayWindow() {
 
 export function isPetOverlayOpen() {
   return Boolean(overlayWindow && !overlayWindow.isDestroyed());
-}
-
-export function reportOverlayPosition(position) {
-  notifyMainWindow("position", { position });
 }
 
 export function reportOverlayPopIn() {

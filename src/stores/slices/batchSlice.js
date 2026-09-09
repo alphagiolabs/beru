@@ -1,4 +1,5 @@
-import { createOperation, uid } from "../../utils/types";
+import { uid } from "../../utils/types";
+import { createOperation } from "../../utils/operation";
 import {
   stripExt,
   rowGet,
@@ -16,9 +17,9 @@ import {
   findTextOpForRegion,
   textOpMatchesRegion,
 } from "../../utils/text-style";
+import { applyBatchTextOperations } from "../../utils/batch-text-ops";
 
-/** True when template-driven text ops match for incremental reapply (plan 020). */
-function excelTextOpsEqual(prevOps, nextOps, templateRegions) {
+function excelTextOpsEqual(prevOps, nextOps) {
   const prev = Array.isArray(prevOps) ? prevOps : [];
   const next = Array.isArray(nextOps) ? nextOps : [];
   if (prev.length !== next.length) return false;
@@ -29,20 +30,15 @@ function excelTextOpsEqual(prevOps, nextOps, templateRegions) {
     if (a.mode === "text") {
       if (a.text !== b.text) return false;
       if ((a.batchRegionId ?? null) !== (b.batchRegionId ?? null)) return false;
-      // Style fields that Excel reapply may rewrite
       if (a.fontSize !== b.fontSize || a.fontColor !== b.fontColor) return false;
       if (a.fontFamily !== b.fontFamily || a.fontWeight !== b.fontWeight) return false;
     } else if (a !== b && a.id !== b.id) {
-      // Non-text ops should be preserved by reference; compare ids if present.
       return false;
     }
   }
-  // Template region count must align with text ops from reapply
-  void templateRegions;
   return true;
 }
 
-/** Template regions, Excel import/mapping, and batch table editor state. */
 export function createBatchSlice(set, get) {
   return {
     templateIdx: -1,
@@ -81,8 +77,6 @@ export function createBatchSlice(set, get) {
       const tr = templateRegions.find((r) => r.id === regionId);
       if (!tr) return "Texto de ejemplo";
 
-      // If a linked text op exists, honor it even when intentionally empty —
-      // do not resurrect the region label over a cleared cell.
       if (videoIdx >= 0 && videoIdx < queue.length) {
         const { op } = findTextOpForRegion(queue[videoIdx].operations, tr.region, tr.id);
         if (op) return op.text != null ? String(op.text) : "";
@@ -234,10 +228,6 @@ export function createBatchSlice(set, get) {
       set({ queue: updated });
     },
 
-    /**
-     * Export current in-memory excelHeaders/excelRows to a user-chosen .xlsx.
-     * Does not overwrite the source path unless the user picks it in the dialog.
-     */
     exportExcel: async () => {
       try {
         const api = window.api;
@@ -267,7 +257,6 @@ export function createBatchSlice(set, get) {
           for (const h of headers) {
             out[h] = row?.[h] ?? "";
           }
-          // Include any extra keys present on the row
           for (const k of Object.keys(row || {})) {
             if (!(k in out)) out[k] = row[k];
           }
@@ -301,8 +290,7 @@ export function createBatchSlice(set, get) {
           return { success: false, error: "Empty Excel file data" };
         }
 
-        // Dynamic import keeps xlsx out of the main bundle — it's only needed
-        // when the user actually imports an Excel file.
+        // Dynamic import keeps xlsx out of the main bundle.
         const XLSX = await import("xlsx");
         const wb = XLSX.read(base64Data, { type: "base64" });
         const sheetName = wb.SheetNames && wb.SheetNames[0];
@@ -393,7 +381,6 @@ export function createBatchSlice(set, get) {
       if (!idColumn || videoIdx < 0 || videoIdx >= queue.length) return -1;
       const id = normalizeMatchId(queue[videoIdx].filename);
       if (id in excelRowIndexByFilename) return excelRowIndexByFilename[id];
-      // Fallback: linear scan if map stale or missing
       const { excelRows } = get();
       return excelRows.findIndex((row) => {
         const v = rowGet(row, idColumn);
@@ -460,8 +447,6 @@ export function createBatchSlice(set, get) {
       if (!tr) return "";
       const item = queue[videoIdx];
       const { op } = findTextOpForRegion(item.operations, tr.region, tr.id);
-      // Prefer the op once it exists — including intentional empty string — so
-      // cleared cells do not resurrect Excel values on materialize/preview.
       if (op) return op.text != null ? String(op.text) : "";
       const rowIdx = get().getExcelRowIndexForVideo(videoIdx);
       const colName = excelMapping.columns?.[regionId];
@@ -553,12 +538,11 @@ export function createBatchSlice(set, get) {
         const ops = [...preservedOps, ...newTextOps];
         status[i] = "matched";
         matched++;
-        // Skip allocating a new item when already idle with identical text ops.
         if (
           item.status === "idle" &&
           item.progress === 0 &&
           !item.error &&
-          excelTextOpsEqual(item.operations, ops, templateRegions)
+          excelTextOpsEqual(item.operations, ops)
         ) {
           return item;
         }
@@ -609,14 +593,6 @@ export function createBatchSlice(set, get) {
       get()._reapplyExcel();
     },
 
-    getMatchReport: () => {
-      const { excelMatchStatus, queue } = get();
-      const matched = Object.values(excelMatchStatus).filter((s) => s === "matched").length;
-      const unmatched = Object.values(excelMatchStatus).filter((s) => s === "unmatched").length;
-      const duplicate = Object.values(excelMatchStatus).filter((s) => s === "duplicate").length;
-      return { matched, unmatched, duplicate, total: queue.length };
-    },
-
     setShowTableEditor: (val) => {
       if (!val && get().showTableEditor) {
         get().materializeBatchTextOps();
@@ -625,52 +601,21 @@ export function createBatchSlice(set, get) {
       set({ showTableEditor: val });
     },
 
-    /**
-     * Ensure each template column has a queue text op with the same value shown
-     * in the table editor (including Excel-only cells). Removes empty text ops.
-     */
     materializeBatchTextOps: () => {
       const { queue, templateRegions } = get();
       if (!templateRegions.length || !queue.length) return;
 
       const globalStyle = getGlobalTextStyleFromState(get());
-      const updated = queue.map((item, videoIdx) => {
-        let ops = item.operations.map((op) => ({
-          ...op,
-          region: op.region ? { ...op.region } : null,
-        }));
-
-        for (const tr of templateRegions) {
-          const text = String(get().getCellTextForRegion(videoIdx, tr.id) ?? "").trim();
-          const { op, opIdx } = findTextOpForRegion(ops, tr.region, tr.id);
-
-          if (text) {
-            const baseStyle = mergeTextStyles(globalStyle, tr.style, op || {});
-            if (opIdx >= 0) {
-              ops[opIdx] = {
-                ...ops[opIdx],
-                batchRegionId: tr.id,
-                text,
-                ...pickTextStyle(baseStyle),
-              };
-            } else {
-              ops.push(
-                createOperation({
-                  mode: "text",
-                  batchRegionId: tr.id,
-                  region: { ...tr.region },
-                  text,
-                  ...pickTextStyle(baseStyle),
-                }),
-              );
-            }
-          } else if (opIdx >= 0) {
-            ops = ops.filter((_, i) => i !== opIdx);
-          }
-        }
-
-        return { ...item, operations: ops };
-      });
+      const updated = queue.map((item, videoIdx) => ({
+        ...item,
+        operations: applyBatchTextOperations(
+          item,
+          templateRegions,
+          globalStyle,
+          (idx, regionId) => get().getCellTextForRegion(idx, regionId),
+          videoIdx,
+        ),
+      }));
 
       set({ queue: updated });
     },

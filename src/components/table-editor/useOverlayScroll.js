@@ -1,11 +1,5 @@
 import { useCallback, useRef } from "react";
 
-/**
- * macOS-like overlay scrollbars: add `.is-scrolling` while the user scrolls,
- * so the thumb can fade in only during interaction (see CSS).
- *
- * Returns a callback ref — use as `ref={bindScroll}`.
- */
 export default function useOverlayScroll() {
   const nodeRef = useRef(null);
   const timerRef = useRef(null);

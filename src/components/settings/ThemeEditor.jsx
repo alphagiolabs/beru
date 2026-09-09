@@ -6,6 +6,7 @@ import { applyThemeTokens, validateThemeTokens } from "../../theme/engine.js";
 import { TOKEN_LABEL_KEYS } from "../../theme/tokens.js";
 import { getPresetById } from "../../theme/presets.js";
 import ThemePreviewCard from "./ThemePreviewCard.jsx";
+import { Button } from "../ui/Button";
 
 const TOKEN_GROUPS = [
   {
@@ -168,22 +169,36 @@ export default function ThemeEditor({
             <p className="theme-editor-sub">{t("settings.appearance.editor.subtitle")}</p>
           </div>
           <div className="theme-editor-header-actions">
-            <button type="button" className="theme-editor-link-btn" onClick={handleReset}>
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              className="theme-editor-link-btn"
+              onClick={handleReset}
+            >
               <RotateCcw size={12} />
               {t("settings.appearance.editor.reset")}
-            </button>
-            <button type="button" className="theme-editor-link-btn" onClick={onCancel}>
+            </Button>
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              className="theme-editor-link-btn"
+              onClick={onCancel}
+            >
               <X size={12} />
               {t("common.cancel")}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
-              className="cap-btn-primary theme-editor-save"
+              variant="primary"
+              size="sm"
+              className="theme-editor-save"
               onClick={handleSave}
             >
               <Save size={12} />
               {t("settings.appearance.editor.save")}
-            </button>
+            </Button>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import { execFileSync } from "child_process";
+import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -9,13 +9,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const _exe = process.platform === "win32" ? ".exe" : "";
 const PROCESSOR_NAME = `beru-processor${_exe}`;
 
-// --- Spawn resolution cache (opt-in) ----------------------------------------
-// resolveProcessorSpawn() re-probes Python via execFileSync(..., "--version")
-// on every call, and getBundledProcessorPath() does fs.existsSync checks each
-// time. Both results are stable for the process lifetime, so memoize them.
-// Enable with BERU_PROCESSOR_SPAWN_CACHE=1. Default off = current behavior.
 let systemPythonCache = { resolved: false, value: null };
 let bundledProcessorCache = { resolved: false, value: null };
+let systemPythonPromise = null;
 
 function processorSpawnCacheEnabled() {
   return process.env.BERU_PROCESSOR_SPAWN_CACHE === "1";
@@ -32,39 +28,63 @@ const UNIX_CANDIDATES = [
   { command: "python", args: [] },
 ];
 
-function probePythonCandidate(candidate) {
-  execFileSync(candidate.command, [...candidate.args, "--version"], {
-    windowsHide: true,
-    timeout: 5000,
-    stdio: "pipe",
-  });
-  return candidate;
+function getPythonCandidates() {
+  return process.platform === "win32" ? WINDOWS_CANDIDATES : UNIX_CANDIDATES;
 }
 
-function resolveSystemPythonSpawn() {
-  if (processorSpawnCacheEnabled() && systemPythonCache.resolved) {
-    return systemPythonCache.value;
-  }
-  let value;
-  if (process.env.BERU_PYTHON && fs.existsSync(process.env.BERU_PYTHON)) {
-    value = { command: process.env.BERU_PYTHON, args: [] };
-  } else {
-    const candidates = process.platform === "win32" ? WINDOWS_CANDIDATES : UNIX_CANDIDATES;
-    value = null;
-    for (const candidate of candidates) {
+function getConfiguredPython() {
+  const command = process.env.BERU_PYTHON;
+  return command && fs.existsSync(command) ? { command, args: [] } : null;
+}
+
+function probePythonCandidateAsync(candidate) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(candidate.command, [...candidate.args, "--version"], {
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    let settled = false;
+    let timeout;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve(candidate);
+    };
+    proc.once("error", finish);
+    proc.once("close", (code) =>
+      finish(code === 0 ? null : new Error(`${candidate.command} exited with code ${code}`)),
+    );
+    timeout = setTimeout(() => {
       try {
-        value = probePythonCandidate(candidate);
-        break;
-      } catch {
-        // Not available — try next candidate.
+        proc.kill();
+      } catch {}
+      finish(new Error(`${candidate.command} probe timed out`));
+    }, 5000);
+  });
+}
+
+async function resolveSystemPythonSpawnAsync() {
+  if (systemPythonCache.resolved) return systemPythonCache.value;
+  if (systemPythonPromise) return systemPythonPromise;
+  systemPythonPromise = (async () => {
+    let value = getConfiguredPython();
+    if (!value) {
+      for (const candidate of getPythonCandidates()) {
+        try {
+          value = await probePythonCandidateAsync(candidate);
+          break;
+        } catch {}
       }
     }
-  }
-  if (processorSpawnCacheEnabled()) systemPythonCache = { resolved: true, value };
-  return value;
+    systemPythonCache = { resolved: true, value };
+    systemPythonPromise = null;
+    return value;
+  })();
+  return systemPythonPromise;
 }
 
-/** Absolute path to the PyInstaller-built processor binary, if present. */
 export function getBundledProcessorPath() {
   if (processorSpawnCacheEnabled() && bundledProcessorCache.resolved) {
     return bundledProcessorCache.value;
@@ -81,69 +101,54 @@ export function getBundledProcessorPath() {
   return value;
 }
 
-/**
- * Build spawn args for processor.py or beru-processor.exe.
- * @param {string[]} userArgs e.g. [tmpFile] or ["--preview-frame-worker"]
- * @returns {{ command: string, args: string[], mode: "bundled" | "script" } | null}
- */
-export function resolveProcessorSpawn(userArgs = []) {
-  const bundled = getBundledProcessorPath();
-
-  // Packaged installs ship only the PyInstaller binary under resources/bin.
-  // Never fall back to loose processor.py (those scripts are not packaged).
+function buildProcessorSpawn(bundled, python, userArgs) {
   if (!isDev) {
-    if (!bundled) return null;
+    return bundled ? { command: bundled, args: userArgs, mode: "bundled" } : null;
+  }
+  if (bundled && (process.env.BERU_USE_BUNDLED === "1" || !python)) {
     return { command: bundled, args: userArgs, mode: "bundled" };
   }
-
-  const preferBundled =
-    bundled && (process.env.BERU_USE_BUNDLED === "1" || !resolveSystemPythonSpawn());
-
-  if (preferBundled) {
-    return { command: bundled, args: userArgs, mode: "bundled" };
-  }
-
-  const py = resolveSystemPythonSpawn();
-  if (!py) return null;
+  if (!python) return null;
 
   const scriptPath = getPythonPath();
   if (!fs.existsSync(scriptPath)) return null;
-
   return {
-    command: py.command,
-    args: [...py.args, scriptPath, ...userArgs],
+    command: python.command,
+    args: [...python.args, scriptPath, ...userArgs],
     mode: "script",
   };
 }
 
-/**
- * @returns {{ ok: true, command: string, args: string[], mode: "bundled" | "script" } | { ok: false, error: string }}
- */
-export function validateProcessorAvailable() {
-  if (!isDev) {
-    const bundled = getBundledProcessorPath();
-    if (!bundled) {
-      return {
-        ok: false,
-        error:
-          "No se encontró el motor de procesamiento incluido en la instalación. " +
-          "Reinstale Beru desde el instalador oficial.",
-      };
-    }
-    return { ok: true, command: bundled, args: [], mode: "bundled" };
-  }
+export async function resolveProcessorSpawnAsync(userArgs = []) {
+  const bundled = getBundledProcessorPath();
+  const python =
+    isDev && !(bundled && process.env.BERU_USE_BUNDLED === "1")
+      ? await resolveSystemPythonSpawnAsync()
+      : null;
+  return buildProcessorSpawn(bundled, python, userArgs);
+}
 
-  const resolved = resolveProcessorSpawn([]);
-  if (!resolved) {
+function processorAvailability(resolved) {
+  if (resolved) return { ok: true, ...resolved };
+  if (!isDev) {
     return {
       ok: false,
       error:
-        "Python 3 no está instalado o no se encontró processor.py. " +
-        "Instálelo desde https://www.python.org/downloads/ (marque 'Add to PATH') " +
-        "o ejecute «npm run build:processor» para generar el binario incluido.",
+        "No se encontró el motor de procesamiento incluido en la instalación. " +
+        "Reinstale Beru desde el instalador oficial.",
     };
   }
-  return { ok: true, ...resolved };
+  return {
+    ok: false,
+    error:
+      "Python 3 no está instalado o no se encontró processor.py. " +
+      "Instálelo desde https://www.python.org/downloads/ (marque 'Add to PATH') " +
+      "o ejecute «npm run build:processor» para generar el binario incluido.",
+  };
+}
+
+export async function validateProcessorAvailableAsync() {
+  return processorAvailability(await resolveProcessorSpawnAsync([]));
 }
 
 function getEncodeProfilesPath() {

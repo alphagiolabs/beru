@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { AlertTriangle } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
+import { Button } from "./ui/Button";
 
 export default function ConfirmDialog() {
   const t = useT();
@@ -63,21 +64,25 @@ export default function ConfirmDialog() {
         </p>
 
         <div className="cap-modal-footer">
-          <button
+          <Button
             type="button"
             onClick={() => resolveConfirm(false)}
-            className="cap-btn-secondary !text-[12px] !px-4 !py-2"
+            variant="secondary"
+            size="md"
+            className="!text-[12px] !px-4 !py-2"
           >
             {cancelLabel || t("common.cancel")}
-          </button>
-          <button
+          </Button>
+          <Button
             ref={confirmBtnRef}
             type="button"
             onClick={() => resolveConfirm(true)}
-            className={`!text-[12px] !px-4 !py-2 ${isDanger ? "cap-btn-danger" : "cap-btn-primary"}`}
+            variant={isDanger ? "danger" : "primary"}
+            size="md"
+            className="!text-[12px] !px-4 !py-2"
           >
             {confirmLabel || t("common.continue")}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

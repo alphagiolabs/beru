@@ -15,7 +15,6 @@ def test_fractional_normalized_region():
 
 
 def test_one_by_one_pixel_is_not_full_frame():
-    # Electron denormalizes; a 1×1 box must stay 1×1, not expand to full frame.
     r = _region_to_pixels({"x": 0, "y": 0, "w": 1, "h": 1}, 1920, 1080)
     assert r == {"x": 0, "y": 0, "w": 1, "h": 1}
 

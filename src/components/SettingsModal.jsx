@@ -4,6 +4,7 @@ import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import UserManagementPanel from "./settings/UserManagementPanel";
 import AppearancePanel from "./settings/AppearancePanel";
+import { Button } from "./ui/Button";
 
 const PetdexPanel = lazy(() => import("../features/pets/settings/PetdexPanel.jsx"));
 
@@ -33,11 +34,12 @@ export default function SettingsModal() {
   const close = () => setShowSettings(false);
 
   return (
-    <div className="cap-modal-overlay" onClick={close}>
+    <div className="cap-modal-overlay settings-modal-overlay" onClick={close}>
       <div
         className="cap-modal-panel settings-modal"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-labelledby="settings-modal-title"
       >
         <div className="settings-modal-header">
@@ -50,15 +52,17 @@ export default function SettingsModal() {
               <p className="settings-modal-header-sub">{subtitle}</p>
             </div>
           </div>
-          <button
+          <Button
             type="button"
             className="settings-modal-close"
             onClick={close}
             title={t("common.close")}
             aria-label={t("common.close")}
+            variant="tertiary"
+            size="icon"
           >
             <X size={15} />
-          </button>
+          </Button>
         </div>
 
         <div className="settings-modal-body">
@@ -79,32 +83,38 @@ export default function SettingsModal() {
             )}
 
             <nav className="settings-modal-nav" aria-label={t("settings.title")}>
-              <button
+              <Button
                 type="button"
+                variant="tertiary"
+                size="sm"
                 className={`settings-modal-nav-item ${settingsTab === "appearance" ? "settings-modal-nav-item--active" : ""}`}
                 onClick={() => setSettingsTab("appearance")}
               >
                 <Palette size={14} />
                 {t("settings.nav.appearance")}
-              </button>
+              </Button>
               {isAdmin && (
-                <button
+                <Button
                   type="button"
+                  variant="tertiary"
+                  size="sm"
                   className={`settings-modal-nav-item ${settingsTab === "users" ? "settings-modal-nav-item--active" : ""}`}
                   onClick={() => setSettingsTab("users")}
                 >
                   <Users size={14} />
                   {t("settings.nav.users")}
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 type="button"
+                variant="tertiary"
+                size="sm"
                 className={`settings-modal-nav-item ${settingsTab === "pets" ? "settings-modal-nav-item--active" : ""}`}
                 onClick={() => setSettingsTab("pets")}
               >
                 <PawPrint size={14} />
                 {t("settings.nav.pets")}
-              </button>
+              </Button>
             </nav>
           </aside>
 

@@ -2,7 +2,8 @@ import { BrowserWindow, dialog } from "electron";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { setMainWindow, isDev, hasActiveProcessing } from "../shared-state.js";
+import { setMainWindow, isDev } from "../shared-state.js";
+import { hasActiveProcessing } from "../processing-run.js";
 import { cancelActiveProcessing } from "../handlers/process.js";
 import { readSettings } from "./settings.js";
 import { applyWindowTheme, resolveWindowTheme, TITLEBAR_OVERLAY_COLOR } from "./windowTheme.js";
@@ -23,9 +24,7 @@ function loadProductionBuild(win) {
 }
 
 export function createWindow() {
-  // Read settings once; the theme is applied to the constructor background and
-  // re-applied after did-finish-load (setTitleBarOverlay can fail before the
-  // window is fully ready). No need for a mid-creation apply.
+  // setTitleBarOverlay can fail before the window is ready. Apply again after load.
   const theme = readSettings().theme;
   const initialTheme = resolveWindowTheme(theme);
   const useOverlay = process.platform === "win32" || process.platform === "darwin";
@@ -93,10 +92,8 @@ export function createWindow() {
       });
   });
 
-  // Electron restores the DevTools open state from userData preferences, which
-  // makes them auto-open (often as a separate window) on `npm run dev`. The
-  // restore fires after load, so close any DevTools that open during a short
-  // startup window. Manual opens (F12/Ctrl+Shift+I) after that still work.
+  // Electron restores DevTools from userData on `npm run dev`. Close restores
+  // during startup; F12 after that still works.
   if (isDev) {
     const startupOpenedAt = Date.now();
     win.webContents.on("devtools-opened", () => {

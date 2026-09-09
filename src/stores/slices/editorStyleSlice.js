@@ -1,6 +1,9 @@
-import { GLOBAL_TEXT_STYLE_DEFAULTS, patchToGlobalState } from "../../utils/text-style";
+import {
+  GLOBAL_TEXT_STYLE_DEFAULTS,
+  patchToGlobalState,
+  pickTextStyle,
+} from "../../utils/text-style";
 
-/** Active tool, sidebar mode, text/blur/delogo defaults, and style setters. */
 export function createEditorStyleSlice(set, get) {
   return {
     activeTool: "blur",
@@ -8,7 +11,7 @@ export function createEditorStyleSlice(set, get) {
 
     ...GLOBAL_TEXT_STYLE_DEFAULTS,
     blurStrength: 20,
-    delogoMethod: "temporal",
+    delogoMethod: "blur",
     delogoFillColor: "black",
     delogoFillOpacity: 1,
     delogoImagePath: "",
@@ -28,33 +31,7 @@ export function createEditorStyleSlice(set, get) {
     outputDir: null,
 
     loadPreset: (preset) => {
-      const stylePatch = {
-        fontFamily: preset.fontFamily,
-        fontSize: preset.fontSize,
-        fontColor: preset.fontColor,
-        fontWeight: preset.fontWeight,
-        letterSpacing: preset.letterSpacing,
-        textAlign: preset.textAlign,
-        textOpacity: preset.textOpacity,
-        bold: preset.bold,
-        italic: preset.italic,
-        bgEnabled: preset.bgEnabled,
-        bgColor: preset.bgColor,
-        bgOpacity: preset.bgOpacity,
-        boxBorderWidth: preset.boxBorderWidth,
-        borderWidth: preset.borderWidth,
-        borderColor: preset.borderColor,
-        textShadowEnabled: preset.textShadowEnabled,
-        textShadowColor: preset.textShadowColor,
-        textShadowOffsetX: preset.textShadowOffsetX,
-        textShadowOffsetY: preset.textShadowOffsetY,
-        autoFit: preset.autoFit,
-        lineHeight: preset.lineHeight,
-        verticalAlign: preset.verticalAlign,
-        textWrap: preset.textWrap,
-        safeMargin: preset.safeMargin,
-        truncate: preset.truncate,
-      };
+      const stylePatch = pickTextStyle(preset);
       if (get().sidebarMode === "batch") {
         get().patchBatchTextStyle(stylePatch);
       } else {

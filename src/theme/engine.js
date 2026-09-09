@@ -103,7 +103,6 @@ export function applyThemeTokens(tokens, activeSlot) {
     root.setAttribute("data-theme-slot", String(activeSlot));
   }
 
-  // Legacy hint for any remaining CSS selectors
   const isLightish = parseLuminance(tokens.bgApp) > 0.45 || parseLuminance(tokens.bgSurface) > 0.5;
   if (isLightish) {
     root.setAttribute("data-theme", "light");
@@ -199,10 +198,6 @@ function normalizeTokens(tokens) {
   return out;
 }
 
-/**
- * @param {string} name
- * @param {string} [basePresetId]
- */
 export function createCustomTheme(name, basePresetId = DEFAULT_SLOT2_PRESET) {
   const base = getPresetById(basePresetId) || getPresetById(DEFAULT_SLOT2_PRESET);
   const now = new Date().toISOString();

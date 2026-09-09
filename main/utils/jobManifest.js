@@ -1,5 +1,4 @@
-const JOB_MANIFEST_TYPE = "beru-job-manifest";
-const JOB_MANIFEST_VERSION = 1;
+import { JOB_MANIFEST_TYPE, JOB_MANIFEST_VERSION } from "../../shared/job-manifest.js";
 
 export function unwrapJobManifest(payload) {
   if (Array.isArray(payload)) {
@@ -30,12 +29,17 @@ export function unwrapJobManifest(payload) {
 }
 
 export function createProcessorManifest(manifest, jobs) {
+  const safeJobs = (Array.isArray(jobs) ? jobs : []).map((job, index) => {
+    if (!job || typeof job !== "object") return job;
+    // Per-job events (complete/progress/error) and the cancel output snapshot
+    // key by integer positions; a non-integer id would be surfaced as a global
+    // error and completed outputs would not be marked for cancel cleanup.
+    return Number.isInteger(job.id) ? job : { ...job, id: index };
+  });
   return {
     type: JOB_MANIFEST_TYPE,
     version: JOB_MANIFEST_VERSION,
     createdAt: manifest?.createdAt || new Date().toISOString(),
-    // Encode profile is resolved per-job by the Python processor; no
-    // manifest-level profile is emitted (Python never reads it).
-    jobs,
+    jobs: safeJobs,
   };
 }

@@ -4,16 +4,6 @@ import { findTextOpForRegion } from "../../utils/text-style";
 import { useT } from "../../i18n/useT";
 import useOverlayScroll from "./useOverlayScroll";
 
-/**
- * Precompute the per-row, per-region cell text and derived flags once per
- * relevant state change, instead of calling `get().getCellTextForRegion` /
- * `findTextOpForRegion` / `get().getExcelDisplayId` per cell per render.
- *
- * Returns:
- *  - displayIds: string[]                     (one per queue row)
- *  - cellText:   string[][]                   (row -> region col text)
- *  - hasOpText:  boolean[][]                  (row -> region col has op.text)
- */
 function usePrecomputedCells(
   queue,
   templateRegions,
@@ -44,10 +34,6 @@ function usePrecomputedCells(
       hasOpText[r] = opFlags;
     }
     return { displayIds, cellText, hasOpText };
-    // excelRows / excelRowIndexByFilename drive getCellTextForRegion output;
-    // queue/templateRegions/excelMapping drive both. `excelMapping` is an object
-    // compared by ref (the store replaces it on change).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, templateRegions, excelMapping, excelRows, excelRowIndexByFilename]);
 }
 
@@ -114,7 +100,6 @@ const TableRow = memo(
               style={
                 isCellFocused
                   ? {
-                      // Keep "2px solid" for keyboard navigation tests
                       borderLeft: "2px solid var(--purple)",
                       background: "rgba(168,85,247,0.08)",
                     }
@@ -199,9 +184,6 @@ export default function TableEditorGrid({
 }) {
   const t = useT();
   const bindScroll = useOverlayScroll();
-  // Subscribe to the Excel state that drives getCellTextForRegion / getExcelDisplayId
-  // so the precompute memo invalidates when they change (the previous code read
-  // these via getState() per cell per render and never re-rendered on change).
   const excelRows = useEditorStore((s) => s.excelRows);
   const excelRowIndexByFilename = useEditorStore((s) => s.excelRowIndexByFilename);
 
@@ -255,7 +237,6 @@ export default function TableEditorGrid({
                     style={
                       colFocused
                         ? {
-                            // Keep "2px solid" for keyboard navigation tests
                             borderLeft: "2px solid var(--purple)",
                           }
                         : undefined

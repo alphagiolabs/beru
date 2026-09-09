@@ -59,9 +59,7 @@ describe("pathSecurity", () => {
   afterEach(() => {
     try {
       fs.rmSync(path.dirname(tmpFile), { recursive: true, force: true });
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   });
 
   it("allows explicitly registered excel paths", () => {

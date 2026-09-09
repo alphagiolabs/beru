@@ -1,10 +1,10 @@
-import { ipcMain, dialog } from "electron";
+import { ipcMain, dialog, app } from "electron";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import os from "os";
 import { randomBytes } from "crypto";
-import { app } from "electron";
+import { getAppIsQuitting } from "../shared-state.js";
 import {
   getPythonProcess,
   setPythonProcess,
@@ -19,12 +19,14 @@ import {
   setProbePhaseActive,
   getLastProcessingError,
   setLastProcessingError,
-  getAppIsQuitting,
-} from "../shared-state.js";
+  snapshotRunOutputsForCancel,
+  markJobOutputComplete,
+  clearRunOutputSnapshot,
+  cleanupIncompleteOutputsAfterCancel,
+} from "../processing-run.js";
 import { validateMediaBinaries } from "../utils/paths.js";
 import {
-  validateProcessorAvailable,
-  resolveProcessorSpawn,
+  validateProcessorAvailableAsync,
   buildProcessorChildEnv,
 } from "../utils/processor-spawn.js";
 import { killProcessTree } from "../utils/kill-process-tree.js";
@@ -33,61 +35,24 @@ import { readSettings } from "../utils/settings.js";
 import { sendToRenderer } from "../utils/renderer.js";
 import { runWithConcurrency } from "../utils/concurrency.js";
 import { createProcessorManifest, unwrapJobManifest } from "../utils/jobManifest.js";
-import { removeIncompleteOutput } from "../utils/process-output.js";
 import {
-  findUnreadableInputs,
+  findUnreadableInputsAsync,
   translateProcessorErrorMessage,
 } from "../utils/process-input-validation.js";
-import { prepareJobsForProcessor } from "../utils/process-media-validation.js";
+import { sanitizeJobMedia } from "../utils/process-media-validation.js";
 
 const MAX_PROCESSOR_STDERR_CHARS = 48_000;
 const MAX_PROCESSOR_STDOUT_LINE_CHARS = 256_000;
-/** Cap grace before force-kill so Python can honor .cancel and clean partials. */
 const CANCEL_KILL_GRACE_MS = 1500;
 
-/**
- * Snapshot of active-run output paths (+ inputs) for cancel cleanup.
- * Populated at spawn so cleanup works even if the tmp JSON is already gone.
- * Keep-set is only type:"complete" indices (not cancelled).
- */
-let activeRunOutputSnapshot = null;
-
-function snapshotRunOutputsForCancel(jobs, outputRoot) {
-  activeRunOutputSnapshot = {
-    outputRoot,
-    jobs: (jobs || []).map((job, index) => ({
-      index,
-      outputPath: job?.output_path,
-      inputPath: job?.input_path,
-    })),
-    completedIndices: new Set(),
-  };
-}
-
-function markJobOutputComplete(index) {
-  if (!activeRunOutputSnapshot) return;
-  if (!Number.isInteger(index) || index < 0) return;
-  activeRunOutputSnapshot.completedIndices.add(index);
-}
-
-function clearRunOutputSnapshot() {
-  activeRunOutputSnapshot = null;
-}
-
-function cleanupIncompleteOutputsAfterCancel() {
-  const snap = activeRunOutputSnapshot;
-  if (!snap) return;
+function unlinkTmpArtifacts(tmpFile) {
+  if (!tmpFile) return;
   try {
-    for (const job of snap.jobs) {
-      if (snap.completedIndices.has(job.index)) continue;
-      removeIncompleteOutput(job.outputPath, {
-        outputRoot: snap.outputRoot,
-        inputPath: job.inputPath,
-      });
-    }
-  } finally {
-    clearRunOutputSnapshot();
-  }
+    fs.unlinkSync(tmpFile);
+  } catch {}
+  try {
+    fs.unlinkSync(tmpFile.replace(".json", ".cancel"));
+  } catch {}
 }
 
 function appendBoundedText(current, chunk, maxChars) {
@@ -111,7 +76,6 @@ function dispatchProcessorLine(line) {
       const errText = msg.error || "Unknown error";
       const idx = msg.index;
       if (Number.isInteger(idx) && idx >= 0) {
-        // Legacy processor: cancel was emitted as type error + "Cancelled".
         if (errText === "Cancelled") {
           sendToRenderer("process:jobCancelled", { type: "cancelled", index: idx });
         } else {
@@ -188,8 +152,6 @@ function applyProbeInfoToJob(job, info) {
   };
 }
 
-// Normalize a job's width/height fields (used both when export metadata is
-// already present and as a fallback after a failed probe).
 function normalizeJobDimensions(job) {
   const sw = Number(job.source_width || job.width || 0);
   const sh = Number(job.source_height || job.height || 0);
@@ -232,8 +194,6 @@ export async function cancelActiveProcessing() {
   const proc = getPythonProcess();
   const currentTmp = getCurrentTmpFile();
 
-  // Idle: do not emit process:finished — a spurious cancelled event can abort a
-  // newly started run in the renderer (abortActiveProcessing).
   if (!runId && !proc?.pid) {
     return { success: true, idle: true };
   }
@@ -248,15 +208,12 @@ export async function cancelActiveProcessing() {
   }
 
   if (proc?.pid) {
-    // Give Python a short window to see .cancel and run _cleanup_ffmpeg_partial
-    // before we force-kill (which races and can leave truncated .mp4s).
     const exitedDuringGrace = await waitForProcessClose(proc, CANCEL_KILL_GRACE_MS);
     if (!exitedDuringGrace) {
       const deathPromise = waitForProcessClose(proc);
       await killProcessTree(proc);
       const closed = await deathPromise;
       if (!closed) {
-        // Escalate: non-Windows SIGKILL; Windows fallback if taskkill failed.
         try {
           if (process.platform === "win32") proc.kill();
           else proc.kill("SIGKILL");
@@ -266,26 +223,15 @@ export async function cancelActiveProcessing() {
         await waitForProcessClose(proc, 3000);
       }
     }
-    // When a child was alive, onClose owns the single cancelled finished emit
-    // (if this run is still cancelling). Do not emit a second finished here.
   }
 
-  // Always attempt incomplete-output cleanup after cancel settles (grace exit
-  // or force-kill). Keep completed outputs; never touch inputs.
   cleanupIncompleteOutputsAfterCancel();
 
-  // Probe-only cancel (no child) or onClose did not settle this runId:
-  // clear the lock and emit exactly one cancelled finished.
   if (runId && getProcessingRunId() === runId) {
     setPythonProcess(null);
     clearProcessingRun(runId);
     if (currentTmp) {
-      try {
-        fs.unlinkSync(currentTmp);
-      } catch {}
-      try {
-        fs.unlinkSync(currentTmp.replace(".json", ".cancel"));
-      } catch {}
+      unlinkTmpArtifacts(currentTmp);
       if (getCurrentTmpFile() === currentTmp) setCurrentTmpFile(null);
     }
     sendToRenderer("process:finished", { code: null, cancelled: true, runId });
@@ -293,8 +239,7 @@ export async function cancelActiveProcessing() {
     setPythonProcess(null);
   }
 
-  if (runId) clearCancellingRunId(runId);
-  else clearCancellingRunId();
+  clearCancellingRunId(runId);
 
   return { success: true, idle: false };
 }
@@ -309,7 +254,7 @@ export function registerProcessHandlers(pathSecurity) {
       return { success: false, error: "No hay videos para procesar" };
     }
 
-    const processorCheck = validateProcessorAvailable();
+    const processorCheck = await validateProcessorAvailableAsync();
     if (!processorCheck.ok) {
       return { success: false, error: processorCheck.error };
     }
@@ -324,16 +269,14 @@ export function registerProcessHandlers(pathSecurity) {
       return { success: false, error: "Selecciona una carpeta de salida antes de procesar" };
     }
 
-    // Path security first — never open/stat arbitrary renderer paths before
-    // validateReadableFile has constrained them to trusted roots / allow-list.
     let safeJobs;
     try {
-      safeJobs = prepareJobsForProcessor(jobs, outputDirectory, pathSecurity);
+      safeJobs = jobs.map((job) => sanitizeJobMedia(job, pathSecurity, { outputDirectory }));
     } catch (securityError) {
       return { success: false, error: securityError.message };
     }
 
-    const unreadable = findUnreadableInputs(safeJobs);
+    const unreadable = await findUnreadableInputsAsync(safeJobs);
     if (unreadable.length > 0) {
       const first = unreadable[0];
       return {
@@ -354,12 +297,7 @@ export function registerProcessHandlers(pathSecurity) {
     if (!beginProcessingRun(runId)) {
       return { success: false, error: "Ya hay un proceso en ejecución" };
     }
-    // Tell the renderer which runId owns upcoming terminal events so stale
-    // watchdog/errors from a prior run can be ignored (plan 025).
     sendToRenderer("process:runStarted", { runId });
-    // Mark the probe phase active so the processing-lock watchdog rearms while
-    // ffprobe is enriching the batch (no processor child exists yet, so
-    // isPythonChildAlive() alone would let it fire mid-probe on large batches).
     setProbePhaseActive(true);
 
     let tmpFile = null;
@@ -375,24 +313,23 @@ export function registerProcessHandlers(pathSecurity) {
         fs.unlinkSync(cancelFile);
       } catch {}
 
-      // Capture tmpFile in closure so this run always cleans up its own file,
-      // even if a new run overwrites the shared _currentTmpFile.
       const runTmpFile = tmpFile;
-      const runCancelFile = cancelFile;
       const isCurrentRun = () => getProcessingRunId() === runId;
 
       const cleanupRunArtifacts = () => {
-        try {
-          if (runTmpFile) fs.unlinkSync(runTmpFile);
-        } catch {}
-        try {
-          if (runCancelFile) fs.unlinkSync(runCancelFile);
-        } catch {}
+        unlinkTmpArtifacts(runTmpFile);
+      };
+
+      const cleanupCancelledRun = () => {
+        cleanupRunArtifacts();
+        if (isCurrentRun()) {
+          setProbePhaseActive(false);
+          clearProcessingRun(runId);
+          if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
+        }
       };
 
       const probeLimit = Math.max(1, Math.min(8, safeJobs.length, (os.cpus()?.length || 4) * 2));
-      // Stop spawning ffprobe probes once this run is cancelled, so a cancel
-      // during the probe phase doesn't keep probing the rest of the batch.
       const enrichedJobs = await runWithConcurrency(
         safeJobs,
         probeLimit,
@@ -401,25 +338,10 @@ export function registerProcessHandlers(pathSecurity) {
         () => !isCurrentRun(),
       );
 
-      // The probe above can take seconds. If the user cancelled during the
-      // probe, cancelActiveProcessing() already cleared our runId and tmpFile.
-      // Bail before spawning so we don't start a Python process that nobody
-      // owns — it would run to completion (or until the watchdog fires) with
-      // no way for the renderer to cancel it. Also bail if the app is quitting
-      // (probe-phase quit race before cancel clears the runId).
       if (!isCurrentRun() || getAppIsQuitting()) {
-        cleanupRunArtifacts();
-        // Quit can set appIsQuitting before cancel clears the run — release the
-        // owned lock so the probe watchdog does not rearm forever.
-        if (isCurrentRun()) {
-          setProbePhaseActive(false);
-          clearProcessingRun(runId);
-          if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
-        }
+        cleanupCancelledRun();
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
-      // Probe phase is over — the processor child is about to spawn, so the
-      // watchdog can now rely on isPythonChildAlive() to rearm.
       setProbePhaseActive(false);
 
       await fs.promises.writeFile(
@@ -427,15 +349,8 @@ export function registerProcessHandlers(pathSecurity) {
         JSON.stringify(createProcessorManifest(manifest, enrichedJobs)),
       );
 
-      // Cancel / quit can land during writeFile (async). Re-check before spawn
-      // so we never install an unowned processor child after cancel cleared the run.
       if (!isCurrentRun() || getAppIsQuitting()) {
-        cleanupRunArtifacts();
-        if (isCurrentRun()) {
-          setProbePhaseActive(false);
-          clearProcessingRun(runId);
-          if (getCurrentTmpFile() === runTmpFile) setCurrentTmpFile(null);
-        }
+        cleanupCancelledRun();
         return { success: false, error: "Procesamiento cancelado", cancelled: true };
       }
 
@@ -448,10 +363,10 @@ export function registerProcessHandlers(pathSecurity) {
         workerCount = String(Math.min(16, Math.floor(Number(settings.batchWorkers))));
       }
 
-      const spawnSpec = resolveProcessorSpawn([tmpFile]);
-      if (!spawnSpec) {
-        throw new Error("No se pudo iniciar el procesador de video");
-      }
+      const spawnSpec = {
+        ...processorCheck,
+        args: [...processorCheck.args, tmpFile],
+      };
 
       const ffmpegPath = mediaCheck.ffmpegPath;
       const ffprobePath = mediaCheck.ffprobePath;
@@ -470,7 +385,6 @@ export function registerProcessHandlers(pathSecurity) {
         env: childEnv,
       });
       setPythonProcess(proc);
-      // Snapshot outputs at spawn so cancel cleanup works if tmp JSON is gone.
       snapshotRunOutputsForCancel(enrichedJobs, outputDirectory);
 
       let stdoutBuf = "";
@@ -492,10 +406,8 @@ export function registerProcessHandlers(pathSecurity) {
         settled = true;
         cleanupChildListeners();
         if (!isCurrentRun()) {
-          // Drop orphaned ref if this child is still installed as the live proc.
           if (getPythonProcess() === proc) setPythonProcess(null);
           cleanupRunArtifacts();
-          // Keep snapshot for cancel cleanup; cancel owns incomplete unlinks.
           if (!result?.cancelled) clearRunOutputSnapshot();
           return result;
         }
@@ -523,10 +435,6 @@ export function registerProcessHandlers(pathSecurity) {
       };
 
       const onClose = (code) => {
-        // If onError already settled this run (spawn failure), don't emit a
-        // second terminal signal — the renderer would otherwise receive both
-        // `process:error` and `process:finished`, leaving the execution
-        // history in an ambiguous state.
         if (settled) {
           return settleRun({
             success: false,
@@ -548,8 +456,6 @@ export function registerProcessHandlers(pathSecurity) {
         }
         if (stdoutBuf.trim()) dispatchProcessorLine(stdoutBuf);
 
-        // Cancel owns terminal signalling: emit cancelled once here so
-        // cancelActiveProcessing does not also emit after kill waits.
         if (cancellingThisRun) {
           sendToRenderer("process:finished", { code: null, cancelled: true, runId });
           clearCancellingRunId(runId);
@@ -569,8 +475,6 @@ export function registerProcessHandlers(pathSecurity) {
           }
           errMsg = translateProcessorErrorMessage(errMsg);
         }
-        // Include error on finished so the renderer can toast when no prior
-        // process:error was emitted (crash / OOM / unexpected exit).
         sendToRenderer(
           "process:finished",
           failed ? { code, error: errMsg, runId } : { code, runId },
@@ -608,16 +512,7 @@ export function registerProcessHandlers(pathSecurity) {
         setPythonProcess(null);
         setCurrentTmpFile(null);
       }
-      if (tmpFile) {
-        try {
-          fs.unlinkSync(tmpFile);
-        } catch {}
-      }
-      if (cancelFile) {
-        try {
-          fs.unlinkSync(cancelFile);
-        } catch {}
-      }
+      unlinkTmpArtifacts(tmpFile);
       console.error("[beru] process:start failed:", err);
       return { success: false, error: err.message };
     }

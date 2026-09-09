@@ -62,6 +62,51 @@ def _truncate_text(text, max_width_px, font_size, mode):
     return raw[:keep].rstrip() + "…"
 
 
+def _layout_export_text(
+    text,
+    region_w,
+    region_h,
+    font_size=32,
+    line_height=1.2,
+    text_wrap=True,
+    auto_fit=False,
+    truncate="none",
+):
+    """Wrap / fit / truncate using the same sequence as build_drawtext."""
+    raw = str(text or "")
+    if isinstance(text_wrap, str):
+        text_wrap = text_wrap.lower() not in ("0", "false", "no")
+    auto_fit = bool(auto_fit)
+    truncate = str(truncate or "none").lower()
+    try:
+        line_height = float(line_height)
+    except (TypeError, ValueError):
+        line_height = 1.2
+    try:
+        region_w = int(region_w)
+    except (TypeError, ValueError):
+        region_w = 0
+    try:
+        region_h = int(region_h)
+    except (TypeError, ValueError):
+        region_h = 0
+
+    if auto_fit and region_w > 0 and region_h > 0:
+        font_size = _fit_font_size(raw, region_w, region_h, font_size, line_height, text_wrap)
+    else:
+        try:
+            font_size = int(font_size)
+        except (TypeError, ValueError):
+            font_size = 32
+
+    display = raw
+    if text_wrap and region_w > 0:
+        display = _wrap_text_to_width(raw, region_w, font_size)
+    if not auto_fit:
+        display = _truncate_text(display, region_w, font_size, truncate)
+    return {"font_size": font_size, "display_text": display}
+
+
 def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_size=8):
     try:
         base_size = int(base_size)
@@ -96,8 +141,6 @@ def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_s
         line_w = longest * _estimate_char_width(font_size)
         return total_h <= region_h and line_w <= region_w
 
-    # Binary search for the largest fitting size in [min_size, size].
-    # Replaces the previous linear `size -= 1` scan (O(base-min) wrap calls).
     if _fits(size):
         return size
     lo, hi = min_size, size

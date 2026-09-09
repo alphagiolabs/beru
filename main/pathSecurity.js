@@ -15,10 +15,6 @@ const DENIED_PATH_FRAGMENTS = [
 
 /** @typedef {'excel' | 'image' | 'video' | 'project'} ReadKind */
 
-/**
- * Path allow-list for IPC reads initiated by the renderer.
- * Dialog picks register exact files; media under trusted user dirs is allowed.
- */
 export function createPathSecurity(app) {
   const allowedFiles = new Set();
   const ALLOWED_FILES_MAX = 2000;
@@ -26,7 +22,6 @@ export function createPathSecurity(app) {
 
   function trimAllowedFiles() {
     if (allowedFiles.size <= ALLOWED_FILES_MAX) return;
-    // Evict oldest entries (first inserted) — Set preserves insertion order
     const excess = allowedFiles.size - ALLOWED_FILES_MAX;
     let count = 0;
     for (const key of allowedFiles) {
@@ -102,7 +97,6 @@ export function createPathSecurity(app) {
         const resolved = path.resolve(filePath);
         let dir = resolved;
         let tail = [];
-        // Walk up until an existing ancestor is found.
         while (dir !== path.dirname(dir)) {
           try {
             const realDir = fs.realpathSync.native
@@ -114,7 +108,6 @@ export function createPathSecurity(app) {
             dir = path.dirname(dir);
           }
         }
-        // Reached the root without an existing ancestor — best effort.
         return path.resolve(filePath);
       } catch {
         return null;
@@ -158,8 +151,6 @@ export function createPathSecurity(app) {
   };
 
   /**
-   * Shared readable-file checks. When requireTrustedRoot is true (registration),
-   * the allow-list bypass is disabled so untrusted paths cannot enter allowedFiles.
    * @param {string} filePath
    * @param {ReadKind} kind
    * @param {{ requireTrustedRoot?: boolean }} [opts]
@@ -261,7 +252,6 @@ export function createPathSecurity(app) {
     return inspectReadableFile(filePath, kind);
   }
 
-  /** Open in Explorer / shell — file or directory under trusted roots or allow-list. */
   function validateShellPath(targetPath) {
     const resolved = resolveSafe(targetPath);
     if (!resolved) return { ok: false, error: "Ruta inválida" };
@@ -285,9 +275,6 @@ export function createPathSecurity(app) {
   }
 
   function validateProtocolFile(filePath) {
-    // The beru:// protocol serves both video frames (for preview proxies) and
-    // image overlays (delogo cover, image op, watermark). Restrict to media
-    // kinds only — project/excel files must never be served over beru://.
     const ext = path.extname(filePath || "").toLowerCase();
     const kind = EXT_BY_KIND.image.has(ext) ? "image" : "video";
     return validateReadableFile(filePath, kind);

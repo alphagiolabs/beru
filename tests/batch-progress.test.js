@@ -98,7 +98,6 @@ describe("getBatchProgress", () => {
     it("reads in-flight progress from jobProgress instead of item.progress", () => {
       expect(
         getBatchProgress({
-          // item.progress is stale (0) — real progress lives in jobProgress
           queue: [item("processing", 0), item("idle")],
           progressDone: 0,
           progressTotal: 2,

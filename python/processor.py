@@ -37,12 +37,7 @@ from batch_errors import (
     remove_partial_output,
 )
 
-# Pure helpers extracted into sibling modules (kept stateless & un-patched so
-# they are safe outside this module's single namespace — the JS test suite
-# monkeypatches processor.X heavily, so anything callable through a patched
-# name MUST stay in this file).  Re-exported below for the Python smoke tests.
 from op_shared import (
-    VALID_DELOGO_METHODS,
     _build_enable_clause,
     _coerce_float,
     _coerce_int,
@@ -53,25 +48,15 @@ from op_shared import (
     _region_to_pixels,
 )
 from color_validation import _validate_drawtext_color
-from delogo_chains import (
-    _build_cleanup_filter,
-    _build_delogo_chain,
-    _build_mirror_patch,
-    _build_padded_region,
-    _fit_delogo_rect,
-)
+from delogo_chains import _build_boxblur_filter, _build_delogo_chain
 from text_layout_helpers import (
     _apply_letter_spacing_fallback,
     _build_region_bg_drawbox,
-    _estimate_char_width,
-    _fit_font_size,
+    _layout_export_text,
     _text_bg_enabled,
     _text_box_pad,
-    _text_clusters,
     _text_glyph_positions,
     _text_layout_bounds,
-    _truncate_text,
-    _wrap_text_to_width,
 )
 
 FFMPEG = os.environ.get("BERU_FFMPEG", "ffmpeg")
@@ -170,8 +155,6 @@ def _validated_job_media(job, *, require_output):
                 # Fonts may live outside overlay asset roots; keep parent fallback.
                 roots = asset_roots or _path_parent(media_path)
             else:
-                # Fail closed: overlay/delogo images require trusted asset_roots
-                # from the main process (no parent-of-self fallback).
                 if not asset_roots:
                     raise ValueError(
                         f"asset_roots required for {field} when media path is set"
@@ -204,8 +187,7 @@ def _init_font_dirs():
     global FONT_DIRS
     system = platform.system()
     if system == "Windows":
-        # Use WINDIR / SystemRoot env vars so non-default Windows installs
-        # (e.g. Windows on D:\) resolve the correct Fonts folder.
+        # WINDIR / SystemRoot: Windows is not always on C:\.
         windir = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or "C:/Windows"
         FONT_DIRS = [
             Path(windir) / "Fonts",
@@ -263,10 +245,7 @@ def _windows_registry_fonts():
                     font_path = Path(windir) / "Fonts" / filename
                 if not font_path.exists():
                     continue
-                # Skip non-renderable font files (e.g. legacy .fon). _resolve_font
-                # validates against FONT_EXTENSIONS and would otherwise raise,
-                # propagating out of build_drawtext and failing the whole job even
-                # when a usable .ttf/.otf/.ttc for the same family exists.
+                # Skip .fon. _resolve_font would raise and fail the job when a .ttf exists.
                 if font_path.suffix.lower() not in FONT_EXTENSIONS:
                     continue
 
@@ -338,9 +317,6 @@ def _font_style_candidates(font_family, font_weight=None, italic=False, bold=Fal
     return candidates
 
 
-# Memoize _resolve_font results: system fonts don't change during a process
-# lifetime, and the per-call work (normalized_fonts dict rebuild + os.path.isfile
-# stats over every candidate) is repeated for identical args across jobs.
 _resolve_font_cache = {}
 _resolve_font_cache_lock = threading.Lock()
 
@@ -365,9 +341,7 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
         match = fonts.get(candidate.lower()) or normalized_fonts.get(_font_name_key(candidate))
         if match:
             full_path, _stem = match
-            # Validate the font file actually exists on this machine — the font
-            # registry may reference a file that was removed or lives on a
-            # different drive.  Without this check FFmpeg raises ENOENT.
+            # Registry paths can be stale. Missing file → FFmpeg ENOENT.
             if os.path.isfile(full_path):
                 validate_media_path(full_path, _path_parent(full_path), FONT_EXTENSIONS)
                 result = ("fontfile", _format_fontfile(full_path), True)
@@ -375,7 +349,6 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
             logger.debug("Font file missing, skipping: %s", full_path)
 
     if result is None:
-        # Try partial match — same existence check.
         key = _font_name_key(font_family)
         for fkey, (fpath, _) in fonts.items():
             normalized_key = _font_name_key(fkey)
@@ -431,7 +404,6 @@ def setup_logging():
 
 logger = setup_logging()
 
-# Audio codecs that can be stream-copied into each container (no re-encode).
 _AUDIO_COPY_CODECS = {
     ".mp4": frozenset({"aac", "mp3", "mp4a"}),
     ".mov": frozenset({"aac", "mp3", "alac"}),
@@ -504,14 +476,10 @@ def detect_hw_encoder(ffmpeg_path, *, force_test=False):
     candidates = [enc for enc in priority if enc in encoders_text]
 
     if force_test and candidates:
-        # Default ON — set BERU_HW_PROBE_PARALLEL=0 to force sequential probes
-        # on GPUs that flake under concurrent 1-frame encodes.
+        # Default ON. BERU_HW_PROBE_PARALLEL=0 for GPUs that flake on concurrent 1-frame encodes.
         raw_par = (os.environ.get("BERU_HW_PROBE_PARALLEL") or "1").strip().lower()
         probe_parallel = raw_par not in ("0", "false", "no", "off")
         if probe_parallel and len(candidates) > 1:
-            # Run all 1-frame test encodes concurrently, then pick the
-            # highest-priority encoder that succeeded. Each probe can take up
-            # to 20s; parallelizing cuts pre-flight from O(n*20s) to ~20s max.
             results = {}
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(candidates)) as pool:
                 future_map = {
@@ -546,13 +514,6 @@ def detect_hw_encoder(ffmpeg_path, *, force_test=False):
     return None
 
 
-def build_hwaccel_args(hw_encoder, has_video_filters=False):
-    """Hardware decode when there is no CPU filter graph (filters need system memory)."""
-    if not hw_encoder or has_video_filters or os.environ.get("BERU_HWACCEL", "1") == "0":
-        return []
-    return ["-hwaccel", "auto"]
-
-
 def _get_drawtext_options():
     """Return supported drawtext option names for the active FFmpeg binary."""
     global _DRAWTEXT_OPTIONS_CACHE, _DRAWTEXT_OPTIONS_CACHE_FOR
@@ -580,7 +541,6 @@ def _drawtext_supports(option_name):
 
 
 MAX_WORKERS_CAP = 16
-AUTO_TARGET_WORKERS = 5
 
 _ENCODER_CAPS = {
     "conservative": {
@@ -601,11 +561,37 @@ _ENCODER_CAPS = {
     },
 }
 
-# Set in process_jobs so each FFmpeg child uses proportional filter threads.
-# This is safe because the processing lock (beginProcessingRun in JS) ensures
-# only one batch runs at a time. Do NOT read or write this from multiple
-# concurrent batches — it is single-batch state.
 _BATCH_ACTIVE_WORKERS = 1
+_SOFTWARE_FALLBACK_ADMISSION = None
+
+
+class _ResourceAdmission:
+    def __init__(self, max_workers, per_job_ram_mb):
+        self.max_workers = max(1, int(max_workers))
+        self.per_job_ram_mb = max(0, int(per_job_ram_mb))
+        self.active = 0
+        self.condition = threading.Condition()
+
+    def acquire(self):
+        while not _check_cancelled():
+            with self.condition:
+                available = _get_available_ram_mb()
+                memory_ok = (
+                    self.active == 0
+                    or self.per_job_ram_mb <= 0
+                    or available <= 0
+                    or available >= self.per_job_ram_mb
+                )
+                if self.active < self.max_workers and memory_ok:
+                    self.active += 1
+                    return True
+                self.condition.wait(timeout=0.5)
+        return False
+
+    def release(self):
+        with self.condition:
+            self.active = max(0, self.active - 1)
+            self.condition.notify_all()
 
 
 def build_filter_thread_args(active_workers=None):
@@ -667,7 +653,7 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_e
         return ["-c:v", "h264_qsv", "-global_quality", str(gq)]
 
     if hw == "h264_mf":
-        # MediaFoundation on Windows — rate control via quality scale
+        # MediaFoundation on Windows: rate control is quality scale.
         gq = profile.get("hw_cq", 23)
         return ["-c:v", "h264_mf", "-rate_control", "quality", "-quality", str(gq)]
 
@@ -687,8 +673,6 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_e
         qp = profile.get("hw_cq", 23)
         return ["-c:v", "h264_vaapi", "-qp", str(qp)]
 
-    # Software fallback (libx264) — cap threads to avoid RAM exhaustion when
-    # many CPU jobs run concurrently.
     preset = job.get("speed_preset") or profile["preset"]
     threads = resolve_x264_threads()
     return [
@@ -731,8 +715,6 @@ def _get_available_ram_mb():
     return 0
 
 
-# Rough per-job memory estimates for 1080p with common presets (MB).
-# Values derived from typical x264/NVENC memory usage at 1080p.
 _RAM_PER_JOB_MB = {
     "software": 512,   # libx264
     "nvenc": 256,    # h264_nvenc
@@ -744,7 +726,6 @@ _RAM_PER_JOB_MB = {
 }
 
 
-# Slower x264 presets hold more reference/lookahead frames in RAM.
 _X264_PRESET_RAM_MULT = {
     "ultrafast": 0.6,
     "superfast": 0.7,
@@ -757,10 +738,8 @@ _X264_PRESET_RAM_MULT = {
     "veryslow": 2.2,
 }
 
-# Decoders that hold markedly more memory than 8-bit H.264.
 _HEAVY_DECODE_CODECS = frozenset({"hevc", "h265", "av1", "vp9", "prores", "wmv3"})
 
-# pix_fmt substrings indicating >8-bit sources (8-bit "nv12"/"yuv410p" must NOT match).
 _HIGH_BIT_DEPTH_PIX_TOKENS = ("p10", "p12", "p16", "10le", "10be", "12le", "12be", "16le", "16be")
 
 
@@ -801,7 +780,6 @@ def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, sou
         h = int(job.get("source_height") or job.get("height") or 0)
         if w > 0 and h > 0:
             pixels = w * h
-    # 4K+ needs more RAM per encode.
     if pixels >= 3840 * 2160:
         per_job = int(per_job * 2.5)
     elif pixels >= 1920 * 1080:
@@ -842,7 +820,6 @@ def _memory_cap_workers(
             source_pixels=max_source_pixels,
         )
     )
-    # Leave 20% headroom for OS / other apps.
     cap = max(1, int((avail_mb * 0.8) / per_job))
     return max(1, min(cap, desired_workers, MAX_WORKERS_CAP))
 
@@ -880,22 +857,13 @@ def resolve_max_workers(
     if effective_hw_encoder:
         cap = caps.get(effective_hw_encoder, caps.get("h264_nvenc", 2))
         workers = max(1, min(cap, job_count))
-        if (
-            mode == "balanced"
-            and effective_hw_encoder != "h264_mf"
-            and job_count >= AUTO_TARGET_WORKERS
-        ):
-            workers = max(workers, min(AUTO_TARGET_WORKERS, job_count, cap))
     else:
         if mode == "conservative":
             workers = max(1, min(max(2, cpus - 1), 6, job_count))
         else:
             cpu_cap = min(max(2, cpus - 2), 8)
             workers = max(1, min(cpu_cap, job_count))
-            if job_count >= AUTO_TARGET_WORKERS:
-                workers = max(workers, min(AUTO_TARGET_WORKERS, job_count, cpu_cap))
 
-    # Reduce parallel 4K+ encodes to limit VRAM/RAM spikes.
     if max_source_pixels >= 3840 * 2160:
         workers = min(workers, 2)
 
@@ -1089,8 +1057,6 @@ def _ffprobe_via_ffmpeg(path):
                 + int(dur_match.group(2)) * 60
                 + float(dur_match.group(3))
             )
-        # Classify lines in a single pass instead of calling text.splitlines()
-        # three separate times for video/audio detection.
         video_line = ""
         audio_line = ""
         for line in text.splitlines():
@@ -1180,18 +1146,25 @@ def ffprobe(path):
 _DRAWTEXT_CACHE = {}
 _DRAWTEXT_CACHE_LOCK = threading.Lock()
 _DRAWTEXT_CACHE_ENABLED = None
-# Bound memoized drawtext strings so the long-lived preview worker cannot grow
-# the cache without limit across many edit/preview cycles.
 _DRAWTEXT_CACHE_MAX = 512
 
-_ALLOWED_DRAWTEXT_PUNCTUATION = frozenset(
-    " .,!?¿¡:;'\"()_-+/&@#%$€£¥={}*"
-)
+_DRAWTEXT_FORBIDDEN_CHARS = frozenset("[]")  # filtergraph pad tokens, not neutralized by escaping
+
+
 def _validate_drawtext_text(value):
+    """Reject control characters and filtergraph pad tokens.
+
+    `_escape_drawtext_text` neutralizes \\ : ' = ; , % { } and newlines, so
+    emoji, CJK, arrows and combining marks render safely (subject to font
+    glyph coverage) instead of failing the whole job. `[` and `]` stay
+    forbidden because escaping does not neutralize the pad-reference syntax.
+    """
     for char in value:
-        if char == "\n" or char.isalnum() or char in _ALLOWED_DRAWTEXT_PUNCTUATION:
-            continue
-        raise ValueError("Drawtext contains forbidden characters")
+        if char in _DRAWTEXT_FORBIDDEN_CHARS:
+            raise ValueError("Drawtext contains forbidden characters")
+        code = ord(char)
+        if char != "\n" and (code < 0x20 or code == 0x7F):
+            raise ValueError("Drawtext contains forbidden characters")
     return value
 
 
@@ -1236,8 +1209,6 @@ def build_drawtext(op):
         return None
     _validate_drawtext_text(text)
 
-    # Memoize identical ops (same text + style + pixel region) across jobs in a
-    # batch. build_drawtext is a pure function of `op`, so the result is stable.
     cache_key = None
     if _drawtext_cache_enabled():
         try:
@@ -1262,36 +1233,28 @@ def build_drawtext(op):
     region_w = layout["w"]
     region_h = layout["h"]
 
-    font_size = op.get("font_size", 32)
     try:
         line_height = float(op.get("line_height", 1.2))
     except (TypeError, ValueError):
         line_height = 1.2
-    text_wrap = op.get("text_wrap", True)
-    if isinstance(text_wrap, str):
-        text_wrap = text_wrap.lower() not in ("0", "false", "no")
-    truncate = str(op.get("truncate") or "none").lower()
-    auto_fit = bool(op.get("auto_fit"))
-
-    if auto_fit and region_w > 0 and region_h > 0:
-        font_size = _fit_font_size(text, region_w, region_h, font_size, line_height, text_wrap)
-    else:
-        try:
-            font_size = int(font_size)
-        except (TypeError, ValueError):
-            font_size = 32
-
-    if text_wrap and region_w > 0:
-        text = _wrap_text_to_width(text, region_w, font_size)
-    if not auto_fit:
-        text = _truncate_text(text, region_w, font_size, truncate)
+    laid = _layout_export_text(
+        text,
+        region_w,
+        region_h,
+        font_size=op.get("font_size", 32),
+        line_height=line_height,
+        text_wrap=op.get("text_wrap", True),
+        auto_fit=op.get("auto_fit"),
+        truncate=op.get("truncate"),
+    )
+    font_size = laid["font_size"]
+    text = laid["display_text"]
 
     letter_spacing = op.get("letter_spacing", 0)
     try:
         spacing_px = int(round(float(letter_spacing)))
     except (TypeError, ValueError):
         spacing_px = 0
-    # Match JS LETTER_SPACING_MIN/MAX in src/utils/letter-spacing.js
     spacing_px = max(-20, min(80, spacing_px))
     native_letter_spacing = spacing_px != 0 and _drawtext_supports("spacing")
     # Positive fallback: insert thin spaces. Negative needs per-glyph drawtext.
@@ -1337,7 +1300,7 @@ def build_drawtext(op):
     if is_fontfile:
         font_val = f"'{font_val}'"
 
-    # Text opacity via fontcolor@alpha (ffmpeg drawtext supports this)
+    # drawtext opacity is fontcolor@alpha.
     text_opacity = op.get("text_opacity", 1)
     try:
         text_opacity = float(text_opacity)
@@ -1355,7 +1318,7 @@ def build_drawtext(op):
             f"x={x_val}",
             f"y={y_val}",
         ]
-        # y is the top of the first text line (matches CSS content box top), not baseline.
+        # y is the top of the first line (CSS content-box top), not baseline.
         if _drawtext_supports("y_align"):
             parts.append("y_align=text")
         if font_weight is not None and _drawtext_supports("fontweight"):
@@ -1373,7 +1336,6 @@ def build_drawtext(op):
             line_spacing_px = int(round(float(font_size) * max(0.0, line_height - 1.0)))
             if line_spacing_px > 0 and _drawtext_supports("line_spacing"):
                 parts.append(f"line_spacing={line_spacing_px}")
-        # Region background is rendered via drawbox in build_filter_complex (full region).
         border_w = op.get("border_width", 0)
         if border_w > 0:
             border_color = _validate_drawtext_color(op.get("border_color", "black"), "border_color")
@@ -1428,7 +1390,6 @@ def build_drawtext(op):
                 _drawtext_cache_store(cache_key, filter_str)
             return filter_str
 
-    # Single drawtext path (zero / positive hair-space / native spacing)
     text = _escape_drawtext_text(text)
     parts = [f"text='{text}'"] + _style_parts(
         x_expr, y_expr, include_line_spacing=True, include_native_spacing=True
@@ -1449,10 +1410,9 @@ def _build_watermark_filter(watermark, video_w, video_h):
         return None, False, None
 
     wm_type = watermark.get("type", "text")
-    opacity = float(watermark.get("opacity", 0.5))
+    opacity = _coerce_float(watermark.get("opacity", 0.5), 0.5, 0.0, 1.0)
     position = watermark.get("position", "bottom-right")
 
-    # Map position key to FFmpeg overlay coordinates
     margin = 10
     pos_map = {
         "top-left": f"{margin}:{margin}",
@@ -1472,12 +1432,11 @@ def _build_watermark_filter(watermark, video_w, video_h):
         if not text.strip():
             return None, False, None
         _validate_drawtext_text(text)
-        font_size = int(watermark.get("fontSize", 18))
+        font_size = _coerce_int(watermark.get("fontSize", 18), 18, 1, 500)
         font_color = _validate_drawtext_color(watermark.get("fontColor", "white"), "fontColor")
         font_family = str(watermark.get("fontFamily", "Arial") or "Arial").strip()
         if not re.fullmatch(r"[\w .-]{1,100}", font_family, re.UNICODE):
             raise ValueError("fontFamily contains forbidden characters")
-        # Resolve font
         font_key, font_val, is_fontfile = _resolve_font(font_family)
         if is_fontfile:
             font_val = f"'{font_val}'"
@@ -1501,11 +1460,9 @@ def _build_watermark_filter(watermark, video_w, video_h):
         img_path = watermark.get("imagePath", "")
         if not img_path or not os.path.exists(img_path):
             return None, False, None
-        scale_factor = float(watermark.get("scale", 1))
-        # Scale the image; default base height ~80px, adjusted by scale
+        scale_factor = _coerce_float(watermark.get("scale", 1), 1.0, 0.05, 20.0)
         target_h = max(16, int(80 * scale_factor))
         x_expr, y_expr = xy.split(":")
-        # Return filter parts; caller must add the image as an input
         return (
             f"scale=-1:{target_h},format=rgba,"
             f"colorchannelmixer=aa={opacity:.3f}",
@@ -1536,10 +1493,6 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
     for raw_op in operations:
         op = _normalize_operation(raw_op)
         mode = op.get("mode")
-        # Skip ops with an explicit empty time range (end <= start). The user's
-        # intent for start=10,end=5 is NOT "apply always" — it's an invalid
-        # range. Skipping matches the UI preview (isOpActive returns false for
-        # e<=s) and avoids silently producing output the user didn't ask for.
         if _is_op_time_disabled(op):
             continue
         region = _region_to_pixels(op.get("region", {}), video_w, video_h)
@@ -1568,66 +1521,40 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
             if not segments:
                 continue
             chain = ",".join(segments)
-            if n == 0:
-                filters.append(f"[0:v]{chain}[tmp{n}]")
-            else:
-                filters.append(f"[tmp{n-1}]{chain}[tmp{n}]")
+            prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
+            filters.append(f"{prev}{chain}[tmp{n}]")
         elif mode == "blur":
             strength = _coerce_int(op.get("blur_strength"), 20, 1, 100)
             luma = max(1, min(100, strength // 3))
             enable_clause = _build_enable_clause(op)
-            overlay_opts = f"{x}:{y}"
+            overlay_opts = _overlay_opts(x, y, enable_clause)
+            blur_filter = _build_boxblur_filter(luma)
             if enable_clause:
-                overlay_opts += f":{enable_clause}"
-            if n == 0:
-                filters.append(
-                    f"[0:v]split[bg{n}][fg{n}];"
-                    f"[bg{n}]crop={w}:{h}:{x}:{y},boxblur={luma}[blur{n}];"
-                    f"[fg{n}][blur{n}]overlay={overlay_opts}[tmp{n}]"
-                )
-            else:
-                filters.append(
-                    f"[tmp{n-1}]split[bg{n}][fg{n}];"
-                    f"[bg{n}]crop={w}:{h}:{x}:{y},boxblur={luma}[blur{n}];"
-                    f"[fg{n}][blur{n}]overlay={overlay_opts}[tmp{n}]"
-                )
+                blur_filter += f":{enable_clause}"
+            prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
+            filters.append(
+                f"{prev}split[bg{n}][fg{n}];"
+                f"[bg{n}]crop={w}:{h}:{x}:{y},{blur_filter}[blur{n}];"
+                f"[fg{n}][blur{n}]overlay={overlay_opts}[tmp{n}]"
+            )
         elif mode == "crop":
             enable_clause = _build_enable_clause(op)
+            prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
             if enable_clause:
-                # Time-bounded crop = ZOOM: during [start,end] the cropped
-                # region is scaled up to fill the entire frame. Outside the
-                # range the original frame shows through (overlay enable clause
-                # is false). Previously this was a no-op: the crop was scaled
-                # back to its own w:h and overlaid at x:y — pasting the crop
-                # exactly on top of its own pixels, producing zero visible
-                # change. The user's intent for "crop between t=5 and t=8" is a
-                # zoom into that region, not a no-op.
-                overlay_opts = f"0:0:{enable_clause}"
-                if n == 0:
-                    filters.append(
-                        f"[0:v]split[full{n}][crop_in{n}];"
-                        f"[crop_in{n}]crop={w}:{h}:{x}:{y},scale={video_w}:{video_h}:flags=fast_bilinear[cropped{n}];"
-                        f"[full{n}][cropped{n}]overlay={overlay_opts}[tmp{n}]"
-                    )
-                else:
-                    filters.append(
-                        f"[tmp{n-1}]split[full{n}][crop_in{n}];"
-                        f"[crop_in{n}]crop={w}:{h}:{x}:{y},scale={video_w}:{video_h}:flags=fast_bilinear[cropped{n}];"
-                        f"[full{n}][cropped{n}]overlay={overlay_opts}[tmp{n}]"
-                    )
+                overlay_opts = _overlay_opts(0, 0, enable_clause)
+                filters.append(
+                    f"{prev}split[full{n}][crop_in{n}];"
+                    f"[crop_in{n}]crop={w}:{h}:{x}:{y},scale={video_w}:{video_h}:flags=fast_bilinear[cropped{n}];"
+                    f"[full{n}][cropped{n}]overlay={overlay_opts}[tmp{n}]"
+                )
             else:
-                # Full-duration crop: changes output resolution. Force even
-                # width/height so yuv420p / H.264 encoders accept the frame, and
-                # update video_w/h so later ops target the cropped size.
+                # Full-duration crop changes output size. yuv420p/H.264 reject odd frames.
                 cw, ch = int(w), int(h)
                 if cw % 2:
                     cw = max(2, cw - 1)
                 if ch % 2:
                     ch = max(2, ch - 1)
-                if n == 0:
-                    filters.append(f"[0:v]crop={cw}:{ch}:{x}:{y}[tmp{n}]")
-                else:
-                    filters.append(f"[tmp{n-1}]crop={cw}:{ch}:{x}:{y}[tmp{n}]")
+                filters.append(f"{prev}crop={cw}:{ch}:{x}:{y}[tmp{n}]")
                 video_w, video_h = cw, ch
         elif mode == "delogo":
             prev = f"tmp{n-1}" if n > 0 else None
@@ -1645,10 +1572,7 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
                 continue
             idx = img_input_index(img_path)
             opacity = _coerce_float(op.get("image_opacity"), 1.0, 0.0, 1.0)
-            enable_clause = _build_enable_clause(op)
-            overlay_opts = f"{x}:{y}"
-            if enable_clause:
-                overlay_opts += f":{enable_clause}"
+            overlay_opts = _overlay_opts(x, y, _build_enable_clause(op))
             prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
             filters.append(
                 f"[{idx}:v]scale={w}:{h},"
@@ -1658,22 +1582,18 @@ def build_filter_complex(operations, video_w, video_h, watermark=None):
             )
         n += 1
 
-    # Append global watermark if configured
     if watermark and watermark.get("enabled"):
         wm_type = watermark.get("type", "text")
-        if wm_type == "text":
+        if wm_type in ("text", "image"):
             wm_result = _build_watermark_filter(watermark, video_w, video_h)
-            if wm_result and wm_result[0]:
-                dt_filter = wm_result[0]
-                prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
-                filters.append(f"{prev}{dt_filter}[tmp{n}]")
-                n += 1
-        elif wm_type == "image":
-            wm_result = _build_watermark_filter(watermark, video_w, video_h)
-            if wm_result and len(wm_result) == 3 and wm_result[2]:
+            prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
+            if wm_type == "text":
+                if wm_result and wm_result[0]:
+                    filters.append(f"{prev}{wm_result[0]}[tmp{n}]")
+                    n += 1
+            elif wm_result and len(wm_result) == 3 and wm_result[2]:
                 scale_filter, overlay_pos, img_path = wm_result
                 idx = img_input_index(img_path)
-                prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
                 filters.append(
                     f"[{idx}:v]{scale_filter}[wm{n}];"
                     f"{prev}[wm{n}]overlay={overlay_pos}[tmp{n}]"
@@ -1751,18 +1671,12 @@ class StderrBuffer:
         self._buf = deque(maxlen=max_lines)
         self._chars = 0
         self._max_chars = max_chars
-        # Unbounded, monotonically-increasing append counter. `len()` is capped
-        # at `max_lines` once the deque fills, so it cannot be used to detect
-        # ongoing activity (the stall detector would otherwise go blind and kill
-        # healthy long encodes). This counter always increases on append.
         self._total = 0
 
     def append(self, line):
         self._buf.append(line)
         self._chars += len(line)
         self._total += 1
-        # Evict oldest until both caps are satisfied. deque(maxlen) already
-        # handles the line cap; only the char cap needs manual eviction.
         while self._chars > self._max_chars and len(self._buf) > 1:
             evicted = self._buf.popleft()
             self._chars -= len(evicted)
@@ -1802,7 +1716,6 @@ def _extract_error_line(stderr_text):
     if len(stderr_text) > MAX_STDERR_CHARS:
         stderr_text = stderr_text[-MAX_STDERR_CHARS:]
     lines = stderr_text.split("\n")
-    # Prefer actionable parse/path failures over generic "Error while ..." wrappers.
     priority = ("invalid", "no such", "unable to parse")
     best_error = None
     best_any = None
@@ -1817,7 +1730,6 @@ def _extract_error_line(stderr_text):
             return stripped[-400:]
         if best_error is None and "error" in low:
             best_error = stripped
-    # Last non-empty line if nothing matched (handles missing trailing newline).
     chosen = best_error or best_any or stderr_text.strip()
     return chosen[-400:] if chosen else ""
 
@@ -1964,16 +1876,9 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
     threading.Thread(target=read_stderr, daemon=True).start()
     deadline = time.monotonic() + timeout_sec
 
-    # Stall detector: if FFmpeg produces no stderr output for STALL_TIMEOUT_SEC,
-    # kill it. This catches hung processes that the fixed deadline would only
-    # catch after a much longer wait.
     STALL_TIMEOUT_SEC = 120
     last_output_time = time.monotonic()
     prev_total = 0
-    # Only enforce the stall check when progress output is expected. With
-    # -loglevel error (no duration / no job_id) a clean run may legitimately
-    # emit zero stderr lines (e.g. stream copy), so the detector would false-
-    # fire at STALL_TIMEOUT_SEC; for those paths we rely on the overall deadline.
     stall_enabled = job_id is not None and duration_sec > 0
 
     while True:
@@ -1991,9 +1896,6 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
             reader_done.wait(timeout=1)
             _cleanup_ffmpeg_partial(cmd)
             return False, f"Timeout after {timeout_sec}s"
-        # Check for stall: compare the unbounded append counter delta to detect
-        # activity. len() is capped once the deque fills (256 lines) and cannot
-        # be used here — it would freeze the detector and kill healthy encodes.
         if stall_enabled:
             with stderr_lock:
                 current_total = stderr_lines.total_appended()
@@ -2077,8 +1979,6 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     input_path = job.get("input_path")
     output_path = job.get("output_path")
     fname = os.path.basename(input_path) if input_path else "unknown"
-    # Use the job's explicit id (which is the queue index) so single-job
-    # runs and batch runs report the same identifier the renderer expects.
     job_id = job.get("id", idx)
 
     if _check_cancelled():
@@ -2099,14 +1999,28 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     watermark = job.get("watermark")
     wm_enabled = isinstance(watermark, dict) and bool(watermark.get("enabled"))
 
-    # Stream-copy only when there is truly nothing to composite. A watermark-only
-    # job must go through the filter graph (previously watermark was skipped).
     if not raw_operations and not wm_enabled:
         logger.debug("Job %d: no operations, copying stream", idx)
-        ok, err = _run_ffmpeg(
-            [ffmpeg_path, "-y", "-loglevel", "error", "-i", input_path, "-c", "copy", output_path],
-            timeout_sec=300
-        )
+        copy_args = [ffmpeg_path, "-y", "-loglevel", "error", "-i", input_path]
+        out_ext = os.path.splitext(output_path)[1].lower()
+        src_audio_codec = (job.get("audio_codec") or "").lower()
+        if src_audio_codec and src_audio_codec not in _AUDIO_COPY_CODECS.get(out_ext, frozenset()):
+            # Container cannot hold the source audio: re-encode audio, keep video copy.
+            copy_args += ["-c:v", "copy"]
+            copy_args += build_audio_args(output_path, src_audio_codec, job.get("audio_channels"))
+        else:
+            copy_args += ["-c", "copy"]
+        if out_ext in (".mp4", ".mov", ".m4v"):
+            copy_args += ["-movflags", "+faststart"]
+        copy_args += ["-max_muxing_queue_size", "1024"]
+        copy_args.append(output_path)
+        try:
+            input_bytes = os.path.getsize(input_path)
+        except OSError:
+            input_bytes = 0
+        # ~25 MB/s conservative estimate: a 10 GB copy needs ~7 min, not the old fixed 5.
+        copy_timeout = max(300, min(7200, int(input_bytes / (25 * 1024 * 1024))))
+        ok, err = _run_ffmpeg(copy_args, timeout_sec=copy_timeout)
         if ok:
             logger.info("Job %d: copied -> %s", idx, os.path.basename(output_path))
             _safe_print(json.dumps({"type": "complete", "index": job_id, "output": output_path}))
@@ -2147,7 +2061,6 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     src_pix_fmt = job.get("pix_fmt") or info.get("pix_fmt", "yuv420p")
     src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
-    # Use the batch-level pre-flight encoder if provided; otherwise detect locally.
     if not profile_allows_hardware(encode_profile):
         local_hw_encoder = None
     elif hw_encoder is not None:
@@ -2158,17 +2071,14 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     def _build_cmd(force_software=False):
         loglevel = "info" if duration > 0 else "error"
         cmd = [ffmpeg_path, "-y", "-loglevel", loglevel]
-        if not force_software:
-            cmd += build_hwaccel_args(local_hw_encoder, has_video_filters=bool(filter_complex))
         cmd += ["-i", input_path]
         for img_path in image_paths:
             if duration > 0:
                 cmd += ["-loop", "1", "-t", f"{duration:.3f}", "-i", img_path]
             else:
                 cmd += ["-loop", "1", "-i", img_path]
-        if filter_complex:
-            cmd += build_filter_thread_args()
-            cmd += ["-filter_complex", filter_complex, "-map", output_label]
+        cmd += build_filter_thread_args()
+        cmd += ["-filter_complex", filter_complex, "-map", output_label]
         if image_paths:
             cmd += ["-shortest"]
         cmd += build_encode_args(ffmpeg_path, encode_profile, job, force_software=force_software, hw_encoder=local_hw_encoder)
@@ -2190,26 +2100,27 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         local_hw_encoder or "libx264",
     )
 
-    # Dynamic timeout: base 5 mins + 2x video duration, min 10 mins, max 2 hours
     estimated_timeout = max(600, min(7200, int(duration * 2 + 300)))
 
     ok, err = _run_ffmpeg(
         _build_cmd(), timeout_sec=estimated_timeout, job_id=job_id, duration_sec=duration,
     )
 
-    # GPU encode can fail (-22) or destabilize the display stack — retry on CPU.
-    # Only attempt the fallback if the batch-level pre-flight actually found a GPU
-    # encoder (local_hw_encoder is not None).  If the pre-flight was skipped, fail
-    # fast so the real error is surfaced to the user instead of hiding it behind a
-    # redundant software retry.
     if not ok and local_hw_encoder is not None and _is_hardware_encode_error(err):
         logger.warning("Job %d: hardware path failed, retrying with libx264", idx)
-        ok, err = _run_ffmpeg(
-            _build_cmd(force_software=True),
-            timeout_sec=estimated_timeout,
-            job_id=job_id,
-            duration_sec=duration,
-        )
+        admission = _SOFTWARE_FALLBACK_ADMISSION
+        if admission is not None and not admission.acquire():
+            return _job_cancelled_result(job_id)
+        try:
+            ok, err = _run_ffmpeg(
+                _build_cmd(force_software=True),
+                timeout_sec=estimated_timeout,
+                job_id=job_id,
+                duration_sec=duration,
+            )
+        finally:
+            if admission is not None:
+                admission.release()
 
     if ok:
         logger.info("Job %d: completed -> %s", idx, os.path.basename(output_path))
@@ -2364,22 +2275,74 @@ def _execute_batch(
     }
 
 
-def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
+_HW_ENCODER_UNSET = object()
+
+
+def _job_requires_encode(job):
+    if not isinstance(job, dict):
+        return False
+    watermark = job.get("watermark")
+    return bool(job.get("operations")) or (
+        isinstance(watermark, dict) and bool(watermark.get("enabled"))
+    )
+
+
+def _jobs_require_fonts(jobs):
+    for job in jobs:
+        if not isinstance(job, dict):
+            continue
+        operations = job.get("operations", [])
+        if any(op.get("mode") == "text" for op in operations if isinstance(op, dict)):
+            return True
+        watermark = job.get("watermark")
+        if (
+            isinstance(watermark, dict)
+            and watermark.get("enabled")
+            and watermark.get("type", "text") == "text"
+        ):
+            return True
+    return False
+
+
+def _jobs_allow_hardware(jobs):
+    return any(
+        _job_requires_encode(job)
+        and profile_allows_hardware(job.get("encode_profile", "balanced"))
+        for job in jobs
+        if isinstance(job, dict)
+    )
+
+
+def _max_estimated_job_ram_mb(jobs, hw_encoder, has_video_filters, encode_profile):
+    return max(
+        (
+            _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile)
+            for job in jobs
+            if isinstance(job, dict)
+        ),
+        default=0,
+    )
+
+
+def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_UNSET):
     """Process jobs concurrently. Report progress to stdout.
 
     Args:
         hw_encoder: If provided (from batch pre-flight), it is used directly
             for profiles that allow hardware encoding.
     """
-    global _cancel_event, _jobs_file, _BATCH_ACTIVE_WORKERS
     _cancel_event.clear()
     _last_job_progress_emit.clear()
 
-    # Warm font cache before parallel workers hit drawtext
-    get_system_fonts()
+    if _jobs_require_fonts(jobs):
+        get_system_fonts()
 
-    # If pre-flight hw_encoder was given, trust it; otherwise detect fresh.
-    hw = hw_encoder if hw_encoder is not None else detect_hw_encoder(ffmpeg_path)
+    if not _jobs_allow_hardware(jobs):
+        hw = None
+    elif hw_encoder is _HW_ENCODER_UNSET:
+        hw = detect_hw_encoder(ffmpeg_path)
+    else:
+        hw = hw_encoder
     max_pixels = 0
     has_video_filters = False
     encode_profiles = set()
@@ -2415,14 +2378,28 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
             jobs=jobs,
         )
 
-    per_job_ram_mb = max(
-        (
-            _estimate_job_ram_mb(job, effective_hw, has_video_filters, encode_profile)
-            for job in jobs
-            if isinstance(job, dict)
-        ),
-        default=0,
+    per_job_ram_mb = _max_estimated_job_ram_mb(
+        jobs, effective_hw, has_video_filters, encode_profile
     )
+
+    global _SOFTWARE_FALLBACK_ADMISSION
+    if effective_hw:
+        software_workers = resolve_max_workers(
+            None,
+            len(jobs),
+            max_pixels,
+            has_video_filters=has_video_filters,
+            encode_profile=encode_profile,
+            jobs=jobs,
+        )
+        software_ram_mb = _max_estimated_job_ram_mb(
+            jobs, None, has_video_filters, encode_profile
+        )
+        _SOFTWARE_FALLBACK_ADMISSION = _ResourceAdmission(
+            min(max_workers, software_workers), software_ram_mb
+        )
+    else:
+        _SOFTWARE_FALLBACK_ADMISSION = None
 
     total = len(jobs)
     mode = (os.environ.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
@@ -2491,7 +2468,13 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
 
     logger.info("Batch finished: %d/%d succeeded, %d failed, %d cancelled",
                 succeeded, total, failed, cancelled)
-    return {"total": total, "succeeded": succeeded, "failed": failed, "cancelled": cancelled}
+    return {
+        "total": total,
+        "succeeded": succeeded,
+        "failed": failed,
+        "cancelled": cancelled,
+        "workers": max_workers,
+    }
 
 
 def _init_ffmpeg_globals():
@@ -2546,12 +2529,8 @@ def render_preview_frame(payload):
         operations, vw, vh, watermark=watermark,
     )
 
-    # NOTE: `-ss` must come BEFORE `-i` (input seek). Placing it after `-i`
-    # performs an output seek that resets the filter graph's internal `t` to 0,
-    # so `enable=between(t,start,end)` clauses evaluate against t=0 regardless
-    # of the requested timestamp — time-bounded ops appear inactive in preview
-    # while export applies them at the correct t. Input seek preserves the
-    # original timeline so the filter graph sees the same `t` as export.
+    # `-ss` before `-i` (input seek). After `-i` is an output seek that resets
+    # filter `t` to 0, so enable=between(t,start,end) never matches the real time.
     cmd = [
         FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
         "-ss", f"{timestamp:.3f}",
@@ -2629,7 +2608,7 @@ def preview_frame_worker_main():
 
 
 def main():
-    global FFMPEG, FFPROBE, _jobs_file
+    global _jobs_file
 
     if len(sys.argv) >= 2 and sys.argv[1] == "--preview-frame-worker":
         preview_frame_worker_main()
@@ -2676,13 +2655,12 @@ def main():
         print(json.dumps({"type": "error", "error": "Invalid jobs manifest"}))
         sys.exit(1)
 
-    get_system_fonts()
-
-    # Pre-flight hardware validation: detect and test the encoder before committing
-    # workers. If a 1-frame smoke test fails, force software for the whole batch.
-    preflight_hw = detect_hw_encoder(FFMPEG, force_test=True)
-    if preflight_hw is None:
-        logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
+    if _jobs_allow_hardware(jobs):
+        preflight_hw = detect_hw_encoder(FFMPEG, force_test=True)
+        if preflight_hw is None:
+            logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
+    else:
+        preflight_hw = None
 
     result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw)
     print(json.dumps({"type": "summary", **result}))

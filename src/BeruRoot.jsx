@@ -16,7 +16,6 @@ const SettingsModal = lazy(() => import("./components/SettingsModal"));
 
 const api = window.api;
 
-/** Neutral boot screen while the persisted session is restored — not the login UI. */
 function AuthSessionLoading() {
   const t = useT();
   return (

@@ -10,9 +10,6 @@ export default function PresetManager() {
   const [deletingFilename, setDeletingFilename] = useState(null);
   const [feedback, setFeedback] = useState(null);
   const getState = useEditorStore.getState;
-  // Track pending feedback-clear timers so they are cancelled on unmount
-  // (avoids setState-after-unmount / leaked timers if the component unmounts
-  // within the 2.5s feedback window — e.g. when the active tool changes).
   const feedbackTimerRef = useRef(null);
   const scheduleFeedbackClear = () => {
     if (feedbackTimerRef.current) clearTimeout(feedbackTimerRef.current);

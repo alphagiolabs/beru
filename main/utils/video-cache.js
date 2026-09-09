@@ -7,8 +7,6 @@ const VIDEO_INFO_CACHE_MAX = 500;
 
 const pendingProbes = new Map();
 
-// hasVideoDimensions is re-exported from videoProbe.js — single source of truth.
-
 function trimVideoInfoCache() {
   if (videoInfoCache.size <= VIDEO_INFO_CACHE_MAX) return;
   const keys = videoInfoCache.keys();
@@ -39,21 +37,20 @@ function setCachedVideoInfo(filePath, mtime, info) {
   trimVideoInfoCache();
 }
 
-/** Fast metadata read for batch import (ffprobe only, cached by path+mtime). */
-export async function probeVideoFast(filePath) {
+function probeVideoCached(filePath, { key, timeoutMs, allowFfmpegFallback }) {
   const mtime = getVideoMtimeMs(filePath);
   const cached = getCachedVideoInfo(filePath, mtime);
-  if (cached) return cached;
+  if (cached) return Promise.resolve(cached);
 
-  const probeKey = `fast:${filePath}:${mtime}`;
+  const probeKey = `${key}:${filePath}:${mtime}`;
   const pending = pendingProbes.get(probeKey);
   if (pending) return pending;
 
   const probe = probeVideoFile(filePath, {
     ffprobePath: getFfprobePath(),
     ffmpegPath: getFfmpegPath(),
-    timeoutMs: 2500,
-    allowFfmpegFallback: false,
+    timeoutMs,
+    allowFfmpegFallback,
   })
     .then((info) => {
       setCachedVideoInfo(filePath, mtime, info);
@@ -69,31 +66,18 @@ export async function probeVideoFast(filePath) {
   return probe;
 }
 
-export async function probeVideo(filePath) {
-  const mtime = getVideoMtimeMs(filePath);
-  const cached = getCachedVideoInfo(filePath, mtime);
-  if (cached) return cached;
+export function probeVideoFast(filePath) {
+  return probeVideoCached(filePath, {
+    key: "fast",
+    timeoutMs: 2500,
+    allowFfmpegFallback: false,
+  });
+}
 
-  const probeKey = `full:${filePath}:${mtime}`;
-  const pending = pendingProbes.get(probeKey);
-  if (pending) return pending;
-
-  const probe = probeVideoFile(filePath, {
-    ffprobePath: getFfprobePath(),
-    ffmpegPath: getFfmpegPath(),
+export function probeVideo(filePath) {
+  return probeVideoCached(filePath, {
+    key: "full",
     timeoutMs: 5000,
     allowFfmpegFallback: true,
-  })
-    .then((info) => {
-      setCachedVideoInfo(filePath, mtime, info);
-      pendingProbes.delete(probeKey);
-      return info;
-    })
-    .catch((err) => {
-      pendingProbes.delete(probeKey);
-      throw err;
-    });
-
-  pendingProbes.set(probeKey, probe);
-  return probe;
+  });
 }

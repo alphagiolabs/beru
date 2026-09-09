@@ -2,7 +2,6 @@ import { getSupabase, isSupabaseConfigured } from "../../lib/supabaseClient.js";
 
 let _authListenerRegistered = false;
 
-/** Distinguish missing profile rows from explicitly disabled accounts. */
 export function profileGateError(profile) {
   if (!profile) return "auth.profileMissing";
   if (!profile.is_active) return "auth.accountDisabled";
@@ -21,7 +20,7 @@ async function fetchProfile(supabase, userId) {
 
 /**
  * Apply a session to the store (profile fetch + active check).
- * Must not run inside the onAuthStateChange callback body — see ensureAuthListener.
+ * Must not run inside the onAuthStateChange callback body. See ensureAuthListener.
  */
 async function applySession(supabase, set, nextSession) {
   if (!nextSession?.user) {
@@ -58,12 +57,11 @@ async function applySession(supabase, set, nextSession) {
 }
 
 /**
- * Register once so cold-start (no session) still receives later sign-in / sign-out events.
+ * Register once so cold start without a session still receives later auth events.
  *
- * CRITICAL: never `await` Supabase APIs inside the onAuthStateChange callback.
- * supabase-js holds an internal lock while the callback runs; an async call that
- * needs the same lock deadlocks getSession/signIn and freezes the app on
- * "Verificando sesión…". Defer with setTimeout(0) so the lock is released first.
+ * Never await Supabase APIs inside onAuthStateChange. supabase-js holds a lock
+ * in the callback; awaiting getSession/signIn deadlocks boot on "Verificando sesión…".
+ * Defer with setTimeout(0).
  * @see https://supabase.com/docs/guides/troubleshooting/why-is-my-supabase-api-call-not-returning-PGzXw0
  */
 function ensureAuthListener(supabase, set) {
@@ -76,7 +74,6 @@ function ensureAuthListener(supabase, set) {
   });
 }
 
-/** Supabase auth session and admin user management. */
 export function createAuthSlice(set, get) {
   return {
     authStatus: isSupabaseConfigured ? "loading" : "unauthenticated",
@@ -91,7 +88,6 @@ export function createAuthSlice(set, get) {
       }
 
       const supabase = getSupabase();
-      // Always register, including cold start without a session.
       ensureAuthListener(supabase, set);
 
       try {
@@ -169,7 +165,6 @@ export function createAuthSlice(set, get) {
         return { ok: false, error: gate };
       }
 
-      // Safety net if initAuth never ran (or failed before ensureAuthListener).
       ensureAuthListener(supabase, set);
 
       set({

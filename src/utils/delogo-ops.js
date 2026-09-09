@@ -1,5 +1,3 @@
-/** Delogo operation sanitization (no UI). Used before FFmpeg job export. */
-
 import { clampNum } from "./clamp";
 import { DELOGO_METHODS, MIRROR_SIDES as MIRROR_SIDES_UI } from "./types";
 
@@ -7,11 +5,6 @@ export const VALID_DELOGO_METHODS = new Set(DELOGO_METHODS.map((m) => m.id));
 
 const MIRROR_SIDE_IDS = MIRROR_SIDES_UI.map((s) => s.id);
 
-/**
- * Single source of truth for delogo field bounds and defaults.
- * Shared by `sanitizeOperation` (export path) and `sanitizeDefaults`
- * (preset load path) so preview and export never disagree.
- */
 export const DELOGO_FIELD_BOUNDS = {
   temporalRadius: { min: 1, max: 15, default: 3 },
   mosaicSize: { min: 4, max: 80, default: 12 },
@@ -20,8 +13,8 @@ export const DELOGO_FIELD_BOUNDS = {
 };
 
 function sanitizeDelogoMethod(method) {
-  const m = String(method || "temporal").toLowerCase();
-  return VALID_DELOGO_METHODS.has(m) ? m : "temporal";
+  const m = String(method || "blur").toLowerCase();
+  return VALID_DELOGO_METHODS.has(m) ? m : "blur";
 }
 
 export function sanitizeMirrorSide(side) {
@@ -60,12 +53,11 @@ export function sanitizeOperation(op) {
     DELOGO_FIELD_BOUNDS.blurStrength.default,
   );
 
-  // Cover requires a non-empty image path; fall back to temporal otherwise.
   if (
     out.delogoMethod === "cover" &&
     (typeof out.delogoImagePath !== "string" || !out.delogoImagePath.trim())
   ) {
-    out.delogoMethod = "temporal";
+    out.delogoMethod = "blur";
   }
 
   out.mirrorSide = sanitizeMirrorSide(out.mirrorSide);

@@ -5,8 +5,6 @@ import { ToggleSwitch, SegmentedToolbar } from "./inspector";
 export default function TextLayoutControls({
   values = {},
   onPatch,
-  disabled = false,
-  /** When true, render horizontal align (StyleEditor Párrafo). AppliedTextEditor keeps its own. */
   showTextAlign = false,
   textAlignOptions = null,
 }) {
@@ -19,7 +17,6 @@ export default function TextLayoutControls({
   const textAlign = values.textAlign || "left";
 
   const patch = (next) => {
-    if (disabled) return;
     onPatch?.(next);
   };
 
@@ -33,7 +30,6 @@ export default function TextLayoutControls({
               ariaLabel="Alineación horizontal"
               columns={3}
               value={textAlign}
-              disabled={disabled}
               onChange={(value) => patch({ textAlign: value })}
               options={textAlignOptions}
             />
@@ -46,7 +42,6 @@ export default function TextLayoutControls({
             ariaLabel="Alineación vertical"
             columns={3}
             value={verticalAlign}
-            disabled={disabled}
             onChange={(value) => patch({ verticalAlign: value })}
             options={VERTICAL_ALIGNS.map((a) => ({
               value: a.value,
@@ -72,7 +67,6 @@ export default function TextLayoutControls({
             inputMode="decimal"
             aria-label="Alto de línea"
             value={lineHeight}
-            disabled={disabled}
             onChange={(e) => patch({ lineHeight: Number(e.target.value) })}
             className="inspector-paragraph-metric-input"
             min={0.8}
@@ -87,7 +81,6 @@ export default function TextLayoutControls({
             inputMode="numeric"
             aria-label="Margen seguro"
             value={safeMargin}
-            disabled={disabled}
             onChange={(e) => patch({ safeMargin: Number(e.target.value) })}
             className="inspector-paragraph-metric-input"
             min={0}
@@ -100,24 +93,22 @@ export default function TextLayoutControls({
         <ToggleSwitch
           label="Auto-ajustar"
           checked={autoFit}
-          disabled={disabled}
           onChange={(next) => patch({ autoFit: next })}
         />
         <ToggleSwitch
           label="Ajuste de línea"
           checked={textWrap}
-          disabled={disabled}
           onChange={(next) => patch({ textWrap: next })}
         />
       </div>
 
-      <div className={`inspector-paragraph-truncate${autoFit || disabled ? " is-disabled" : ""}`}>
+      <div className={`inspector-paragraph-truncate${autoFit ? " is-disabled" : ""}`}>
         <span className="inspector-paragraph-micro">Truncado</span>
         <SegmentedToolbar
           ariaLabel="Truncado"
           columns={3}
           value={truncate}
-          disabled={disabled || autoFit}
+          disabled={autoFit}
           onChange={(value) => patch({ truncate: value })}
           options={TRUNCATE_MODES.map((m) => ({
             value: m.value,

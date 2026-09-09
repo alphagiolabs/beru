@@ -1,5 +1,5 @@
 import { hasVideoDimensions } from "../../utils/batch-process";
-import { buildBatchTextOperationsForPreview } from "../../utils/preview-frame-job";
+import { buildBatchTextOperationsForPreview } from "../../utils/batch-text-ops";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { appendProcessingLog, formatProcessingLogs } from "../../utils/processing-logs";
 import {
@@ -20,13 +20,10 @@ import {
   applyJobProgressBatch,
   abortProcessingQueue,
   buildExportJob,
+  buildExportJobs,
 } from "../../utils/export-pipeline.js";
-import { runSingle } from "../../utils/batch-runner.js";
+import { validateBatchReady, runBatch, runSingle, cancelBatch } from "../../utils/batch-runner.js";
 
-// Module-level debounce timer for execution history persistence.
-// This is safe because the store lives for the entire app session — the timer
-// is never leaked. The debounce (1200ms) coalesces rapid history updates
-// (e.g. batch log lines) into a single IPC save call.
 let persistHistoryTimer = null;
 
 function schedulePersistExecutionHistory(history) {
@@ -38,21 +35,31 @@ function schedulePersistExecutionHistory(history) {
   }, 1200);
 }
 
+async function persistProcessingSetting(partial, label) {
+  const api = window.api;
+  if (!api?.saveSettings) return;
+  try {
+    await api.saveSettings(partial);
+  } catch (e) {
+    console.error(`[beru] Failed to save ${label}:`, e.message);
+  }
+}
+
 function processingHooks(set, get) {
   return {
     startExecutionRun: (opts) => get().startExecutionRun(opts),
     applyPatch: (patch) => set(patch),
+    setProcessing: (val) => get().setProcessing(val),
     getQueue: () => get().queue,
     finalizeActiveExecution: (summary) => get().finalizeActiveExecution(summary),
+    abortActiveProcessing: () => get().abortActiveProcessing(),
     summarizeQueue,
   };
 }
 
-/** Batch encode progress, job building, and FFmpeg processing orchestration. */
 export function createProcessingSlice(set, get) {
   return {
     isProcessing: false,
-    /** Main-process processing run id (for ignoring stale process:error/finished). */
     activeProcessRunId: null,
     encodeProfile: "balanced",
     batchWorkers: 0,
@@ -67,14 +74,7 @@ export function createProcessingSlice(set, get) {
     activeExecutionId: null,
 
     setActiveProcessRunId: (runId) => set({ activeProcessRunId: runId || null }),
-    /**
-     * Standalone per-job progress map (0..100) used when
-     * `VITE_BERU_RENDER_PROGRESS_MAP` is enabled. Keeps `queue` referentially
-     * stable during processing. Read via `getJobProgress(idx)` or
-     * `useEditorStore((s) => s.jobProgress)`.
-     */
     jobProgress: {},
-    /** @param {number} idx */
     getJobProgress: (idx) => {
       const map = get().jobProgress;
       const v = map?.[idx];
@@ -162,7 +162,6 @@ export function createProcessingSlice(set, get) {
         };
       }),
 
-    // Batched variant of appendLog — one store update for N log lines.
     appendLogBatch: (lines) => {
       if (!lines || lines.length === 0) return;
       set((s) => {
@@ -347,6 +346,47 @@ export function createProcessingSlice(set, get) {
       };
     },
 
+    processAll: async () => {
+      const api = window.api;
+      if (!api?.startProcessing) {
+        return { ok: false, code: "api_unavailable" };
+      }
+      const { templateRegions, sidebarMode } = get();
+      if (sidebarMode === "batch" || templateRegions.length > 0) {
+        get().materializeBatchTextOps();
+      }
+
+      let queueForProcessing = get().queue;
+      if (queueForProcessing.some((q) => !hasVideoDimensions(q))) {
+        queueForProcessing = await get().refreshMissingVideoInfo(api);
+      }
+
+      if (get().isProcessing) {
+        return { ok: false, code: "busy" };
+      }
+
+      const validation = validateBatchReady({
+        queue: queueForProcessing,
+        templateRegions,
+        getCellText: (videoIdx, regionId) => get().getCellTextForRegion(videoIdx, regionId),
+      });
+      if (!validation.ok) return validation;
+
+      const jobs = buildExportJobs(queueForProcessing, (q, i) => get()._buildJobFor(q, i));
+      return runBatch({
+        api,
+        jobs,
+        queue: get().queue,
+        hooks: processingHooks(set, get),
+      });
+    },
+
+    cancelProcessing: async () =>
+      cancelBatch({
+        api: window.api,
+        hooks: processingHooks(set, get),
+      }),
+
     processSingle: async (videoIdx) => {
       const api = window.api;
       if (!api?.startProcessing) {
@@ -397,7 +437,6 @@ export function createProcessingSlice(set, get) {
         };
       }),
 
-    /** Reset queue rows left mid-batch after user cancel or main-process abort. */
     abortActiveProcessing: () =>
       set((s) => {
         const { queue, queueChanged } = abortProcessingQueue(s.queue);
@@ -425,54 +464,26 @@ export function createProcessingSlice(set, get) {
     setEncodeProfile: async (val) => {
       const profile = val === "fast" || val === "quality" || val === "uquality" ? val : "balanced";
       set({ encodeProfile: profile });
-      const api = window.api;
-      if (api?.saveSettings) {
-        try {
-          await api.saveSettings({ encodeProfile: profile });
-        } catch (e) {
-          console.error("[beru] Failed to save encode profile:", e.message);
-        }
-      }
+      await persistProcessingSetting({ encodeProfile: profile }, "encode profile");
     },
 
     setBatchWorkers: async (val) => {
       const n = Number(val);
       const workers = Number.isFinite(n) && n >= 0 ? Math.min(16, Math.floor(n)) : 0;
       set({ batchWorkers: workers });
-      const api = window.api;
-      if (api?.saveSettings) {
-        try {
-          await api.saveSettings({ batchWorkers: workers });
-        } catch (e) {
-          console.error("[beru] Failed to save batch workers:", e.message);
-        }
-      }
+      await persistProcessingSetting({ batchWorkers: workers }, "batch workers");
     },
 
     setBatchWorkersMode: async (val) => {
       const batchWorkersMode = val === "conservative" ? "conservative" : "balanced";
       set({ batchWorkersMode });
-      const api = window.api;
-      if (api?.saveSettings) {
-        try {
-          await api.saveSettings({ batchWorkersMode });
-        } catch (e) {
-          console.error("[beru] Failed to save batch workers mode:", e.message);
-        }
-      }
+      await persistProcessingSetting({ batchWorkersMode }, "batch workers mode");
     },
 
     setBatchRetryFailed: async (enabled) => {
       const batchRetryFailed = !!enabled;
       set({ batchRetryFailed });
-      const api = window.api;
-      if (api?.saveSettings) {
-        try {
-          await api.saveSettings({ batchRetryFailed });
-        } catch (e) {
-          console.error("[beru] Failed to save batch retry setting:", e.message);
-        }
-      }
+      await persistProcessingSetting({ batchRetryFailed }, "batch retry setting");
     },
 
     setExportFormat: (val) => set({ exportFormat: val }),

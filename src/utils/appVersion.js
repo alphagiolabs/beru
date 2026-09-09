@@ -1,5 +1,4 @@
 /* global __APP_VERSION__ */
-/** Current app semver from package.json (injected at build time). */
 export const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0-dev";
 
 function normalizeReleaseNoteLines(notes) {
@@ -43,7 +42,6 @@ function classifyReleaseNoteLine(line, activeSection) {
   return { kind: "item", section: "whatsNew", text: line };
 }
 
-/** Group release notes into Hermes-style changelog sections. */
 export function parseReleaseNotesSections(notes, maxPerSection = 4) {
   const buckets = { whatsNew: [], fixed: [] };
   let activeSection = null;
@@ -69,7 +67,6 @@ export function parseReleaseNotesSections(notes, maxPerSection = 4) {
   };
 }
 
-/** Format elapsed ms as HH:MM for footer clocks. */
 export function formatFooterClock(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
   const h = Math.floor(totalSec / 3600);

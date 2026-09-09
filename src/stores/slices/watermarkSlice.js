@@ -1,15 +1,14 @@
-/** Global watermark configuration. Applied to all videos during export. */
 export function createWatermarkSlice(set, get) {
   return {
     watermark: {
       enabled: false,
-      type: "text", // "text" | "image"
+      type: "text",
       text: "",
       imagePath: "",
       imageDataUrl: "",
       opacity: 0.5,
       scale: 1,
-      position: "bottom-right", // 9-position grid key
+      position: "bottom-right",
       fontSize: 18,
       fontColor: "#ffffff",
       fontFamily: "Arial",

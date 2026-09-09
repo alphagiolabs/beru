@@ -1,8 +1,5 @@
 import { useId } from "react";
 
-/**
- * Accessible switch replacing native checkboxes in the inspector.
- */
 export default function ToggleSwitch({
   checked = false,
   onChange,

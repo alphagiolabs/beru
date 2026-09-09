@@ -2,6 +2,7 @@ import { useRef, useCallback } from "react";
 import { History, Download } from "lucide-react";
 import useCloseOnOutsideClick from "../../hooks/useCloseOnOutsideClick";
 import { formatRunTitle } from "./utils";
+import { Button } from "../ui/Button";
 
 export default function ExecutionHistoryPanel({ history, onExport, onClear, onClose, t }) {
   const panelRef = useRef(null);
@@ -40,15 +41,27 @@ export default function ExecutionHistoryPanel({ history, onExport, onClear, onCl
       {(hasLines || hasRuns) && (
         <div className="status-footer-popover-actions">
           {hasLines && (
-            <button type="button" className="status-footer-link-btn" onClick={onExport}>
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              className="status-footer-link-btn"
+              onClick={onExport}
+            >
               <Download size={12} />
               {t("footer.exportLogs")}
-            </button>
+            </Button>
           )}
           {hasRuns && (
-            <button type="button" className="status-footer-link-btn" onClick={onClear}>
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              className="status-footer-link-btn"
+              onClick={onClear}
+            >
               {t("footer.clearHistory")}
-            </button>
+            </Button>
           )}
         </div>
       )}

@@ -9,7 +9,6 @@ import { createWatermarkSlice } from "./slices/watermarkSlice.js";
 import { createAuthSlice } from "./slices/authSlice.js";
 import { createPetSlice } from "./slices/petSlice.js";
 import {
-  SESSION_PERSIST_KEY,
   readSessionSnapshotFromStorage,
   writeSessionSnapshotToStorage,
 } from "../utils/session-persist.js";
@@ -52,7 +51,6 @@ const useEditorStore = createWithEqualityFn(
   Object.is,
 );
 
-// Persist queue + batch/Excel/output context across crash/relaunch.
 if (typeof window !== "undefined") {
   let prev = useEditorStore.getState();
   useEditorStore.subscribe((state) => {
@@ -73,8 +71,6 @@ if (typeof window !== "undefined") {
     if (changed) persistSession(() => useEditorStore.getState());
   });
 
-  // Flush debounced snapshot before unload so crash recovery is not empty.
-  // Guard for Node/jsdom partial globals used by unit tests.
   if (typeof window.addEventListener === "function") {
     const flushSession = () => persistSession(() => useEditorStore.getState(), { immediate: true });
     window.addEventListener("beforeunload", flushSession);
@@ -86,5 +82,4 @@ if (typeof window !== "undefined") {
   }
 }
 
-export { SESSION_PERSIST_KEY };
 export default useEditorStore;

@@ -1,8 +1,3 @@
-// Regression test for the "python ffmpeg-path" bug:
-// `processor.py` must use the bundled ffmpeg/ffprobe when the main process
-// passes BERU_FFMPEG / BERU_FFPROBE env vars. Previously the script hardcoded
-// "ffmpeg" on PATH, so packaged installs without ffmpeg in PATH would crash.
-
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "child_process";
 import { writeFileSync, unlinkSync } from "fs";
@@ -343,13 +338,10 @@ print(processor.build_drawtext({
     expect(r.status).toBe(0);
     const filter = r.stdout.trim();
     expect(filter).not.toContain("spacing=");
-    // One drawtext per glyph cluster, comma-chained
     expect(filter).toContain("text='A'");
     expect(filter).toContain("text='B'");
     expect(filter).toContain("text='C'");
     expect((filter.match(/drawtext=/g) || []).length).toBe(3);
-    // Layout box is region + box pad (default 4) → origin x=14,y=24.
-    // Advance ≈ 0.55*32 + (-2) ≈ 15.6 → second glyph near x=30.
     expect(filter).toMatch(/x=14/);
     expect(filter).toMatch(/x=30/);
   });
@@ -485,6 +477,61 @@ print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8, consider_memory=
     });
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout.trim())).toBe(5);
+  });
+
+  it("skips font and hardware startup work when a batch only copies streams", () => {
+    const code = `
+import json
+import processor
+
+jobs = [{"input_path": "in.mp4", "output_path": "out.mp4", "operations": []}]
+print(json.dumps({
+    "fonts": processor._jobs_require_fonts(jobs),
+    "hardware": processor._jobs_allow_hardware(jobs),
+    "encode": processor._job_requires_encode(jobs[0]),
+}))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout.trim())).toEqual({ fonts: false, hardware: false, encode: false });
+  });
+
+  it("caps software fallback admission independently from GPU workers", () => {
+    const code = `
+import json
+import threading
+import time
+import processor
+
+gate = processor._ResourceAdmission(2, 0)
+state = {"active": 0, "peak": 0}
+lock = threading.Lock()
+
+def run():
+    assert gate.acquire()
+    try:
+        with lock:
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+        time.sleep(0.03)
+        with lock:
+            state["active"] -= 1
+    finally:
+        gate.release()
+
+threads = [threading.Thread(target=run) for _ in range(6)]
+for thread in threads:
+    thread.start()
+for thread in threads:
+    thread.join()
+print(json.dumps(state))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout.trim()).peak).toBeLessThanOrEqual(2);
   });
 
   it("applies balanced GPU worker caps for 1080p quality batches with video filters", () => {
@@ -1093,8 +1140,7 @@ def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
     calls.append(cmd)
     if "libx264" in cmd:
         return True, None
-    # Use a real hardware-encoder error marker (not "operation not permitted",
-    # which is a permissions error, not a GPU failure — see batch_errors.py).
+    # "operation not permitted" is a permission error, not GPU. See batch_errors.py.
     return False, "Error while filtering: h264_nvenc: encoder init failed"
 
 processor.detect_hw_encoder = lambda _ffmpeg: "h264_nvenc"
@@ -1176,7 +1222,12 @@ def fake_process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
 
 try:
     with open(jobs_path, "w", encoding="utf-8") as f:
-        json.dump([{"id": 0, "input_path": "C:/tmp/in.mp4", "output_path": "C:/tmp/out.mp4"}], f)
+        json.dump([{
+            "id": 0,
+            "input_path": "C:/tmp/in.mp4",
+            "output_path": "C:/tmp/out.mp4",
+            "operations": [{"mode": "blur"}],
+        }], f)
     processor.find_ffmpeg = lambda: ffmpeg.name
     processor.find_ffprobe = lambda _ffmpeg: ffprobe.name
     processor.detect_hw_encoder = lambda _ffmpeg, force_test=False: "h264_nvenc" if force_test else None
@@ -1241,6 +1292,8 @@ print("RESULT", json.dumps(result, sort_keys=True))
     }
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('"file": "a.mp4"');
-    expect(r.stdout).toContain('RESULT {"cancelled": 0, "failed": 0, "succeeded": 1, "total": 1}');
+    expect(r.stdout).toContain(
+      'RESULT {"cancelled": 0, "failed": 0, "succeeded": 1, "total": 1, "workers": 1}',
+    );
   });
 });

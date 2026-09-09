@@ -75,11 +75,9 @@ describe("Stability under heavy load", () => {
       progressDone: 0,
     });
 
-    // Simulate rapid job_progress messages (1 per video, every few ms)
     for (let i = 0; i < 500; i++) {
       useEditorStore.getState().updateJobProgressBatch([{ index: i, percent: 50 }]);
     }
-    // Simulate all completing
     for (let i = 0; i < 500; i++) {
       useEditorStore.getState().markJobDone({ index: i });
     }
@@ -113,8 +111,6 @@ describe("Stability under heavy load", () => {
     const state = useEditorStore.getState();
     expect(updates).toBe(1);
     expect(state.queue.every((q) => q.status === "processing")).toBe(true);
-    // With progressMap enabled (default), progress lives in jobProgress map,
-    // not in queue. With progressMap disabled, progress is in queue.
     if (state.jobProgress && Object.keys(state.jobProgress).length > 0) {
       expect(Object.values(state.jobProgress).every((p) => p === 42)).toBe(true);
     } else {
@@ -186,7 +182,6 @@ describe("Stability under heavy load", () => {
     expect(report.matched).toBe(200);
     expect(report.unmatched).toBe(0);
     const state = useEditorStore.getState();
-    // Each video should have 5 text operations
     expect(state.queue[0].operations.length).toBe(5);
     expect(state.queue[199].operations[4].text).toBe("Text 199-4");
   });
@@ -218,7 +213,6 @@ describe("Stability under heavy load", () => {
     );
     useEditorStore.setState({ queue: items, imageDataCache: cache });
 
-    // Remove 50 videos
     for (let i = 0; i < 50; i++) {
       useEditorStore.getState().removeVideo(0);
     }

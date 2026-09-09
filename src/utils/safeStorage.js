@@ -1,9 +1,3 @@
-/* Safe localStorage wrapper that degrades gracefully when storage is
- * unavailable (sandboxed renderer, private mode, disabled cookies, etc.).
- *
- * Used by the updater flow to persist the last-check timestamp and the
- * dismissed-version marker without crashing on access errors.
- */
 export const safeStorage = {
   get(key) {
     try {

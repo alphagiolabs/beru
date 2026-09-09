@@ -8,57 +8,59 @@ import {
   uninstallPet,
 } from "../utils/petdex.js";
 
-export function registerPetdexHandlers() {
-  ipcMain.handle("petdex:fetchManifest", async () => {
+function wrapPetdex(fn) {
+  return async (...args) => {
     try {
+      return await fn(...args);
+    } catch (e) {
+      return { success: false, error: e?.message || String(e) };
+    }
+  };
+}
+
+export function registerPetdexHandlers() {
+  ipcMain.handle(
+    "petdex:fetchManifest",
+    wrapPetdex(async () => {
       const result = await fetchPetManifest();
       return { success: true, manifest: result.manifest, source: result.source };
-    } catch (e) {
-      return { success: false, error: e?.message || String(e) };
-    }
-  });
+    }),
+  );
 
-  ipcMain.handle("petdex:listInstalled", async () => {
-    try {
-      return { success: true, pets: listInstalledPets() };
-    } catch (e) {
-      return { success: false, error: e?.message || String(e) };
-    }
-  });
+  ipcMain.handle(
+    "petdex:listInstalled",
+    wrapPetdex(async () => ({ success: true, pets: listInstalledPets() })),
+  );
 
-  ipcMain.handle("petdex:install", async (_event, entry) => {
-    try {
+  ipcMain.handle(
+    "petdex:install",
+    wrapPetdex(async (_event, entry) => {
       const pet = await installPet(entry);
       return { success: true, pet };
-    } catch (e) {
-      return { success: false, error: e?.message || String(e) };
-    }
-  });
+    }),
+  );
 
-  ipcMain.handle("petdex:uninstall", async (_event, slug) => {
-    try {
+  ipcMain.handle(
+    "petdex:uninstall",
+    wrapPetdex(async (_event, slug) => {
       const pet = uninstallPet(slug);
       return { success: true, pet };
-    } catch (e) {
-      return { success: false, error: e?.message || String(e) };
-    }
-  });
+    }),
+  );
 
-  ipcMain.handle("petdex:getSpritesheet", async (_event, slug) => {
-    try {
+  ipcMain.handle(
+    "petdex:getSpritesheet",
+    wrapPetdex(async (_event, slug) => {
       const filePath = resolvePetSpritesheetPath(slug);
       return { success: true, path: filePath };
-    } catch (e) {
-      return { success: false, error: e?.message || String(e) };
-    }
-  });
+    }),
+  );
 
-  ipcMain.handle("petdex:getBundledSpritesheet", async (_event, slug) => {
-    try {
+  ipcMain.handle(
+    "petdex:getBundledSpritesheet",
+    wrapPetdex(async (_event, slug) => {
       const filePath = resolveBundledSpritesheetPath(slug);
       return { success: true, path: filePath };
-    } catch (e) {
-      return { success: false, error: e?.message || String(e) };
-    }
-  });
+    }),
+  );
 }

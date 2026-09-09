@@ -9,21 +9,6 @@ function defaultCornerPosition() {
   };
 }
 
-/**
- * @param {{
- *   state: import("../utils/pet-states.js").PetStateId,
- *   spritesheet: string,
- *   scale: number,
- *   opacity?: number,
- *   movement?: string,
- *   position?: { x: number, y: number } | null,
- *   onPositionChange?: (position: { x: number, y: number }) => void,
- *   onShiftClick?: () => void,
- *   onContextMenu?: () => void,
- *   title?: string,
- *   className?: string,
- * }} props
- */
 export default function PetSurface({
   state,
   spritesheet,
@@ -42,7 +27,6 @@ export default function PetSurface({
   const dragOffset = useRef({ x: 0, y: 0 });
   const nodeRef = useRef(null);
 
-  // Lógica de caminar
   const [walkPos, setWalkPos] = useState(null);
   const [walkState, setWalkState] = useState(null);
   const isDraggingRef = useRef(false);

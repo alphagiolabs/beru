@@ -2,6 +2,7 @@ import { Play, Pause, SkipBack, SkipForward } from "lucide-react";
 import TextOverlay from "../TextOverlay";
 import { regionToScreen, fmtTime } from "../../utils/video-utils";
 import { useT } from "../../i18n/useT";
+import { Button } from "../ui/Button";
 
 export default function TableEditorPreview({
   videoRef,
@@ -84,8 +85,10 @@ export default function TableEditorPreview({
             style={{ "--te-seek": `${seekFrac * 100}%` }}
           />
           <div className="te-transport-row">
-            <button
+            <Button
               type="button"
+              variant="tertiary"
+              size="icon"
               className="te-icon-btn te-icon-btn--sm"
               aria-label={t("table.seekStart")}
               onClick={() => {
@@ -94,9 +97,11 @@ export default function TableEditorPreview({
               }}
             >
               <SkipBack size={13} />
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="tertiary"
+              size="icon"
               className="te-icon-btn te-icon-btn--sm te-icon-btn--accent"
               aria-label={playing ? t("table.pause") : t("table.play")}
               onClick={() => {
@@ -107,9 +112,11 @@ export default function TableEditorPreview({
               }}
             >
               {playing ? <Pause size={13} /> : <Play size={13} />}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="tertiary"
+              size="icon"
               className="te-icon-btn te-icon-btn--sm"
               aria-label={t("table.seekEnd")}
               onClick={() => {
@@ -118,7 +125,7 @@ export default function TableEditorPreview({
               }}
             >
               <SkipForward size={13} />
-            </button>
+            </Button>
             <span className="te-time">
               {fmtTime(currentTime)}
               <span className="te-time-sep">/</span>

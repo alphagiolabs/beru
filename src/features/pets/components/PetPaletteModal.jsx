@@ -3,6 +3,7 @@ import { Check, PawPrint, Power, Search, Settings, X } from "lucide-react";
 import useEditorStore from "../../../stores/useEditorStore";
 import { useT } from "../../../i18n/useT";
 import PetPreviewSprite from "./PetPreviewSprite.jsx";
+import { Button } from "../../../components/ui/Button";
 
 export default function PetPaletteModal() {
   const t = useT();
@@ -107,14 +108,16 @@ export default function PetPaletteModal() {
             <PawPrint size={14} strokeWidth={2.25} />
             <span id="pet-palette-title">{t("settings.petdex.paletteTitle")}</span>
           </div>
-          <button
+          <Button
             type="button"
+            variant="tertiary"
+            size="icon"
             className="pet-palette-close"
             onClick={close}
             aria-label={t("common.close")}
           >
             <X size={14} />
-          </button>
+          </Button>
         </header>
 
         <label className="pet-palette-search">
@@ -172,18 +175,22 @@ export default function PetPaletteModal() {
         </div>
 
         <footer className="pet-palette-foot">
-          <button
+          <Button
             type="button"
+            variant="tertiary"
+            size="sm"
             className={`pet-palette-toggle${petEnabled ? " pet-palette-toggle--on" : ""}`}
             disabled={!petActiveSlug}
             onClick={() => setPetEnabled(!petEnabled)}
           >
             <Power size={12} />
             {petEnabled ? t("settings.petdex.petOn") : t("settings.petdex.petOff")}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="cap-btn-secondary pet-palette-gallery-btn"
+            variant="secondary"
+            size="sm"
+            className="pet-palette-gallery-btn"
             onClick={() => {
               close();
               openSettingsTab("pets");
@@ -191,7 +198,7 @@ export default function PetPaletteModal() {
           >
             <Settings size={12} />
             {t("settings.petdex.paletteBrowse")}
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

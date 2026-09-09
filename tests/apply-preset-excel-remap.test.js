@@ -1,18 +1,10 @@
-// Regression: applyPreset with a preset whose templateRegions have fresh IDs
-// (created from a different project) silently produced empty text ops for
-// EVERY video, because excelMapping.columns was keyed by the OLD region IDs
-// and columns[newTr.id] was undefined. The fix re-maps columns from old IDs
-// to new IDs by matching regions geometrically before _reapplyExcel runs.
-
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 
 globalThis.window = { api: {} };
 
 const { default: useEditorStore } = await import("../src/stores/useEditorStore.js");
 
 function setupState() {
-  // Two template regions with OLD numeric IDs 1001 and 1002, both mapped in
-  // excelMapping.columns to column names "Nombre" and "Codigo".
   useEditorStore.setState({
     queue: [
       { filename: "video1.mp4", path: "C:\\v\\1.mp4", operations: [], status: "idle" },
@@ -40,7 +32,6 @@ describe("applyPreset — Excel column re-mapping on region ID change", () => {
   });
 
   it("re-maps excelMapping.columns by geometric region match", () => {
-    // Preset with FRESH numeric IDs but SAME regions as the old templateRegions.
     const preset = {
       type: "beru-preset",
       name: "Imported preset",
@@ -55,15 +46,12 @@ describe("applyPreset — Excel column re-mapping on region ID change", () => {
     const res = useEditorStore.getState().applyPreset(preset);
     expect(res.ok).toBe(true);
 
-    // After applyPreset, the new templateRegions are in place with new IDs.
     const state = useEditorStore.getState();
     expect(state.templateRegions.map((r) => r.id)).toEqual([2001, 2002]);
 
-    // excelMapping.columns must be re-mapped to the new IDs.
     expect(state.excelMapping.columns[2001]).toBe("Nombre");
     expect(state.excelMapping.columns[2002]).toBe("Codigo");
 
-    // And the queue's text ops must have the Excel content, NOT empty strings.
     const ops1 = state.queue[0].operations.filter((o) => o.mode === "text");
     const op1Nombre = ops1.find((o) => o.batchRegionId === 2001);
     const op1Codigo = ops1.find((o) => o.batchRegionId === 2002);
@@ -80,7 +68,6 @@ describe("applyPreset — Excel column re-mapping on region ID change", () => {
   });
 
   it("does not re-map when preset region IDs already match existing columns", () => {
-    // Preset with the SAME numeric IDs as the current templateRegions.
     const preset = {
       type: "beru-preset",
       name: "Same IDs",
@@ -94,7 +81,6 @@ describe("applyPreset — Excel column re-mapping on region ID change", () => {
 
     useEditorStore.getState().applyPreset(preset);
     const state = useEditorStore.getState();
-    // Columns untouched (already correct).
     expect(state.excelMapping.columns[1001]).toBe("Nombre");
     expect(state.excelMapping.columns[1002]).toBe("Codigo");
   });

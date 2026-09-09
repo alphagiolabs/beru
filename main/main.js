@@ -1,9 +1,9 @@
 import { app, BrowserWindow, protocol } from "electron";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createPathSecurity } from "./pathSecurity.js";
-import { getPythonProcess, hasActiveProcessing, setAppIsQuitting } from "./shared-state.js";
+import { setAppIsQuitting } from "./shared-state.js";
+import { getPythonProcess, hasActiveProcessing } from "./processing-run.js";
 import { createBeruVideoResponse, validateBeruRequestPath } from "./utils/beru-protocol.js";
 import { killProcessTree } from "./utils/kill-process-tree.js";
 import { createWindow } from "./utils/window.js";
@@ -23,15 +23,11 @@ import { registerSystemHandlers } from "./handlers/system.js";
 import { registerUpdaterHandlers } from "./handlers/updater.js";
 import { disposePetsModule, registerPetsModule } from "./pets/index.js";
 import { isQuittingForUpdate } from "./updater.js";
-import { initTelemetry } from "./utils/telemetry.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let quitCleanupStarted = false;
 let quitDisposalDone = false;
 
 const pathSecurity = createPathSecurity(app);
-
-// ── Global cleanup helpers ───────────────────────────────────────────
 
 function cleanupTempFiles() {
   try {
@@ -47,10 +43,6 @@ function cleanupTempFiles() {
   } catch {}
 }
 
-// Unconditional quit-time disposal. Runs on EVERY quit path (not just when a
-// processing run is active): the preview-frame worker is a separate long-lived
-// child that getPythonProcess() does not track, so gating on it orphaned the
-// worker on every normal quit while idle. Idempotent across before-quit/will-quit.
 function disposeOnQuit() {
   if (quitDisposalDone) return;
   quitDisposalDone = true;
@@ -67,8 +59,6 @@ function disposeOnQuit() {
 
 function onFatalError(err) {
   console.error("[beru] FATAL:", err);
-  // Write crash info to a log file for post-mortem debugging.
-  // Future: integrate electron's crashReporter or Sentry for remote crash reporting.
   try {
     const crashLog = path.join(app.getPath("userData"), "crash.log");
     const entry = `[${new Date().toISOString()}] ${err?.stack || err?.message || String(err)}\n`;
@@ -79,17 +69,12 @@ function onFatalError(err) {
     disposePreviewFrameWorker();
     const proc = getPythonProcess();
     if (proc?.pid) {
-      // Fire-and-forget: do not await before quit. Same tree-kill as cancel.
       void killProcessTree(proc);
     }
   } catch {}
   app.quit();
 }
 
-/**
- * Intercept quit while a batch is active (including probe phase with no child).
- * Update-quit cancels in scheduleInstall before quitAndInstall, so skip here.
- */
 function interceptQuitIfProcessing(event) {
   if (quitCleanupStarted) return;
   if (isQuittingForUpdate()) return;
@@ -102,7 +87,6 @@ function interceptQuitIfProcessing(event) {
   event.preventDefault();
   quitCleanupStarted = true;
   setAppIsQuitting(true);
-  // Cancel first (may write .cancel / kill child), then dispose temps + workers.
   cancelActiveProcessing().finally(() => {
     disposeOnQuit();
     app.quit();
@@ -117,7 +101,6 @@ app.on("render-process-gone", (event, _webContents, details) => {
   console.error("[beru] renderer process gone:", details.reason, details.exitCode);
 });
 
-// ── Register beru:// protocol before app is ready ────────────────────────────
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "beru",
@@ -147,24 +130,19 @@ function registerBeruProtocol() {
   });
 }
 
-// ── Suppress GPU shader disk cache errors on Windows ────────────────────────
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
-// Windows Task Manager and shell use the packaged exe FileDescription (set at
-// build time from package.json description). Keep app identity consistent in dev.
+// Task Manager uses the packaged exe FileDescription. Match it in dev.
 app.setName("Beru");
 if (process.platform === "win32") {
   app.setAppUserModelId("app.beru.desktop");
 }
-
-// ── App lifecycle ─────────────────────────────────────────────────────────
 
 process.on("uncaughtException", onFatalError);
 process.on("unhandledRejection", onFatalError);
 
 app.whenReady().then(() => {
   registerBeruProtocol();
-  initTelemetry();
   createWindow();
 });
 
@@ -179,8 +157,6 @@ app.on("before-quit", (event) => {
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
-
-// ── IPC Handlers ──────────────────────────────────────────────────────────
 
 registerDialogHandlers(pathSecurity);
 registerVideoHandlers(pathSecurity);

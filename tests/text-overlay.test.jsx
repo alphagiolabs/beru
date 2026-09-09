@@ -2,69 +2,24 @@ import React, { act } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRoot } from "react-dom/client";
 import TextOverlay from "../src/components/TextOverlay.jsx";
+import { layoutExportText, textBoxPad, textLayoutBounds } from "../src/utils/text-layout.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let root = null;
-let originals = {};
 
-function restoreMetricGetters() {
-  for (const [prop, descriptor] of Object.entries(originals)) {
-    if (descriptor) Object.defineProperty(HTMLElement.prototype, prop, descriptor);
-    else delete HTMLElement.prototype[prop];
-  }
-  originals = {};
-}
-
-function mockMeasurerMetrics({ scrollWidth, scrollHeight }) {
-  restoreMetricGetters();
-  for (const prop of ["scrollWidth", "scrollHeight", "clientWidth", "clientHeight"]) {
-    originals[prop] = Object.getOwnPropertyDescriptor(HTMLElement.prototype, prop);
-  }
-
-  Object.defineProperties(HTMLElement.prototype, {
-    scrollWidth: {
-      configurable: true,
-      get() {
-        return this.dataset?.overflowMeasurer ? scrollWidth : 0;
-      },
-    },
-    scrollHeight: {
-      configurable: true,
-      get() {
-        return this.dataset?.overflowMeasurer ? scrollHeight : 0;
-      },
-    },
-    clientWidth: {
-      configurable: true,
-      get() {
-        if (!this.dataset?.overflowMeasurer) return 0;
-        return Number.parseFloat(this.style.width) || 0;
-      },
-    },
-    clientHeight: {
-      configurable: true,
-      get() {
-        if (!this.dataset?.overflowMeasurer) return 0;
-        return Number.parseFloat(this.style.maxHeight) || 0;
-      },
-    },
-  });
-}
-
-function renderOverlay(style = {}) {
+function renderOverlay(style = {}, { screen, text } = {}) {
   root = createRoot(document.getElementById("root"));
   act(() => {
     root.render(
       <TextOverlay
-        screen={{ x: 0, y: 0, w: 160, h: 50, sx: 1, sy: 1 }}
-        text="Texto de ejemplo"
+        screen={screen ?? { x: 0, y: 0, w: 160, h: 50, sx: 1, sy: 1 }}
+        text={text ?? "Texto de ejemplo"}
         style={{
           fontSize: 24,
           safeMargin: 4,
           bgEnabled: true,
-          // boxPad + safeMargin inset matches Python _text_layout_bounds
           boxBorderWidth: 4,
           ...style,
         }}
@@ -73,7 +28,7 @@ function renderOverlay(style = {}) {
   });
 }
 
-describe("TextOverlay overflow warning", () => {
+describe("TextOverlay export-layout preview", () => {
   beforeEach(() => {
     document.body.innerHTML = '<div id="root"></div>';
   });
@@ -83,25 +38,50 @@ describe("TextOverlay overflow warning", () => {
       root?.unmount();
     });
     root = null;
-    restoreMetricGetters();
   });
 
-  it("does not mark overflow when text fits the usable safe area", () => {
-    // usable = 160 - 2*4(safe) - 2*4(boxPad) = 144 wide; 50 - 8 - 8 = 34 tall
-    mockMeasurerMetrics({ scrollWidth: 140, scrollHeight: 28 });
+  it("paints wrapped lines from the shared export layout, not a DOM measurer", () => {
     renderOverlay();
 
-    const measurer = document.querySelector("[data-overflow-measurer]");
-    expect(measurer.style.width).toBe("144px");
-    expect(measurer.style.maxHeight).toBe("34px");
-    expect(measurer.style.padding).toBe("0px");
+    expect(document.querySelector("[data-overflow-measurer]")).toBeNull();
+    const painted = document.querySelector("[data-export-layout]");
+    expect(painted).toBeTruthy();
+
+    const bounds = textLayoutBounds(
+      { x: 0, y: 0, w: 160, h: 50 },
+      4,
+      textBoxPad({ bgEnabled: true, boxBorderWidth: 4 }),
+    );
+    const layout = layoutExportText({
+      text: "Texto de ejemplo",
+      regionW: bounds.w,
+      regionH: bounds.h,
+      fontSize: 24,
+      lineHeight: 1.2,
+      textWrap: true,
+      autoFit: false,
+      truncate: "none",
+    });
+    expect(painted.getAttribute("data-display-text")).toBe(layout.displayText);
+    expect(painted.getAttribute("data-font-size")).toBe(String(layout.fontSize));
+    expect(layout.displayText).toBe("Texto de\nejemplo");
+  });
+
+  it("does not mark overflow when autoFit shrinks text to the usable area", () => {
+    renderOverlay({ autoFit: true });
     expect(document.body.textContent).not.toMatch(/Desborda/i);
   });
 
-  it("marks overflow when measured text exceeds the usable safe area", () => {
-    mockMeasurerMetrics({ scrollWidth: 140, scrollHeight: 48 });
+  it("marks overflow when export layout exceeds the usable safe area", () => {
     renderOverlay();
-
     expect(document.body.textContent).toMatch(/Desborda/i);
+  });
+
+  it("pins each line box to drawtext line spacing (no CSS half-leading)", () => {
+    renderOverlay({ lineHeight: 1.2, fontSize: 24 });
+    const line = document.querySelector("[data-export-layout] > div");
+    expect(line.style.lineHeight).toBe("24px");
+    expect(line.style.height).toBe("29px");
+    expect(line.style.whiteSpace).toBe("pre");
   });
 });

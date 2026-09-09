@@ -14,8 +14,6 @@ describe("main/main.js quit handlers during update install", () => {
   });
 
   it("does not intercept will-quit when quitting for an update", () => {
-    // Both quit events share interceptQuitIfProcessing which early-returns
-    // when isQuittingForUpdate() is true (cancel happens in scheduleInstall).
     expect(mainSrc).toMatch(/app\.on\("will-quit"/);
     expect(mainSrc).toMatch(/app\.on\("before-quit"/);
     expect(mainSrc).toMatch(/if \(isQuittingForUpdate\(\)\) return/);

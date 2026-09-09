@@ -1,7 +1,3 @@
-// Tests for the disk-backed deletePreset store action.
-// deletePreset must call window.api.deletePreset (IPC), refuse bundled presets,
-// and refresh the presets list from disk afterwards.
-
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
 const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
@@ -61,7 +57,6 @@ describe("useEditorStore.deletePreset", () => {
       source: "user",
     });
     expect(mockApi.listPresets).toHaveBeenCalledTimes(1);
-    // The refreshed list (from the mock) replaces the in-memory list.
     expect(useEditorStore.getState().presets).toHaveLength(1);
     expect(useEditorStore.getState().presets[0].filename).toBe("otro.beru.json");
   });

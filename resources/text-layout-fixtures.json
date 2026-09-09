@@ -75,5 +75,81 @@
       "font_size": 32,
       "expected": { "wrapped": "aaa\nbbb" }
     }
+  ],
+  "fit_cases": [
+    {
+      "id": "fit-shrink",
+      "text": "HELLO WORLD THIS IS LONG",
+      "region_w": 80,
+      "region_h": 40,
+      "font_size": 48,
+      "line_height": 1.2,
+      "wrap": true,
+      "expected": { "font_size": 12 }
+    },
+    {
+      "id": "fit-ok",
+      "text": "Hi",
+      "region_w": 400,
+      "region_h": 80,
+      "font_size": 32,
+      "line_height": 1.2,
+      "wrap": true,
+      "expected": { "font_size": 32 }
+    },
+    {
+      "id": "fit-nowrap",
+      "text": "HELLO WORLD",
+      "region_w": 80,
+      "region_h": 80,
+      "font_size": 48,
+      "line_height": 1.2,
+      "wrap": false,
+      "expected": { "font_size": 13 }
+    }
+  ],
+  "truncate_cases": [
+    {
+      "id": "ellipsis",
+      "text": "ABCDEFGHIJKLMNOP",
+      "max_width_px": 80,
+      "font_size": 32,
+      "mode": "ellipsis",
+      "expected": { "truncated": "ABC…" }
+    },
+    {
+      "id": "clip-noop",
+      "text": "ABCDEFGHIJKLMNOP",
+      "max_width_px": 80,
+      "font_size": 32,
+      "mode": "clip",
+      "expected": { "truncated": "ABCDEFGHIJKLMNOP" }
+    }
+  ],
+  "layout_cases": [
+    {
+      "id": "wrap-then-keep-size",
+      "text": "one two three four five six",
+      "region_w": 80,
+      "region_h": 400,
+      "font_size": 32,
+      "line_height": 1.2,
+      "text_wrap": true,
+      "auto_fit": false,
+      "truncate": "none",
+      "expected": { "font_size": 32, "display_text": "one\ntwo\nthree\nfour\nfive\nsix" }
+    },
+    {
+      "id": "auto-fit-then-wrap",
+      "text": "HELLO WORLD THIS IS LONG",
+      "region_w": 80,
+      "region_h": 40,
+      "font_size": 48,
+      "line_height": 1.2,
+      "text_wrap": true,
+      "auto_fit": true,
+      "truncate": "none",
+      "expected": { "font_size": 12, "display_text": "HELLO WORLD\nTHIS IS LONG" }
+    }
   ]
 }

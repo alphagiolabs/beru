@@ -4,15 +4,11 @@ import os from "os";
 import path from "path";
 import { removeIncompleteOutput } from "../main/utils/process-output.js";
 
-/**
- * Cancel must delete incomplete outputs after force-kill, never completed
- * outputs or inputs, and never paths outside the output root.
- */
-
 const processSrc = fs.readFileSync(
   path.join(process.cwd(), "main", "handlers", "process.js"),
   "utf-8",
 );
+const runSrc = fs.readFileSync(path.join(process.cwd(), "main", "processing-run.js"), "utf-8");
 
 describe("removeIncompleteOutput", () => {
   let tmpDir;
@@ -87,7 +83,6 @@ describe("cancel incomplete-output cleanup wiring (source)", () => {
 
     expect(processSrc).toMatch(/markJobOutputComplete/);
     expect(processSrc).toMatch(/msg\.type === "complete"/);
-    // Keep-set must not rely on cancelled NDJSON (not on main yet).
     const cancelFn = processSrc.slice(
       processSrc.indexOf("export async function cancelActiveProcessing"),
       processSrc.indexOf("export function registerProcessHandlers"),
@@ -97,8 +92,8 @@ describe("cancel incomplete-output cleanup wiring (source)", () => {
   });
 
   it("cleanup uses removeIncompleteOutput and completedIndices keep-set", () => {
-    expect(processSrc).toMatch(/removeIncompleteOutput/);
-    expect(processSrc).toMatch(/completedIndices/);
+    expect(runSrc).toMatch(/removeIncompleteOutput/);
+    expect(runSrc).toMatch(/completedIndices/);
     expect(processSrc).toMatch(/cleanupIncompleteOutputsAfterCancel/);
   });
 });

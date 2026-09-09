@@ -1,9 +1,10 @@
 import React, { act } from "react";
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import App from "../src/App.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
-import { createOperation, createQueueItem } from "../src/utils/types.js";
+import { createQueueItem } from "../src/utils/types.js";
+import { createOperation } from "../src/utils/operation.js";
 import { seedAuthenticatedAuthSync } from "./helpers/authTestState.js";
 
 globalThis.React = React;
@@ -146,7 +147,6 @@ describe("App render", () => {
     root = createRoot(document.getElementById("root"));
     await act(async () => {
       root.render(<App />);
-      // Flush Suspense lazy resolution (React.lazy chunks resolve on next tick)
       await new Promise((r) => setTimeout(r, 10));
     });
     expect(document.body.textContent).toMatch(/demo\.mp4/);
@@ -318,10 +318,8 @@ describe("App render", () => {
 
     const canvas = document.querySelector("canvas");
     expect(canvas).toBeTruthy();
-    // Canvas remains above free batch overlays (z=20); DOM TextRegionFrame is z=50.
     expect(Number(canvas.style.zIndex)).toBeGreaterThanOrEqual(30);
 
-    // When jsdom can resolve video layout, the DOM selection chrome mounts above the canvas.
     const frame = document.querySelector("[data-text-region-frame]");
     if (frame) {
       expect(Number(frame.style.zIndex)).toBeGreaterThanOrEqual(50);

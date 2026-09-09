@@ -4,16 +4,11 @@ import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { findTextOpForRegion } from "../utils/text-style";
 import { useT } from "../i18n/useT";
+import { Button } from "./ui/Button";
 import TableEditorPreview from "./table-editor/TableEditorPreview";
 import TableEditorFocusPanel from "./table-editor/TableEditorFocusPanel";
 import TableEditorGrid from "./table-editor/TableEditorGrid";
-
-function resolvedDuration(video, fallback) {
-  const mediaDuration = Number(video?.duration);
-  if (Number.isFinite(mediaDuration) && mediaDuration > 0) return mediaDuration;
-  const fallbackDuration = Number(fallback);
-  return Number.isFinite(fallbackDuration) && fallbackDuration > 0 ? fallbackDuration : 0;
-}
+import { resolvedDuration } from "./video-preview/utils";
 
 export default function TableEditor() {
   const t = useT();
@@ -301,8 +296,10 @@ export default function TableEditor() {
             <p className="te-header-meta">{metaParts.join(" · ")}</p>
           </div>
           <div className="te-header-right">
-            <button
+            <Button
               type="button"
+              variant="tertiary"
+              size="sm"
               className="te-ghost-btn"
               disabled={!excelRows?.length}
               title={t("table.exportExcel")}
@@ -310,16 +307,18 @@ export default function TableEditor() {
             >
               <FileSpreadsheet size={14} />
               <span>{t("table.exportExcel")}</span>
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="tertiary"
+              size="icon"
               className="te-icon-btn"
               onClick={() => get().setShowTableEditor(false)}
               aria-label={t("table.close")}
               title={t("table.close")}
             >
               <X size={16} />
-            </button>
+            </Button>
           </div>
         </header>
 

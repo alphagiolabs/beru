@@ -1,13 +1,6 @@
 import path from "path";
 import { deriveOutputPath } from "./process-output.js";
 
-/**
- * Validate input video + overlay/delogo/watermark images via pathSecurity,
- * canonicalize paths, and attach input_root / asset_roots for the processor.
- *
- * Batch callers pass `outputDirectory` so output_path / output_root are set.
- * Preview callers omit it — no output directory is required.
- */
 export function sanitizeJobMedia(job, pathSecurity, { outputDirectory } = {}) {
   const inputCheck = pathSecurity.validateReadableFile(job?.input_path, "video");
   if (!inputCheck.ok) {
@@ -50,8 +43,4 @@ export function sanitizeJobMedia(job, pathSecurity, { outputDirectory } = {}) {
   }
 
   return sanitized;
-}
-
-export function prepareJobsForProcessor(jobs, outputDirectory, pathSecurity) {
-  return jobs.map((job) => sanitizeJobMedia(job, pathSecurity, { outputDirectory }));
 }

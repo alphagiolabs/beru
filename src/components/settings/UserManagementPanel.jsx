@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Shield, ShieldOff, UserPlus, Users } from "lucide-react";
+import { Button } from "../ui/Button";
 import useEditorStore from "../../stores/useEditorStore";
 import { useT } from "../../i18n/useT";
 
@@ -147,14 +148,17 @@ export default function UserManagementPanel() {
             />
           </label>
           <div className="settings-users-form-actions">
-            <button type="submit" className="settings-users-submit" disabled={creating}>
-              {creating ? (
-                <Loader2 size={14} className="login-screen-spin" />
-              ) : (
-                <UserPlus size={14} strokeWidth={2.25} />
-              )}
+            <Button
+              type="submit"
+              variant="primary"
+              size="sm"
+              className="settings-users-submit"
+              loading={creating}
+              disabled={creating}
+            >
+              <UserPlus size={14} strokeWidth={2.25} />
               {t("auth.addUserBtn")}
-            </button>
+            </Button>
           </div>
         </form>
       </section>

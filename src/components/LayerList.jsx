@@ -112,10 +112,6 @@ export default function LayerList() {
   );
   const t = useT();
   const getState = useEditorStore.getState;
-  // Stable, index-parameterized callbacks. Defined once so their identities
-  // don't change on every LayerList render — otherwise the memo() on LayerRow
-  // is defeated and every row re-renders on each selection change. The row
-  // passes its own `i` when invoking them.
   const handleSelect = useCallback((i) => getState().selectOperation(i), [getState]);
   const handleMoveUp = useCallback((i) => getState().moveOperation(i, i - 1), [getState]);
   const handleMoveDown = useCallback((i) => getState().moveOperation(i, i + 1), [getState]);

@@ -1,11 +1,5 @@
 import { useEffect } from "react";
 
-/**
- * Registers mousedown-outside and Escape-key listeners to close a popup.
- * @param {React.RefObject} ref - ref to the popup container element
- * @param {boolean} isOpen - whether the popup is currently open
- * @param {(next: boolean) => void} setIsOpen - setter to close the popup
- */
 export default function useCloseOnOutsideClick(ref, isOpen, setIsOpen) {
   useEffect(() => {
     if (!isOpen) return;

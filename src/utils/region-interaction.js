@@ -1,7 +1,3 @@
-/**
- * Pure geometry for DOM-based region move/resize (text selection chrome).
- * Coordinates are normalized 0..1 video space — same contract as the store.
- */
 import { clampRegionToVideo } from "./video-utils";
 
 const MIN_SIZE = 0.01;
@@ -20,10 +16,6 @@ export const RESIZE_HANDLES = /** @type {const} */ ([
   "br",
 ]);
 
-/**
- * @param {HandleId} handle
- * @returns {string}
- */
 export function cursorForHandle(handle) {
   const m = {
     tl: "nwse-resize",
@@ -39,9 +31,7 @@ export function cursorForHandle(handle) {
 }
 
 /**
- * Convert a client-pixel pointer delta into normalized video delta.
- * contentW/H must be the *visible letterboxed content* size in CSS pixels
- * (from getBoundingClientRect-based contentRect) so zoom is accounted for.
+ * contentW/H is the visible letterboxed content in CSS pixels (getBoundingClientRect).
  *
  * @param {{ clientX: number, clientY: number }} start
  * @param {{ clientX: number, clientY: number }} now
@@ -56,13 +46,6 @@ export function pointerDeltaToNorm(start, now, contentPx) {
   };
 }
 
-/**
- * @param {Region} start
- * @param {number} dx
- * @param {number} dy
- * @param {number} [minSize]
- * @returns {Region | null}
- */
 export function applyMove(start, dx, dy, minSize = MIN_SIZE) {
   if (!start) return null;
   return clampRegionToVideo(
@@ -73,17 +56,7 @@ export function applyMove(start, dx, dy, minSize = MIN_SIZE) {
   );
 }
 
-/**
- * Resize from a handle. Same semantics as useCanvas edge/corner logic.
- *
- * @param {Region} start
- * @param {HandleId} handle
- * @param {number} dx
- * @param {number} dy
- * @param {number} [minSize]
- * @returns {Region | null}
- */
-export function applyResize(start, handle, dx, dy, minSize = MIN_SIZE) {
+export function applyResizeRaw(start, handle, dx, dy, minSize = MIN_SIZE) {
   if (!start || !handle) return null;
   let nx = start.x;
   let ny = start.y;
@@ -114,21 +87,20 @@ export function applyResize(start, handle, dx, dy, minSize = MIN_SIZE) {
     if (handle.includes("t") || handle === "tc") ny = start.y + start.h - minSize;
   }
 
-  return clampRegionToVideo({ x: nx, y: ny, w: nw, h: nh }, 1, 1, minSize);
+  return { x: nx, y: ny, w: nw, h: nh };
 }
 
-/**
- * Sample zoom-aware content size from a video element.
- * Uses getBoundingClientRect so CSS scale on ancestors is included.
- *
- * @param {HTMLVideoElement | null | undefined} videoEl
- * @returns {{ width: number, height: number } | null}
- */
+export function applyResize(start, handle, dx, dy, minSize = MIN_SIZE) {
+  const next = applyResizeRaw(start, handle, dx, dy, minSize);
+  if (!next) return null;
+  return clampRegionToVideo(next, 1, 1, minSize);
+}
+
+// Uses getBoundingClientRect so CSS scale on ancestors is included.
 export function getContentPx(videoEl) {
   if (!videoEl) return null;
   const br = videoEl.getBoundingClientRect();
   if (!br.width || !br.height) return null;
-  // Intrinsic size not ready yet — use full element so resize still works.
   if (!videoEl.videoWidth || !videoEl.videoHeight) {
     return { width: br.width, height: br.height };
   }

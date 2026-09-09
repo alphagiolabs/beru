@@ -5,9 +5,8 @@ import path from "path";
 const src = fs.readFileSync(path.join(process.cwd(), "src/components/VideoPreview.jsx"), "utf-8");
 
 function watermarkPreviewBody(maxLen) {
-  const match = src.match(/\{\/\*\s*Global watermark preview[\s\S]*?\*\/\}/);
-  expect(match).not.toBeNull();
-  const wmStart = match.index;
+  const wmStart = src.indexOf("watermark?.enabled");
+  expect(wmStart).toBeGreaterThan(-1);
   return src.slice(wmStart, wmStart + maxLen);
 }
 

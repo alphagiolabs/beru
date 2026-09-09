@@ -22,8 +22,8 @@ describe("beru protocol path parsing", () => {
   });
 
   it("preserves backslash UNC paths without a spurious leading slash", () => {
-    // \\server\share\clip.mp4 — the URL pathname root adds a leading "/", which
-    // must be stripped or path.resolve on win32 destroys the UNC.
+    // \\server\share\clip.mp4. The URL pathname adds a leading "/" that
+    // path.resolve on win32 must strip or the UNC is destroyed.
     const unc = "\\\\server\\share\\clip.mp4";
     expect(filePathFromBeruUrl(`beru://local/${encodeURIComponent(unc)}`)).toBe(unc);
   });
@@ -104,9 +104,6 @@ describe("beru protocol path parsing", () => {
         expect(response1.status).toBe(200);
         expect(response1.headers.get("content-length")).toBe("10");
         expect(await response1.text()).toBe("0123456789");
-        // Delete the file and request again. With the stat cache enabled, the
-        // second response headers must still be derived from the cached size
-        // even though the file no longer exists on disk.
         unlinkSync(tmp);
         const response2 = createBeruVideoResponse(tmp, {
           headers: { get: () => null },
@@ -116,9 +113,7 @@ describe("beru protocol path parsing", () => {
       } finally {
         try {
           unlinkSync(tmp);
-        } catch {
-          /* already removed */
-        }
+        } catch {}
         invalidateBeruStatCache();
       }
     } finally {

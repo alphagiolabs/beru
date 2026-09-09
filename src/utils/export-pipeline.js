@@ -1,8 +1,5 @@
-import { denormalizeRegion } from "./types.js";
-import { sanitizeOperation } from "./delogo-ops.js";
-import { filterOperationsForExport } from "./batch-process.js";
 import { getLockedDimensions } from "./video-dimensions.js";
-import { textStyleToPythonPayload } from "./text-style.js";
+import { operationsToJobPayload } from "./operation.js";
 
 function isQueueJobIndex(idx, queueLength) {
   return Number.isInteger(idx) && idx >= 0 && idx < queueLength;
@@ -35,10 +32,6 @@ function applyJobProgressMessages(queue, messages) {
   return next || queue;
 }
 
-/**
- * Flag-on path: flip `status` to "processing" the first time a job reports
- * progress, but keep the numeric `progress` out of `queue`.
- */
 function applyJobProgressStatusOnly(queue, messages) {
   let next = null;
   for (const msg of messages) {
@@ -51,6 +44,13 @@ function applyJobProgressStatusOnly(queue, messages) {
     next[idx] = { ...current, status: "processing" };
   }
   return next || queue;
+}
+
+function omitJobIndex(jobProgress, idx) {
+  if (jobProgress?.[idx] === undefined) return jobProgress;
+  const next = { ...jobProgress };
+  delete next[idx];
+  return next;
 }
 
 function applyJobProgressMap(jobProgress, queue, messages) {
@@ -72,12 +72,6 @@ function applyJobProgressMap(jobProgress, queue, messages) {
   return next;
 }
 
-/**
- * Build a processor job payload from a queue item.
- * @param {object|null} item
- * @param {number} index
- * @param {{ encodeProfile: string, outputPath: string, watermark?: object|null }} ctx
- */
 export function buildExportJob(item, index, ctx) {
   if (!item) return null;
   const encodeProfile = ctx?.encodeProfile || "balanced";
@@ -91,32 +85,7 @@ export function buildExportJob(item, index, ctx) {
     height,
     source_width: width,
     source_height: height,
-    operations: filterOperationsForExport(item.operations).map((op) => {
-      const safe = sanitizeOperation(op);
-      return {
-        mode: safe.mode,
-        region: safe.region
-          ? width > 0 && height > 0
-            ? denormalizeRegion(safe.region, width, height)
-            : safe.region
-          : safe.region,
-        blur_strength: safe.blurStrength,
-        delogo_method: safe.delogoMethod,
-        delogo_fill_color: safe.delogoFillColor,
-        delogo_fill_opacity: safe.delogoFillOpacity,
-        delogo_image_path: safe.delogoImagePath,
-        temporal_radius: safe.temporalRadius,
-        mosaic_size: safe.mosaicSize,
-        mirror_side: safe.mirrorSide,
-        edge_feather: safe.edgeFeather,
-        text: safe.text,
-        ...textStyleToPythonPayload(safe),
-        image_path: safe.imagePath,
-        image_opacity: safe.imageOpacity,
-        start_time: safe.startTime,
-        end_time: safe.endTime,
-      };
-    }),
+    operations: operationsToJobPayload(item.operations, width, height),
     video_duration: item.duration,
     video_codec: item.videoCodec || "",
     pix_fmt: item.pixFmt || "yuv420p",
@@ -128,16 +97,11 @@ export function buildExportJob(item, index, ctx) {
   };
 }
 
-/** @param {Array} queue @param {(item, index) => object|null} buildOne */
 export function buildExportJobs(queue, buildOne) {
   if (!Array.isArray(queue)) return [];
   return queue.map((item, i) => buildOne(item, i)).filter(Boolean);
 }
 
-/**
- * Apply a batch of job_progress messages.
- * @returns {{ queue: Array, jobProgress: object }}
- */
 export function applyJobProgressBatch({ queue, jobProgress = {}, messages, progressMap = false }) {
   const msgs = Array.isArray(messages) ? messages : [];
   if (progressMap) {
@@ -184,14 +148,7 @@ export function applyJobError({
   if (!isQueueJobIndex(idx, queue.length)) return {};
   const updated = [...queue];
   updated[idx] = { ...updated[idx], status: "error", error: msg.error };
-  const nextProgress =
-    progressMap && jobProgress?.[idx] !== undefined
-      ? (() => {
-          const next = { ...jobProgress };
-          delete next[idx];
-          return next;
-        })()
-      : jobProgress;
+  const nextProgress = progressMap ? omitJobIndex(jobProgress, idx) : jobProgress;
   return {
     queue: updated,
     progressDone: Math.min(progressDone + 1, progressTotal),
@@ -211,14 +168,7 @@ export function applyJobCancelled({
   if (!isQueueJobIndex(idx, queue.length)) return {};
   const updated = [...queue];
   updated[idx] = { ...updated[idx], status: "idle", progress: 0, error: null };
-  const nextProgress =
-    progressMap && jobProgress?.[idx] !== undefined
-      ? (() => {
-          const next = { ...jobProgress };
-          delete next[idx];
-          return next;
-        })()
-      : jobProgress;
+  const nextProgress = progressMap ? omitJobIndex(jobProgress, idx) : jobProgress;
   return {
     queue: updated,
     progressDone: Math.min(progressDone + 1, progressTotal),

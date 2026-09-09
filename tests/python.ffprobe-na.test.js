@@ -1,10 +1,5 @@
-// Regression test for the "ffprobe N/A" bug:
-// ffprobe emits the string "N/A" for fields it cannot measure (bit_rate on
-// some streams, occasionally duration). Previously processor.py did a bare
-// `float()`/`int()` on those values inside ffprobe(), which raised ValueError,
-// was swallowed by the surrounding try/except, and discarded an otherwise-valid
-// probe — falling back to the slow regex parse or reporting zero dimensions for
-// a readable file (which then failed the job with "no se pudo leer la resolución").
+// ffprobe emits the string "N/A" for fields it cannot measure. float()/int() on
+// that value raises and used to discard an otherwise valid probe.
 
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "child_process";
@@ -25,9 +20,6 @@ describeIfPython("python/processor.py ffprobe N/A handling", () => {
     "import sys; sys.stdout.reconfigure(encoding='utf-8'); sys.path.insert(0, 'python'); ";
 
   it("returns valid dimensions when ffprobe reports bit_rate/duration as 'N/A'", () => {
-    // Monkeypatch subprocess.run so the ffprobe call returns JSON with N/A fields
-    // and a valid 1920x1080 video stream; the ffmpeg fallback returns nothing so
-    // we know the result came from the JSON path (not the regex fallback).
     const code = `
 import json, logging
 import processor
@@ -74,14 +66,12 @@ print(json.dumps(result))
     expect(r.status).toBe(0);
 
     const parsed = JSON.parse(r.stdout.trim());
-    // The valid probe must survive the N/A fields — not fall back to empty.
     expect(parsed.width).toBe(1920);
     expect(parsed.height).toBe(1080);
     expect(parsed.video_codec).toBe("h264");
     expect(parsed.frame_rate).toBe(30);
     expect(parsed.audio_codec).toBe("aac");
     expect(parsed.audio_channels).toBe(2);
-    // N/A coerces to 0 (not a crash), duration unknown -> 0.
     expect(parsed.bit_rate).toBe(0);
     expect(parsed.duration).toBe(0);
   });

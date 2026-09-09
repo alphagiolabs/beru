@@ -38,19 +38,16 @@ describe("PropertiesPanel — text input reactivity", () => {
 
   it("re-renders textInput when the store changes externally (preset/undo/load)", () => {
     renderPanel();
-    // Find the text content input (placeholder "Texto...")
     const textInput = Array.from(document.querySelectorAll('input[type="text"]')).find(
       (el) => el.placeholder === "Texto...",
     );
     expect(textInput).toBeTruthy();
     expect(textInput.value).toBe("Initial");
 
-    // Simulate an external mutation (preset apply, undo, project load, Excel)
     act(() => {
       useEditorStore.getState().setTextInput("ChangedByPreset");
     });
 
-    // The input must reflect the new value WITHOUT user interaction
     expect(textInput.value).toBe("ChangedByPreset");
   });
 });
@@ -62,7 +59,6 @@ describe("PropertiesPanel — invalid time range warning", () => {
 
   it("shows a warning when tempEnd <= tempStart", () => {
     renderPanel();
-    // No warning initially
     expect(document.body.textContent).not.toContain("rango es inválido");
 
     act(() => {

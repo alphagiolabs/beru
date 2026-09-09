@@ -30,7 +30,6 @@ vi.mock("../main/utils/preview-frame.js", () => ({
   renderPreviewFrame: mocks.renderPreviewFrame,
 }));
 
-// Platform-native absolute paths — backslash literals break path.dirname on Linux CI.
 const videoDir = path.join(path.sep === "\\" ? "C:\\" : "/data", "videos");
 const imgDir = path.join(path.sep === "\\" ? "C:\\" : "/data", "imgs");
 const resolvedVideo = path.join(videoDir, "good.mp4");

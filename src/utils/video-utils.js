@@ -1,8 +1,3 @@
-/* ── Video utilities ────────────────────────────────────────────────── */
-
-/* Regions are stored NORMALIZED (0..1) where 1.0 = full video dimension.
- * This lets a single region be reused across videos of any resolution. */
-
 const MIN_REGION_SIZE = 0.01;
 
 export function isRegionUsable(region, minSize = MIN_REGION_SIZE) {
@@ -43,25 +38,24 @@ export function clampRegionToVideo(region, maxX = 1, maxY = 1, minSize = MIN_REG
   return { x, y, w, h };
 }
 
+export function letterboxContent(containerW, containerH, videoW, videoH) {
+  const vr = videoW / videoH;
+  const cr = containerW / containerH;
+  if (vr > cr) {
+    const dw = containerW;
+    const dh = containerW / vr;
+    return { dw, dh, ox: 0, oy: (containerH - dh) / 2 };
+  }
+  const dh = containerH;
+  const dw = containerH * vr;
+  return { dw, dh, ox: (containerW - dw) / 2, oy: 0 };
+}
+
 export function contentRect(videoEl) {
   if (!videoEl) return null;
   const br = videoEl.getBoundingClientRect();
   if (br.width === 0 || br.height === 0) return null;
-  const vr = videoEl.videoWidth / videoEl.videoHeight;
-  const cr = br.width / br.height;
-  let dw, dh, ox, oy;
-  if (vr > cr) {
-    dw = br.width;
-    dh = br.width / vr;
-    ox = 0;
-    oy = (br.height - dh) / 2;
-  } else {
-    dh = br.height;
-    dw = br.height * vr;
-    ox = (br.width - dw) / 2;
-    oy = 0;
-  }
-  return { dw, dh, ox, oy, br };
+  return { ...letterboxContent(br.width, br.height, videoEl.videoWidth, videoEl.videoHeight), br };
 }
 
 export function contentRectLayout(videoEl) {
@@ -69,21 +63,11 @@ export function contentRectLayout(videoEl) {
   const w = videoEl.offsetWidth;
   const h = videoEl.offsetHeight;
   if (w === 0 || h === 0) return null;
-  const vr = videoEl.videoWidth / videoEl.videoHeight;
-  const cr = w / h;
-  let dw, dh, ox, oy;
-  if (vr > cr) {
-    dw = w;
-    dh = w / vr;
-    ox = 0;
-    oy = (h - dh) / 2;
-  } else {
-    dh = h;
-    dw = h * vr;
-    ox = (w - dw) / 2;
-    oy = 0;
-  }
-  return { dw, dh, ox, oy, width: w, height: h };
+  return {
+    ...letterboxContent(w, h, videoEl.videoWidth, videoEl.videoHeight),
+    width: w,
+    height: h,
+  };
 }
 
 export function toVideoCoordsNormalized(videoEl, cx, cy) {
@@ -115,13 +99,7 @@ export function regionToScreen(region, videoEl) {
   };
 }
 
-export function drawRegionOnCanvas(
-  canvas,
-  videoEl,
-  region,
-  tool = "blur",
-  delogoMethod = "inpaint",
-) {
+export function drawRegionOnCanvas(canvas, videoEl, region, tool = "blur") {
   if (!canvas || !videoEl) return;
   const ctx = canvas.getContext("2d");
   const dpr = Math.max(1, (typeof window !== "undefined" && window.devicePixelRatio) || 1);
@@ -164,18 +142,12 @@ export function drawRegionOnCanvas(
     ctx.strokeRect(x, y, w, h);
     ctx.setLineDash([]);
   } else if (tool === "delogo") {
-    /* The actual visual effect is rendered live by DelogoLivePreview
-       (canvas for temporal/mirror/mosaic/inpaint, CSS for blur/fill).
-       Here we only draw the selection border so the user can see
-       the region bounds on top of the preview. */
     ctx.strokeStyle = "rgba(244,63,94,0.9)";
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 3]);
     ctx.strokeRect(x, y, w, h);
     ctx.setLineDash([]);
   } else if (tool === "text") {
-    // Outline only — a translucent fill was covering the live text preview
-    // underneath the canvas (z-index) and looked like the text "disappeared".
     ctx.strokeStyle = "rgba(168,85,247,0.95)";
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 4]);
@@ -189,7 +161,6 @@ export function drawRegionOnCanvas(
     ctx.strokeRect(x, y, w, h);
   }
 
-  // Corner handles (skip for text — DOM TextRegionFrame / dashed outline is enough)
   if (tool === "text") return;
 
   const cornerColor = tool === "crop" ? "#fbbf24" : tool === "delogo" ? "#ef4444" : "#ffffff";
@@ -209,7 +180,6 @@ export function drawRegionOnCanvas(
     ctx.stroke();
   });
 
-  // Resize dots
   const hs = 7;
   ctx.fillStyle = cornerColor;
   ctx.strokeStyle = "#ffffff";
@@ -237,20 +207,16 @@ export function fmtTime(s) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-/* ── Excel utilities ────────────────────────────────────────────────── */
-
 export function stripExt(name) {
   const i = name.lastIndexOf(".");
   return i > 0 ? name.slice(0, i) : name;
 }
 
-/** Format Excel-ish IDs without scientific notation (large numeric cells). */
 export function formatMatchIdRaw(raw) {
   const fullwide = (n) =>
     n.toLocaleString("fullwide", { useGrouping: false, maximumFractionDigits: 20 });
   if (typeof raw === "number" && Number.isFinite(raw)) return fullwide(raw);
   const s = String(raw).trim();
-  // Some readers stringify large IDs as "1.23e+21" — expand when parseable.
   if (/^-?\d+(\.\d+)?e[+-]?\d+$/i.test(s)) {
     const n = Number(s);
     if (Number.isFinite(n)) return fullwide(n);
@@ -258,7 +224,6 @@ export function formatMatchIdRaw(raw) {
   return s;
 }
 
-/** Canonical ID for matching queue videos to Excel rows (trim, lowercase, no extension). */
 export function normalizeMatchId(name) {
   if (name === undefined || name === null) return "";
   return stripExt(formatMatchIdRaw(name)).toLowerCase();
@@ -272,7 +237,6 @@ export function rowGet(row, ...keys) {
     const v = lower[k.toLowerCase().trim()];
     if (v !== undefined && v !== null && v !== "") return v;
   }
-  // Broader fallback: try common ID column names
   const idAliases = [
     "id",
     "identificador",

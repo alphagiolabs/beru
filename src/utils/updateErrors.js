@@ -1,4 +1,3 @@
-/** Map updater IPC failure codes to i18n keys. */
 const ERROR_KEYS = {
   "no-update-available": "updater.errors.noUpdateAvailable",
   "no-api": "updater.errors.noApi",

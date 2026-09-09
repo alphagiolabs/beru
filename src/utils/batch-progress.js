@@ -1,13 +1,5 @@
 const TERMINAL = new Set(["done", "error"]);
 
-/**
- * Overall batch bar: finished jobs plus fractional credit for in-flight encodes.
- *
- * When `jobProgress` is supplied (the `VITE_BERU_RENDER_PROGRESS_MAP` path),
- * per-job progress is read from it instead of `item.progress`, so `queue` can
- * stay referentially stable during processing.
- * @returns {{ completed: number, total: number, percent: number }}
- */
 export function getBatchProgress({ queue, progressDone, progressTotal, jobProgress }) {
   const total = progressTotal > 0 ? progressTotal : queue.length;
   if (total <= 0) {

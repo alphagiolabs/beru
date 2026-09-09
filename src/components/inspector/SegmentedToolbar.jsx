@@ -1,7 +1,3 @@
-/**
- * Compact chip/toolbar row for align, weight, etc.
- * Single selected-language: soft accent fill.
- */
 export default function SegmentedToolbar({
   options = [],
   value,

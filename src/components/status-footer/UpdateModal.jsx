@@ -1,8 +1,9 @@
 import { useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Loader2, X } from "lucide-react";
+import { X } from "lucide-react";
 import { parseReleaseNotesSections } from "../../utils/appVersion";
 import { formatUpdateError } from "../../utils/updateErrors";
+import { Button } from "../ui/Button";
 import BeruMark from "./BeruMark";
 import UpdateChangelog from "./UpdateChangelog";
 
@@ -56,15 +57,17 @@ export default function UpdateModal({
         className="status-footer-update-panel"
         onClick={(event) => event.stopPropagation()}
       >
-        <button
+        <Button
           ref={closeBtnRef}
           type="button"
           className="status-footer-update-close"
           onClick={onClose}
           aria-label={t("common.close")}
+          variant="tertiary"
+          size="icon"
         >
           <X size={16} />
-        </button>
+        </Button>
 
         <div className="status-footer-update-brand">
           <BeruMark />
@@ -78,12 +81,24 @@ export default function UpdateModal({
           <>
             <p className="status-footer-update-subtitle">{t("updater.modal.body", { version })}</p>
             <p className="status-footer-update-warning">{t("updater.modal.note")}</p>
-            <button type="button" className="status-footer-update-primary" onClick={onInstall}>
+            <Button
+              type="button"
+              variant="primary"
+              size="lg"
+              className="status-footer-update-primary"
+              onClick={onInstall}
+            >
               {t("updater.modal.install")}
-            </button>
-            <button type="button" className="status-footer-update-secondary" onClick={onLater}>
+            </Button>
+            <Button
+              type="button"
+              variant="tertiary"
+              size="sm"
+              className="status-footer-update-secondary"
+              onClick={onLater}
+            >
               {t("updater.modal.later")}
-            </button>
+            </Button>
           </>
         ) : status === "downloading" ? (
           <>
@@ -104,29 +119,27 @@ export default function UpdateModal({
                 {inlineError}
               </p>
             )}
-            <button
+            <Button
               type="button"
+              variant="primary"
+              size="lg"
               className="status-footer-update-primary"
               onClick={onUpdateNow}
               disabled={isBusy}
+              loading={isStartingDownload}
             >
-              {isStartingDownload ? (
-                <>
-                  <Loader2 size={14} className="status-footer-spin inline mr-1.5" />
-                  {t("footer.updateStarting")}
-                </>
-              ) : (
-                t("footer.updateNow")
-              )}
-            </button>
-            <button
+              {isStartingDownload ? t("footer.updateStarting") : t("footer.updateNow")}
+            </Button>
+            <Button
               type="button"
+              variant="tertiary"
+              size="sm"
               className="status-footer-update-secondary"
               onClick={onLater}
               disabled={isStartingDownload}
             >
               {t("footer.maybeLater")}
-            </button>
+            </Button>
             {sections.hiddenCount > 0 && (
               <p className="status-footer-update-more">
                 {t("footer.moreChanges", { count: sections.hiddenCount })}

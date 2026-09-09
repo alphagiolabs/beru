@@ -1,4 +1,4 @@
-import { useEffect, useRef, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import useEditorStore from "./stores/useEditorStore";
 import useKeyboard from "./hooks/useKeyboard";
 import useProcessing from "./hooks/useProcessing";
@@ -20,9 +20,9 @@ const WatermarkModal = lazy(() => import("./components/WatermarkModal"));
 const api = window.api;
 
 export default function App() {
-  const isDragging = useEditorStore((s) => s.isDragging);
   const setIsDragging = useEditorStore((s) => s.setIsDragging);
   const addVideos = useEditorStore((s) => s.addVideos);
+  const loadPresets = useEditorStore((s) => s.loadPresets);
   const loadPresetsFromStorage = useEditorStore((s) => s.loadPresetsFromStorage);
   const loadSettings = useEditorStore((s) => s.loadSettings);
   const loadRecents = useEditorStore((s) => s.loadRecents);
@@ -30,38 +30,43 @@ export default function App() {
   const ensurePetsReady = useEditorStore((s) => s.ensurePetsReady);
   const showToast = useEditorStore((s) => s.showToast);
   const t = useT();
-  const dropRef = useRef(null);
+  const [mobilePanel, setMobilePanel] = useState("editor");
   const dragDepthRef = useRef(0);
   const DRAG_DEPTH_MAX = 32;
 
   useKeyboard();
   useProcessing(api);
 
-  // Re-register restored session paths with the main-process allow-list so
-  // preview (beru://) and process:start work after crash/relaunch.
   useEffect(() => {
     if (!api?.restoreSessionPaths) return;
     const { outputDir, queue, excelPath, watermark } = useEditorStore.getState();
     const videoPaths = (queue || []).map((item) => item?.path).filter(Boolean);
-    // Re-allow watermark image via videoPaths list (same registerAllowedPaths path).
     if (watermark?.imagePath) videoPaths.push(watermark.imagePath);
     if (!outputDir && videoPaths.length === 0 && !excelPath) return;
     void api.restoreSessionPaths({ outputDir, videoPaths, excelPath });
   }, []);
 
   useEffect(() => {
-    loadPresetsFromStorage();
     const settingsReady = loadSettings();
     loadRecents();
     loadExecutionHistory();
     void (async () => {
+      await loadPresets();
+      loadPresetsFromStorage();
       await settingsReady;
       const { petEnabled, petPoppedOut } = useEditorStore.getState();
       if (petEnabled || petPoppedOut) {
         await ensurePetsReady();
       }
     })();
-  }, [loadPresetsFromStorage, loadSettings, loadRecents, loadExecutionHistory, ensurePetsReady]);
+  }, [
+    loadPresets,
+    loadPresetsFromStorage,
+    loadSettings,
+    loadRecents,
+    loadExecutionHistory,
+    ensurePetsReady,
+  ]);
 
   useEffect(() => {
     const resetDragState = () => {
@@ -137,20 +142,42 @@ export default function App() {
 
   return (
     <div
-      ref={dropRef}
       {...dropHandlers}
       className="h-screen flex flex-col overflow-hidden"
       style={{ background: "var(--bg-app)", color: "var(--text-primary)" }}
     >
       <Header />
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        <QueueSidebar />
-        <div className="flex-1 flex flex-col min-w-0">
+      <nav className="mobile-workspace-nav" aria-label={t("workspace.navigation")}>
+        {[
+          ["queue", t("workspace.queue")],
+          ["editor", t("workspace.editor")],
+          ["properties", t("workspace.properties")],
+        ].map(([panel, label]) => (
+          <button
+            key={panel}
+            type="button"
+            className={mobilePanel === panel ? "is-active" : ""}
+            aria-current={mobilePanel === panel ? "page" : undefined}
+            onClick={() => setMobilePanel(panel)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      <div className="workspace-layout flex-1 flex overflow-hidden min-h-0">
+        <div
+          className={`workspace-panel workspace-panel--queue${mobilePanel === "queue" ? " is-mobile-active" : ""}`}
+        >
+          <QueueSidebar />
+        </div>
+        <div
+          className={`workspace-panel workspace-panel--editor${mobilePanel === "editor" ? " is-mobile-active" : ""}`}
+        >
           <VideoPreview />
           <ToolBar />
         </div>
         <aside
-          className="inspector w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l"
+          className={`workspace-panel workspace-panel--properties inspector w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l${mobilePanel === "properties" ? " is-mobile-active" : ""}`}
           style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
         >
           <PropertiesPanel />

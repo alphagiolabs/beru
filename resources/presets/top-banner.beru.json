@@ -25,7 +25,7 @@
   },
   "defaults": {
     "blurStrength": 20,
-    "delogoMethod": "temporal",
+    "delogoMethod": "blur",
     "delogoFillColor": "#000000",
     "delogoFillOpacity": 1
   }

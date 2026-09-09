@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
+import { Button } from "./ui/Button";
 
 export default function ShortcutsModal() {
   const showShortcuts = useEditorStore((s) => s.showShortcuts);
@@ -83,13 +84,17 @@ export default function ShortcutsModal() {
           style={{ borderColor: "var(--border)" }}
         >
           <span className="text-sm font-semibold">{t("modal.shortcuts.title")}</span>
-          <button
+          <Button
             onClick={() => useEditorStore.getState().setShowShortcuts(false)}
-            className="p-1 rounded hover:bg-white/10"
+            variant="tertiary"
+            size="icon"
+            className="!h-8 !min-h-8 !w-8 !min-w-8"
             style={{ color: "var(--text-dim)" }}
+            title={t("common.close")}
+            aria-label={t("common.close")}
           >
             <X size={18} />
-          </button>
+          </Button>
         </div>
         <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
           {groups.map((g) => (
