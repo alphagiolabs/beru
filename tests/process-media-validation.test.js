@@ -65,10 +65,7 @@ describe("process-media-validation", () => {
   });
 
   it("sanitizeJobMedia rejects unauthorized overlay images", () => {
-    const outsideImage =
-      process.platform === "win32"
-        ? "C:\\Windows\\System32\\beru-evil-overlay.png"
-        : "/etc/beru-evil-overlay.png";
+    const outsideImage = "C:\\Windows\\System32\\beru-evil-overlay.png";
     expect(() =>
       sanitizeJobMedia(
         {

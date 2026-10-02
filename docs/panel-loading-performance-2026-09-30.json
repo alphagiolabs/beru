@@ -1,0 +1,946 @@
+{
+  "date": "2026-09-30",
+  "scope": "Defer unopened panels and keep previously mounted modal state",
+  "method": {
+    "runtime": "Electron 35.7.5",
+    "machine": "Windows 11, i5-12400, 12 logical CPUs, 7.78 GiB RAM",
+    "newProfiles": 3,
+    "reusedProfiles": 3,
+    "interleavedVariants": true,
+    "ready": "From native launch to app-shell and two animation frames in a visible window",
+    "startupSnapshot": "Two seconds after ready",
+    "build": "Temporary production builds with blank authentication configuration and audit-only store exposure",
+    "cold": "Fresh application and Chromium profile; OS file cache may be warm",
+    "gzip": "Equivalent compressed size calculated from emitted JS; local file delivery was not gzip compressed",
+    "concurrentDirtyCheckout": true
+  },
+  "summary": {
+    "before": {
+      "scriptBytes": 1072877,
+      "gzipEquivalentBytes": 309020,
+      "scripts": 14,
+      "mainChunkBytes": 700051,
+      "jsHeapMedianBytes": 6913804,
+      "residentMedianMiB": 399.7421875,
+      "cpuMedianSeconds": 1.924119,
+      "taskDurationMedianSeconds": 0.257395,
+      "cold": {
+        "n": 3,
+        "medianMs": 954.699951171875,
+        "minMs": 930.599853515625,
+        "maxMs": 1117.800048828125
+      },
+      "warm": {
+        "n": 3,
+        "medianMs": 643.39990234375,
+        "minMs": 587.60009765625,
+        "maxMs": 867.300048828125
+      }
+    },
+    "final": {
+      "scriptBytes": 931011,
+      "gzipEquivalentBytes": 271616,
+      "scripts": 4,
+      "mainChunkBytes": 642200,
+      "jsHeapMedianBytes": 6234196,
+      "residentMedianMiB": 397.078125,
+      "cpuMedianSeconds": 1.7723039999999999,
+      "taskDurationMedianSeconds": 0.256434,
+      "cold": {
+        "n": 3,
+        "medianMs": 1272.7001953125,
+        "minMs": 902.2998046875,
+        "maxMs": 3870.800048828125
+      },
+      "warm": {
+        "n": 3,
+        "medianMs": 632.699951171875,
+        "minMs": 603.099853515625,
+        "maxMs": 842
+      }
+    }
+  },
+  "runs": [
+    {
+      "label": "panels-complete-before-cold-1",
+      "variant": "before",
+      "temperature": "cold",
+      "readyMs": 1117.800048828125,
+      "navigationReadyMs": 768.6999999880791,
+      "beforeNavigationMs": 349.10009765625,
+      "freeStartMiB": 1513.96875,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "vendor-DCNNbBh0.js",
+        "index-DVqrOj4Z.js",
+        "icons-Dda9KGaQ.js",
+        "main-ClwsrSAB.js",
+        "ShortcutsModal-CMLavdJl.js",
+        "SettingsModal-BBcibmBp.js",
+        "TableEditor-BTG9qtNu.js",
+        "pet-activity-BY5h0v1N.js",
+        "DesktopPet-BU6SBQrm.js",
+        "pet-states-DfEgFYyS.js",
+        "ExcelMappingModal-BcKVhxPB.js",
+        "PetPaletteModal-DDIbGrXQ.js",
+        "PetPreviewSprite-CSdpNg6-.js",
+        "WatermarkModal-CoAhm6D1.js"
+      ],
+      "scriptBytes": 1072877,
+      "scriptGzipEquivalentBytes": 309020,
+      "startupPanelModules": [
+        "C:/Users/HIDROAA/Desktop/beru/src/components/PropertiesPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/LayerList.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/UserManagementPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/ThemeEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/AppearancePanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/SettingsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ShortcutsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/TableEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ExcelMappingModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/WatermarkModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/DesktopPet.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetPaletteModal.jsx"
+      ],
+      "jsHeapBytes": 7047480,
+      "scriptDurationSeconds": 0.115771,
+      "taskDurationSeconds": 0.259627,
+      "cpuCumulativeSeconds": 2.197235,
+      "residentMiB": 405.05078125,
+      "privateMiB": 260.68359375,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-before-cold-1.json"
+    },
+    {
+      "label": "panels-complete-before-cold-2",
+      "variant": "before",
+      "temperature": "cold",
+      "readyMs": 954.699951171875,
+      "navigationReadyMs": 660.2000000029802,
+      "beforeNavigationMs": 294.5,
+      "freeStartMiB": 1138.08203125,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "vendor-DCNNbBh0.js",
+        "index-DVqrOj4Z.js",
+        "main-ClwsrSAB.js",
+        "icons-Dda9KGaQ.js",
+        "ShortcutsModal-CMLavdJl.js",
+        "SettingsModal-BBcibmBp.js",
+        "TableEditor-BTG9qtNu.js",
+        "DesktopPet-BU6SBQrm.js",
+        "pet-states-DfEgFYyS.js",
+        "pet-activity-BY5h0v1N.js",
+        "ExcelMappingModal-BcKVhxPB.js",
+        "PetPaletteModal-DDIbGrXQ.js",
+        "PetPreviewSprite-CSdpNg6-.js",
+        "WatermarkModal-CoAhm6D1.js"
+      ],
+      "scriptBytes": 1072877,
+      "scriptGzipEquivalentBytes": 309020,
+      "startupPanelModules": [
+        "C:/Users/HIDROAA/Desktop/beru/src/components/PropertiesPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/LayerList.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/UserManagementPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/ThemeEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/AppearancePanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/SettingsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ShortcutsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/TableEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ExcelMappingModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/WatermarkModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/DesktopPet.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetPaletteModal.jsx"
+      ],
+      "jsHeapBytes": 7046796,
+      "scriptDurationSeconds": 0.11745,
+      "taskDurationSeconds": 0.265036,
+      "cpuCumulativeSeconds": 2.143615,
+      "residentMiB": 359.234375,
+      "privateMiB": 261.7109375,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-before-cold-2.json"
+    },
+    {
+      "label": "panels-complete-before-cold-3",
+      "variant": "before",
+      "temperature": "cold",
+      "readyMs": 930.599853515625,
+      "navigationReadyMs": 672.1999999880791,
+      "beforeNavigationMs": 258.39990234375,
+      "freeStartMiB": 1187.5546875,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "main-ClwsrSAB.js",
+        "icons-Dda9KGaQ.js",
+        "index-DVqrOj4Z.js",
+        "vendor-DCNNbBh0.js",
+        "ShortcutsModal-CMLavdJl.js",
+        "SettingsModal-BBcibmBp.js",
+        "TableEditor-BTG9qtNu.js",
+        "DesktopPet-BU6SBQrm.js",
+        "pet-activity-BY5h0v1N.js",
+        "pet-states-DfEgFYyS.js",
+        "ExcelMappingModal-BcKVhxPB.js",
+        "PetPaletteModal-DDIbGrXQ.js",
+        "PetPreviewSprite-CSdpNg6-.js",
+        "WatermarkModal-CoAhm6D1.js"
+      ],
+      "scriptBytes": 1072877,
+      "scriptGzipEquivalentBytes": 309020,
+      "startupPanelModules": [
+        "C:/Users/HIDROAA/Desktop/beru/src/components/PropertiesPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/LayerList.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/UserManagementPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/ThemeEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/AppearancePanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/SettingsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ShortcutsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/TableEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ExcelMappingModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/WatermarkModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/DesktopPet.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetPaletteModal.jsx"
+      ],
+      "jsHeapBytes": 6772312,
+      "scriptDurationSeconds": 0.135701,
+      "taskDurationSeconds": 0.257395,
+      "cpuCumulativeSeconds": 1.733446,
+      "residentMiB": 400.7265625,
+      "privateMiB": 259.05078125,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-before-cold-3.json"
+    },
+    {
+      "label": "panels-complete-before-warm-1",
+      "variant": "before",
+      "temperature": "warm",
+      "readyMs": 867.300048828125,
+      "navigationReadyMs": 574.0999999940395,
+      "beforeNavigationMs": 293.199951171875,
+      "freeStartMiB": 1217.82421875,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "icons-Dda9KGaQ.js",
+        "vendor-DCNNbBh0.js",
+        "index-DVqrOj4Z.js",
+        "main-ClwsrSAB.js",
+        "ShortcutsModal-CMLavdJl.js",
+        "SettingsModal-BBcibmBp.js",
+        "TableEditor-BTG9qtNu.js",
+        "pet-states-DfEgFYyS.js",
+        "pet-activity-BY5h0v1N.js",
+        "DesktopPet-BU6SBQrm.js",
+        "ExcelMappingModal-BcKVhxPB.js",
+        "PetPreviewSprite-CSdpNg6-.js",
+        "PetPaletteModal-DDIbGrXQ.js",
+        "WatermarkModal-CoAhm6D1.js"
+      ],
+      "scriptBytes": 1072877,
+      "scriptGzipEquivalentBytes": 309020,
+      "startupPanelModules": [
+        "C:/Users/HIDROAA/Desktop/beru/src/components/PropertiesPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/LayerList.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/UserManagementPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/ThemeEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/AppearancePanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/SettingsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ShortcutsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/TableEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ExcelMappingModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/WatermarkModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/DesktopPet.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetPaletteModal.jsx"
+      ],
+      "jsHeapBytes": 6913804,
+      "scriptDurationSeconds": 0.116971,
+      "taskDurationSeconds": 0.246644,
+      "cpuCumulativeSeconds": 1.924119,
+      "residentMiB": 399.7421875,
+      "privateMiB": 259.296875,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-before-warm-1.json"
+    },
+    {
+      "label": "panels-complete-before-warm-2",
+      "variant": "before",
+      "temperature": "warm",
+      "readyMs": 643.39990234375,
+      "navigationReadyMs": 345.20000000298023,
+      "beforeNavigationMs": 298.199951171875,
+      "freeStartMiB": 1178.4140625,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "vendor-DCNNbBh0.js",
+        "icons-Dda9KGaQ.js",
+        "index-DVqrOj4Z.js",
+        "main-ClwsrSAB.js",
+        "ShortcutsModal-CMLavdJl.js",
+        "SettingsModal-BBcibmBp.js",
+        "pet-activity-BY5h0v1N.js",
+        "TableEditor-BTG9qtNu.js",
+        "DesktopPet-BU6SBQrm.js",
+        "pet-states-DfEgFYyS.js",
+        "ExcelMappingModal-BcKVhxPB.js",
+        "PetPaletteModal-DDIbGrXQ.js",
+        "PetPreviewSprite-CSdpNg6-.js",
+        "WatermarkModal-CoAhm6D1.js"
+      ],
+      "scriptBytes": 1072877,
+      "scriptGzipEquivalentBytes": 309020,
+      "startupPanelModules": [
+        "C:/Users/HIDROAA/Desktop/beru/src/components/PropertiesPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/LayerList.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/UserManagementPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/ThemeEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/AppearancePanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/SettingsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ShortcutsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/TableEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ExcelMappingModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/WatermarkModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/DesktopPet.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetPaletteModal.jsx"
+      ],
+      "jsHeapBytes": 6784256,
+      "scriptDurationSeconds": 0.130077,
+      "taskDurationSeconds": 0.246366,
+      "cpuCumulativeSeconds": 1.694124,
+      "residentMiB": 391.81640625,
+      "privateMiB": 254.12109375,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-before-warm-2.json"
+    },
+    {
+      "label": "panels-complete-before-warm-3",
+      "variant": "before",
+      "temperature": "warm",
+      "readyMs": 587.60009765625,
+      "navigationReadyMs": 338.6000000089407,
+      "beforeNavigationMs": 249,
+      "freeStartMiB": 1130.75390625,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "main-ClwsrSAB.js",
+        "icons-Dda9KGaQ.js",
+        "vendor-DCNNbBh0.js",
+        "index-DVqrOj4Z.js",
+        "ShortcutsModal-CMLavdJl.js",
+        "SettingsModal-BBcibmBp.js",
+        "TableEditor-BTG9qtNu.js",
+        "DesktopPet-BU6SBQrm.js",
+        "pet-activity-BY5h0v1N.js",
+        "pet-states-DfEgFYyS.js",
+        "ExcelMappingModal-BcKVhxPB.js",
+        "PetPreviewSprite-CSdpNg6-.js",
+        "PetPaletteModal-DDIbGrXQ.js",
+        "WatermarkModal-CoAhm6D1.js"
+      ],
+      "scriptBytes": 1072877,
+      "scriptGzipEquivalentBytes": 309020,
+      "startupPanelModules": [
+        "C:/Users/HIDROAA/Desktop/beru/src/components/PropertiesPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/LayerList.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/UserManagementPanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/ThemeEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/settings/AppearancePanel.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/SettingsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ShortcutsModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/TableEditor.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/ExcelMappingModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/components/WatermarkModal.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/DesktopPet.jsx",
+        "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetPaletteModal.jsx"
+      ],
+      "jsHeapBytes": 6786076,
+      "scriptDurationSeconds": 0.12812,
+      "taskDurationSeconds": 0.255424,
+      "cpuCumulativeSeconds": 1.657094,
+      "residentMiB": 394.44140625,
+      "privateMiB": 255.234375,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-before-warm-3.json"
+    },
+    {
+      "label": "panels-complete-final-cold-1",
+      "variant": "final",
+      "temperature": "cold",
+      "readyMs": 1272.7001953125,
+      "navigationReadyMs": 764.0999999940395,
+      "beforeNavigationMs": 508.60009765625,
+      "freeStartMiB": 1151.59375,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "vendor-DCNNbBh0.js",
+        "icons-Dda9KGaQ.js",
+        "index-DVqrOj4Z.js",
+        "main-Cg3AggNp.js"
+      ],
+      "scriptBytes": 931011,
+      "scriptGzipEquivalentBytes": 271616,
+      "startupPanelModules": [],
+      "jsHeapBytes": 6389980,
+      "scriptDurationSeconds": 0.114945,
+      "taskDurationSeconds": 0.391001,
+      "cpuCumulativeSeconds": 2.523033,
+      "residentMiB": 403.21875,
+      "privateMiB": 259.265625,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-final-cold-1.json"
+    },
+    {
+      "label": "panels-complete-final-cold-2",
+      "variant": "final",
+      "temperature": "cold",
+      "readyMs": 3870.800048828125,
+      "navigationReadyMs": 3366.5,
+      "beforeNavigationMs": 504.300048828125,
+      "freeStartMiB": 481.10546875,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "vendor-DCNNbBh0.js",
+        "icons-Dda9KGaQ.js",
+        "index-DVqrOj4Z.js",
+        "main-Cg3AggNp.js"
+      ],
+      "scriptBytes": 931011,
+      "scriptGzipEquivalentBytes": 271616,
+      "startupPanelModules": [],
+      "jsHeapBytes": 6430600,
+      "scriptDurationSeconds": 0.267698,
+      "taskDurationSeconds": 0.730389,
+      "cpuCumulativeSeconds": 5.233716,
+      "residentMiB": 321.1953125,
+      "privateMiB": 257.0546875,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-final-cold-2.json"
+    },
+    {
+      "label": "panels-complete-final-cold-3",
+      "variant": "final",
+      "temperature": "cold",
+      "readyMs": 902.2998046875,
+      "navigationReadyMs": 642.9000000059605,
+      "beforeNavigationMs": 259.39990234375,
+      "freeStartMiB": 1217.48046875,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "icons-Dda9KGaQ.js",
+        "vendor-DCNNbBh0.js",
+        "index-DVqrOj4Z.js",
+        "main-Cg3AggNp.js"
+      ],
+      "scriptBytes": 931011,
+      "scriptGzipEquivalentBytes": 271616,
+      "startupPanelModules": [],
+      "jsHeapBytes": 6103792,
+      "scriptDurationSeconds": 0.118676,
+      "taskDurationSeconds": 0.236707,
+      "cpuCumulativeSeconds": 1.6496499999999998,
+      "residentMiB": 397.078125,
+      "privateMiB": 254.94140625,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-final-cold-3.json"
+    },
+    {
+      "label": "panels-complete-final-warm-1",
+      "variant": "final",
+      "temperature": "warm",
+      "readyMs": 842,
+      "navigationReadyMs": 545.5,
+      "beforeNavigationMs": 296.5,
+      "freeStartMiB": 1146.19140625,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "vendor-DCNNbBh0.js",
+        "icons-Dda9KGaQ.js",
+        "index-DVqrOj4Z.js",
+        "main-Cg3AggNp.js"
+      ],
+      "scriptBytes": 931011,
+      "scriptGzipEquivalentBytes": 271616,
+      "startupPanelModules": [],
+      "jsHeapBytes": 6234196,
+      "scriptDurationSeconds": 0.094128,
+      "taskDurationSeconds": 0.227478,
+      "cpuCumulativeSeconds": 1.7723039999999999,
+      "residentMiB": 408.2421875,
+      "privateMiB": 268.48046875,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-final-warm-1.json"
+    },
+    {
+      "label": "panels-complete-final-warm-2",
+      "variant": "final",
+      "temperature": "warm",
+      "readyMs": 632.699951171875,
+      "navigationReadyMs": 368,
+      "beforeNavigationMs": 264.699951171875,
+      "freeStartMiB": 1235.5546875,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "icons-Dda9KGaQ.js",
+        "vendor-DCNNbBh0.js",
+        "index-DVqrOj4Z.js",
+        "main-Cg3AggNp.js"
+      ],
+      "scriptBytes": 931011,
+      "scriptGzipEquivalentBytes": 271616,
+      "startupPanelModules": [],
+      "jsHeapBytes": 6113228,
+      "scriptDurationSeconds": 0.118397,
+      "taskDurationSeconds": 0.230441,
+      "cpuCumulativeSeconds": 1.606604,
+      "residentMiB": 389.42578125,
+      "privateMiB": 248.73828125,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-final-warm-2.json"
+    },
+    {
+      "label": "panels-complete-final-warm-3",
+      "variant": "final",
+      "temperature": "warm",
+      "readyMs": 603.099853515625,
+      "navigationReadyMs": 334.20000000298023,
+      "beforeNavigationMs": 268.89990234375,
+      "freeStartMiB": 1218.80078125,
+      "visible": "visible",
+      "visibilityChanges": [],
+      "scripts": [
+        "vendor-DCNNbBh0.js",
+        "icons-Dda9KGaQ.js",
+        "index-DVqrOj4Z.js",
+        "main-Cg3AggNp.js"
+      ],
+      "scriptBytes": 931011,
+      "scriptGzipEquivalentBytes": 271616,
+      "startupPanelModules": [],
+      "jsHeapBytes": 6183132,
+      "scriptDurationSeconds": 0.133114,
+      "taskDurationSeconds": 0.256434,
+      "cpuCumulativeSeconds": 1.611181,
+      "residentMiB": 388.30078125,
+      "privateMiB": 249.06640625,
+      "errors": [],
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-final-warm-3.json"
+    }
+  ],
+  "sourceHashes": {
+    "src/App.jsx": "eeb8c984be0c901f92049d48eea0a07c8d1f2801554485ef9789a58f20f8a6b4",
+    "src/BeruRoot.jsx": "fe1e62e60ff45f944ae84fbdf33c187dd2cfda7db4bf1d36ab5893d207035a84",
+    "src/components/SettingsModal.jsx": "d113847cda135cab8dc9c2fe8ce227666a5710ff511afb72a3a7c96fdc1237a1",
+    "src/components/settings/AppearancePanel.jsx": "4adfb579d7959fc15a353cacae7f38e87a90b88c497704563f80fe863976ddd5",
+    "src/components/LogoSidePanel.jsx": "00905f9716a75c144e6957d6975bb9f743fa7ebbfbdffffb2215a8f646f5e2ad",
+    "src/components/DeferredPanel.jsx": "9e1eec3b82e39ccdc93bcd57bf97c46154d31ec166a0827ee2714178a8c389ed",
+    "src/components/editor-panels.js": "05b32e6f0af1922a51e9f5bb663656809ab9428e7d41654d60ccb1bab0cce35d"
+  },
+  "productionDiffAgainstStart": [
+    {
+      "file": "src/App.jsx",
+      "added": 18,
+      "removed": 8
+    },
+    {
+      "file": "src/BeruRoot.jsx",
+      "added": 10,
+      "removed": 3
+    },
+    {
+      "file": "src/components/SettingsModal.jsx",
+      "added": 10,
+      "removed": 10
+    },
+    {
+      "file": "src/components/settings/AppearancePanel.jsx",
+      "added": 13,
+      "removed": 10
+    },
+    {
+      "file": "src/components/LogoSidePanel.jsx",
+      "added": 6,
+      "removed": 5
+    },
+    {
+      "file": "src/components/DeferredPanel.jsx",
+      "added": 13,
+      "removed": 0
+    },
+    {
+      "file": "src/components/editor-panels.js",
+      "added": 4,
+      "removed": 0
+    }
+  ],
+  "testChanges": {
+    "newFile": "tests/deferred-panel.test.jsx",
+    "newFileLines": 78,
+    "newTests": 2,
+    "adaptedFiles": [
+      "tests/app-render.test.jsx",
+      "tests/settings-appearance.test.jsx",
+      "tests/app-rail.test.jsx"
+    ],
+    "adaptation": "Wait for actual lazy modules before asserting their visible UI; retain original UI assertions"
+  },
+  "ui": {
+    "before": [
+      {
+        "name": "shortcuts",
+        "ms": 20,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "watermark",
+        "ms": 81,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "mapping",
+        "ms": 32,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "table",
+        "ms": 146,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "settings-appearance",
+        "ms": 172,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "theme-editor",
+        "ms": 120,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "settings-appearance-restored",
+        "ms": 56,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "settings-users",
+        "ms": 70,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "settings-pets",
+        "ms": 373,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-before/assets/PetdexPanel-quUQ0lMG.js",
+            "type": "script",
+            "ms": 3724
+          }
+        ]
+      },
+      {
+        "name": "pet-palette",
+        "ms": 36,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "pet-palette-reopen",
+        "ms": 33,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "settings-reopen",
+        "ms": 69,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "pet-overlay-sync",
+        "ms": 112,
+        "found": true,
+        "newRequests": []
+      }
+    ],
+    "final": [
+      {
+        "name": "shortcuts",
+        "ms": 333,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/ShortcutsModal-Bu5K-g_-.js",
+            "type": "script",
+            "ms": 3527
+          }
+        ]
+      },
+      {
+        "name": "watermark",
+        "ms": 332,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/PositionIcon-BqoJvQjS.js",
+            "type": "script",
+            "ms": 3862
+          },
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/WatermarkModal-B1Ucq8HK.js",
+            "type": "script",
+            "ms": 3862
+          }
+        ]
+      },
+      {
+        "name": "mapping",
+        "ms": 347,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/ExcelMappingModal-BIb7I-bQ.js",
+            "type": "script",
+            "ms": 4197
+          }
+        ]
+      },
+      {
+        "name": "logo-tools",
+        "ms": 377,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/PropertiesPanel-CPBngqmO.js",
+            "type": "script",
+            "ms": 4689
+          },
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/InspectorGroup-BgmMIKjA.js",
+            "type": "script",
+            "ms": 4689
+          },
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/TextLayoutControls-BywZZFtc.js",
+            "type": "script",
+            "ms": 4690
+          },
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/LayerList-CHdOpZhw.js",
+            "type": "script",
+            "ms": 4710
+          }
+        ]
+      },
+      {
+        "name": "batch-inspector",
+        "ms": 236,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "table",
+        "ms": 359,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/TableEditor-DvVqya1U.js",
+            "type": "script",
+            "ms": 5343
+          }
+        ]
+      },
+      {
+        "name": "settings-appearance",
+        "ms": 395,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/SettingsModal-rfAS78KP.js",
+            "type": "script",
+            "ms": 5700
+          },
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/AppearancePanel-CEdu5ALA.js",
+            "type": "script",
+            "ms": 5704
+          }
+        ]
+      },
+      {
+        "name": "theme-editor",
+        "ms": 437,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/ThemeEditor-CifMiF5e.js",
+            "type": "script",
+            "ms": 6143
+          }
+        ]
+      },
+      {
+        "name": "settings-appearance-restored",
+        "ms": 92,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "settings-users",
+        "ms": 355,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/UserManagementPanel-Dq9GZyVn.js",
+            "type": "script",
+            "ms": 6694
+          }
+        ]
+      },
+      {
+        "name": "settings-pets",
+        "ms": 397,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/pet-states-DfEgFYyS.js",
+            "type": "script",
+            "ms": 7051
+          },
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/PetPreviewSprite-ChQGcB-3.js",
+            "type": "script",
+            "ms": 7052
+          },
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/PetdexPanel-DpHByhlj.js",
+            "type": "script",
+            "ms": 7052
+          }
+        ]
+      },
+      {
+        "name": "pet-palette",
+        "ms": 357,
+        "found": true,
+        "visible": "visible",
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/PetPaletteModal-B3mqWrXg.js",
+            "type": "script",
+            "ms": 7463
+          }
+        ]
+      },
+      {
+        "name": "pet-palette-reopen",
+        "ms": 40,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "settings-reopen",
+        "ms": 98,
+        "found": true,
+        "visible": "visible",
+        "newRequests": []
+      },
+      {
+        "name": "pet-overlay-sync",
+        "ms": 322,
+        "found": true,
+        "newRequests": [
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/pet-activity-BY5h0v1N.js",
+            "type": "script",
+            "ms": 8172
+          },
+          {
+            "url": "file:///C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/build-panels-final/assets/DesktopPet-3PmgRXnv.js",
+            "type": "script",
+            "ms": 8173
+          }
+        ]
+      }
+    ],
+    "errors": [],
+    "paletteQueryPreserved": true,
+    "petOverlayEventHandled": true,
+    "screenshot": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\panels-complete-check-final-ui-settings.png"
+  },
+  "discardedSeries": [
+    "panels (pilot; cold-1 profile reused from initial probe)",
+    "panels-final (superseded version without inspector deferral)"
+  ],
+  "limitations": [
+    "Three cold and three warm runs per variant cannot establish a stable latency speedup",
+    "Final cold-2 took 3871 ms with only 481 MiB free; retained as a valid measurement, not excluded",
+    "First opening pays lazy import and React render latency; reopening uses loaded modules",
+    "No real login, packaged installer or OS-cold boot was measured",
+    "Source maps include an audit-only store exposure without a transform source map; not used for line-level attribution"
+  ],
+  "checks": {
+    "focused": {
+      "passed": 52,
+      "files": 12,
+      "note": "45 cases in 11 files, plus 7 app-rail cases after async wait fix"
+    },
+    "lint": {
+      "result": "passed",
+      "log": "panels-lint-final.log"
+    },
+    "format": {
+      "result": "passed after documentation",
+      "log": "panels-format-final.log"
+    },
+    "fullTests": {
+      "passed": 1041,
+      "files": 145,
+      "exitCode": 0,
+      "log": "panels-tests-final.log"
+    },
+    "rendererBuild": "passed",
+    "python": "not applicable"
+  }
+}

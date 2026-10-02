@@ -45,7 +45,7 @@ export default function ConfirmDialog() {
             className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
             style={{
               background: isDanger ? "rgba(244,63,94,0.12)" : "rgba(251,191,36,0.12)",
-              color: isDanger ? "var(--rose)" : "var(--amber)",
+              color: isDanger ? "var(--text-rose)" : "var(--text-amber)",
             }}
           >
             <AlertTriangle size={20} strokeWidth={2.25} />

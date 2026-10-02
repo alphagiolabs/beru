@@ -44,7 +44,6 @@ describe("StatusFooter batch summary", () => {
       progressDone: 0,
       progressTotal: 0,
       queue: [queueItem()],
-      logLines: [],
       update: {
         status: "idle",
         version: null,

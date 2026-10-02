@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { useT } from "../i18n/useT";
 import { letterSpacingToPx } from "../utils/text-style";
 import {
   drawtextLineSpacingPx,
@@ -27,6 +28,7 @@ function TextOverlay({
   zIndex,
   showOverflowWarning = true,
 }) {
+  const t = useT();
   const rawText = text != null ? String(text).trim() : "";
   const displaySource = rawText.length > 0 ? rawText : null;
 
@@ -111,8 +113,8 @@ function TextOverlay({
             position: "absolute",
             top: -18,
             left: 0,
-            background: isFocused ? focusedOutlineColor : "rgba(168,85,247,0.9)",
-            color: "white",
+            background: "var(--bg-elevated)",
+            color: "var(--text-primary)",
             fontSize: "9px",
             fontWeight: 600,
             padding: "1px 6px",
@@ -131,8 +133,8 @@ function TextOverlay({
             top: 2,
             right: 2,
             zIndex: 2,
-            background: "rgba(244,63,94,0.92)",
-            color: "white",
+            background: "var(--rose)",
+            color: "var(--text-on-rose)",
             fontSize: "8px",
             fontWeight: 700,
             padding: "1px 5px",
@@ -142,7 +144,7 @@ function TextOverlay({
             pointerEvents: "none",
           }}
         >
-          Desborda
+          {t("preview.overflow")}
         </div>
       )}
 

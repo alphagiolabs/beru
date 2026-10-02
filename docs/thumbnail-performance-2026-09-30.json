@@ -1,0 +1,1724 @@
+{
+  "date": "2026-09-30",
+  "scope": "Visible queue thumbnails and memory-aware multimedia admission",
+  "machine": {
+    "cpu": "Intel Core i5-12400",
+    "logicalCpus": 12,
+    "ramGiB": 7.78,
+    "gpu": "Intel UHD Graphics 730",
+    "runtime": {
+      "electron": "35.7.5"
+    }
+  },
+  "scenario": {
+    "videos": 120,
+    "codec": "H.264",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "durationSeconds": 12,
+    "audio": false,
+    "bytesPerVideo": 3808586,
+    "distinctPathsWithIdenticalContent": true,
+    "selectedIndex": 0,
+    "scrollTargetIndex": 90,
+    "commonVisibleCohort": [89, 107],
+    "profiles": "Fresh isolated profiles; thumbnail cache empty; OS file cache warm",
+    "authentication": "Blank Supabase configuration in temporary renderer build",
+    "measurement": "Native Electron, CDP, requestAnimationFrame, longtask observer, native process samples excluding unrelated apps",
+    "baseline": "Saved pre-change thumbnail pool, extractor, handlers and renderer; surrounding modules from working checkout",
+    "concurrentEdits": true
+  },
+  "policy": {
+    "priority": ["selected/interactive", "visible/recent viewport", "metadata", "background"],
+    "visibleMarginPx": 98,
+    "backgroundChunk": 4,
+    "backgroundBatchesInFlight": 2,
+    "maxTasks": 8,
+    "maxDuringExport": 2,
+    "uiReserveMiB": 512,
+    "headroomFactor": 0.8,
+    "thumbnailTaskEstimateMiB": 192,
+    "fastProbeEstimateMiB": 32,
+    "minimumProgressTasks": 1,
+    "decoderThreads": 2,
+    "filterThreads": 1,
+    "cacheMaxThumbnails": 300,
+    "key": "path + mtime + width"
+  },
+  "sourceHashes": {
+    "main/utils/media-task-pool.js": "75cc283a55a9648b2f7cf8bf64417f30aa8aa0eac8105ce6ef0a2f0df31b39cc",
+    "main/utils/thumbnail.js": "0e3d24d4b3dc326460c6a6bf8b0efdcb035685a9a281ac2d738db329ebeaa3f1",
+    "main/handlers/video.js": "a16a3c25f1764270c12f1d78af6522fb6c165c9b516db003567d3dad6a568c59",
+    "main/preload.cjs": "6fea8f98f03f0c64da272ac1bdabcf11ec7a4ae424a212e46c403c225cd4dfab",
+    "src/stores/slices/queueSlice.js": "d0b4f6e1533cff52a20cea72b7c6122e9e3d02960c7e4d39565f295e0546a2b2",
+    "src/components/QueueSidebar.jsx": "13e41e4e9c9b7a680d59536ba7047d197bb348abc1e293fb2fb0e35c430d8e01"
+  },
+  "runs": [
+    {
+      "label": "thumbnail-ui-legacy-deep-2",
+      "mainPid": 12936,
+      "freeStartMiB": 966.7265625,
+      "freeMinMiB": 37.9375,
+      "scrollMs": 7336.600000008941,
+      "visibleIndices": [
+        89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107
+      ],
+      "visibleMs": 18772.60000000894,
+      "afterScrollMs": 11436,
+      "completeMs": 18772.60000000894,
+      "metadataMs": 3513.7999999970198,
+      "count": 120,
+      "rssPeakMiB": 1405.578125,
+      "privatePeakMiB": 1559.26953125,
+      "ffmpegRssPeakMiB": 1019.67578125,
+      "ffmpegPrivatePeakMiB": 1160.33203125,
+      "ffmpegSinglePrivatePeakMiB": 146.49609375,
+      "childPeak": 9,
+      "cpuSeconds": 99.46875,
+      "cpuPercent": 44.12361599063132,
+      "frameP50Ms": 16.69999999999891,
+      "frameP95Ms": 16.80000000000291,
+      "frameP99Ms": 33.19999999999982,
+      "longTasks": 1,
+      "longTaskMaxMs": 3453,
+      "thumbnailProcesses": 120,
+      "maxThumbnailProcessesPerPath": 1,
+      "imagesValid": true,
+      "errors": [],
+      "start": 1790800475835,
+      "end": 1790800494621,
+      "visibility": [],
+      "visibleState": "visible",
+      "commonCohortMs": 18753.40000000596,
+      "frameMaxMs": 2433.3999999999996,
+      "framesAbove50Ms": 3,
+      "thumbnailCompletionTrace": [
+        {
+          "index": 0,
+          "ms": 3461.7000000029802
+        },
+        {
+          "index": 1,
+          "ms": 3461.7999999970198
+        },
+        {
+          "index": 2,
+          "ms": 3461.7999999970198
+        },
+        {
+          "index": 3,
+          "ms": 3461.7999999970198
+        },
+        {
+          "index": 16,
+          "ms": 7413.9000000059605
+        },
+        {
+          "index": 17,
+          "ms": 7413.9000000059605
+        },
+        {
+          "index": 18,
+          "ms": 7414
+        },
+        {
+          "index": 19,
+          "ms": 7414
+        },
+        {
+          "index": 20,
+          "ms": 7414
+        },
+        {
+          "index": 21,
+          "ms": 7414
+        },
+        {
+          "index": 22,
+          "ms": 7414
+        },
+        {
+          "index": 23,
+          "ms": 7414
+        },
+        {
+          "index": 24,
+          "ms": 7414
+        },
+        {
+          "index": 25,
+          "ms": 7414
+        },
+        {
+          "index": 26,
+          "ms": 7414
+        },
+        {
+          "index": 27,
+          "ms": 7414
+        },
+        {
+          "index": 4,
+          "ms": 7499.100000008941
+        },
+        {
+          "index": 5,
+          "ms": 7499.100000008941
+        },
+        {
+          "index": 6,
+          "ms": 7499.100000008941
+        },
+        {
+          "index": 7,
+          "ms": 7499.100000008941
+        },
+        {
+          "index": 8,
+          "ms": 7499.100000008941
+        },
+        {
+          "index": 9,
+          "ms": 7499.100000008941
+        },
+        {
+          "index": 10,
+          "ms": 7499.100000008941
+        },
+        {
+          "index": 11,
+          "ms": 7499.20000000298
+        },
+        {
+          "index": 12,
+          "ms": 7499.20000000298
+        },
+        {
+          "index": 13,
+          "ms": 7499.20000000298
+        },
+        {
+          "index": 14,
+          "ms": 7499.20000000298
+        },
+        {
+          "index": 15,
+          "ms": 7499.20000000298
+        },
+        {
+          "index": 28,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 29,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 30,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 31,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 32,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 33,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 34,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 35,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 36,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 37,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 38,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 39,
+          "ms": 10400.40000000596
+        },
+        {
+          "index": 40,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 41,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 42,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 43,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 44,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 45,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 46,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 47,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 48,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 49,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 50,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 51,
+          "ms": 10626.90000000596
+        },
+        {
+          "index": 52,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 53,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 54,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 55,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 56,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 57,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 58,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 59,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 60,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 61,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 62,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 63,
+          "ms": 13270.29999999702
+        },
+        {
+          "index": 64,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 65,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 66,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 67,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 68,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 69,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 70,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 71,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 72,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 73,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 74,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 75,
+          "ms": 13387.40000000596
+        },
+        {
+          "index": 76,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 77,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 78,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 79,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 80,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 81,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 82,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 83,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 84,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 85,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 86,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 87,
+          "ms": 16272.20000000298
+        },
+        {
+          "index": 88,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 89,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 90,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 91,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 92,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 93,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 94,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 95,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 96,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 97,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 98,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 99,
+          "ms": 16363.40000000596
+        },
+        {
+          "index": 112,
+          "ms": 18342.90000000596
+        },
+        {
+          "index": 113,
+          "ms": 18342.90000000596
+        },
+        {
+          "index": 114,
+          "ms": 18342.90000000596
+        },
+        {
+          "index": 115,
+          "ms": 18342.90000000596
+        },
+        {
+          "index": 116,
+          "ms": 18342.90000000596
+        },
+        {
+          "index": 117,
+          "ms": 18342.90000000596
+        },
+        {
+          "index": 118,
+          "ms": 18342.90000000596
+        },
+        {
+          "index": 119,
+          "ms": 18342.90000000596
+        },
+        {
+          "index": 100,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 101,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 102,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 103,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 104,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 105,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 106,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 107,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 108,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 109,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 110,
+          "ms": 18753.40000000596
+        },
+        {
+          "index": 111,
+          "ms": 18753.40000000596
+        }
+      ],
+      "rendererHeapUsedBytes": 8245676,
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-legacy-deep-2.json",
+      "nativeSamples": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-legacy-deep-2-os.jsonl",
+      "screenshot": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-legacy-deep-2-end.png"
+    },
+    {
+      "label": "thumbnail-ui-final",
+      "mainPid": 23796,
+      "freeStartMiB": 875.984375,
+      "freeMinMiB": 652.1484375,
+      "scrollMs": 1506.7999999970198,
+      "visibleIndices": [
+        89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109
+      ],
+      "visibleMs": 5134.5,
+      "afterScrollMs": 3627.7000000029802,
+      "completeMs": 12716.40000000596,
+      "metadataMs": 2587.5,
+      "count": 120,
+      "rssPeakMiB": 634.671875,
+      "privatePeakMiB": 579.15625,
+      "ffmpegRssPeakMiB": 97.98046875,
+      "ffmpegPrivatePeakMiB": 125.76953125,
+      "ffmpegSinglePrivatePeakMiB": 63.58984375,
+      "childPeak": 8,
+      "cpuSeconds": 42.0625,
+      "cpuPercent": 27.55883586235815,
+      "frameP50Ms": 16.699999999999818,
+      "frameP95Ms": 16.80000000000109,
+      "frameP99Ms": 16.900000000001455,
+      "longTasks": 1,
+      "longTaskMaxMs": 112,
+      "thumbnailProcesses": 120,
+      "maxThumbnailProcessesPerPath": 1,
+      "imagesValid": true,
+      "errors": [],
+      "start": 1790800875890,
+      "end": 1790800888609,
+      "visibility": [],
+      "visibleState": "visible",
+      "commonCohortMs": 5118.29999999702,
+      "frameMaxMs": 133.29999999999995,
+      "framesAbove50Ms": 3,
+      "thumbnailCompletionTrace": [
+        {
+          "index": 0,
+          "ms": 262.20000000298023
+        },
+        {
+          "index": 23,
+          "ms": 588.9000000059605
+        },
+        {
+          "index": 112,
+          "ms": 2728.2000000029802
+        },
+        {
+          "index": 111,
+          "ms": 2889.2000000029802
+        },
+        {
+          "index": 110,
+          "ms": 3048.6000000089407
+        },
+        {
+          "index": 109,
+          "ms": 3206.5
+        },
+        {
+          "index": 108,
+          "ms": 3361.7999999970198
+        },
+        {
+          "index": 107,
+          "ms": 3510
+        },
+        {
+          "index": 105,
+          "ms": 3696.2999999970198
+        },
+        {
+          "index": 106,
+          "ms": 3705.1000000089407
+        },
+        {
+          "index": 104,
+          "ms": 3894.5
+        },
+        {
+          "index": 103,
+          "ms": 3904.2999999970198
+        },
+        {
+          "index": 102,
+          "ms": 4094.9000000059605
+        },
+        {
+          "index": 101,
+          "ms": 4104.79999999702
+        },
+        {
+          "index": 100,
+          "ms": 4275
+        },
+        {
+          "index": 99,
+          "ms": 4286.79999999702
+        },
+        {
+          "index": 98,
+          "ms": 4479.20000000298
+        },
+        {
+          "index": 97,
+          "ms": 4492.600000008941
+        },
+        {
+          "index": 96,
+          "ms": 4646.79999999702
+        },
+        {
+          "index": 95,
+          "ms": 4662.100000008941
+        },
+        {
+          "index": 94,
+          "ms": 4811.29999999702
+        },
+        {
+          "index": 93,
+          "ms": 4824
+        },
+        {
+          "index": 92,
+          "ms": 4967.100000008941
+        },
+        {
+          "index": 91,
+          "ms": 4975.600000008941
+        },
+        {
+          "index": 90,
+          "ms": 5110.9000000059605
+        },
+        {
+          "index": 89,
+          "ms": 5118.29999999702
+        },
+        {
+          "index": 88,
+          "ms": 5277.5
+        },
+        {
+          "index": 87,
+          "ms": 5285.29999999702
+        },
+        {
+          "index": 86,
+          "ms": 5447.100000008941
+        },
+        {
+          "index": 85,
+          "ms": 5457.600000008941
+        },
+        {
+          "index": 84,
+          "ms": 5633.100000008941
+        },
+        {
+          "index": 83,
+          "ms": 5642.20000000298
+        },
+        {
+          "index": 82,
+          "ms": 5790.9000000059605
+        },
+        {
+          "index": 81,
+          "ms": 5797.600000008941
+        },
+        {
+          "index": 80,
+          "ms": 5946.600000008941
+        },
+        {
+          "index": 79,
+          "ms": 5954.79999999702
+        },
+        {
+          "index": 78,
+          "ms": 6092.4000000059605
+        },
+        {
+          "index": 77,
+          "ms": 6097.79999999702
+        },
+        {
+          "index": 76,
+          "ms": 6248.20000000298
+        },
+        {
+          "index": 75,
+          "ms": 6257.4000000059605
+        },
+        {
+          "index": 74,
+          "ms": 6404
+        },
+        {
+          "index": 73,
+          "ms": 6408.9000000059605
+        },
+        {
+          "index": 71,
+          "ms": 6546.29999999702
+        },
+        {
+          "index": 72,
+          "ms": 6553.20000000298
+        },
+        {
+          "index": 70,
+          "ms": 6721.20000000298
+        },
+        {
+          "index": 69,
+          "ms": 6728.79999999702
+        },
+        {
+          "index": 68,
+          "ms": 6913.4000000059605
+        },
+        {
+          "index": 67,
+          "ms": 6924.20000000298
+        },
+        {
+          "index": 66,
+          "ms": 7110.9000000059605
+        },
+        {
+          "index": 65,
+          "ms": 7123.29999999702
+        },
+        {
+          "index": 64,
+          "ms": 7337.29999999702
+        },
+        {
+          "index": 63,
+          "ms": 7344.20000000298
+        },
+        {
+          "index": 62,
+          "ms": 7523
+        },
+        {
+          "index": 61,
+          "ms": 7528.9000000059605
+        },
+        {
+          "index": 60,
+          "ms": 7680.29999999702
+        },
+        {
+          "index": 59,
+          "ms": 7693.9000000059605
+        },
+        {
+          "index": 57,
+          "ms": 7881.20000000298
+        },
+        {
+          "index": 58,
+          "ms": 7890.600000008941
+        },
+        {
+          "index": 55,
+          "ms": 8046.4000000059605
+        },
+        {
+          "index": 56,
+          "ms": 8055.100000008941
+        },
+        {
+          "index": 54,
+          "ms": 8202.70000000298
+        },
+        {
+          "index": 53,
+          "ms": 8209.79999999702
+        },
+        {
+          "index": 52,
+          "ms": 8345.70000000298
+        },
+        {
+          "index": 51,
+          "ms": 8352.40000000596
+        },
+        {
+          "index": 50,
+          "ms": 8490.10000000894
+        },
+        {
+          "index": 49,
+          "ms": 8495
+        },
+        {
+          "index": 48,
+          "ms": 8633.20000000298
+        },
+        {
+          "index": 47,
+          "ms": 8639.60000000894
+        },
+        {
+          "index": 45,
+          "ms": 8792.10000000894
+        },
+        {
+          "index": 46,
+          "ms": 8798.20000000298
+        },
+        {
+          "index": 44,
+          "ms": 8938.60000000894
+        },
+        {
+          "index": 43,
+          "ms": 8952.79999999702
+        },
+        {
+          "index": 42,
+          "ms": 9096
+        },
+        {
+          "index": 41,
+          "ms": 9104.79999999702
+        },
+        {
+          "index": 40,
+          "ms": 9267.60000000894
+        },
+        {
+          "index": 39,
+          "ms": 9274.29999999702
+        },
+        {
+          "index": 38,
+          "ms": 9419.20000000298
+        },
+        {
+          "index": 37,
+          "ms": 9425.60000000894
+        },
+        {
+          "index": 36,
+          "ms": 9564.29999999702
+        },
+        {
+          "index": 35,
+          "ms": 9571.20000000298
+        },
+        {
+          "index": 34,
+          "ms": 9709.79999999702
+        },
+        {
+          "index": 33,
+          "ms": 9716
+        },
+        {
+          "index": 32,
+          "ms": 9864
+        },
+        {
+          "index": 31,
+          "ms": 9873.29999999702
+        },
+        {
+          "index": 30,
+          "ms": 10084.79999999702
+        },
+        {
+          "index": 29,
+          "ms": 10095.79999999702
+        },
+        {
+          "index": 28,
+          "ms": 10313.5
+        },
+        {
+          "index": 27,
+          "ms": 10322.79999999702
+        },
+        {
+          "index": 26,
+          "ms": 10497.20000000298
+        },
+        {
+          "index": 25,
+          "ms": 10505.40000000596
+        },
+        {
+          "index": 24,
+          "ms": 10643.79999999702
+        },
+        {
+          "index": 22,
+          "ms": 10651.40000000596
+        },
+        {
+          "index": 21,
+          "ms": 10783.40000000596
+        },
+        {
+          "index": 20,
+          "ms": 10794.40000000596
+        },
+        {
+          "index": 19,
+          "ms": 10924.10000000894
+        },
+        {
+          "index": 18,
+          "ms": 10935.79999999702
+        },
+        {
+          "index": 17,
+          "ms": 11075.10000000894
+        },
+        {
+          "index": 16,
+          "ms": 11081.5
+        },
+        {
+          "index": 15,
+          "ms": 11228.40000000596
+        },
+        {
+          "index": 14,
+          "ms": 11235.29999999702
+        },
+        {
+          "index": 13,
+          "ms": 11375
+        },
+        {
+          "index": 12,
+          "ms": 11379.90000000596
+        },
+        {
+          "index": 11,
+          "ms": 11513
+        },
+        {
+          "index": 10,
+          "ms": 11520.60000000894
+        },
+        {
+          "index": 9,
+          "ms": 11647.40000000596
+        },
+        {
+          "index": 8,
+          "ms": 11660.60000000894
+        },
+        {
+          "index": 7,
+          "ms": 11810
+        },
+        {
+          "index": 6,
+          "ms": 11819.20000000298
+        },
+        {
+          "index": 5,
+          "ms": 11976.40000000596
+        },
+        {
+          "index": 4,
+          "ms": 11985.79999999702
+        },
+        {
+          "index": 3,
+          "ms": 12134.70000000298
+        },
+        {
+          "index": 2,
+          "ms": 12141.29999999702
+        },
+        {
+          "index": 1,
+          "ms": 12284.90000000596
+        },
+        {
+          "index": 113,
+          "ms": 12434.40000000596
+        },
+        {
+          "index": 114,
+          "ms": 12434.40000000596
+        },
+        {
+          "index": 115,
+          "ms": 12434.40000000596
+        },
+        {
+          "index": 116,
+          "ms": 12713.90000000596
+        },
+        {
+          "index": 117,
+          "ms": 12713.90000000596
+        },
+        {
+          "index": 118,
+          "ms": 12713.90000000596
+        },
+        {
+          "index": 119,
+          "ms": 12713.90000000596
+        }
+      ],
+      "rendererHeapUsedBytes": 8029144,
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-final.json",
+      "nativeSamples": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-final-os.jsonl",
+      "screenshot": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-final-end.png"
+    },
+    {
+      "label": "thumbnail-ui-final-2",
+      "mainPid": 9064,
+      "freeStartMiB": 750.93359375,
+      "freeMinMiB": 629.3828125,
+      "scrollMs": 1412.699999988079,
+      "visibleIndices": [
+        89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109
+      ],
+      "visibleMs": 6107.29999999702,
+      "afterScrollMs": 4694.600000008941,
+      "completeMs": 17071.69999998808,
+      "metadataMs": 5552.199999988079,
+      "count": 120,
+      "rssPeakMiB": 654.8203125,
+      "privatePeakMiB": 548.734375,
+      "ffmpegRssPeakMiB": 49.60546875,
+      "ffmpegPrivatePeakMiB": 63.6015625,
+      "ffmpegSinglePrivatePeakMiB": 63.6015625,
+      "childPeak": 5,
+      "cpuSeconds": 35.375,
+      "cpuPercent": 17.263508237682515,
+      "frameP50Ms": 16.69999999999891,
+      "frameP95Ms": 16.800000000000182,
+      "frameP99Ms": 16.900000000001455,
+      "longTasks": 1,
+      "longTaskMaxMs": 100,
+      "thumbnailProcesses": 120,
+      "maxThumbnailProcessesPerPath": 1,
+      "imagesValid": true,
+      "errors": [],
+      "start": 1790800910433,
+      "end": 1790800927509,
+      "visibility": [],
+      "visibleState": "visible",
+      "commonCohortMs": 6100.199999988079,
+      "frameMaxMs": 83.20000000000005,
+      "framesAbove50Ms": 3,
+      "thumbnailCompletionTrace": [
+        {
+          "index": 0,
+          "ms": 220.19999998807907
+        },
+        {
+          "index": 23,
+          "ms": 436.69999998807907
+        },
+        {
+          "index": 22,
+          "ms": 611.3999999910593
+        },
+        {
+          "index": 21,
+          "ms": 844.2999999970198
+        },
+        {
+          "index": 49,
+          "ms": 1018.2999999970198
+        },
+        {
+          "index": 67,
+          "ms": 1225.5999999940395
+        },
+        {
+          "index": 85,
+          "ms": 1418
+        },
+        {
+          "index": 103,
+          "ms": 1593.7999999970198
+        },
+        {
+          "index": 112,
+          "ms": 1770.3999999910593
+        },
+        {
+          "index": 111,
+          "ms": 1957.5
+        },
+        {
+          "index": 110,
+          "ms": 2151.0999999940395
+        },
+        {
+          "index": 109,
+          "ms": 2367.699999988079
+        },
+        {
+          "index": 108,
+          "ms": 2572.5999999940395
+        },
+        {
+          "index": 107,
+          "ms": 2762.5
+        },
+        {
+          "index": 106,
+          "ms": 2955
+        },
+        {
+          "index": 105,
+          "ms": 3150.8999999910593
+        },
+        {
+          "index": 104,
+          "ms": 3334.0999999940395
+        },
+        {
+          "index": 102,
+          "ms": 3536.2999999970198
+        },
+        {
+          "index": 101,
+          "ms": 3783.8999999910593
+        },
+        {
+          "index": 100,
+          "ms": 3970.199999988079
+        },
+        {
+          "index": 99,
+          "ms": 4183.399999991059
+        },
+        {
+          "index": 98,
+          "ms": 4384.0999999940395
+        },
+        {
+          "index": 97,
+          "ms": 4602.5
+        },
+        {
+          "index": 96,
+          "ms": 4807.5999999940395
+        },
+        {
+          "index": 95,
+          "ms": 5029.899999991059
+        },
+        {
+          "index": 94,
+          "ms": 5274.399999991059
+        },
+        {
+          "index": 93,
+          "ms": 5519.5
+        },
+        {
+          "index": 92,
+          "ms": 5666.0999999940395
+        },
+        {
+          "index": 113,
+          "ms": 5775.399999991059
+        },
+        {
+          "index": 91,
+          "ms": 5881.5999999940395
+        },
+        {
+          "index": 90,
+          "ms": 5988.79999999702
+        },
+        {
+          "index": 89,
+          "ms": 6100.199999988079
+        },
+        {
+          "index": 88,
+          "ms": 6210.29999999702
+        },
+        {
+          "index": 87,
+          "ms": 6315.199999988079
+        },
+        {
+          "index": 86,
+          "ms": 6591.399999991059
+        },
+        {
+          "index": 84,
+          "ms": 6702.399999991059
+        },
+        {
+          "index": 83,
+          "ms": 6814.5
+        },
+        {
+          "index": 82,
+          "ms": 6922.899999991059
+        },
+        {
+          "index": 81,
+          "ms": 7030.899999991059
+        },
+        {
+          "index": 80,
+          "ms": 7141.29999999702
+        },
+        {
+          "index": 79,
+          "ms": 7251.199999988079
+        },
+        {
+          "index": 78,
+          "ms": 7364.0999999940395
+        },
+        {
+          "index": 77,
+          "ms": 7474.899999991059
+        },
+        {
+          "index": 76,
+          "ms": 7583.699999988079
+        },
+        {
+          "index": 75,
+          "ms": 7695.5999999940395
+        },
+        {
+          "index": 74,
+          "ms": 7808.899999991059
+        },
+        {
+          "index": 73,
+          "ms": 7916.699999988079
+        },
+        {
+          "index": 72,
+          "ms": 8025.699999988079
+        },
+        {
+          "index": 71,
+          "ms": 8133.399999991059
+        },
+        {
+          "index": 70,
+          "ms": 8242.89999999106
+        },
+        {
+          "index": 69,
+          "ms": 8358.79999999702
+        },
+        {
+          "index": 68,
+          "ms": 8469
+        },
+        {
+          "index": 66,
+          "ms": 8577.59999999404
+        },
+        {
+          "index": 65,
+          "ms": 8683.699999988079
+        },
+        {
+          "index": 64,
+          "ms": 8792.29999999702
+        },
+        {
+          "index": 63,
+          "ms": 8903
+        },
+        {
+          "index": 62,
+          "ms": 9018.89999999106
+        },
+        {
+          "index": 61,
+          "ms": 9134
+        },
+        {
+          "index": 60,
+          "ms": 9252.29999999702
+        },
+        {
+          "index": 59,
+          "ms": 9366.199999988079
+        },
+        {
+          "index": 58,
+          "ms": 9482.29999999702
+        },
+        {
+          "index": 57,
+          "ms": 9628.89999999106
+        },
+        {
+          "index": 56,
+          "ms": 9741.09999999404
+        },
+        {
+          "index": 55,
+          "ms": 9848.59999999404
+        },
+        {
+          "index": 54,
+          "ms": 9959.89999999106
+        },
+        {
+          "index": 53,
+          "ms": 10069.89999999106
+        },
+        {
+          "index": 52,
+          "ms": 10180.89999999106
+        },
+        {
+          "index": 51,
+          "ms": 10293.199999988079
+        },
+        {
+          "index": 50,
+          "ms": 10404.5
+        },
+        {
+          "index": 48,
+          "ms": 10517.199999988079
+        },
+        {
+          "index": 47,
+          "ms": 10631.59999999404
+        },
+        {
+          "index": 46,
+          "ms": 10765
+        },
+        {
+          "index": 45,
+          "ms": 10903
+        },
+        {
+          "index": 44,
+          "ms": 11028
+        },
+        {
+          "index": 43,
+          "ms": 11143.39999999106
+        },
+        {
+          "index": 42,
+          "ms": 11270.79999999702
+        },
+        {
+          "index": 41,
+          "ms": 11468.09999999404
+        },
+        {
+          "index": 40,
+          "ms": 11670.89999999106
+        },
+        {
+          "index": 39,
+          "ms": 11866
+        },
+        {
+          "index": 38,
+          "ms": 12012.199999988079
+        },
+        {
+          "index": 37,
+          "ms": 12145.199999988079
+        },
+        {
+          "index": 36,
+          "ms": 12268.29999999702
+        },
+        {
+          "index": 35,
+          "ms": 12407.199999988079
+        },
+        {
+          "index": 34,
+          "ms": 12542.09999999404
+        },
+        {
+          "index": 33,
+          "ms": 12653.79999999702
+        },
+        {
+          "index": 32,
+          "ms": 12775.199999988079
+        },
+        {
+          "index": 31,
+          "ms": 12891
+        },
+        {
+          "index": 30,
+          "ms": 13014.79999999702
+        },
+        {
+          "index": 29,
+          "ms": 13134.89999999106
+        },
+        {
+          "index": 28,
+          "ms": 13260.199999988079
+        },
+        {
+          "index": 27,
+          "ms": 13376.59999999404
+        },
+        {
+          "index": 26,
+          "ms": 13510.79999999702
+        },
+        {
+          "index": 25,
+          "ms": 13638
+        },
+        {
+          "index": 24,
+          "ms": 13753.89999999106
+        },
+        {
+          "index": 20,
+          "ms": 13871.29999999702
+        },
+        {
+          "index": 19,
+          "ms": 13991.199999988079
+        },
+        {
+          "index": 18,
+          "ms": 14109.699999988079
+        },
+        {
+          "index": 17,
+          "ms": 14224.5
+        },
+        {
+          "index": 16,
+          "ms": 14338.29999999702
+        },
+        {
+          "index": 15,
+          "ms": 14455.199999988079
+        },
+        {
+          "index": 14,
+          "ms": 14569.59999999404
+        },
+        {
+          "index": 13,
+          "ms": 14684.699999988079
+        },
+        {
+          "index": 12,
+          "ms": 14800.39999999106
+        },
+        {
+          "index": 11,
+          "ms": 14917.199999988079
+        },
+        {
+          "index": 10,
+          "ms": 15039.39999999106
+        },
+        {
+          "index": 9,
+          "ms": 15157.199999988079
+        },
+        {
+          "index": 8,
+          "ms": 15275.79999999702
+        },
+        {
+          "index": 7,
+          "ms": 15408
+        },
+        {
+          "index": 6,
+          "ms": 15543.39999999106
+        },
+        {
+          "index": 5,
+          "ms": 15682.199999988079
+        },
+        {
+          "index": 4,
+          "ms": 15833.199999988079
+        },
+        {
+          "index": 3,
+          "ms": 15969.699999988079
+        },
+        {
+          "index": 2,
+          "ms": 16103.29999999702
+        },
+        {
+          "index": 1,
+          "ms": 16250.5
+        },
+        {
+          "index": 114,
+          "ms": 16535.59999999404
+        },
+        {
+          "index": 115,
+          "ms": 16535.59999999404
+        },
+        {
+          "index": 116,
+          "ms": 17022.5
+        },
+        {
+          "index": 117,
+          "ms": 17022.5
+        },
+        {
+          "index": 118,
+          "ms": 17022.5
+        },
+        {
+          "index": 119,
+          "ms": 17022.5
+        }
+      ],
+      "rendererHeapUsedBytes": 12287248,
+      "rawArtifact": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-final-2.json",
+      "nativeSamples": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-final-2-os.jsonl",
+      "screenshot": "C:\\Users\\HIDROAA\\AppData\\Local\\Temp\\beru-performance-audit-20260930\\thumbnail-ui-final-2-end.png"
+    }
+  ],
+  "excludedRuns": [
+    {
+      "label": "thumbnail-ui-before",
+      "completeMs": 15462.90000000596,
+      "metadataMs": 5801.5999999940395,
+      "visibleMs": 8178.0999999940395,
+      "visibleState": "visible",
+      "reason": "Different scroll target"
+    },
+    {
+      "label": "thumbnail-ui-after",
+      "completeMs": 16872.20000000298,
+      "metadataMs": 22296.40000000596,
+      "visibleMs": 5003.9000000059605,
+      "visibleState": "visible",
+      "reason": "Superseded admission policy"
+    },
+    {
+      "label": "thumbnail-ui-weighted",
+      "completeMs": 20562.5,
+      "metadataMs": 5709.800000011921,
+      "visibleMs": 8638.10000000894,
+      "visibleState": "visible",
+      "reason": "Superseded admission policy"
+    },
+    {
+      "label": "thumbnail-ui-weighted-2",
+      "completeMs": 24898.10000000894,
+      "metadataMs": 17268,
+      "visibleMs": 12553.60000000894,
+      "visibleState": "visible",
+      "reason": "Superseded admission policy"
+    },
+    {
+      "label": "thumbnail-ui-legacy-deep-3",
+      "completeMs": 19004.89999999106,
+      "metadataMs": 7979.5999999940395,
+      "visibleMs": 19004.79999999702,
+      "visibleState": "hidden",
+      "reason": "Window became hidden"
+    }
+  ],
+  "checks": {
+    "focused": {
+      "files": 5,
+      "passed": 43
+    },
+    "lint": {
+      "firstRun": "passed",
+      "latestRun": "failed outside thumbnail scope",
+      "failedFile": "scan-comments.mjs",
+      "errors": 5,
+      "time": "15:54 America/Lima"
+    },
+    "format": "failed outside thumbnail scope",
+    "formatFailures": [
+      "docs/audits/2026-09-30-thermo-nuclear/01_python.md",
+      "docs/audits/2026-09-30-thermo-nuclear/02_main.md",
+      "docs/audits/2026-09-30-thermo-nuclear/03_state_domain.md",
+      "docs/audits/2026-09-30-thermo-nuclear/05_tooling_tests.md",
+      "main/handlers/petdex.js",
+      "main/utils/preview-frame.js",
+      "main/utils/processor-spawn.js",
+      "scan-comments.mjs",
+      "scripts/build-processor.mjs"
+    ],
+    "fullTests": {
+      "filesPassed": 143,
+      "filesFailed": 1,
+      "passed": 1037,
+      "failed": 2,
+      "total": 1039,
+      "failedFile": "tests/video-probe-output-limit.test.js",
+      "failure": "stdout data listeners remain after oversize output / timeout",
+      "owner": "main/videoProbe.js -> main/utils/run-captured.js",
+      "independentReproduction": "2 failures / 1 pass, repeated at 15:54; imports probeVideoFile directly, does not call thumbnail pool"
+    },
+    "rendererBuild": "passed, temporary audit build; existing chunk-size warning",
+    "installer": "not tested",
+    "python": "not applicable to this change",
+    "formatScoped": "passed",
+    "lintScoped": "passed"
+  },
+  "limitations": [
+    "Variable free RAM and concurrent changes prevent isolated causal attribution or a universal speedup percentage",
+    "Native sampler can miss short-lived processes; CPU measurements are approximate",
+    "Memory costs are admission estimates, not a physical RAM guarantee; only synthetic 1080p H.264 was profiled",
+    "Existing virtual spacer requires retrying deep scroll; layout was unchanged",
+    "Most recent viewport jobs precede older visible jobs; running decoders are not preempted"
+  ]
+}

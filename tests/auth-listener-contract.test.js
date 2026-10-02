@@ -1,37 +1,83 @@
-import { describe, it, expect } from "vitest";
-import fs from "fs";
-import path from "path";
+import { create } from "zustand";
+import { beforeEach, afterEach, describe, it, expect, vi } from "vitest";
 
-const src = fs.readFileSync(path.join(process.cwd(), "src/stores/slices/authSlice.js"), "utf-8");
+const mocks = vi.hoisted(() => ({ client: null }));
+vi.mock("../src/lib/supabaseClient.js", () => ({
+  isSupabaseConfigured: true,
+  getSupabase: () => mocks.client,
+}));
 
-describe("auth listener registration contract", () => {
-  it("defines ensureAuthListener helper", () => {
-    expect(src).toMatch(/function ensureAuthListener/);
+let createAuthSlice;
+beforeEach(async () => {
+  vi.resetModules();
+  vi.useFakeTimers();
+  ({ createAuthSlice } = await import("../src/stores/slices/authSlice.js"));
+});
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+});
+
+function setup() {
+  let listener;
+  let locked = false;
+  const session = { user: { id: "user" } };
+  const fetchProfile = vi.fn(async () => {
+    if (locked) throw new Error("Auth SDK lock is held");
+    return { data: { id: "user", is_active: true }, error: null };
+  });
+  mocks.client = {
+    auth: {
+      getSession: async () => ({ data: { session: null } }),
+      signInWithPassword: async () => ({ data: { user: session.user }, error: null }),
+      signOut: async () => {},
+      onAuthStateChange: (callback) => {
+        listener = callback;
+      },
+    },
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: fetchProfile }) }) }),
+  };
+  return {
+    store: create(createAuthSlice),
+    session,
+    fetchProfile,
+    emit: (event, value) => listener(event, value),
+    lock: (value) => {
+      locked = value;
+    },
+  };
+}
+
+describe("auth listener lifecycle", () => {
+  it("receives a later login after cold start without a session", async () => {
+    const { store, emit, session } = setup();
+    await store.getState().initAuth();
+    expect(store.getState().authStatus).toBe("unauthenticated");
+    emit("SIGNED_IN", session);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState()).toMatchObject({ authStatus: "authenticated", user: session.user });
   });
 
-  it("initAuth registers the listener before handling no-session", () => {
-    const initStart = src.indexOf("initAuth: async");
-    const initBody = src.slice(initStart, src.indexOf("signIn: async"));
-    const ensureIdx = initBody.indexOf("ensureAuthListener");
-    const noSessionIdx = initBody.indexOf("no-session");
-    expect(ensureIdx).toBeGreaterThanOrEqual(0);
-    expect(noSessionIdx).toBeGreaterThan(ensureIdx);
+  it("receives logout events when signIn is called before initialization", async () => {
+    const { store, emit } = setup();
+    expect(await store.getState().signIn("user@example.com", "password")).toEqual({ ok: true });
+    emit("SIGNED_OUT", null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState()).toMatchObject({
+      authStatus: "unauthenticated",
+      user: null,
+      profile: null,
+    });
   });
 
-  it("signIn also ensures the listener is registered", () => {
-    const signInStart = src.indexOf("signIn: async");
-    const signInBody = src.slice(signInStart, src.indexOf("signOut: async"));
-    expect(signInBody).toMatch(/ensureAuthListener/);
-  });
-
-  // supabase-js deadlocks if onAuthStateChange is async and awaits client APIs
-  // while getSession/signIn hold the same lock. Boot freezes on "Verificando sesión".
-  it("defers async session work out of onAuthStateChange (no deadlock)", () => {
-    expect(src).not.toMatch(/onAuthStateChange\(\s*async\b/);
-    expect(src).toMatch(/onAuthStateChange\s*\(\s*\([^)]*\)\s*=>\s*\{/);
-    const ensureStart = src.indexOf("function ensureAuthListener");
-    const ensureBody = src.slice(ensureStart, src.indexOf("export function createAuthSlice"));
-    expect(ensureBody).toMatch(/setTimeout\s*\(/);
-    expect(ensureBody).toMatch(/applySession/);
+  it("does profile work only after the SDK auth callback releases its lock", async () => {
+    const { store, emit, session, fetchProfile, lock } = setup();
+    await store.getState().initAuth();
+    lock(true);
+    expect(emit("SIGNED_IN", session)).toBeUndefined();
+    expect(fetchProfile).not.toHaveBeenCalled();
+    lock(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getState().authStatus).toBe("authenticated");
   });
 });

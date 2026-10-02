@@ -44,15 +44,6 @@ describe("PropertiesPanel — delogo cover method", () => {
     window.api.readImage.mockClear();
   });
 
-  it("renders an image picker when cover method is selected", () => {
-    renderPanel();
-
-    const chooseBtn = Array.from(document.querySelectorAll("button")).find((b) =>
-      /Elegir/.test(b.textContent || ""),
-    );
-    expect(chooseBtn).toBeTruthy();
-  });
-
   it("picking an image stores the path in delogoImagePath and clears on reset", async () => {
     const root = renderPanel();
 

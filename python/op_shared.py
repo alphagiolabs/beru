@@ -1,19 +1,26 @@
-"""Shared, pure operation helpers for processor.py.
-
-Extracted from the ``processor.py`` monolith.  These helpers are stateless
-and never monkeypatched by the test suite, so they are safe to live outside
-``processor.py``'s single namespace.  ``processor.py`` re-exports the public
-ones (``_normalize_operation``, ``_region_to_pixels``) for backwards
-compatibility with the Python smoke tests.
-
-Logger is fetched lazily via ``logging.getLogger("beru")`` so this module does
-not import ``processor`` (which would be circular) but still emits through the
-same configured logger once ``processor.py`` has run ``setup_logging``.
-"""
+"""Pure operation normalization, geometry and timing helpers."""
 
 import logging
+import math
+import os
 
 logger = logging.getLogger("beru")
+
+
+def _env_flag(name, default, *, env=None):
+    """Boolean env flag: unset -> default; '0/false/no/off' -> False."""
+    raw = (os.environ if env is None else env).get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off")
+
+
+def _env_int(name, default=0, *, env=None):
+    """Integer env var with a fallback for missing/unparseable values."""
+    try:
+        return int((os.environ if env is None else env).get(name) or default)
+    except (TypeError, ValueError):
+        return default
 
 VALID_DELOGO_METHODS = frozenset({
     "temporal", "mirror", "mosaic", "inpaint", "blur", "fill", "cover",
@@ -89,12 +96,11 @@ def _optimize_delogo_for_speed(op, video_w, video_h):
         return op
 
     radius = op.get("temporal_radius")
-    if radius is not None:
-        try:
-            if int(radius) != 3:
-                return op
-        except (TypeError, ValueError):
-            pass
+    try:
+        if int(radius) != 3:
+            return op
+    except (TypeError, ValueError):
+        pass
 
     region = op.get("region") or {}
     rw = float(region.get("w", 0))
@@ -146,10 +152,8 @@ def _optimize_delogo_for_speed(op, video_w, video_h):
 def _region_looks_normalized(region, video_w, video_h):
     """True when a region is fractional (normalized) rather than pixel-sized.
 
-    Single source of truth for both `_region_to_pixels` and
-    `_optimize_delogo_for_speed`, which previously disagreed about 1x1 boxes:
-    a 1x1 region is real pixels; only widths/heights with a proper fraction
-    (w < 1 or h < 1) are normalized.
+    A 1x1 region is real pixels; only proper fractions (w < 1 or h < 1)
+    are normalized.
     """
     if not region or video_w <= 0 or video_h <= 0:
         return False
@@ -205,7 +209,7 @@ def _is_op_time_disabled(op):
     "no time filter" and applied the op for every t — silently producing output
     the user did not ask for. Centralising the empty-range check here lets
     `build_filter_complex` skip the op entirely, matching what the UI preview
-    does (see isOpActive in src/components/video-preview/utils.js).
+    does (see isOpActive in src/utils/operation.js).
     """
     start = op.get("start_time", op.get("startTime"))
     end = op.get("end_time", op.get("endTime"))
@@ -228,17 +232,25 @@ def _build_enable_clause(op):
     end = op.get("end_time", op.get("endTime"))
     if start is None and end is None:
         return ""
-    if start is not None and end is not None:
-        s = float(start)
-        e = float(end)
+
+    def _parse_finite(v):
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if math.isfinite(f) else None
+
+    s = _parse_finite(start)
+    e = _parse_finite(end)
+    if s is not None and e is not None:
         if e <= s:
             return ""
         return f"enable=between(t\\,{s:.6f}\\,{e:.6f})"
-    if start is not None:
-        s = float(start)
+    if s is not None:
         return f"enable=gte(t\\,{s:.6f})"
-    e = float(end)
-    return f"enable=lte(t\\,{e:.6f})"
+    if e is not None:
+        return f"enable=lte(t\\,{e:.6f})"
+    return ""
 
 
 def _overlay_opts(x, y, enable_clause):

@@ -13,9 +13,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from processor import build_filter_complex  # noqa: E402
+from processor import build_filter_complex, find_ffmpeg  # noqa: E402
 
-FFMPEG = HERE.parent / "bin" / "ffmpeg.exe"
+FFMPEG = Path(find_ffmpeg())
 
 
 def base_region():
@@ -38,8 +38,7 @@ def run_ffmpeg_parse(graph, out_label, images=None):
     """Feed the graph to ffmpeg's -filter_complex with a fakesrc, decode 1 frame
     to /dev/null. If the graph is invalid, ffmpeg errors out."""
     if not FFMPEG.exists():
-        print(f"  (skip ffmpeg parse — ffmpeg not at {FFMPEG})")
-        return True
+        raise AssertionError(f"ffmpeg not found at {FFMPEG}")
     images = images or []
     cmd = [str(FFMPEG), "-y"]
     cmd += ["-f", "lavfi", "-i", "color=c=black:s=640x360:d=1:r=30"]
@@ -114,10 +113,8 @@ def main():
     temp_img = None
     try:
         temp_img = Path(tempfile.gettempdir()) / "beru_test_cover.png"
-        if create_test_image(temp_img):
-            CASES.append(("cover with image", [make_op("cover", delogo_image_path=str(temp_img))]))
-        else:
-            print("  (skip cover case — ffmpeg not available to create test image)")
+        assert create_test_image(temp_img), f"could not create cover image via {FFMPEG}"
+        CASES.append(("cover with image", [make_op("cover", delogo_image_path=str(temp_img))]))
 
         passed = 0
         failed = 0
@@ -151,10 +148,6 @@ def main():
                 temp_img.unlink()
             except Exception:
                 pass
-
-
-def test_delogo_filter_graphs():
-    assert main() == 0
 
 
 if __name__ == "__main__":

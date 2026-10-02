@@ -18,16 +18,30 @@ export default function useKeyboard() {
       const cmd = ctrlKey || metaKey;
 
       if (key === "Escape") {
-        if (store.showShortcuts) {
-          store.setShowShortcuts(false);
+        if (store.confirmDialog || store.showPetPalette) return;
+        if (store.showSettings) {
+          store.setShowSettings(false);
           return;
         }
-        if (store.showTableEditor) {
-          store.setShowTableEditor(false);
+        if (store.updateModalOpen) {
+          store.setUpdateModalOpen(false);
+          return;
+        }
+        if (store.showWatermarkModal) {
+          store.setShowWatermarkModal(false);
           return;
         }
         if (store.showMappingModal) {
           store.setShowMappingModal(false);
+          return;
+        }
+        if (store.showTableEditor) {
+          if (isTypingTarget(e.target)) e.target.blur();
+          else store.setShowTableEditor(false);
+          return;
+        }
+        if (store.showShortcuts) {
+          store.setShowShortcuts(false);
           return;
         }
       }
@@ -46,7 +60,16 @@ export default function useKeyboard() {
         return;
       }
 
-      if (store.showShortcuts || store.showTableEditor || store.showMappingModal) {
+      if (
+        store.confirmDialog ||
+        store.showShortcuts ||
+        store.showTableEditor ||
+        store.showMappingModal ||
+        store.showSettings ||
+        store.showWatermarkModal ||
+        store.updateModalOpen ||
+        store.showPetPalette
+      ) {
         return;
       }
 
@@ -151,7 +174,13 @@ export default function useKeyboard() {
         const selOpIdx = store.selectedOperationIdx;
         const selOp =
           selOpIdx != null ? store.queue[store.selectedIdx]?.operations?.[selOpIdx] : null;
-        if (selOp && (selOp.mode === "blur" || selOp.mode === "delogo" || selOp.mode === "crop")) {
+        if (
+          selOp &&
+          (selOp.mode === "blur" ||
+            selOp.mode === "delogo" ||
+            selOp.mode === "crop" ||
+            selOp.mode === "image")
+        ) {
           e.preventDefault();
           store.removeOperation(selOpIdx);
         }

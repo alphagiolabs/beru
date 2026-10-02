@@ -21,3 +21,18 @@ export function queueCapacityInput(queue = [], templateRegions = []) {
     jobs,
   };
 }
+
+export function capacityJobsSignature(queue = [], templateRegions = []) {
+  const jobsSig = queue
+    .map((item) =>
+      [
+        item.videoCodec || "",
+        item.pixFmt || "",
+        item.sourceWidth || item.width || 0,
+        item.sourceHeight || item.height || 0,
+      ].join("|"),
+    )
+    .join(";");
+  const hasOps = queue.some((item) => (item.operations || []).length > 0);
+  return `${queue.length}:${templateRegions.length}:${hasOps ? 1 : 0}:${jobsSig}`;
+}

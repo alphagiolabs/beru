@@ -21,7 +21,8 @@ describe("scripts/dev.mjs: Electron restart cleans up the previous exit listener
 
   it("does not register the exit handler with a bare arrow that cannot be removed", () => {
     const restartBlockMatch = src.match(/restartTimer = setTimeout\(\(\) => \{([\s\S]*?)\}, 500\)/);
-    const restartBlock = restartBlockMatch ? restartBlockMatch[1] : "";
+    expect(restartBlockMatch, "restart timer block must exist").not.toBeNull();
+    const restartBlock = restartBlockMatch[1];
     expect(restartBlock).not.toMatch(/electron\.on\(\s*["']exit["']\s*,\s*\(/);
   });
 });

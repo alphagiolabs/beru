@@ -55,14 +55,10 @@ export default function useRegionGesture({ videoEl, onChange, onCommit, enabled 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
     };
   }, [endSession]);
 

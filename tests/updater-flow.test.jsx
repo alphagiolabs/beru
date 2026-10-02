@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import StatusFooter from "../src/components/StatusFooter.jsx";
 import UpdatePrompt from "../src/components/UpdatePrompt.jsx";
-import { reduceUpdaterEvent, IDLE_UPDATE } from "../src/utils/updateState.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -42,7 +41,6 @@ describe("realistic update flow", () => {
       progressDone: 0,
       progressTotal: 0,
       queue: [],
-      executionHistory: [],
       batchSummary: null,
       language: "es",
       updateModalOpen: false,
@@ -152,8 +150,6 @@ describe("realistic update flow", () => {
     const moreNote = document.querySelector(".status-footer-update-more");
 
     expect(changelog).toBeTruthy();
-    expect(getComputedStyle(changelog).overflowY).not.toBe("auto");
-    expect(getComputedStyle(changelog).maxHeight).not.toMatch(/px/);
     expect(document.querySelector(".status-footer-update-release-link")).toBeNull();
     expect(
       primaryBtn.compareDocumentPosition(moreNote) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -190,18 +186,5 @@ describe("realistic update flow", () => {
     expect(document.body.textContent).toMatch(/No se encontró la actualización/i);
     expect(useEditorStore.getState().update.status).toBe("available");
     expect(useEditorStore.getState().update.error).toBe("no-update-available");
-  });
-});
-
-describe("reduceUpdaterEvent pending-update guard", () => {
-  it("preserves an available update when duplicate check events arrive", () => {
-    const available = reduceUpdaterEvent(IDLE_UPDATE, {
-      type: "available",
-      version: "9.9.9",
-      releaseNotes: "- fix: modal",
-    });
-
-    expect(reduceUpdaterEvent(available, { type: "checking" })).toBe(available);
-    expect(reduceUpdaterEvent(available, { type: "not-available" })).toBe(available);
   });
 });

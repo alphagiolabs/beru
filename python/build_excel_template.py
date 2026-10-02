@@ -130,8 +130,6 @@ def build():
         ws_v.cell(row=r, column=5,
                   value=f'=LEN(Datos!B{r})'
                   ).border = BORDER
-    # formato condicional via relleno segun estado (no usamos ConditionalFormatting
-    # para mantenerlo simple y compatible con todas las versiones)
     for i in range(n):
         r = i + 2
         ws_v.cell(row=r, column=1).fill = INPUT_FILL

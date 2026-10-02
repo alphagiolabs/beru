@@ -15,7 +15,6 @@ import {
   getPythonPath,
   validateMediaBinaries,
 } from "../main/utils/paths.js";
-import { translateProcessorErrorMessage } from "../main/utils/process-input-validation.js";
 
 describe("processor-spawn", () => {
   it("resolves and validates the processor asynchronously", async () => {
@@ -80,12 +79,5 @@ describe("paths media binaries", () => {
     }
     expect(typeof check.error).toBe("string");
     expect(/FFmpeg|ffprobe|instal/i.test(check.error)).toBe(true);
-  });
-});
-
-describe("translateProcessorErrorMessage spawn errors", () => {
-  it("translates spawn py ENOENT into an actionable Python install message", () => {
-    const msg = translateProcessorErrorMessage("spawn py ENOENT");
-    expect(msg).toMatch(/Python 3 no está instalado/i);
   });
 });

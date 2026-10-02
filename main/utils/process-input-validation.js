@@ -1,4 +1,5 @@
 import fs from "fs";
+import { runWithConcurrency } from "./concurrency.js";
 
 function missingInput() {
   return { ok: false, code: "missing", message: "Archivo no encontrado" };
@@ -67,19 +68,11 @@ export async function validateInputPathReadableAsync(inputPath) {
 }
 
 export async function findUnreadableInputsAsync(jobs, limit = 8) {
-  const results = new Array(jobs.length);
-  let cursor = 0;
-  const inspect = async () => {
-    while (true) {
-      const index = cursor++;
-      if (index >= jobs.length) return;
-      const inputPath = jobs[index]?.input_path;
-      if (!inputPath) continue;
-      const check = await validateInputPathReadableAsync(inputPath);
-      results[index] = unreadableIssue(inputPath, check);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, jobs.length) }, inspect));
+  const results = await runWithConcurrency(jobs, limit, async (job) => {
+    const inputPath = job?.input_path;
+    if (!inputPath) return null;
+    return unreadableIssue(inputPath, await validateInputPathReadableAsync(inputPath));
+  });
   return results.filter(Boolean);
 }
 

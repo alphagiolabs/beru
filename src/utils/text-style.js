@@ -42,6 +42,11 @@ const GLOBAL_KEY_MAP = {
   fontColor: "textFontColor",
 };
 
+const GLOBAL_TEXT_STYLE_KEYS = new Set([
+  "textInput",
+  ...TEXT_STYLE_KEYS.map((k) => GLOBAL_KEY_MAP[k] || k),
+]);
+
 export const TEXT_STYLE_DEFAULTS = Object.freeze({
   fontSize: 32,
   fontColor: "white",
@@ -149,34 +154,21 @@ export function persistGlobalTextStyle(s) {
   };
 }
 
+export function pickGlobalTextStyle(s) {
+  const out = {};
+  for (const k of TEXT_STYLE_KEYS) {
+    const gk = GLOBAL_KEY_MAP[k] || k;
+    out[gk] = s[gk];
+  }
+  return out;
+}
+
 export function getGlobalTextStyleFromState(s) {
-  return normalizeTextStyle({
-    fontSize: s.textFontSize,
-    fontColor: s.textFontColor,
-    fontFamily: s.fontFamily,
-    fontWeight: s.fontWeight,
-    letterSpacing: s.letterSpacing,
-    textAlign: s.textAlign,
-    textOpacity: s.textOpacity,
-    bold: s.bold,
-    italic: s.italic,
-    bgEnabled: s.bgEnabled,
-    bgColor: s.bgColor,
-    bgOpacity: s.bgOpacity,
-    boxBorderWidth: s.boxBorderWidth,
-    borderWidth: s.borderWidth,
-    borderColor: s.borderColor,
-    textShadowEnabled: s.textShadowEnabled,
-    textShadowColor: s.textShadowColor,
-    textShadowOffsetX: s.textShadowOffsetX,
-    textShadowOffsetY: s.textShadowOffsetY,
-    autoFit: s.autoFit,
-    lineHeight: s.lineHeight,
-    verticalAlign: s.verticalAlign,
-    textWrap: s.textWrap,
-    safeMargin: s.safeMargin,
-    truncate: s.truncate,
-  });
+  const raw = {};
+  for (const k of TEXT_STYLE_KEYS) {
+    raw[k] = s[GLOBAL_KEY_MAP[k] || k];
+  }
+  return normalizeTextStyle(raw);
 }
 
 export function mergeTextStyles(...layers) {
@@ -219,38 +211,7 @@ export function patchToGlobalState(patch) {
   for (const [k, v] of Object.entries(patch)) {
     if (v === undefined) continue;
     const gk = GLOBAL_KEY_MAP[k] || k;
-    if (
-      [
-        "textFontSize",
-        "textFontColor",
-        "fontFamily",
-        "fontWeight",
-        "letterSpacing",
-        "textAlign",
-        "textOpacity",
-        "bold",
-        "italic",
-        "bgEnabled",
-        "bgColor",
-        "bgOpacity",
-        "boxBorderWidth",
-        "borderWidth",
-        "borderColor",
-        "textShadowEnabled",
-        "textShadowColor",
-        "textShadowOffsetX",
-        "textShadowOffsetY",
-        "autoFit",
-        "lineHeight",
-        "verticalAlign",
-        "textWrap",
-        "safeMargin",
-        "truncate",
-        "textInput",
-      ].includes(gk)
-    ) {
-      global[gk] = v;
-    }
+    if (GLOBAL_TEXT_STYLE_KEYS.has(gk)) global[gk] = v;
   }
   return global;
 }
@@ -275,6 +236,18 @@ export function textOpMatchesRegion(op, region, regionId = null) {
 
 export function findTextOpForRegion(operations, region, regionId = null) {
   if (!region || !Array.isArray(operations)) return { op: null, opIdx: -1 };
-  const idx = operations.findIndex((o) => textOpMatchesRegion(o, region, regionId));
+  const linkedIdx =
+    regionId == null
+      ? -1
+      : operations.findIndex(
+          (op) =>
+            op.mode === "text" &&
+            op.batchRegionId != null &&
+            String(op.batchRegionId) === String(regionId),
+        );
+  const idx =
+    linkedIdx >= 0
+      ? linkedIdx
+      : operations.findIndex((o) => textOpMatchesRegion(o, region, regionId));
   return { op: idx >= 0 ? operations[idx] : null, opIdx: idx };
 }

@@ -25,6 +25,4 @@ export const PERF_FLAGS = {
   virtualize: flagBool("VITE_BERU_RENDER_VIRTUALIZE", true),
   virtualizeThreshold: flagNumber("VITE_BERU_RENDER_VIRTUALIZE_THRESHOLD", 100),
   delogoThrottleFps: flagNumber("VITE_BERU_DELGO_THROTTLE_FPS", 30),
-  delogoQuickselect: flagBool("VITE_BERU_DELGO_QUICKSELECT", true),
-  logBatch: flagBool("VITE_BERU_LOG_BATCH", true),
 };

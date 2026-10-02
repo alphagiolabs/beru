@@ -9,7 +9,7 @@ describe("main/utils/window.js close confirmation during processing", () => {
     expect(windowSrc).toMatch(/win\.on\("close"/);
     expect(windowSrc).toMatch(/hasActiveProcessing\(\)/);
     expect(windowSrc).toMatch(/showMessageBox/);
-    expect(windowSrc).toMatch(/cancelActiveProcessing/);
+    expect(windowSrc).toMatch(/cancelRun/);
     expect(windowSrc).toMatch(/Cancelar y salir/);
   });
 

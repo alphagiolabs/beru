@@ -6,6 +6,7 @@ import {
   THEME_TOKEN_KEYS,
 } from "./tokens.js";
 import { getPresetById, isPresetId } from "./presets.js";
+import { getThemeTextColors } from "./contrast.js";
 
 const COLOR_RE =
   /^(#[0-9a-fA-F]{3,8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*[\d.]+\s*)?\)|hsla?\([^)]+\))$/;
@@ -98,6 +99,16 @@ export function applyThemeTokens(tokens, activeSlot) {
       root.style.setProperty(cssVar, val);
     }
   }
+
+  const text = getThemeTextColors(tokens);
+  for (const key of ["textPrimary", "textSecondary", "textDim"]) {
+    root.style.setProperty(CSS_VAR_MAP[key], text[key]);
+  }
+  for (const key of ["accent", "brand", "amber", "rose", "purple"]) {
+    root.style.setProperty(`--text-${key}`, text[key]);
+  }
+  root.style.setProperty("--text-on-brand", text.onBrand);
+  root.style.setProperty("--text-on-rose", text.onRose);
 
   if (activeSlot === 1 || activeSlot === 2) {
     root.setAttribute("data-theme-slot", String(activeSlot));

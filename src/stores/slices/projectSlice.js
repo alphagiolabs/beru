@@ -1,10 +1,10 @@
+import { reconcileBatchExport, removeLinkedTemplateText } from "../../utils/batch-export.js";
 import { createOperation } from "../../utils/operation";
 import {
   getGlobalTextStyleFromState,
   persistGlobalTextStyle,
   pickTextStyle,
   regionsMatch,
-  textOpMatchesRegion,
 } from "../../utils/text-style";
 import {
   sanitizeTemplateRegions,
@@ -22,28 +22,40 @@ import {
 } from "../../../shared/project-document.js";
 import { swallow } from "../../utils/swallow.js";
 
+function templateState(data, state) {
+  const templateRegions = sanitizeTemplateRegions(data.templateRegions);
+  const watermark = restoreWatermark(data.watermark);
+  return {
+    templateRegions,
+    selectedTemplateRegionId: templateRegions[0]?.id ?? null,
+    currentRegion: null,
+    templateIdx: -1,
+    imageDataCache: {},
+    ...sanitizeTextStyle(data.textStyle || {}),
+    ...sanitizeDefaults(data.defaults || {}),
+    ...(watermark ? { watermark: { ...state.watermark, ...watermark } } : {}),
+  };
+}
+
 export function createProjectSlice(set, get) {
   return {
     presets: [],
-    presetsUserDir: null,
 
     deletePreset: async (preset) => {
       const api = window.api;
-      if (!api?.deletePreset) return { ok: false, error: "API no disponible" };
+      if (!api?.deletePreset)
+        return { ok: false, code: "api_unavailable", error: "API no disponible" };
       const p = preset || {};
-      if (p.source === "bundled") {
-        return { ok: false, error: "Los presets incluidos no se pueden eliminar" };
-      }
       const filename = p.filename;
       if (typeof filename !== "string" || !filename.trim()) {
-        return { ok: false, error: "Preset sin nombre de archivo" };
+        return { ok: false, code: "preset_no_filename", error: "Preset sin nombre de archivo" };
       }
       const res = await api.deletePreset(filename);
       if (!res.success) return { ok: false, error: res.error };
       if (api.listPresets) {
         try {
           const r = await api.listPresets();
-          if (r?.success) set({ presets: r.presets, presetsUserDir: r.userDir });
+          if (r?.success) set({ presets: r.presets });
         } catch (e) {
           swallow("listPresets-after-delete", e);
         }
@@ -95,7 +107,8 @@ export function createProjectSlice(set, get) {
 
     saveProject: async () => {
       const api = window.api;
-      if (!api?.saveProject) return { ok: false, error: "API no disponible" };
+      if (!api?.saveProject)
+        return { ok: false, code: "api_unavailable", error: "API no disponible" };
       const payload = get().serializeProject();
       const res = await api.saveProject(payload);
       if (res.canceled) return { ok: false, canceled: true };
@@ -115,9 +128,10 @@ export function createProjectSlice(set, get) {
 
     savePreset: async (name) => {
       const api = window.api;
-      if (!api?.savePreset) return { ok: false, error: "API no disponible" };
+      if (!api?.savePreset)
+        return { ok: false, code: "api_unavailable", error: "API no disponible" };
       const cleanName = (name || "").trim();
-      if (!cleanName) return { ok: false, error: "Nombre vacío" };
+      if (!cleanName) return { ok: false, code: "empty_preset_name", error: "Nombre vacío" };
       const payload = get().serializePreset();
       const jsonStr = JSON.stringify(payload, null, 2);
       const res = await api.savePreset(cleanName, jsonStr);
@@ -126,7 +140,7 @@ export function createProjectSlice(set, get) {
         try {
           const r = await api.listPresets();
           if (r?.success) {
-            set({ presets: r.presets, presetsUserDir: r.userDir });
+            set({ presets: r.presets });
           }
         } catch (e) {
           swallow("listPresets-after-save", e);
@@ -137,7 +151,8 @@ export function createProjectSlice(set, get) {
 
     loadProject: async () => {
       const api = window.api;
-      if (!api?.loadProject) return { ok: false, error: "API no disponible" };
+      if (!api?.loadProject)
+        return { ok: false, code: "api_unavailable", error: "API no disponible" };
       const res = await api.loadProject();
       if (res.canceled) return { ok: false, canceled: true };
       if (!res.success) return { ok: false, error: res.error };
@@ -146,128 +161,123 @@ export function createProjectSlice(set, get) {
       return { ok: r.ok, error: r.error, filePath: res.filePath, warnings: r.warnings };
     },
 
-    _applyTemplateState: (data) => {
-      const textStyle = sanitizeTextStyle(data.textStyle || {});
-      const defaults = sanitizeDefaults(data.defaults || {});
-      const templateRegions = sanitizeTemplateRegions(data.templateRegions);
-      set({
-        templateRegions,
-        selectedTemplateRegionId: templateRegions[0]?.id ?? null,
-        currentRegion: null,
-        templateIdx: -1,
-        imageDataCache: {},
-        ...textStyle,
-        ...defaults,
-      });
-    },
-
     _applyProject: (data) => {
       if (!isProjectOrPreset(data)) {
-        return { ok: false, error: "Archivo no es un proyecto Beru" };
+        return { ok: false, code: "not_project", error: "Archivo no es un proyecto Beru" };
       }
       const warnings = [];
-      get()._applyTemplateState(data);
       const excel = data.excel || null;
-      if (excel) {
-        set({
-          excelPath: excel.path || null,
-          excelHeaders: Array.isArray(excel.headers) ? excel.headers : [],
-          excelRows: Array.isArray(excel.rows) ? excel.rows : [],
-          excelMapping:
-            excel.mapping && typeof excel.mapping === "object"
-              ? { idColumn: excel.mapping.idColumn ?? null, columns: excel.mapping.columns || {} }
-              : { idColumn: null, columns: {} },
-        });
-        get()._buildExcelRowIndex();
-        get()._reapplyExcel();
-      } else {
-        set({
-          excelPath: null,
-          excelHeaders: [],
-          excelRows: [],
-          excelMapping: { idColumn: null, columns: {} },
-          excelMatchStatus: {},
-        });
-      }
-      const watermark = restoreWatermark(data.watermark);
-      if (watermark) get().setWatermark(watermark);
+      set(
+        (state) =>
+          reconcileBatchExport(
+            state,
+            {
+              ...templateState(data, state),
+              excelPath: excel?.path || null,
+              excelHeaders: Array.isArray(excel?.headers)
+                ? excel.headers.map((h) => String(h))
+                : [],
+              excelRows: Array.isArray(excel?.rows)
+                ? excel.rows.filter((r) => r !== null && typeof r === "object")
+                : [],
+              excelMapping:
+                excel?.mapping && typeof excel.mapping === "object"
+                  ? {
+                      idColumn: excel.mapping.idColumn ?? null,
+                      columns: excel.mapping.columns || {},
+                    }
+                  : { idColumn: null, columns: {} },
+            },
+            { applyExcel: Boolean(excel) },
+          ).patch,
+      );
       if (data.version && !COMPATIBLE_PROJECT_VERSIONS.has(data.version)) {
-        warnings.push(`Versión del proyecto: ${data.version} (actual ${PROJECT_VERSION})`);
+        warnings.push({
+          code: "project_version",
+          version: data.version,
+          expected: PROJECT_VERSION,
+        });
       }
       return { ok: true, warnings };
     },
 
     applyPreset: (data) => {
       if (!isProjectOrPreset(data)) {
-        return { ok: false, error: "Preset inválido" };
+        return { ok: false, code: "invalid_preset", error: "Preset inválido" };
       }
-      const oldTemplateRegions = get().templateRegions;
-      const oldColumns = get().excelMapping?.columns || {};
-
-      get()._applyTemplateState(data);
-
-      const newTemplateRegions = get().templateRegions;
-      const needsRemap = newTemplateRegions.some((tr) => !(tr.id in oldColumns));
-      if (needsRemap && Object.keys(oldColumns).length > 0) {
-        const newColumns = {};
-        for (const newTr of newTemplateRegions) {
-          if (newTr.id in oldColumns) {
-            newColumns[newTr.id] = oldColumns[newTr.id];
-            continue;
+      set((state) => {
+        const oldColumns = state.excelMapping?.columns || {};
+        const changes = templateState(data, state);
+        const templateRegions = changes.templateRegions;
+        let columns = oldColumns;
+        if (
+          templateRegions.some((tr) => !(tr.id in oldColumns)) &&
+          Object.keys(oldColumns).length > 0
+        ) {
+          const remapped = {};
+          for (const tr of templateRegions) {
+            if (tr.id in oldColumns) {
+              remapped[tr.id] = oldColumns[tr.id];
+              continue;
+            }
+            const old = state.templateRegions.find(
+              (previous) => previous.region && regionsMatch(previous.region, tr.region),
+            );
+            if (old && oldColumns[old.id] != null) remapped[tr.id] = oldColumns[old.id];
           }
-          const oldMatch = oldTemplateRegions.find(
-            (oldTr) => oldTr.region && regionsMatch(oldTr.region, newTr.region),
-          );
-          if (oldMatch && oldColumns[oldMatch.id] != null) {
-            newColumns[newTr.id] = oldColumns[oldMatch.id];
-          }
+          if (Object.keys(remapped).length > 0) columns = remapped;
         }
-        if (Object.keys(newColumns).length > 0) {
-          set((s) => ({
-            excelMapping: { ...s.excelMapping, columns: newColumns },
+        const queue = state.queue.map((item) => ({
+          ...item,
+          operations: removeLinkedTemplateText(item.operations, state.templateRegions),
+        }));
+        const next = {
+          ...state,
+          ...changes,
+          queue,
+          excelMapping: { ...state.excelMapping, columns },
+        };
+        const applyExcel = next.excelRows.length > 0 && Object.keys(columns).length > 0;
+        if (!applyExcel) {
+          next.queue = queue.map((item) => ({
+            ...item,
+            operations: [
+              ...removeLinkedTemplateText(item.operations, templateRegions),
+              ...templateRegions.map((tr) =>
+                createOperation({
+                  mode: "text",
+                  batchRegionId: tr.id,
+                  region: { ...tr.region },
+                  text: next.textInput || "",
+                  ...pickTextStyle(getGlobalTextStyleFromState(next)),
+                }),
+              ),
+            ],
           }));
         }
-      }
-
-      const { excelRows, excelMapping } = get();
-      if (excelRows.length > 0 && Object.keys(excelMapping.columns || {}).length > 0) {
-        get()._reapplyExcel();
-      } else {
-        const tr = get().templateRegions;
-        set((s) => ({
-          queue: s.queue.map((item) => {
-            const preservedOps = item.operations.filter((op) => {
-              if (op.mode !== "text") return true;
-              return !tr.some((r) => r.region && textOpMatchesRegion(op, r.region, r.id));
-            });
-            const newTextOps = tr.map((r) =>
-              createOperation({
-                mode: "text",
-                batchRegionId: r.id,
-                region: { ...r.region },
-                text: get().textInput || "",
-                ...pickTextStyle(getGlobalTextStyleFromState(get())),
-              }),
-            );
-            return {
-              ...item,
-              operations: [...preservedOps, ...newTextOps],
-            };
-          }),
-        }));
-      }
+        return reconcileBatchExport(
+          state,
+          {
+            ...changes,
+            queue: next.queue,
+            excelMapping: next.excelMapping,
+          },
+          { applyExcel, preserveManual: true },
+        ).patch;
+      });
       return { ok: true, name: data.name };
     },
 
     loadPresets: async () => {
       const api = window.api;
-      if (!api?.listPresets) return { ok: false, error: "API no disponible", presets: [] };
+      if (!api?.listPresets)
+        return { ok: false, code: "api_unavailable", error: "API no disponible", presets: [] };
       const res = await api.listPresets();
       if (!res.success) {
         set({ presets: [] });
         return { ok: false, error: res.error, presets: [] };
       }
-      set({ presets: res.presets, presetsUserDir: res.userDir || null });
+      set({ presets: res.presets });
       return { ok: true, presets: res.presets, userDir: res.userDir };
     },
   };

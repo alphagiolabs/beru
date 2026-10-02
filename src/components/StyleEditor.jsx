@@ -1,14 +1,16 @@
 import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, Ban } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
-import { pickTextStyle, patchToGlobalState } from "../utils/text-style";
+import { pickTextStyle, pickGlobalTextStyle, patchToGlobalState } from "../utils/text-style";
 import { normalizeColor } from "../utils/color-utils";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS, TEXT_STYLE_PRESETS } from "../utils/types";
 import TextLayoutControls from "./TextLayoutControls";
+import { useT } from "../i18n/useT";
 import { presetMatches, presetPreviewTextStyle } from "./style-editor/preset-utils";
 import { InspectorGroup, ToggleSwitch, SegmentedToolbar, FontFamilyPicker } from "./inspector";
 
 export default function StyleEditor() {
+  const t = useT();
   const {
     isBatch,
     fontFamily,
@@ -37,34 +39,7 @@ export default function StyleEditor() {
     safeMargin,
     truncate,
   } = useEditorStore(
-    (s) => ({
-      isBatch: s.sidebarMode === "batch",
-      fontFamily: s.fontFamily,
-      bold: s.bold,
-      italic: s.italic,
-      textFontSize: s.textFontSize,
-      textFontColor: s.textFontColor,
-      bgEnabled: s.bgEnabled,
-      bgColor: s.bgColor,
-      bgOpacity: s.bgOpacity,
-      borderWidth: s.borderWidth,
-      borderColor: s.borderColor,
-      fontWeight: s.fontWeight,
-      letterSpacing: s.letterSpacing,
-      textAlign: s.textAlign,
-      textOpacity: s.textOpacity,
-      boxBorderWidth: s.boxBorderWidth,
-      textShadowEnabled: s.textShadowEnabled,
-      textShadowColor: s.textShadowColor,
-      textShadowOffsetX: s.textShadowOffsetX,
-      textShadowOffsetY: s.textShadowOffsetY,
-      autoFit: s.autoFit,
-      lineHeight: s.lineHeight,
-      verticalAlign: s.verticalAlign,
-      textWrap: s.textWrap,
-      safeMargin: s.safeMargin,
-      truncate: s.truncate,
-    }),
+    (s) => ({ isBatch: s.sidebarMode === "batch", ...pickGlobalTextStyle(s) }),
     shallow,
   );
 
@@ -97,29 +72,42 @@ export default function StyleEditor() {
   };
 
   const strokeActive = (borderWidth ?? 0) > 0;
+  const activePreset = TEXT_STYLE_PRESETS.find((p) => presetMatches(p, currentTextStyle));
 
   return (
     <div className="space-y-2.5">
-      <InspectorGroup title="Estilos" className="inspector-group--presets" collapsible defaultOpen>
+      <InspectorGroup
+        title={
+          <>
+            {t("props.styles")}
+            <span className="inspector-preset-meta-name" aria-live="polite">
+              {activePreset ? t(activePreset.nameKey) : t("props.customStyle")}
+            </span>
+          </>
+        }
+        className="inspector-group--presets"
+        collapsible
+        defaultOpen
+      >
         <div className="inspector-presets">
           <div
             className="inspector-preset-grid"
             role="listbox"
-            aria-label="Estilos preestablecidos"
+            aria-label={t("props.presetStyles")}
           >
             {TEXT_STYLE_PRESETS.map((preset) => {
               const active = presetMatches(preset, currentTextStyle);
               return (
                 <button
-                  key={preset.id || preset.name}
+                  key={preset.id}
                   type="button"
                   role="option"
                   aria-selected={active}
                   onClick={() => patch(pickTextStyle(preset))}
                   className={`inspector-preset${active ? " is-selected" : ""}`}
                   style={{ background: preset.previewBg || "var(--bg-elevated)" }}
-                  aria-label={`Aplicar estilo: ${preset.name}`}
-                  title={preset.name}
+                  aria-label={t("props.applyStyle", { name: t(preset.nameKey) })}
+                  title={t(preset.nameKey)}
                   data-text-style-preset
                   data-preset-id={preset.id}
                 >
@@ -137,105 +125,104 @@ export default function StyleEditor() {
               );
             })}
           </div>
-          {(() => {
-            const activePreset = TEXT_STYLE_PRESETS.find((p) => presetMatches(p, currentTextStyle));
-            return (
-              <div className="inspector-preset-meta" aria-live="polite">
-                <span className="inspector-preset-meta-name">
-                  {activePreset?.name || "Personalizado"}
-                </span>
-              </div>
-            );
-          })()}
         </div>
       </InspectorGroup>
 
-      <InspectorGroup title="Tipografía" className="inspector-group--type" collapsible defaultOpen>
+      <InspectorGroup
+        title={t("props.typography")}
+        className="inspector-group--type"
+        collapsible
+        defaultOpen
+      >
         <div className="inspector-type">
           <FontFamilyPicker
-            label="Fuente"
-            ariaLabel="Fuente"
+            label={t("table.font")}
+            ariaLabel={t("table.font")}
             value={fontFamily}
             options={FONT_FAMILIES}
             onChange={(next) => patch({ fontFamily: next })}
           />
 
           <div className="inspector-type-weight">
-            <span className="inspector-paragraph-micro">Peso</span>
+            <span className="inspector-paragraph-micro">{t("table.weight")}</span>
             <SegmentedToolbar
-              ariaLabel="Peso de fuente"
+              ariaLabel={t("props.fontWeight")}
               columns={FONT_WEIGHTS.length}
               value={fontWeight ?? 400}
               onChange={(value) => patch({ fontWeight: value, bold: value >= 700 })}
               options={FONT_WEIGHTS.map((w) => ({
                 value: w.value,
-                label: "Aa",
-                title: w.label,
-                ariaLabel: w.label,
+                label: String(w.value),
+                title: t(w.labelKey),
+                ariaLabel: t(w.labelKey),
                 style: { fontWeight: w.value, fontFamily: fontFamily || undefined },
               }))}
             />
           </div>
 
-          <div className="inspector-type-metrics" role="group" aria-label="Tamaño y espaciado">
-            <label className="inspector-type-metric">
-              <span className="inspector-type-metric-key">Tam.</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                aria-label="Tamaño"
-                value={textFontSize}
-                onChange={(e) => patch({ fontSize: Number(e.target.value) })}
-                className="inspector-type-metric-input"
-                min={8}
-                max={200}
-              />
-            </label>
-            <label className="inspector-type-metric">
-              <span className="inspector-type-metric-key">Esp.</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                aria-label="Espaciado"
-                value={letterSpacing ?? 0}
-                onChange={(e) => patch({ letterSpacing: Number(e.target.value) })}
-                className="inspector-type-metric-input"
-                min={-20}
-                max={80}
-                step={0.5}
-              />
-            </label>
-          </div>
+          <div className="inspector-type-row">
+            <div
+              className="inspector-type-metrics"
+              role="group"
+              aria-label={t("props.sizeAndTracking")}
+            >
+              <label className="inspector-type-metric">
+                <span className="inspector-type-metric-key">{t("props.sizeAbbr")}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  aria-label={t("table.size")}
+                  value={textFontSize}
+                  onChange={(e) => patch({ fontSize: Number(e.target.value) })}
+                  className="inspector-type-metric-input"
+                  min={8}
+                  max={200}
+                />
+              </label>
+              <label className="inspector-type-metric">
+                <span className="inspector-type-metric-key">{t("props.trackingAbbr")}</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  aria-label={t("table.tracking")}
+                  value={letterSpacing ?? 0}
+                  onChange={(e) => patch({ letterSpacing: Number(e.target.value) })}
+                  className="inspector-type-metric-input"
+                  min={-20}
+                  max={80}
+                  step={0.5}
+                />
+              </label>
+            </div>
 
-          <div className="inspector-type-style" role="group" aria-label="Estilo de fuente">
-            <button
-              type="button"
-              onClick={() => patch({ bold: !bold })}
-              className={`inspector-chip${bold ? " is-selected" : ""}`}
-              aria-pressed={bold}
-              aria-label="Negrita"
-              title="Negrita"
-            >
-              <Bold size={12} strokeWidth={2.5} />
-              <span>Negrita</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => patch({ italic: !italic })}
-              className={`inspector-chip${italic ? " is-selected" : ""}`}
-              aria-pressed={italic}
-              aria-label="Cursiva"
-              title="Cursiva"
-            >
-              <Italic size={12} />
-              <span>Cursiva</span>
-            </button>
+            <div className="inspector-type-style" role="group" aria-label={t("props.fontStyle")}>
+              <button
+                type="button"
+                onClick={() => patch({ bold: !bold })}
+                className={`inspector-chip${bold ? " is-selected" : ""}`}
+                aria-pressed={bold}
+                aria-label={t("props.bold")}
+                title={t("props.bold")}
+              >
+                <Bold size={12} strokeWidth={2.5} />
+              </button>
+              <button
+                type="button"
+                onClick={() => patch({ italic: !italic })}
+                className={`inspector-chip${italic ? " is-selected" : ""}`}
+                aria-pressed={italic}
+                aria-label={t("props.italic")}
+                title={t("props.italic")}
+              >
+                <Italic size={12} />
+              </button>
+            </div>
           </div>
         </div>
       </InspectorGroup>
 
       <InspectorGroup
-        title="Párrafo"
+        title={t("props.paragraph")}
         className="inspector-group--paragraph"
         collapsible
         defaultOpen
@@ -254,7 +241,7 @@ export default function StyleEditor() {
           onPatch={patch}
           textAlignOptions={TEXT_ALIGNS.map((a) => ({
             value: a.value,
-            title: a.value,
+            title: t(`position.${a.value}`),
             icon:
               a.value === "left" ? (
                 <AlignLeft size={12} />
@@ -267,10 +254,15 @@ export default function StyleEditor() {
         />
       </InspectorGroup>
 
-      <InspectorGroup title="Color" className="inspector-group--color" collapsible defaultOpen>
+      <InspectorGroup
+        title={t("table.color")}
+        className="inspector-group--color"
+        collapsible
+        defaultOpen
+      >
         <div className="inspector-color">
           <label className="inspector-color-swatch-row">
-            <span className="inspector-color-key">Tinta</span>
+            <span className="inspector-color-key">{t("props.ink")}</span>
             <span className="inspector-color-swatch">
               <span
                 className="inspector-color-swatch-fill"
@@ -285,7 +277,7 @@ export default function StyleEditor() {
                 value={normalizeColor(textFontColor) || "#ffffff"}
                 onChange={(e) => patch({ fontColor: e.target.value })}
                 className="inspector-color-swatch-input"
-                aria-label="Color de texto"
+                aria-label={t("props.textColor")}
               />
             </span>
             <input
@@ -295,12 +287,12 @@ export default function StyleEditor() {
               className="inspector-color-hex"
               spellCheck={false}
               autoComplete="off"
-              aria-label="Valor de color"
+              aria-label={t("props.textColorValue")}
             />
           </label>
 
           <label className="inspector-color-opacity-row">
-            <span className="inspector-color-key">Opacidad</span>
+            <span className="inspector-color-key">{t("table.opacity")}</span>
             <input
               type="range"
               min={0}
@@ -312,7 +304,7 @@ export default function StyleEditor() {
               style={{
                 accentColor: normalizeColor(textFontColor) || "var(--accent-brand)",
               }}
-              aria-label="Opacidad de texto"
+              aria-label={t("props.textOpacity")}
             />
             <span className="inspector-color-pct">{Math.round((textOpacity ?? 1) * 100)}%</span>
           </label>
@@ -320,7 +312,7 @@ export default function StyleEditor() {
       </InspectorGroup>
 
       <InspectorGroup
-        title="Fondo"
+        title={t("table.background")}
         className="inspector-group--fx"
         collapsible
         defaultOpen={!!bgEnabled}
@@ -329,7 +321,7 @@ export default function StyleEditor() {
         hideChevron
         headerAccessory={
           <ToggleSwitch
-            ariaLabel="Fondo activo"
+            ariaLabel={t("props.backgroundActive")}
             checked={!!bgEnabled}
             onChange={(next) => patch({ bgEnabled: next })}
           />
@@ -338,7 +330,7 @@ export default function StyleEditor() {
         {bgEnabled ? (
           <div className="inspector-color">
             <label className="inspector-color-swatch-row">
-              <span className="inspector-color-key">Color</span>
+              <span className="inspector-color-key">{t("table.color")}</span>
               <span className="inspector-color-swatch">
                 <span
                   className="inspector-color-swatch-fill"
@@ -353,7 +345,7 @@ export default function StyleEditor() {
                   value={normalizeColor(bgColor) || "#000000"}
                   onChange={(e) => patch({ bgColor: e.target.value })}
                   className="inspector-color-swatch-input"
-                  aria-label="Color de fondo"
+                  aria-label={t("props.backgroundColor")}
                 />
               </span>
               <input
@@ -363,11 +355,11 @@ export default function StyleEditor() {
                 className="inspector-color-hex"
                 spellCheck={false}
                 autoComplete="off"
-                aria-label="Valor de color de fondo"
+                aria-label={t("props.backgroundColorValue")}
               />
             </label>
             <label className="inspector-color-opacity-row">
-              <span className="inspector-color-key">Opacidad</span>
+              <span className="inspector-color-key">{t("table.opacity")}</span>
               <input
                 type="range"
                 min={0}
@@ -379,12 +371,12 @@ export default function StyleEditor() {
                 style={{
                   accentColor: normalizeColor(bgColor) || "var(--accent-brand)",
                 }}
-                aria-label="Opacidad de fondo"
+                aria-label={t("props.backgroundOpacity")}
               />
               <span className="inspector-color-pct">{Math.round((bgOpacity ?? 0) * 100)}%</span>
             </label>
             <label className="inspector-color-metric-row">
-              <span className="inspector-color-key">Padding</span>
+              <span className="inspector-color-key">{t("props.padding")}</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -393,7 +385,7 @@ export default function StyleEditor() {
                 className="inspector-color-metric-input"
                 min={0}
                 max={80}
-                aria-label="Padding de fondo"
+                aria-label={t("props.backgroundPadding")}
               />
             </label>
           </div>
@@ -401,7 +393,7 @@ export default function StyleEditor() {
       </InspectorGroup>
 
       <InspectorGroup
-        title="Contorno"
+        title={t("table.stroke")}
         className="inspector-group--fx"
         collapsible
         defaultOpen={strokeActive}
@@ -409,7 +401,7 @@ export default function StyleEditor() {
       >
         <div className="inspector-color">
           <label className="inspector-color-metric-row">
-            <span className="inspector-color-key">Ancho</span>
+            <span className="inspector-color-key">{t("props.widthAbbr")}</span>
             <input
               type="number"
               inputMode="numeric"
@@ -418,11 +410,11 @@ export default function StyleEditor() {
               className="inspector-color-metric-input"
               min={0}
               max={20}
-              aria-label="Ancho de contorno"
+              aria-label={t("props.strokeWidth")}
             />
           </label>
           <label className="inspector-color-swatch-row">
-            <span className="inspector-color-key">Color</span>
+            <span className="inspector-color-key">{t("table.color")}</span>
             <span className="inspector-color-swatch">
               <span
                 className="inspector-color-swatch-fill"
@@ -434,7 +426,7 @@ export default function StyleEditor() {
                 value={normalizeColor(borderColor) || "#000000"}
                 onChange={(e) => patch({ borderColor: e.target.value })}
                 className="inspector-color-swatch-input"
-                aria-label="Color de contorno"
+                aria-label={t("props.strokeColor")}
               />
             </span>
             <input
@@ -444,14 +436,14 @@ export default function StyleEditor() {
               className="inspector-color-hex"
               spellCheck={false}
               autoComplete="off"
-              aria-label="Valor de color de contorno"
+              aria-label={t("props.strokeColorValue")}
             />
           </label>
         </div>
       </InspectorGroup>
 
       <InspectorGroup
-        title="Sombra"
+        title={t("table.shadow")}
         className="inspector-group--fx"
         collapsible
         defaultOpen={!!textShadowEnabled}
@@ -460,7 +452,7 @@ export default function StyleEditor() {
         hideChevron
         headerAccessory={
           <ToggleSwitch
-            ariaLabel="Sombra activa"
+            ariaLabel={t("props.shadowActive")}
             checked={!!textShadowEnabled}
             onChange={(next) => patch({ textShadowEnabled: next })}
           />
@@ -469,7 +461,7 @@ export default function StyleEditor() {
         {textShadowEnabled ? (
           <div className="inspector-color">
             <label className="inspector-color-swatch-row">
-              <span className="inspector-color-key">Color</span>
+              <span className="inspector-color-key">{t("table.color")}</span>
               <span className="inspector-color-swatch">
                 <span
                   className="inspector-color-swatch-fill"
@@ -483,7 +475,7 @@ export default function StyleEditor() {
                   value={normalizeColor(textShadowColor) || "#000000"}
                   onChange={(e) => patch({ textShadowColor: e.target.value })}
                   className="inspector-color-swatch-input"
-                  aria-label="Color de sombra"
+                  aria-label={t("props.shadowColor")}
                 />
               </span>
               <input
@@ -493,10 +485,10 @@ export default function StyleEditor() {
                 className="inspector-color-hex"
                 spellCheck={false}
                 autoComplete="off"
-                aria-label="Valor de color de sombra"
+                aria-label={t("props.shadowColorValue")}
               />
             </label>
-            <div className="inspector-color-pair" role="group" aria-label="Offset de sombra">
+            <div className="inspector-color-pair" role="group" aria-label={t("props.shadowOffset")}>
               <label className="inspector-color-pair-cell">
                 <span className="inspector-color-pair-key">X</span>
                 <input
@@ -507,7 +499,7 @@ export default function StyleEditor() {
                   className="inspector-color-metric-input"
                   min={-64}
                   max={64}
-                  aria-label="Offset X de sombra"
+                  aria-label={t("props.shadowOffsetX")}
                 />
               </label>
               <label className="inspector-color-pair-cell">
@@ -520,7 +512,7 @@ export default function StyleEditor() {
                   className="inspector-color-metric-input"
                   min={-64}
                   max={64}
-                  aria-label="Offset Y de sombra"
+                  aria-label={t("props.shadowOffsetY")}
                 />
               </label>
             </div>

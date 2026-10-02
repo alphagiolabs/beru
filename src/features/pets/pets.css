@@ -21,68 +21,6 @@
   color: var(--text-dim);
 }
 
-.settings-petdex-card-item {
-  @apply rounded-2xl overflow-hidden flex flex-col min-w-0 transition-all duration-200;
-  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-  background: color-mix(in srgb, var(--bg-surface) 50%, var(--bg-app));
-}
-
-.settings-petdex-card-item:hover {
-  border-color: color-mix(in srgb, var(--accent-brand) 20%, var(--border));
-  box-shadow:
-    0 4px 20px color-mix(in srgb, var(--bg-app) 60%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--accent-brand) 6%, transparent);
-  transform: translateY(-2px);
-}
-
-.settings-petdex-card-item--active {
-  border-color: color-mix(in srgb, var(--accent-brand) 45%, transparent);
-  background: color-mix(in srgb, var(--accent-brand) 5%, var(--bg-surface));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent-brand) 18%, transparent),
-    0 2px 16px color-mix(in srgb, var(--accent-brand) 10%, transparent);
-}
-
-.settings-petdex-card-item--busy {
-  opacity: 0.55;
-  pointer-events: none;
-}
-
-.settings-petdex-card-preview {
-  @apply flex items-center justify-center overflow-hidden relative;
-  min-height: 100px;
-  background: radial-gradient(
-    circle at 50% 35%,
-    color-mix(in srgb, var(--bg-surface) 90%, white) 0%,
-    color-mix(in srgb, var(--bg-surface) 35%, var(--bg-app)) 55%,
-    var(--bg-app) 100%
-  );
-  transition: background 0.2s ease;
-}
-
-.settings-petdex-card-item:hover .settings-petdex-card-preview {
-  background: radial-gradient(
-    circle at 50% 35%,
-    color-mix(in srgb, var(--bg-surface) 95%, white) 0%,
-    color-mix(in srgb, var(--bg-elevated) 45%, var(--bg-app)) 55%,
-    var(--bg-app) 100%
-  );
-}
-
-.settings-petdex-card-meta {
-  @apply px-3 py-2.5 flex flex-col gap-0.5 min-w-0;
-}
-
-.settings-petdex-card-name {
-  @apply text-[12px] font-semibold truncate tracking-tight;
-  color: var(--text-primary);
-}
-
-.settings-petdex-card-kind {
-  @apply text-[9px] uppercase tracking-widest truncate font-medium;
-  color: var(--text-dim);
-}
-
 .pet-sprite-frame {
   --pet-scale: 1;
   width: calc(192px * var(--pet-scale));
@@ -193,7 +131,7 @@
 
 .pet-palette-head-brand svg {
   @apply flex-shrink-0;
-  color: var(--accent-brand);
+  color: var(--text-brand);
 }
 
 .pet-palette-close {
@@ -304,7 +242,7 @@
 }
 
 .pet-palette-item-check {
-  color: var(--accent-brand);
+  color: var(--text-brand);
   flex-shrink: 0;
 }
 
@@ -327,7 +265,7 @@
 }
 
 .pet-palette-toggle--on {
-  color: var(--accent-brand);
+  color: var(--text-brand);
   border-color: color-mix(in srgb, var(--accent-brand) 35%, transparent);
   background: color-mix(in srgb, var(--accent-brand) 10%, transparent);
   box-shadow: 0 0 12px color-mix(in srgb, var(--accent-brand) 12%, transparent);
@@ -358,7 +296,9 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-surface);
+  min-height: 0;
+  min-width: 0;
+  background: var(--bg-elevated);
   color: var(--text-primary);
   font-family: inherit;
 }
@@ -367,29 +307,32 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 12px 24px;
   padding: 16px 24px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-surface);
+  background: transparent;
 }
 
 .settings-petdex-header-left {
   display: flex;
   align-items: center;
-  gap: 24px;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  min-width: 0;
 }
 
 .settings-petdex-toggle-label {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .settings-petdex-label-text {
   font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .settings-petdex-switch {
@@ -404,7 +347,7 @@
 }
 
 .settings-petdex-switch.is-active {
-  background: var(--accent-success, #10b981);
+  background: var(--accent-brand);
 }
 
 .settings-petdex-switch:disabled {
@@ -431,73 +374,57 @@
 .settings-petdex-slider-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
 .settings-petdex-slider {
-  width: 120px;
+  width: 96px;
   accent-color: var(--text-primary);
 }
 
 .settings-petdex-val-text {
-  font-size: 13px;
-  font-weight: 600;
-  min-width: 40px;
+  font-size: 11px;
+  font-weight: 500;
+  min-width: 34px;
+  font-variant-numeric: tabular-nums;
 }
 
 .settings-petdex-mov-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 
-.settings-petdex-mov-select {
-  padding: 4px 30px 4px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-  background-color: color-mix(in srgb, var(--border) 20%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='gray' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 12px;
-}
-
-.settings-petdex-mov-select:hover {
-  background-color: color-mix(in srgb, var(--border) 35%, transparent);
-}
-
-.settings-petdex-mov-select:focus {
-  outline: none;
-  border-color: color-mix(in srgb, var(--text-dim) 50%, transparent);
+.settings-petdex-mov-group .ui-select-trigger {
+  min-width: 124px;
 }
 
 .settings-petdex-header-right {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-left: auto;
 }
 
 .settings-petdex-sync-badge {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
 }
 .settings-petdex-sync-badge .sync-icon {
-  color: var(--accent-brand);
+  color: var(--text-brand);
 }
 
 .settings-petdex-tools {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  flex-shrink: 0;
   padding: 12px 24px;
-  gap: 16px;
+  gap: 10px 16px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
 }
 
@@ -505,11 +432,23 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: color-mix(in srgb, var(--bg-app) 50%, transparent);
+  flex: 1 1 240px;
+  min-width: 180px;
+  max-width: 360px;
+  min-height: 32px;
+  background: var(--bg-surface);
   padding: 6px 12px;
-  border-radius: 20px;
+  border-radius: 4px;
   border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  width: 200px;
+}
+
+.settings-petdex-searchbox svg {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.settings-petdex-searchbox:focus-within {
+  border-color: var(--accent-brand);
 }
 
 .settings-petdex-searchbox input {
@@ -517,25 +456,30 @@
   background: transparent;
   outline: none;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 11px;
+  min-width: 0;
   width: 100%;
+}
+
+.settings-petdex-searchbox input::placeholder {
+  color: var(--text-dim);
 }
 
 .settings-petdex-filters {
   display: flex;
-  gap: 8px;
-  flex: 1;
+  gap: 2px;
+  flex-wrap: wrap;
 }
 
 .settings-petdex-filter-btn {
   min-height: var(--button-height-sm);
   padding: 0 var(--button-padding-sm);
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  border-radius: 4px;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
   transition:
     background-color 140ms var(--ease-out),
@@ -560,15 +504,16 @@
 }
 
 .settings-petdex-filter-btn.is-active {
-  background: color-mix(in srgb, var(--accent-brand) 16%, var(--bg-elevated));
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent-brand) 65%, var(--border));
+  border-color: transparent;
 }
 
 .settings-petdex-tools-right {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-left: auto;
 }
 
 .settings-petdex-refresh-btn {
@@ -617,38 +562,44 @@
 }
 
 .settings-petdex-total-text {
-  font-size: 12px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--text-dim);
 }
 
 .settings-petdex-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 24px;
 }
 
 .settings-petdex-grid-new {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   gap: 12px;
 }
 
 .settings-petdex-card-item {
-  background: color-mix(in srgb, var(--bg-app) 40%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-  border-radius: 12px;
+  min-width: 0;
+  overflow: hidden;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
   padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+    background 140ms var(--ease-out),
+    border-color 140ms var(--ease-out);
   position: relative;
 }
 
 .settings-petdex-card-item:hover {
   border-color: color-mix(in srgb, var(--border) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-app) 80%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
 .settings-petdex-card-item--active {
@@ -660,10 +611,15 @@
   background: color-mix(in srgb, var(--accent-brand) 10%, transparent);
 }
 
+.settings-petdex-card-item--busy {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
 .settings-petdex-card-preview {
-  height: 84px;
-  background: color-mix(in srgb, var(--bg-surface) 60%, transparent);
-  border-radius: 8px;
+  height: 112px;
+  overflow: hidden;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -699,11 +655,12 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .settings-petdex-card-name {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -727,11 +684,9 @@
 
 .settings-petdex-card-kind {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--text-dim);
-  background: color-mix(in srgb, var(--border) 40%, transparent);
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 2px 0;
   letter-spacing: 0.5px;
 }
 
@@ -739,15 +694,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   padding: 12px 24px;
   border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  background: var(--bg-surface);
+  background: var(--bg-elevated);
 }
 
 .settings-petdex-footer-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .settings-petdex-footer-active-preview {
@@ -762,13 +722,18 @@
 }
 
 .settings-petdex-footer-name {
-  font-size: 13px;
-  font-weight: 600;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--text-primary);
 }
 
 .settings-petdex-footer-range {
-  font-size: 13px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   color: var(--text-dim);
 }
 
@@ -776,6 +741,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  margin-left: auto;
 }
 
 .settings-petdex-page-btn {
@@ -819,7 +785,28 @@
 }
 
 .settings-petdex-page-text {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 680px) {
+  .settings-petdex-header,
+  .settings-petdex-tools,
+  .settings-petdex-body,
+  .settings-petdex-footer {
+    padding: 12px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-petdex-card-item,
+  .settings-petdex-filter-btn,
+  .settings-petdex-refresh-btn,
+  .settings-petdex-page-btn,
+  .settings-petdex-switch,
+  .settings-petdex-switch-thumb {
+    transition: none;
+  }
 }

@@ -1,0 +1,47 @@
+export const RAW_JOB = {
+  id: 3,
+  input_path: "C:\\videos\\a.mp4",
+  output_path: "C:\\out\\a.mp4",
+  width: 1920,
+  height: 1080,
+  source_width: 1920,
+  source_height: 1080,
+  operations: [{ mode: "blur", region: { x: 0, y: 0, w: 10, h: 10 } }],
+  video_duration: 12.5,
+  trim_start: 1,
+  trim_end: 11.5,
+  video_codec: "h264",
+  pix_fmt: "yuv420p10le",
+  frame_rate: 30,
+  audio_codec: "aac",
+  audio_channels: 2,
+  encode_profile: "quality",
+  watermark: { enabled: true, type: "text", text: "beru" },
+  video_info_probed: true,
+};
+
+export const MINIMAL_JOB = {
+  input_path: "C:\\videos\\b.mp4",
+  output_path: "C:\\out\\b.mp4",
+};
+
+export const MINIMAL_JOB_NORMALIZED = {
+  ...MINIMAL_JOB,
+  id: 0,
+  width: 0,
+  height: 0,
+  source_width: 0,
+  source_height: 0,
+  operations: [],
+  video_duration: 0,
+  trim_start: 0,
+  trim_end: null,
+  video_codec: "",
+  pix_fmt: "yuv420p",
+  frame_rate: 0,
+  audio_codec: "",
+  audio_channels: 0,
+  encode_profile: "balanced",
+  watermark: null,
+  video_info_probed: false,
+};

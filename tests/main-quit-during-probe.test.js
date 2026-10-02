@@ -1,131 +1,205 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
+import os from "os";
 import path from "path";
-import { runInNewContext } from "node:vm";
 
 const mainSrc = fs.readFileSync(path.join(process.cwd(), "main", "main.js"), "utf-8");
-const processSrc = fs.readFileSync(
-  path.join(process.cwd(), "main", "handlers", "process.js"),
-  "utf-8",
-);
-const sharedSrc = fs.readFileSync(path.join(process.cwd(), "main", "shared-state.js"), "utf-8");
-const runSrc = fs.readFileSync(path.join(process.cwd(), "main", "processing-run.js"), "utf-8");
+
+const mocks = vi.hoisted(() => ({
+  handlers: new Map(),
+  sendToRenderer: vi.fn(),
+  startJobRun: vi.fn(async () => {
+    throw new Error("startJobRun must not be reached before spawn stage");
+  }),
+  state: {
+    quitting: false,
+    tempRoot: "",
+    interrupt: async () => {},
+  },
+}));
+
+vi.mock("electron", () => ({
+  ipcMain: { handle: (channel, handler) => mocks.handlers.set(channel, handler) },
+  app: { isPackaged: false, getPath: () => mocks.state.tempRoot },
+}));
+
+vi.mock("../main/shared-state.js", () => ({
+  getAppIsQuitting: () => mocks.state.quitting,
+  setAppIsQuitting: (value) => {
+    mocks.state.quitting = Boolean(value);
+  },
+  getMainWindow: () => null,
+  isDev: true,
+}));
+
+vi.mock("../main/utils/paths.js", () => ({
+  validateMediaBinaries: () => ({ ok: true }),
+}));
+
+vi.mock("../main/utils/processor-spawn.js", () => ({
+  validateProcessorAvailableAsync: async () => ({ ok: true, command: "noop", args: [] }),
+  buildProcessorChildEnv: (env) => env,
+}));
+
+vi.mock("../main/utils/job-worker.js", () => ({
+  startJobRun: mocks.startJobRun,
+}));
+
+vi.mock("../main/utils/media-task-pool.js", () => ({
+  setMediaProcessingActive: vi.fn(),
+  waitForMediaTasksToDrain: () => mocks.state.interrupt("admission"),
+}));
+
+vi.mock("../main/utils/concurrency.js", () => ({
+  runWithConcurrency: async (jobs) => {
+    await mocks.state.interrupt("probe");
+    return jobs;
+  },
+}));
+
+vi.mock("../main/utils/video-cache.js", () => ({ probeVideo: vi.fn() }));
+vi.mock("../main/utils/settings.js", () => ({ readSettings: () => ({}) }));
+vi.mock("../main/utils/renderer.js", () => ({
+  sendToRenderer: (...args) => mocks.sendToRenderer(...args),
+}));
+vi.mock("../main/utils/jobManifest.js", () => ({
+  unwrapJobManifest: (jobs) => ({ jobs, manifest: null }),
+  createProcessorManifest: (_manifest, jobs) => ({ jobs }),
+}));
+vi.mock("../main/utils/process-input-validation.js", () => ({
+  findUnreadableInputsAsync: async () => [],
+  translateProcessorErrorMessage: (err) => err,
+}));
+vi.mock("../main/utils/process-media-validation.js", () => ({
+  sanitizeJobMedia: (job, _security, { outputDirectory }) => ({
+    ...job,
+    output_path: job.output_path || path.join(outputDirectory, "out.mp4"),
+  }),
+}));
+vi.mock("../main/utils/kill-process-tree.js", () => ({
+  killProcessTree: vi.fn(async () => {}),
+}));
+
+const { registerProcessHandlers } = await import("../main/handlers/process.js");
+const { executeProcessingRun, cancelRun, hasActiveProcessing } =
+  await import("../main/processing-run.js");
 
 describe("quit during probe phase", () => {
   it("gates quit on hasActiveProcessing, not only getPythonProcess", () => {
     expect(mainSrc).toMatch(/hasActiveProcessing\(\)/);
     expect(mainSrc).toMatch(/setAppIsQuitting\(true\)/);
-    expect(mainSrc).toMatch(/cancelActiveProcessing\(\)/);
+    expect(mainSrc).toMatch(/cancelRun\(\)/);
     expect(mainSrc).not.toMatch(/if \(!getPythonProcess\(\)\) return;/);
   });
+});
 
-  it("exports appIsQuitting helpers from shared-state", () => {
-    expect(sharedSrc).toMatch(/export const getAppIsQuitting/);
-    expect(sharedSrc).toMatch(/export const setAppIsQuitting/);
-    expect(runSrc).toMatch(/export const hasActiveProcessing/);
+describe("cancel mid-flight", () => {
+  let tempRoot;
+  let writeFileSpy;
+  let replacementRun;
+  let replacementDir;
+
+  const beruDirsLeft = () =>
+    fs.readdirSync(tempRoot).filter((name) => name.startsWith("beru-jobs-"));
+
+  beforeEach(() => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-quit-probe-"));
+    mocks.handlers.clear();
+    mocks.sendToRenderer.mockClear();
+    mocks.startJobRun.mockClear();
+    mocks.state.quitting = false;
+    mocks.state.tempRoot = tempRoot;
+    mocks.state.interrupt = async () => {};
+    replacementRun = null;
+    replacementDir = null;
+
+    writeFileSpy = vi
+      .spyOn(fs.promises, "writeFile")
+      .mockImplementation(async (target, contents) => {
+        fs.writeFileSync(target, contents);
+        await mocks.state.interrupt("write");
+      });
+
+    registerProcessHandlers({ getOutputDirectory: () => tempRoot });
   });
 
-  it("bails spawn when getAppIsQuitting after probe", () => {
-    const probeIdx = processSrc.indexOf("enrichJobVideoInfo");
-    const spawnIdx = processSrc.indexOf("spawn(spawnSpec.command");
-    expect(probeIdx).toBeGreaterThan(-1);
-    expect(spawnIdx).toBeGreaterThan(probeIdx);
-    const between = processSrc.slice(probeIdx, spawnIdx);
-    expect(between).toMatch(/getAppIsQuitting\(\)/);
-    expect(between).toMatch(/cancelled\s*:\s*true/);
+  afterEach(async () => {
+    writeFileSpy.mockRestore();
+    mocks.state.interrupt = async () => {};
+    mocks.state.quitting = false;
+    await cancelRun();
+    if (replacementRun) await replacementRun;
+    replacementRun = null;
+    try {
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    } catch {}
   });
 
   it.each([
+    ["admission", "quit"],
     ["probe", "quit"],
     ["write", "quit"],
+    ["admission", "superseded"],
     ["probe", "superseded"],
     ["write", "superseded"],
-  ])("cancels after %s on %s without clearing another run", async (stage, reason) => {
-    let runId = null;
-    let tmpFile = null;
-    let originalTmpFile;
-    let quitting = false;
-    let probeActive = false;
-    const handlers = new Map();
-    const spawn = vi.fn();
-    const unlinkSync = vi.fn();
-    const interrupt = (phase) => {
-      if (phase !== stage) return;
-      originalTmpFile = tmpFile;
-      if (reason === "quit") quitting = true;
-      else {
-        runId = "replacement";
-        tmpFile = "replacement.json";
-        probeActive = true;
-      }
-    };
-    const writeFile = vi.fn(async () => interrupt("write"));
-    const context = {
-      ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-      app: { getPath: () => process.cwd() },
-      path,
-      os: { cpus: () => [0] },
-      randomBytes: () => ({ toString: () => "test" }),
-      fs: { unlinkSync, promises: { writeFile } },
-      spawn,
-      unwrapJobManifest: (jobs) => ({ jobs, manifest: null }),
-      validateProcessorAvailableAsync: async () => ({ ok: true, args: [] }),
-      validateMediaBinaries: () => ({ ok: true }),
-      sanitizeJobMedia: (job) => job,
-      findUnreadableInputsAsync: async () => [],
-      getAppIsQuitting: () => quitting,
-      beginProcessingRun: (id) => {
-        runId = id;
-        return true;
-      },
-      getProcessingRunId: () => runId,
-      clearProcessingRun: () => {
-        runId = null;
-      },
-      setCurrentTmpFile: (file) => {
-        tmpFile = file;
-      },
-      getCurrentTmpFile: () => tmpFile,
-      setProbePhaseActive: (active) => {
-        probeActive = active;
-      },
-      setLastProcessingError: vi.fn(),
-      sendToRenderer: vi.fn(),
-      runWithConcurrency: async (jobs) => {
-        interrupt("probe");
-        return jobs;
-      },
-      createProcessorManifest: (_manifest, jobs) => ({ jobs }),
-    };
-    const executable = processSrc.replace(/^import[\s\S]*?;\r?\n/gm, "").replace(/\bexport /g, "");
-    runInNewContext(executable, context);
-    context.registerProcessHandlers({ getOutputDirectory: () => process.cwd() });
-    const result = await handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+  ])("cancels after %s on %s without touching another run's artifacts", async (stage, reason) => {
+    mocks.state.interrupt =
+      reason === "quit"
+        ? async (s) => {
+            if (s === stage) mocks.state.quitting = true;
+          }
+        : async (s) => {
+            if (s !== stage) return;
+            await cancelRun();
+            mocks.state.interrupt = () => new Promise(() => {});
+            replacementRun = executeProcessingRun({
+              jobs: [
+                {
+                  input_path: "replacement.mp4",
+                  output_path: path.join(tempRoot, "replacement.mp4"),
+                },
+              ],
+              outputDirectory: tempRoot,
+              spawnSpec: { ok: true, command: "noop", args: [] },
+            });
+          };
 
-    expect(result).toEqual({ success: false, error: "Procesamiento cancelado", cancelled: true });
-    expect(spawn).not.toHaveBeenCalled();
-    expect(writeFile).toHaveBeenCalledTimes(stage === "write" ? 1 : 0);
-    expect(unlinkSync).toHaveBeenCalledWith(originalTmpFile);
-    expect(unlinkSync).toHaveBeenCalledWith(originalTmpFile.replace(".json", ".cancel"));
-    expect(runId).toBe(reason === "quit" ? null : "replacement");
-    expect(tmpFile).toBe(reason === "quit" ? null : "replacement.json");
-    expect(probeActive).toBe(reason !== "quit");
-    expect(unlinkSync).not.toHaveBeenCalledWith("replacement.json");
+    const result = await mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "Procesamiento cancelado",
+      cancelled: true,
+    });
+    expect(mocks.startJobRun).not.toHaveBeenCalled();
+    expect(writeFileSpy).toHaveBeenCalledTimes(stage === "write" ? 1 : 0);
+
+    if (reason === "quit") {
+      expect(hasActiveProcessing()).toBe(false);
+      expect(beruDirsLeft()).toEqual([]);
+    } else {
+      await vi.waitFor(() => {
+        expect(hasActiveProcessing()).toBe(true);
+        expect(beruDirsLeft()).toHaveLength(1);
+      });
+      replacementDir = path.join(tempRoot, beruDirsLeft()[0]);
+      expect(hasActiveProcessing()).toBe(true);
+      expect(beruDirsLeft()).toEqual([path.basename(replacementDir)]);
+      expect(fs.existsSync(replacementDir)).toBe(true);
+    }
   });
 
-  it("refuses to begin a processing run while app is quitting", () => {
-    const beginIdx = processSrc.indexOf("beginProcessingRun(runId)");
-    expect(beginIdx).toBeGreaterThan(-1);
-    const beforeBegin = processSrc.slice(0, beginIdx);
-    const guardIdx = beforeBegin.lastIndexOf("getAppIsQuitting()");
-    expect(guardIdx).toBeGreaterThan(-1);
-    const guardSlice = beforeBegin.slice(guardIdx, beginIdx);
-    expect(guardSlice).toMatch(/cancelled\s*:\s*true/);
+  it("refuses to begin a processing run while app is quitting", async () => {
+    mocks.state.quitting = true;
+    const result = await mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    expect(result).toMatchObject({ success: false, cancelled: true });
+    expect(hasActiveProcessing()).toBe(false);
+    expect(mocks.sendToRenderer).not.toHaveBeenCalled();
+    expect(mocks.startJobRun).not.toHaveBeenCalled();
+    expect(beruDirsLeft()).toEqual([]);
   });
 
   it("disposes temp files after cancel, not before", () => {
-    expect(mainSrc).toMatch(
-      /cancelActiveProcessing\(\)\.finally\(\(\)\s*=>\s*\{[\s\S]*disposeOnQuit\(\)/,
-    );
+    expect(mainSrc).toMatch(/cancelRun\(\)\.finally\(\(\)\s*=>\s*\{[\s\S]*disposeOnQuit\(\)/);
   });
 });

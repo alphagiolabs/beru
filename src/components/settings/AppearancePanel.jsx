@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -27,8 +27,12 @@ import {
   validateThemeTokens,
 } from "../../theme/engine.js";
 import { DEFAULT_SLOT1_PRESET, DEFAULT_SLOT2_PRESET } from "../../theme/tokens.js";
-import ThemeEditor from "./ThemeEditor.jsx";
+import { Select } from "../ui/select";
 import { Button } from "../ui/Button";
+import { lazyPanel } from "../../utils/lazy-panel";
+import PanelLoading from "../PanelLoading";
+
+const ThemeEditor = lazyPanel(() => import("./ThemeEditor.jsx"));
 
 const PREVIEW_SWATCH_KEYS = ["accentBrand", "bgSurface", "amber", "purple"];
 
@@ -209,7 +213,12 @@ function CustomThemeRow({
             <MoreHorizontal size={11} />
           </summary>
           <div className="settings-theme-row-menu-panel">
-            <button type="button" onClick={onEdit}>
+            <button
+              type="button"
+              onClick={onEdit}
+              onPointerEnter={ThemeEditor.preload}
+              onFocus={ThemeEditor.preload}
+            >
               <Pencil size={11} />
               {t("settings.appearance.editColors")}
             </button>
@@ -245,26 +254,28 @@ function ThemeLibraryColumn({ icon: Icon, title, count, children }) {
   );
 }
 
-function ThemeRefSelect({ value, customThemes, onChange, t }) {
+function ThemeRefSelect({ value, customThemes, onChange, label, t }) {
+  const groups = [
+    {
+      label: t("settings.appearance.presets"),
+      options: THEME_PRESETS.map((p) => ({ value: p.id, label: t(p.nameKey) })),
+    },
+  ];
+  if (customThemes.length > 0) {
+    groups.push({
+      label: t("settings.appearance.customThemes"),
+      options: customThemes.map((c) => ({ value: toCustomThemeRef(c.id), label: c.name })),
+    });
+  }
   return (
-    <select className="cap-input settings-appearance-select" value={value} onChange={onChange}>
-      <optgroup label={t("settings.appearance.presets")}>
-        {THEME_PRESETS.map((p) => (
-          <option key={p.id} value={p.id}>
-            {t(p.nameKey)}
-          </option>
-        ))}
-      </optgroup>
-      {customThemes.length > 0 && (
-        <optgroup label={t("settings.appearance.customThemes")}>
-          {customThemes.map((c) => (
-            <option key={c.id} value={toCustomThemeRef(c.id)}>
-              {c.name}
-            </option>
-          ))}
-        </optgroup>
-      )}
-    </select>
+    <Select
+      size="sm"
+      className="w-full"
+      value={value}
+      onValueChange={onChange}
+      aria-label={label}
+      options={groups}
+    />
   );
 }
 
@@ -304,9 +315,22 @@ function ThemeSlot({
         </div>
         <ThemeColorThumb tokens={resolved?.tokens} compact />
       </div>
-      <ThemeRefSelect value={themeRef} customThemes={customThemes} t={t} onChange={onAssign} />
+      <ThemeRefSelect
+        value={themeRef}
+        customThemes={customThemes}
+        label={label}
+        t={t}
+        onChange={onAssign}
+      />
       <div className="settings-appearance-slot-actions">
-        <Button type="button" variant="secondary" size="sm" onClick={onEdit}>
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={onEdit}
+          onPointerEnter={ThemeEditor.preload}
+          onFocus={ThemeEditor.preload}
+        >
           <Pencil size={12} />
           {t("settings.appearance.editColors")}
         </Button>
@@ -472,14 +496,16 @@ export default function AppearancePanel() {
 
   if (editorState) {
     return (
-      <ThemeEditor
-        themeRef={editorState.themeRef}
-        initialName={editorState.name}
-        initialTokens={editorState.tokens}
-        basePresetId={editorState.basePresetId}
-        onSave={handleEditorSave}
-        onCancel={() => setEditorState(null)}
-      />
+      <Suspense fallback={<PanelLoading label={t("settings.appearance.editor.title")} />}>
+        <ThemeEditor
+          themeRef={editorState.themeRef}
+          initialName={editorState.name}
+          initialTokens={editorState.tokens}
+          basePresetId={editorState.basePresetId}
+          onSave={handleEditorSave}
+          onCancel={() => setEditorState(null)}
+        />
+      </Suspense>
     );
   }
 
@@ -502,7 +528,7 @@ export default function AppearancePanel() {
               isActive={themeActiveSlot === 1}
               customThemes={customThemes}
               t={t}
-              onAssign={(e) => assignThemeToSlot(1, e.target.value)}
+              onAssign={(ref) => assignThemeToSlot(1, ref)}
               onActivate={() => setThemeActiveSlot(1)}
               onEdit={() => openEditorForRef(themeSlot1, 1)}
             />
@@ -514,7 +540,7 @@ export default function AppearancePanel() {
               isActive={themeActiveSlot === 2}
               customThemes={customThemes}
               t={t}
-              onAssign={(e) => assignThemeToSlot(2, e.target.value)}
+              onAssign={(ref) => assignThemeToSlot(2, ref)}
               onActivate={() => setThemeActiveSlot(2)}
               onEdit={() => openEditorForRef(themeSlot2, 2)}
             />
@@ -550,6 +576,8 @@ export default function AppearancePanel() {
               title={t("settings.appearance.createTheme")}
               aria-label={t("settings.appearance.createTheme")}
               onClick={handleCreateTheme}
+              onPointerEnter={ThemeEditor.preload}
+              onFocus={ThemeEditor.preload}
             >
               <Plus size={12} />
               <span>{t("settings.appearance.createTheme")}</span>

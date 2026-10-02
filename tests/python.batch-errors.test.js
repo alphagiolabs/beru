@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "child_process";
 
-const PY = process.platform === "win32" ? "python" : "python3";
+const PY = "python";
 const hasPython = (() => {
   try {
     const r = spawnSync(PY, ["--version"], { encoding: "utf8" });

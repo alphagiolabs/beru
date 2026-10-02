@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Processing Run concentra eventos, respuesta IPC y cancelación; Batch Export reconstruye coincidencias de Excel sin perder las ediciones por video.
+- El procesador usa un contexto por ejecución y la preview exacta concentra vigencia, temporizadores y comparación.
+- Electron, electron-builder, Vite y Vitest se actualizan para corregir las vulnerabilidades de dependencias. El desarrollo requiere Node.js 22.12 o posterior.
+- **`isOpActive` movido al módulo Operation** — La semántica "op activa en t" vive ahora en `src/utils/operation.js` (antes `video-preview/utils.js`) y se fija con `resources/op-active-fixtures.json`, un contrato compartido que consumen Vitest y `python/test_op_active_fixtures.py`. Los bounds no numéricos se ignoran igual que `float()` en Python.
+
 ## [1.6.46] - 2026-07-13
 
 ### Added

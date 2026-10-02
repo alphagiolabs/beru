@@ -1,9 +1,20 @@
 import { useMemo } from "react";
-import { Plus, FileSpreadsheet, Table2, Copy, Trash2, Settings2, Bookmark } from "lucide-react";
+import {
+  Plus,
+  FileSpreadsheet,
+  Table2,
+  Copy,
+  Trash2,
+  Settings2,
+  Bookmark,
+  ChevronRight,
+  Check,
+} from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
+import { ExcelMappingModal, TableEditor } from "./modal-panels";
 import { useT } from "../i18n/useT";
-import { textOpMatchesRegion } from "../utils/text-style";
+import { importExcelFromDialog } from "../utils/import-excel.js";
 import { InspectorGroup } from "./inspector";
 import { Button } from "./ui/Button";
 
@@ -34,6 +45,7 @@ export default function BatchPanel() {
     }),
     shallow,
   );
+  const isTemplate = useEditorStore((s) => s.selectedIdx >= 0 && s.selectedIdx === s.templateIdx);
   const showToast = useEditorStore((s) => s.showToast);
   const get = useEditorStore.getState;
   const t = useT();
@@ -45,51 +57,19 @@ export default function BatchPanel() {
   }, [excelMatchStatus, queueLength]);
 
   const handleImportExcel = async () => {
-    const hasLinkedTextToOverwrite = get().queue.some((v) =>
-      v.operations.some(
-        (op) =>
-          op.mode === "text" &&
-          templateRegions.some((tr) => tr.region && textOpMatchesRegion(op, tr.region, tr.id)),
-      ),
-    );
-    if (hasLinkedTextToOverwrite) {
-      const ok = await get().requestConfirm({ message: t("batch.confirmExcelOverwrite") });
-      if (!ok) return;
-    }
-
-    const path = await api?.openExcel();
-    if (!path) return;
-    const result = await get().importExcel(path);
-    if (!result.success) {
-      showToast({
-        kind: "err",
-        text: t("batch.excelParseError", {
-          message: result.error || t("errors.unknown"),
-        }),
-      });
-    } else {
-      const mapping = get().excelMapping;
-      if (!mapping.idColumn || Object.keys(mapping.columns).length === 0) {
-        get().setShowMappingModal(true);
-      } else {
-        showToast({
-          kind: "ok",
-          text: result.message || t("batch.excelLinked", { count: result.rowCount ?? 0 }),
-        });
-      }
-    }
+    await importExcelFromDialog({ api, store: get(), t, showToast });
   };
 
   return (
-    <div className="space-y-2.5" data-testid="batch-panel">
+    <div className="batch-panel" data-testid="batch-panel">
       <InspectorGroup
         className="inspector-group--regions"
-        title="Regiones de texto"
+        title={t("batch.regions")}
         headerAccessory={
           templateRegions.length > 0 ? (
             <span
               className="inspector-region-count"
-              aria-label={`${templateRegions.length} regiones`}
+              aria-label={t("batch.regionCount", { count: templateRegions.length })}
             >
               {templateRegions.length}
             </span>
@@ -136,8 +116,8 @@ export default function BatchPanel() {
                         get().removeTemplateRegion(tr.id);
                       }}
                       className="inspector-region-row-delete"
-                      aria-label={`Eliminar ${tr.label}`}
-                      title="Eliminar"
+                      aria-label={t("batch.removeRegion", { name: tr.label })}
+                      title={t("common.delete")}
                     >
                       <Trash2 size={11} strokeWidth={2} />
                     </button>
@@ -154,8 +134,8 @@ export default function BatchPanel() {
           disabled={!currentRegion}
           className="inspector-region-add"
         >
-          <Plus size={12} strokeWidth={2.25} />
-          <span>Agregar región actual</span>
+          <Plus size={14} strokeWidth={2} />
+          <span>{t("batch.addRegion")}</span>
         </button>
       </InspectorGroup>
 
@@ -164,20 +144,24 @@ export default function BatchPanel() {
           <Button
             type="button"
             onClick={handleImportExcel}
+            onPointerEnter={ExcelMappingModal.preload}
+            onFocus={ExcelMappingModal.preload}
             variant="secondary"
             size="sm"
             className="flex-1 !text-[11px]"
           >
             <FileSpreadsheet size={13} />
-            {excelPath ? "Reimportar Excel" : "Importar Excel"}
+            {excelPath ? t("batch.excelReimport") : t("batch.importExcel")}
           </Button>
           {excelPath && (
             <button
               type="button"
               onClick={() => get().setShowMappingModal(true)}
+              onPointerEnter={ExcelMappingModal.preload}
+              onFocus={ExcelMappingModal.preload}
               className="inspector-chip !w-9 !min-h-[32px] !px-0"
-              title="Configurar mapeo"
-              aria-label="Configurar mapeo"
+              title={t("excel.configureMapping")}
+              aria-label={t("excel.configureMapping")}
             >
               <Settings2 size={13} />
             </button>
@@ -201,12 +185,18 @@ export default function BatchPanel() {
                   <span className="inspector-excel-dot" aria-hidden>
                     ·
                   </span>
-                  <span style={{ color: "var(--accent-brand)" }}>{report.matched} ok</span>
+                  <span style={{ color: "var(--text-brand)" }}>
+                    {t("batch.excelMatched", { count: report.matched })}
+                  </span>
                   {report.unmatched > 0 && (
-                    <span style={{ color: "var(--amber)" }}>· {report.unmatched} sin match</span>
+                    <span style={{ color: "var(--text-amber)" }}>
+                      · {t("batch.excelUnmatched", { count: report.unmatched })}
+                    </span>
                   )}
                   {report.duplicate > 0 && (
-                    <span style={{ color: "var(--rose)" }}>· {report.duplicate} dup</span>
+                    <span style={{ color: "var(--text-rose)" }}>
+                      · {t("batch.excelDuplicate", { count: report.duplicate })}
+                    </span>
                   )}
                 </>
               )}
@@ -215,7 +205,7 @@ export default function BatchPanel() {
                   <span className="inspector-excel-dot" aria-hidden>
                     ·
                   </span>
-                  <span>{excelRows.length} filas</span>
+                  <span>{t("batch.excelRows", { count: excelRows.length })}</span>
                 </>
               )}
             </div>
@@ -223,34 +213,64 @@ export default function BatchPanel() {
         )}
       </InspectorGroup>
 
-      <InspectorGroup title="Acciones" className="inspector-group--actions">
-        <div className="inspector-action-stack" role="group" aria-label="Acciones de lote">
-          <button type="button" onClick={get().applyToAll} className="inspector-action-btn">
-            <span className="inspector-action-icon" aria-hidden>
-              <Copy size={13} strokeWidth={2} />
-            </span>
-            <span className="inspector-action-label">Aplicar capas a todos</span>
-          </button>
-          <button
+      <InspectorGroup title={t("batch.actions")} className="inspector-group--actions">
+        <div className="inspector-action-stack" role="group" aria-label={t("batch.actionsAria")}>
+          <Button
             type="button"
-            onClick={() => get().setShowTableEditor(true)}
+            onClick={get().applyToAll}
+            variant="tertiary"
+            size="sm"
+            className="inspector-action-btn inspector-action-btn--apply"
+          >
+            <span className="inspector-action-icon" aria-hidden>
+              <Copy size={14} strokeWidth={2} />
+            </span>
+            <span className="inspector-action-label">{t("batch.applyLayersToAll")}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="tertiary"
+            size="sm"
+            onClick={() => {
+              if (queueLength === 0) {
+                showToast({ kind: "warn", text: t("table.needsVideos") });
+                return;
+              }
+              get().setShowTableEditor(true);
+            }}
             className="inspector-action-btn"
+            onPointerEnter={() => {
+              if (queueLength > 0) TableEditor.preload();
+            }}
+            onFocus={() => {
+              if (queueLength > 0) TableEditor.preload();
+            }}
           >
             <span className="inspector-action-icon" aria-hidden>
-              <Table2 size={13} strokeWidth={2} />
+              <Table2 size={14} strokeWidth={2} />
             </span>
-            <span className="inspector-action-label">Editor de tabla</span>
-          </button>
-          <button
+            <span className="inspector-action-label">{t("batch.tableEditor")}</span>
+            <ChevronRight size={12} className="inspector-action-trailing" aria-hidden />
+          </Button>
+          <div className="inspector-action-divider" role="separator" />
+          <Button
             type="button"
+            variant="tertiary"
+            size="sm"
             onClick={() => get().setTemplate(selectedIdx)}
-            className="inspector-action-btn inspector-action-btn--accent"
+            className={`inspector-action-btn${isTemplate ? " is-active" : ""}`}
+            aria-pressed={isTemplate}
           >
             <span className="inspector-action-icon" aria-hidden>
-              <Bookmark size={13} strokeWidth={2} />
+              <Bookmark size={14} strokeWidth={2} fill={isTemplate ? "currentColor" : "none"} />
             </span>
-            <span className="inspector-action-label">Marcar como plantilla</span>
-          </button>
+            <span className="inspector-action-label">{t("batch.markAsTemplate")}</span>
+            <Check
+              size={13}
+              className={`inspector-action-trailing${isTemplate ? " is-visible" : " is-hidden"}`}
+              aria-hidden
+            />
+          </Button>
         </div>
       </InspectorGroup>
     </div>

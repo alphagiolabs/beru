@@ -1,6 +1,5 @@
 """PyInstaller spec for the bundled Beru video processor (Windows x64)."""
 
-import sys
 from pathlib import Path
 
 block_cipher = None
@@ -24,7 +23,18 @@ a = Analysis(
     hiddenimports=[
         "encode_profiles",
         "batch_errors",
+        "batch_context",
+        "capacity",
+        "encoders",
+        "encode_args",
+        "ffmpeg_runner",
+        "filters",
+        "fonts",
+        "job_classify",
+        "media_paths",
+        "media_probe",
         "op_shared",
+        "preview",
         "color_validation",
         "delogo_chains",
         "text_layout_helpers",

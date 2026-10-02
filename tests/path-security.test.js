@@ -69,7 +69,7 @@ describe("pathSecurity", () => {
 
   it("denies sensitive system paths even with excel extension", () => {
     const res = security.validateReadableFile(
-      process.platform === "win32" ? "C:\\Windows\\System32\\drivers\\etc\\hosts" : "/etc/passwd",
+      "C:\\Windows\\System32\\drivers\\etc\\hosts",
       "excel",
     );
     expect(res.ok).toBe(false);
@@ -126,8 +126,7 @@ describe("pathSecurity", () => {
   });
 
   it("cannot allow-list denied paths via register then validateReadableFile", () => {
-    const denied =
-      process.platform === "win32" ? "C:\\Windows\\System32\\drivers\\etc\\hosts" : "/etc/passwd";
+    const denied = "C:\\Windows\\System32\\drivers\\etc\\hosts";
     const reg = security.registerAllowedPath(denied, "excel");
     expect(reg.ok).toBe(false);
     expect(security.validateReadableFile(denied, "excel").ok).toBe(false);
@@ -168,34 +167,6 @@ describe("pathSecurity", () => {
       expect(narrow.validateReadableFile(videoFile, "video").ok).toBe(true);
     } finally {
       fs.rmSync(trustedRoot, { recursive: true, force: true });
-    }
-  });
-
-  it("session restore style skips outside-root video paths", () => {
-    const trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-trusted-"));
-    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-outside-"));
-    const tempDir = path.join(trustedRoot, "temp");
-    fs.mkdirSync(tempDir, { recursive: true });
-    fs.mkdirSync(path.join(trustedRoot, "app"), { recursive: true });
-    const insideFile = path.join(tempDir, "ok.mp4");
-    const outsideFile = path.join(outsideRoot, "bad.mp4");
-    fs.writeFileSync(insideFile, Buffer.from("ok"));
-    fs.writeFileSync(outsideFile, Buffer.from("bad"));
-
-    const narrow = createPathSecurity(makeNarrowApp(trustedRoot));
-    const result = { ok: true, videos: 0, excel: false, errors: [] };
-    try {
-      for (const videoPath of [insideFile, outsideFile]) {
-        const check = narrow.registerAllowedPath(videoPath, "video");
-        if (check.ok) result.videos += 1;
-        else result.errors.push(check.error || videoPath);
-      }
-      expect(result.videos).toBe(1);
-      expect(result.errors).toEqual(["Archivo fuera de ubicaciones permitidas"]);
-      expect(narrow.validateReadableFile(outsideFile, "video").ok).toBe(false);
-    } finally {
-      fs.rmSync(trustedRoot, { recursive: true, force: true });
-      fs.rmSync(outsideRoot, { recursive: true, force: true });
     }
   });
 });

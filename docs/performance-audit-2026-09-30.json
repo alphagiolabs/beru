@@ -1,0 +1,2125 @@
+{
+  "date": "2026-09-30",
+  "timezone": "America/Lima",
+  "baseHead": "0d5a91043897db3cbea221e07ce83c7e9125f25e",
+  "preexistingStatusEntries": 246,
+  "scope": "Current dirty checkout; production renderer, unpackaged Electron main, isolated profile, auth unconfigured; no product source changes",
+  "hardware": {
+    "cpu": "Intel Core i5-12400",
+    "logicalProcessors": 12,
+    "ramKiB": 8159508,
+    "gpu": "Intel UHD Graphics 730"
+  },
+  "methods": {
+    "startup": "Process spawn to .app-shell plus two visible rAF callbacks; includes instrumentation overhead",
+    "cpu": "CPU seconds / wall seconds / 12 * 100; sampled descendants; brief processes may be missed",
+    "rss": "Sum of resident working sets; shared pages may be double-counted; excludes dedicated VRAM",
+    "fluency": "rAF callbacks, not source-video FPS or INP",
+    "temporaryRoot": "C:/Users/HIDROAA/AppData/Local/Temp/beru-performance-audit-20260930/"
+  },
+  "startup": [
+    {
+      "name": "cold-1",
+      "readyMs": 966.800048828125,
+      "windowMs": 320,
+      "domComplete": 526.7000000029802,
+      "longTasks": [65, 293],
+      "idleCpu": 0.7492535002421916,
+      "rss": 374.921875,
+      "private": 240.23046875
+    },
+    {
+      "name": "cold-2",
+      "readyMs": 881.300048828125,
+      "windowMs": 385,
+      "domComplete": 386.79999999701977,
+      "longTasks": [173],
+      "idleCpu": 0.955419222532069,
+      "rss": 466.13671875,
+      "private": 250.853515625
+    },
+    {
+      "name": "cold-3",
+      "readyMs": 722.39990234375,
+      "windowMs": 354,
+      "domComplete": 315.20000000298023,
+      "longTasks": [114],
+      "idleCpu": 0.8188821626224916,
+      "rss": 477.26953125,
+      "private": 262.27734375
+    },
+    {
+      "name": "warm-1",
+      "readyMs": 959.699951171875,
+      "windowMs": 231,
+      "domComplete": 413.20000000298023,
+      "longTasks": [69, 107],
+      "idleCpu": 0.7103484142507476,
+      "rss": 452.59765625,
+      "private": 237.458984375
+    },
+    {
+      "name": "warm-2",
+      "readyMs": 808.599853515625,
+      "windowMs": 224,
+      "domComplete": 266.20000000298023,
+      "longTasks": [118],
+      "idleCpu": 0.6888261253883101,
+      "rss": 470.4140625,
+      "private": 257.08203125
+    },
+    {
+      "name": "warm-3",
+      "readyMs": 770,
+      "windowMs": 219,
+      "domComplete": 252.59999999403954,
+      "longTasks": [108],
+      "idleCpu": 0.6667577476826897,
+      "rss": 470.0234375,
+      "private": 255.076171875
+    },
+    {
+      "name": "warm-4",
+      "readyMs": 781.39990234375,
+      "windowMs": 234,
+      "domComplete": 252.80000001192093,
+      "longTasks": [95],
+      "idleCpu": 0.7562460333415109,
+      "rss": 472.20703125,
+      "private": 258.0390625
+    },
+    {
+      "name": "warm-5",
+      "readyMs": 799.699951171875,
+      "windowMs": 246,
+      "domComplete": 257.79999999701977,
+      "longTasks": [94],
+      "idleCpu": 0.7533230349444928,
+      "rss": 466.46875,
+      "private": 252.53515625
+    }
+  ],
+  "nativeRepeat": [
+    {
+      "name": "idle",
+      "elapsed": 5004,
+      "cpuMean": 0.8326671995736745,
+      "cpuAppMean": 0.6342257959473319,
+      "rssMedian": 383.720703125,
+      "rssPeak": 391.17578125,
+      "privatePeak": 262.59765625,
+      "workersPeak": 0,
+      "fps": 60.15187849720224,
+      "frameP95": 16.800000000000182,
+      "frameMax": 16.899999999999636,
+      "gaps33": 0,
+      "longCount": 1,
+      "longMax": 50,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 6.456867218017578,
+      "scriptMs": 16.924999999999997,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "import-24-cold-repeat",
+      "elapsed": 4564,
+      "action": {
+        "allThumbnailsMs": 4558.29999999702,
+        "firstVideoMs": 359.20000000298023,
+        "metadataMs": 4558.20000000298
+      },
+      "cpuMean": 44.50591586327783,
+      "cpuAppMean": 7.688691003046483,
+      "rssMedian": 809.970703125,
+      "rssPeak": 1176.76953125,
+      "privatePeak": 1284.44140625,
+      "workersPeak": 8,
+      "fps": 52.36634531113059,
+      "frameP95": 17.100000000000364,
+      "frameMax": 233.39999999999964,
+      "gaps33": 4,
+      "longCount": 1,
+      "longMax": 141,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.710376739501953,
+      "scriptMs": 193.28199999999995,
+      "styleMs": 26.711,
+      "layoutMs": 37.304,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 24
+    },
+    {
+      "name": "loaded-24-idle-repeat",
+      "elapsed": 3002,
+      "cpuMean": 2.255440817232956,
+      "cpuAppMean": 0.7351876366623404,
+      "rssMedian": 355.66796875,
+      "rssPeak": 356.875,
+      "privatePeak": 419.19921875,
+      "workersPeak": 0,
+      "fps": 54.297135243171226,
+      "frameP95": 16.80000000000109,
+      "frameMax": 166.60000000000036,
+      "gaps33": 2,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.513786315917969,
+      "scriptMs": 10.848999999999997,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 24
+    },
+    {
+      "name": "import-120-partly-warm-repeat",
+      "elapsed": 14809,
+      "cpuMean": 48.78965775316812,
+      "cpuAppMean": 3.1839642138424287,
+      "rssMedian": 633.244140625,
+      "rssPeak": 1195.2578125,
+      "privatePeak": 1488.81640625,
+      "workersPeak": 8,
+      "fps": 58.68053210885273,
+      "frameP95": 16.80000000000291,
+      "frameMax": 100.20000000000073,
+      "gaps33": 5,
+      "longCount": 1,
+      "longMax": 57,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.321807861328125,
+      "scriptMs": 260.08000000000004,
+      "styleMs": 17.444000000000003,
+      "layoutMs": 32.205,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 27
+    },
+    {
+      "name": "filmstrip-complete-repeat",
+      "elapsed": 3875,
+      "action": {
+        "completeMs": 3873.9000000059605,
+        "count": 20
+      },
+      "cpuMean": 8.736559139784946,
+      "cpuAppMean": 7.008323965116386,
+      "rssMedian": 365.744140625,
+      "rssPeak": 369.00390625,
+      "privatePeak": 506.6796875,
+      "workersPeak": 0,
+      "fps": 43.87096774193548,
+      "frameP95": 33.39999999999782,
+      "frameMax": 466.59999999999854,
+      "gaps33": 5,
+      "longCount": 2,
+      "longMax": 80,
+      "canvas": {
+        "draw": 20,
+        "drawMs": 12.100000008940697,
+        "encode": 20,
+        "encodeMs": 681.3000000268221
+      },
+      "heapMiB": 8.011222839355469,
+      "scriptMs": 97.67899999999996,
+      "styleMs": 23.663000000000004,
+      "layoutMs": 27.85199999999999,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "filmstrip-idle-repeat",
+      "elapsed": 3012,
+      "cpuMean": 1.0375166002656042,
+      "cpuAppMean": 0.6632229760153137,
+      "rssMedian": 366.52734375,
+      "rssPeak": 368.43359375,
+      "privatePeak": 500.78125,
+      "workersPeak": 0,
+      "fps": 59.7609561752988,
+      "frameP95": 16.80000000000291,
+      "frameMax": 16.900000000001455,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 6.7428436279296875,
+      "scriptMs": 10.414000000000033,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "playback-repeat",
+      "elapsed": 6016,
+      "cpuMean": 2.94353945035461,
+      "cpuAppMean": 2.573426808380465,
+      "rssMedian": 392.01171875,
+      "rssPeak": 399.078125,
+      "privatePeak": 522.95703125,
+      "workersPeak": 0,
+      "fps": 59.50797872340426,
+      "frameP95": 16.80000000000291,
+      "frameMax": 50,
+      "gaps33": 1,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 6.9480743408203125,
+      "scriptMs": 91.16000000000003,
+      "styleMs": 4.2500000000000036,
+      "layoutMs": 23.972000000000023,
+      "video": {
+        "quality": {
+          "dropped": 1,
+          "total": 187
+        },
+        "ready": 4,
+        "time": 5.953885,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "source-frame-first-repeat",
+      "elapsed": 934,
+      "action": {
+        "ms": 933.8000000119209,
+        "ok": true
+      },
+      "cpuMean": 8.503970378301211,
+      "cpuAppMean": 0.8940375638181859,
+      "rssMedian": 412.921875,
+      "rssPeak": 572.3359375,
+      "privatePeak": 699.828125,
+      "workersPeak": 3,
+      "fps": 58.8865096359743,
+      "frameP95": 16.80000000000291,
+      "frameMax": 16.80000000000291,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.106880187988281,
+      "scriptMs": 3.71100000000002,
+      "styleMs": 0.9689999999999976,
+      "layoutMs": 1.3039999999999996,
+      "video": {
+        "quality": {
+          "dropped": 1,
+          "total": 187
+        },
+        "ready": 4,
+        "time": 5.95557,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "source-frame-warm-repeat",
+      "elapsed": 1355,
+      "action": [
+        {
+          "ms": 230.1000000089407,
+          "ok": true
+        },
+        {
+          "ms": 247.59999999403954,
+          "ok": true
+        },
+        {
+          "ms": 307.29999999701977,
+          "ok": true
+        },
+        {
+          "ms": 274.6000000089407,
+          "ok": true
+        },
+        {
+          "ms": 294.8999999910593,
+          "ok": true
+        }
+      ],
+      "cpuMean": 18.64237392373924,
+      "cpuAppMean": 0.9949331389541649,
+      "rssMedian": 465.3125,
+      "rssPeak": 561.33984375,
+      "privatePeak": 688.60546875,
+      "workersPeak": 3,
+      "fps": 59.77859778597786,
+      "frameP95": 16.80000000000291,
+      "frameMax": 17.19999999999709,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.417903900146484,
+      "scriptMs": 6.977000000000011,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": {
+        "quality": {
+          "dropped": 1,
+          "total": 187
+        },
+        "ready": 4,
+        "time": 5.95557,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "clear-idle-repeat",
+      "elapsed": 4007,
+      "cpuMean": 1.5597704017968557,
+      "cpuAppMean": 0.7091773713547831,
+      "rssMedian": 334.859375,
+      "rssPeak": 349.5859375,
+      "privatePeak": 525.875,
+      "workersPeak": 2,
+      "fps": 59.89518342899925,
+      "frameP95": 16.80000000000291,
+      "frameMax": 16.900000000001455,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.811618804931641,
+      "scriptMs": 21.385999999999903,
+      "styleMs": 9.532000000000012,
+      "layoutMs": 0.8360000000000034,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    }
+  ],
+  "focusedTimingsAndRendererMetrics": [
+    {
+      "name": "idle",
+      "elapsed": 5014,
+      "cpuAppMean": 0.7383226076064064,
+      "fps": 60.0319106501795,
+      "frameP95": 16.800000000000182,
+      "frameMax": 16.899999999999636,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 6.449275970458984,
+      "scriptMs": 16.666000000000015,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "probe-24-cold",
+      "elapsed": 479,
+      "action": {
+        "count": 24,
+        "valid": 24
+      },
+      "cpuAppMean": 10.619851072322575,
+      "fps": 41.75365344467641,
+      "frameP95": 16.800000000000182,
+      "frameMax": 16.800000000000182,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.679664611816406,
+      "scriptMs": 1.8589999999999995,
+      "styleMs": 0.8129999999999977,
+      "layoutMs": 0,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "thumbnail-24-cold",
+      "elapsed": 2901,
+      "action": {
+        "count": 24,
+        "valid": 24
+      },
+      "cpuAppMean": 1.4011312481334168,
+      "fps": 53.77456049638056,
+      "frameP95": 16.899999999999636,
+      "frameMax": 166.6999999999989,
+      "gaps33": 3,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.729133605957031,
+      "scriptMs": 16.26500000000003,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "probe-24-warm",
+      "elapsed": 4,
+      "action": {
+        "count": 24
+      },
+      "cpuAppMean": null,
+      "fps": 0,
+      "frameMax": 0,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.744327545166016,
+      "scriptMs": 0,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "thumbnail-24-warm",
+      "elapsed": 6,
+      "action": {
+        "count": 24
+      },
+      "cpuAppMean": 8.985386705918595,
+      "fps": 0,
+      "frameMax": 0,
+      "gaps33": 0,
+      "longCount": 1,
+      "longMax": 75,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.779693603515625,
+      "scriptMs": 0,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "settings-load-first",
+      "elapsed": 87,
+      "action": {
+        "paintMs": 84
+      },
+      "cpuAppMean": 17.981994465763236,
+      "fps": 34.48275862068966,
+      "frameP95": 47.70000000000073,
+      "frameMax": 47.70000000000073,
+      "gaps33": 2,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 9.086971282958984,
+      "scriptMs": 39.03800000000002,
+      "styleMs": 14.253000000000009,
+      "layoutMs": 12.102000000000002,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 24
+    },
+    {
+      "name": "settings-load-warm",
+      "elapsed": 41,
+      "action": {
+        "paintMs": 40.5
+      },
+      "cpuAppMean": 7.0791144258270275,
+      "fps": 73.17073170731707,
+      "frameP95": 16.700000000000728,
+      "frameMax": 16.700000000000728,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 11.27413558959961,
+      "scriptMs": 17.54899999999998,
+      "styleMs": 6.219000000000002,
+      "layoutMs": 3.893000000000008,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 24
+    },
+    {
+      "name": "filmstrip-complete",
+      "elapsed": 2920,
+      "action": {
+        "completeMs": 2919.7999999970198,
+        "count": 20
+      },
+      "cpuAppMean": 5.795471030702965,
+      "fps": 54.109589041095894,
+      "frameP95": 17,
+      "frameMax": 116.60000000000036,
+      "gaps33": 4,
+      "longCount": 1,
+      "longMax": 56,
+      "canvas": {
+        "draw": 20,
+        "drawMs": 6.899999961256981,
+        "encode": 20,
+        "encodeMs": 598.600000038743
+      },
+      "heapMiB": 7.615242004394531,
+      "scriptMs": 63.95599999999996,
+      "styleMs": 10.947,
+      "layoutMs": 10.760000000000005,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "filmstrip-switch-complete",
+      "elapsed": 2812,
+      "action": {
+        "completeMs": 2810.7999999970198,
+        "count": 20
+      },
+      "cpuAppMean": 5.109380191391033,
+      "fps": 57.25462304409673,
+      "frameP95": 16.900000000001455,
+      "frameMax": 66.60000000000036,
+      "gaps33": 1,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 20,
+        "drawMs": 5.799999997019768,
+        "encode": 20,
+        "encodeMs": 606.7999999970198
+      },
+      "heapMiB": 9.962818145751953,
+      "scriptMs": 68.40000000000002,
+      "styleMs": 1.1629999999999974,
+      "layoutMs": 3.160999999999997,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "filmstrip-cached",
+      "elapsed": 1004,
+      "cpuAppMean": 1.3338059927052082,
+      "fps": 59.7609561752988,
+      "frameP95": 16.80000000000291,
+      "frameMax": 17,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 11.096298217773438,
+      "scriptMs": 6.8190000000000195,
+      "styleMs": 0.15400000000000136,
+      "layoutMs": 0.4740000000000022,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "blur-paused",
+      "elapsed": 4013,
+      "cpuAppMean": 0.8854125211299575,
+      "fps": 59.55644156491403,
+      "frameP95": 16.80000000000291,
+      "frameMax": 17,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 2,
+        "drawMs": 2.300000011920929,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 13.058448791503906,
+      "scriptMs": 16.6369999999999,
+      "styleMs": 6.253999999999996,
+      "layoutMs": 1.3239999999999919,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 4
+        },
+        "ready": 4,
+        "time": 0,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "blur-playback",
+      "elapsed": 6014,
+      "cpuAppMean": 3.714828370328537,
+      "fps": 59.69404722314599,
+      "frameP95": 16.799999999999272,
+      "frameMax": 33.29999999999927,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 172,
+        "drawMs": 69.99999997019768,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.101493835449219,
+      "scriptMs": 206.70199999999994,
+      "styleMs": 7.959999999999995,
+      "layoutMs": 19.24500000000001,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 184
+        },
+        "ready": 4,
+        "time": 6.012793,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "blur-ffmpeg-first",
+      "elapsed": 361,
+      "action": {
+        "ms": 357,
+        "ok": true
+      },
+      "cpuAppMean": 2.4463161545991556,
+      "fps": 58.171745152354575,
+      "frameP95": 17.099999999998545,
+      "frameMax": 17.599999999998545,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 2,
+        "drawMs": 0.4000000059604645,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.427524566650391,
+      "scriptMs": 3.4480000000000066,
+      "styleMs": 0.34000000000000696,
+      "layoutMs": 0.8350000000000024,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 184
+        },
+        "ready": 4,
+        "time": 6.013955,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "blur-ffmpeg-warm",
+      "elapsed": 3301,
+      "action": [
+        {
+          "ms": 610.5,
+          "ok": true
+        },
+        {
+          "ms": 1868.5,
+          "ok": true
+        },
+        {
+          "ms": 820.5999999940395,
+          "ok": true
+        }
+      ],
+      "cpuAppMean": 3.307171349489913,
+      "fps": 59.98182368979097,
+      "frameP95": 16.80000000000291,
+      "frameMax": 17.099999999998545,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.396705627441406,
+      "scriptMs": 28.624000000000095,
+      "styleMs": 48.42199999999999,
+      "layoutMs": 3.3009999999999984,
+      "video": {
+        "quality": {
+          "dropped": 0,
+          "total": 184
+        },
+        "ready": 4,
+        "time": 6.013955,
+        "width": 1920
+      },
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "clear-before-gc",
+      "elapsed": 3015,
+      "cpuAppMean": 0.9839808676325337,
+      "fps": 60.03316749585406,
+      "frameP95": 16.89999999999418,
+      "frameMax": 17.099999999998545,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 7.566535949707031,
+      "scriptMs": 16.047000000000033,
+      "styleMs": 8.233999999999991,
+      "layoutMs": 0,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    },
+    {
+      "name": "clear-after-gc",
+      "elapsed": 3007,
+      "cpuAppMean": 0.800293348687836,
+      "fps": 59.52776854007316,
+      "frameP95": 16.80000000000291,
+      "frameMax": 17.10000000000582,
+      "gaps33": 0,
+      "longCount": 0,
+      "longMax": 0,
+      "canvas": {
+        "draw": 0,
+        "drawMs": 0,
+        "encode": 0,
+        "encodeMs": 0
+      },
+      "heapMiB": 6.563549041748047,
+      "scriptMs": 12.367000000000017,
+      "styleMs": 0,
+      "layoutMs": 0,
+      "video": null,
+      "visible": "visible",
+      "rows": 0
+    }
+  ],
+  "focusedVisibility": [],
+  "exportFast": {
+    "name": "export-fast-two-1080p",
+    "elapsed": 4249,
+    "action": {
+      "events": 6,
+      "ms": 4245,
+      "result": {
+        "ok": true
+      },
+      "statuses": ["done", "done"],
+      "summary": {
+        "cancelled": 0,
+        "failed": 0,
+        "runId": "1790787224996-da8752b561a294e6b39473735eff17ff",
+        "succeeded": 2,
+        "total": 2,
+        "type": "summary",
+        "workers": 2
+      }
+    },
+    "cpuMean": 30.55253196830627,
+    "cpuAppMean": 9.462785058204513,
+    "rssMedian": 781.68359375,
+    "rssPeak": 1039.62109375,
+    "privatePeak": 1285.60546875,
+    "workersPeak": 6,
+    "fps": 56.013179571663926,
+    "frameP95": 16.900000000001455,
+    "frameMax": 183.39999999999782,
+    "gaps33": 1,
+    "longCount": 0,
+    "longMax": 0,
+    "canvas": {
+      "draw": 135,
+      "drawMs": 110.90000002086163,
+      "encode": 20,
+      "encodeMs": 842.1999999731779
+    },
+    "heapMiB": 9.248119354248047,
+    "scriptMs": 417.63700000000006,
+    "styleMs": 132.85500000000002,
+    "layoutMs": 55.391999999999996,
+    "video": {
+      "quality": {
+        "dropped": 4,
+        "total": 207
+      },
+      "ready": 1,
+      "time": 4,
+      "width": 1920
+    },
+    "visible": "visible",
+    "rows": 2
+  },
+  "exportBalancedVisible": {
+    "name": "export-balanced-two-1080p",
+    "elapsed": 11014,
+    "action": {
+      "events": 7,
+      "ms": 11000.39999999106,
+      "result": {
+        "ok": true
+      },
+      "statuses": ["done", "done"],
+      "summary": {
+        "cancelled": 0,
+        "failed": 0,
+        "runId": "1790787372742-8762131ba18967082de20d68ba1acc12",
+        "succeeded": 2,
+        "total": 2,
+        "type": "summary",
+        "workers": 2
+      }
+    },
+    "cpuMean": 22.260967102475636,
+    "cpuAppMean": 8.177437127962097,
+    "rssMedian": 388.6328125,
+    "rssPeak": 812.16015625,
+    "privatePeak": 1312.22265625,
+    "workersPeak": 8,
+    "fps": 55.47485019066643,
+    "frameP95": 17.299999999999272,
+    "frameMax": 100,
+    "gaps33": 16,
+    "longCount": 5,
+    "longMax": 82,
+    "canvas": {
+      "draw": 134,
+      "drawMs": 163.89999996125698,
+      "encode": 20,
+      "encodeMs": 1145.900000065565
+    },
+    "heapMiB": 7.788658142089844,
+    "scriptMs": 810.268,
+    "styleMs": 411.79900000000004,
+    "layoutMs": 79.231,
+    "video": {
+      "quality": {
+        "dropped": 3,
+        "total": 256
+      },
+      "ready": 4,
+      "time": 4,
+      "width": 1920
+    },
+    "visible": "visible",
+    "rows": 2
+  },
+  "exportVisibility": [],
+  "profiles": [
+    {
+      "name": "focused-filmstrip",
+      "top": [
+        {
+          "function": "(idle)",
+          "file": "",
+          "original": null,
+          "ms": 2070.753
+        },
+        {
+          "function": "toDataURL",
+          "file": "",
+          "original": null,
+          "ms": 596.327
+        },
+        {
+          "function": "(program)",
+          "file": "",
+          "original": null,
+          "ms": 198.91
+        },
+        {
+          "function": "K",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/src/components/video-preview/LogoTimeline.jsx",
+            "line": 101,
+            "column": 20,
+            "name": null
+          },
+          "ms": 14.667
+        },
+        {
+          "function": "setAttribute",
+          "file": "",
+          "original": null,
+          "ms": 6.414
+        },
+        {
+          "function": "",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/src/components/video-preview/useFilmstripFrames.js",
+            "line": 46,
+            "column": 5,
+            "name": null
+          },
+          "ms": 6.243
+        },
+        {
+          "function": "(garbage collector)",
+          "file": "",
+          "original": null,
+          "ms": 5.727
+        },
+        {
+          "function": "drawImage",
+          "file": "",
+          "original": null,
+          "ms": 4.534
+        },
+        {
+          "function": "cT",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/src/components/video-preview/LogoTimeline.jsx",
+            "line": 64,
+            "column": 24,
+            "name": "LogoTimeline"
+          },
+          "ms": 3.112
+        },
+        {
+          "function": "In",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 11120,
+            "column": 9,
+            "name": "renderRootSync"
+          },
+          "ms": 1.831
+        },
+        {
+          "function": "gn",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 5081,
+            "column": 9,
+            "name": "updateEffectImpl"
+          },
+          "ms": 1.798
+        },
+        {
+          "function": "",
+          "file": "icons-Dda9KGaQ.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/lucide-react/dist/esm/Icon.js",
+            "line": 13,
+            "column": 2,
+            "name": null
+          },
+          "ms": 1.709
+        },
+        {
+          "function": "Dc",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 4333,
+            "column": 9,
+            "name": "renderWithHooks"
+          },
+          "ms": 1.7
+        },
+        {
+          "function": "ap",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 8842,
+            "column": 9,
+            "name": "commitBeforeMutationEffects"
+          },
+          "ms": 1.665
+        },
+        {
+          "function": "createElementNS",
+          "file": "",
+          "original": null,
+          "ms": 1.661
+        },
+        {
+          "function": "Dc",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 4333,
+            "column": 9,
+            "name": "renderWithHooks"
+          },
+          "ms": 1.63
+        },
+        {
+          "function": "P",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 4455,
+            "column": 9,
+            "name": "updateWorkInProgressHook"
+          },
+          "ms": 1.623
+        },
+        {
+          "function": "",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/src/i18n/useT.js",
+            "line": 12,
+            "column": 21,
+            "name": null
+          },
+          "ms": 1.621
+        },
+        {
+          "function": "vi",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 1103,
+            "column": 9,
+            "name": "updateInput"
+          },
+          "ms": 1.616
+        },
+        {
+          "function": "requestAnimationFrame",
+          "file": "",
+          "original": null,
+          "ms": 1.605
+        },
+        {
+          "function": "",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/src/components/video-preview/LogoTimeline.jsx",
+            "line": 94,
+            "column": 36,
+            "name": "s"
+          },
+          "ms": 1.589
+        },
+        {
+          "function": "",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/src/components/video-preview/LogoTimeline.jsx",
+            "line": 138,
+            "column": 24,
+            "name": null
+          },
+          "ms": 1.589
+        },
+        {
+          "function": "ge",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 9384,
+            "column": 9,
+            "name": "recursivelyTraverseMutationEffects"
+          },
+          "ms": 1.583
+        },
+        {
+          "function": "setAttribute",
+          "file": "",
+          "original": null,
+          "ms": 1.578
+        },
+        {
+          "function": "Ur",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 10109,
+            "column": 9,
+            "name": "commitPassiveMountOnFiber"
+          },
+          "ms": 1.574
+        }
+      ]
+    },
+    {
+      "name": "scenarios-scroll",
+      "top": [
+        {
+          "function": "(idle)",
+          "file": "",
+          "original": null,
+          "ms": 1918.516
+        },
+        {
+          "function": "(program)",
+          "file": "",
+          "original": null,
+          "ms": 543.01
+        },
+        {
+          "function": "(garbage collector)",
+          "file": "",
+          "original": null,
+          "ms": 11.339
+        },
+        {
+          "function": "setAttribute",
+          "file": "",
+          "original": null,
+          "ms": 8.046
+        },
+        {
+          "function": "Sr",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 8704,
+            "column": 9,
+            "name": "commitHostMount"
+          },
+          "ms": 7.643
+        },
+        {
+          "function": "setAttribute",
+          "file": "",
+          "original": null,
+          "ms": 6.675
+        },
+        {
+          "function": "removeChild",
+          "file": "",
+          "original": null,
+          "ms": 6.356
+        },
+        {
+          "function": "requestAnimationFrame",
+          "file": "",
+          "original": null,
+          "ms": 5.785
+        },
+        {
+          "function": "oo",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 1273,
+            "column": 9,
+            "name": "setValueForStyle"
+          },
+          "ms": 5.376
+        },
+        {
+          "function": "setAttribute",
+          "file": "",
+          "original": null,
+          "ms": 5.298
+        },
+        {
+          "function": "createElementNS",
+          "file": "",
+          "original": null,
+          "ms": 5.007
+        },
+        {
+          "function": "frame",
+          "file": "",
+          "original": null,
+          "ms": 4.74
+        },
+        {
+          "function": "oo",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 1273,
+            "column": 9,
+            "name": "setValueForStyle"
+          },
+          "ms": 3.062
+        },
+        {
+          "function": "Lo",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 6160,
+            "column": 9,
+            "name": "updateMemoComponent"
+          },
+          "ms": 2.945
+        },
+        {
+          "function": "Pm",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 7955,
+            "column": 9,
+            "name": "completeWork"
+          },
+          "ms": 2.725
+        },
+        {
+          "function": "Ml",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 1517,
+            "column": 9,
+            "name": "getListener"
+          },
+          "ms": 2.469
+        },
+        {
+          "function": "",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 12455,
+            "column": 19,
+            "name": null
+          },
+          "ms": 2.452
+        },
+        {
+          "function": "oo",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 1273,
+            "column": 9,
+            "name": "setValueForStyle"
+          },
+          "ms": 2.306
+        },
+        {
+          "function": "wR",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/@tanstack/virtual-core/dist/esm/index.js",
+            "line": 1193,
+            "column": 9,
+            "name": "findNearestBinarySearchFlat"
+          },
+          "ms": 2.232
+        },
+        {
+          "function": "",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/@tanstack/virtual-core/dist/esm/index.js",
+            "line": 118,
+            "column": 76,
+            "name": "el"
+          },
+          "ms": 1.894
+        },
+        {
+          "function": "ym",
+          "file": "main-CdgtKPRh.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/src/components/QueueSidebar.jsx",
+            "line": 264,
+            "column": 24,
+            "name": "QueueSidebar"
+          },
+          "ms": 1.845
+        },
+        {
+          "function": "Vd",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 704,
+            "column": 9,
+            "name": "markRootFinished"
+          },
+          "ms": 1.82
+        },
+        {
+          "function": "createElement",
+          "file": "",
+          "original": null,
+          "ms": 1.776
+        },
+        {
+          "function": "pc",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 2197,
+            "column": 9,
+            "name": "hasSelectionCapabilities"
+          },
+          "ms": 1.767
+        },
+        {
+          "function": "l",
+          "file": "index-DVqrOj4Z.js",
+          "original": {
+            "source": "../../../../../../Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+            "line": 3319,
+            "column": 11,
+            "name": "mapRemainingChildren"
+          },
+          "ms": 1.76
+        }
+      ]
+    }
+  ],
+  "bundles": [
+    {
+      "file": "assets/index-n24F09I8.css",
+      "bytes": 192011,
+      "gzip": 28445,
+      "modules": []
+    },
+    {
+      "file": "assets/icons-Dda9KGaQ.js",
+      "bytes": 47919,
+      "gzip": 10702,
+      "imports": [],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/react/cjs/react.production.js",
+          "bytes": 17597
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/settings.js",
+          "bytes": 917
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/Icon.js",
+          "bytes": 899
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/square-dashed-mouse-pointer.js",
+          "bytes": 890
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/palette.js",
+          "bytes": 853
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/sparkles.js",
+          "bytes": 723
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/sun.js",
+          "bytes": 694
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/scan-eye.js",
+          "bytes": 687
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/eye-off.js",
+          "bytes": 661
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/film.js",
+          "bytes": 625
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/hand.js",
+          "bytes": 608
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/lucide-react/dist/esm/icons/align-center-vertical.js",
+          "bytes": 606
+        }
+      ]
+    },
+    {
+      "file": "assets/xlsx-D_0l8YDs.js",
+      "bytes": 429529,
+      "gzip": 143110,
+      "imports": [],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/xlsx/xlsx.mjs",
+          "bytes": 889015
+        }
+      ]
+    },
+    {
+      "file": "assets/vendor-DCNNbBh0.js",
+      "bytes": 6586,
+      "gzip": 2507,
+      "imports": ["assets/icons-Dda9KGaQ.js"],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/react-dom/cjs/react-dom.production.js",
+          "bytes": 6807
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js",
+          "bytes": 2663
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js",
+          "bytes": 2011
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/zustand/esm/vanilla.mjs",
+          "bytes": 1396
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/react-dom/index.js",
+          "bytes": 377
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/use-sync-external-store/shim/with-selector.js",
+          "bytes": 197
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/use-sync-external-store/shim/index.js",
+          "bytes": 94
+        },
+        {
+          "id": "\u0000C:/Users/HIDROAA/Desktop/beru/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim.production.js?commonjs-exports",
+          "bytes": 45
+        },
+        {
+          "id": "\u0000C:/Users/HIDROAA/Desktop/beru/node_modules/use-sync-external-store/shim/with-selector.js?commonjs-module",
+          "bytes": 33
+        },
+        {
+          "id": "\u0000C:/Users/HIDROAA/Desktop/beru/node_modules/use-sync-external-store/cjs/use-sync-external-store-shim/with-selector.production.js?commonjs-exports",
+          "bytes": 33
+        },
+        {
+          "id": "\u0000C:/Users/HIDROAA/Desktop/beru/node_modules/react-dom/index.js?commonjs-module",
+          "bytes": 29
+        },
+        {
+          "id": "\u0000C:/Users/HIDROAA/Desktop/beru/node_modules/react-dom/cjs/react-dom.production.js?commonjs-exports",
+          "bytes": 29
+        }
+      ]
+    },
+    {
+      "file": "assets/main-CdgtKPRh.js",
+      "bytes": 698127,
+      "gzip": 196584,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/vendor-DCNNbBh0.js"
+      ],
+      "dynamicImports": [
+        "assets/xlsx-D_0l8YDs.js",
+        "assets/xlsx-D_0l8YDs.js",
+        "assets/ShortcutsModal-rmJowo00.js",
+        "assets/TableEditor-TkTVx99f.js",
+        "assets/ExcelMappingModal-jrxoogrp.js",
+        "assets/WatermarkModal-CFF5YIvN.js",
+        "assets/DesktopPet-BtXOa3xQ.js",
+        "assets/PetPaletteModal-DVMqNRna.js",
+        "assets/SettingsModal-B6uyRfr2.js"
+      ],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@supabase/auth-js/dist/module/GoTrueClient.js",
+          "bytes": 253168
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@supabase/postgrest-js/dist/index.mjs",
+          "bytes": 134981
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/tailwind-merge/dist/bundle-mjs.mjs",
+          "bytes": 102185
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@supabase/storage-js/dist/index.mjs",
+          "bytes": 101673
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/VideoPreview.jsx",
+          "bytes": 74509
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@supabase/phoenix/priv/static/phoenix.mjs",
+          "bytes": 54184
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@radix-ui/react-select/dist/index.mjs",
+          "bytes": 51100
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@tanstack/virtual-core/dist/esm/index.js",
+          "bytes": 42824
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@supabase/auth-js/dist/module/GoTrueAdminApi.js",
+          "bytes": 36217
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/PropertiesPanel.jsx",
+          "bytes": 35801
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@supabase/supabase-js/dist/index.mjs",
+          "bytes": 34626
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/@radix-ui/react-menu/dist/index.mjs",
+          "bytes": 33544
+        }
+      ]
+    },
+    {
+      "file": "assets/petOverlay-D7KrXWo8.js",
+      "bytes": 1979,
+      "gzip": 1013,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/pet-activity-BY5h0v1N.js",
+        "assets/vendor-DCNNbBh0.js",
+        "assets/pet-states-DfEgFYyS.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/PetOverlayApp.jsx",
+          "bytes": 3035
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/pet-overlay-main.jsx",
+          "bytes": 193
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/pet-overlay.html?html-proxy&inline-css&index=0.css",
+          "bytes": 0
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/pet-overlay.html",
+          "bytes": 0
+        }
+      ]
+    },
+    {
+      "file": "assets/index-DVqrOj4Z.js",
+      "bytes": 234306,
+      "gzip": 70981,
+      "imports": ["assets/icons-Dda9KGaQ.js", "assets/vendor-DCNNbBh0.js"],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js",
+          "bytes": 536626
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/i18n/messages/es.json",
+          "bytes": 28829
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/i18n/messages/en.json",
+          "bytes": 26893
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/scheduler/cjs/scheduler.production.js",
+          "bytes": 10588
+        },
+        {
+          "id": "\u0000vite/modulepreload-polyfill.js",
+          "bytes": 1280
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/react/cjs/react-jsx-runtime.production.js",
+          "bytes": 1025
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/utils/format-message.js",
+          "bytes": 488
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/react-dom/client.js",
+          "bytes": 447
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/react/jsx-runtime.js",
+          "bytes": 99
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/node_modules/scheduler/index.js",
+          "bytes": 90
+        },
+        {
+          "id": "\u0000C:/Users/HIDROAA/Desktop/beru/node_modules/react/cjs/react-jsx-runtime.production.js?commonjs-exports",
+          "bytes": 36
+        },
+        {
+          "id": "\u0000C:/Users/HIDROAA/Desktop/beru/node_modules/react-dom/cjs/react-dom-client.production.js?commonjs-exports",
+          "bytes": 35
+        }
+      ]
+    },
+    {
+      "file": "assets/SettingsModal-B6uyRfr2.js",
+      "bytes": 28948,
+      "gzip": 7247,
+      "imports": [
+        "assets/main-CdgtKPRh.js",
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/vendor-DCNNbBh0.js"
+      ],
+      "dynamicImports": ["assets/PetdexPanel-luEtw8lP.js"],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/settings/AppearancePanel.jsx",
+          "bytes": 27897
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/settings/UserManagementPanel.jsx",
+          "bytes": 11961
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/settings/ThemeEditor.jsx",
+          "bytes": 10108
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/SettingsModal.jsx",
+          "bytes": 6442
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/settings/ThemePreviewCard.jsx",
+          "bytes": 2347
+        }
+      ]
+    },
+    {
+      "file": "assets/ShortcutsModal-rmJowo00.js",
+      "bytes": 3141,
+      "gzip": 1199,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/main-CdgtKPRh.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/vendor-DCNNbBh0.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/ShortcutsModal.jsx",
+          "bytes": 4828
+        }
+      ]
+    },
+    {
+      "file": "assets/TableEditor-TkTVx99f.js",
+      "bytes": 25048,
+      "gzip": 7093,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/main-CdgtKPRh.js",
+        "assets/vendor-DCNNbBh0.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/table-editor/TableEditorFocusPanel.jsx",
+          "bytes": 25716
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/TableEditor.jsx",
+          "bytes": 13052
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/table-editor/TableEditorGrid.jsx",
+          "bytes": 9875
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/table-editor/TableEditorPreview.jsx",
+          "bytes": 4943
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/table-editor/useOverlayScroll.js",
+          "bytes": 982
+        }
+      ]
+    },
+    {
+      "file": "assets/ExcelMappingModal-jrxoogrp.js",
+      "bytes": 7683,
+      "gzip": 2476,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/main-CdgtKPRh.js",
+        "assets/vendor-DCNNbBh0.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/ExcelMappingModal.jsx",
+          "bytes": 17278
+        }
+      ]
+    },
+    {
+      "file": "assets/WatermarkModal-CFF5YIvN.js",
+      "bytes": 6861,
+      "gzip": 1960,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/main-CdgtKPRh.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/vendor-DCNNbBh0.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/components/WatermarkModal.jsx",
+          "bytes": 13869
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/utils/watermark-position.js",
+          "bytes": 259
+        }
+      ]
+    },
+    {
+      "file": "assets/DesktopPet-BtXOa3xQ.js",
+      "bytes": 4472,
+      "gzip": 1957,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/main-CdgtKPRh.js",
+        "assets/pet-activity-BY5h0v1N.js",
+        "assets/vendor-DCNNbBh0.js",
+        "assets/pet-states-DfEgFYyS.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetSurface.jsx",
+          "bytes": 5046
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/DesktopPet.jsx",
+          "bytes": 2325
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/hooks/usePetState.js",
+          "bytes": 1697
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/hooks/usePetOverlaySync.js",
+          "bytes": 1267
+        }
+      ]
+    },
+    {
+      "file": "assets/pet-activity-BY5h0v1N.js",
+      "bytes": 1480,
+      "gzip": 740,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/pet-states-DfEgFYyS.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/utils/pet-activity.js",
+          "bytes": 1824
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetSprite.jsx",
+          "bytes": 920
+        }
+      ]
+    },
+    {
+      "file": "assets/PetPaletteModal-DVMqNRna.js",
+      "bytes": 4050,
+      "gzip": 1655,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/main-CdgtKPRh.js",
+        "assets/PetPreviewSprite-BNdczouE.js",
+        "assets/vendor-DCNNbBh0.js",
+        "assets/pet-states-DfEgFYyS.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetPaletteModal.jsx",
+          "bytes": 8204
+        }
+      ]
+    },
+    {
+      "file": "assets/PetdexPanel-luEtw8lP.js",
+      "bytes": 7717,
+      "gzip": 2337,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/main-CdgtKPRh.js",
+        "assets/PetPreviewSprite-BNdczouE.js",
+        "assets/pet-states-DfEgFYyS.js",
+        "assets/vendor-DCNNbBh0.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/settings/PetdexPanel.jsx",
+          "bytes": 15302
+        }
+      ]
+    },
+    {
+      "file": "assets/PetPreviewSprite-BNdczouE.js",
+      "bytes": 1731,
+      "gzip": 895,
+      "imports": [
+        "assets/index-DVqrOj4Z.js",
+        "assets/icons-Dda9KGaQ.js",
+        "assets/main-CdgtKPRh.js",
+        "assets/pet-states-DfEgFYyS.js"
+      ],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/PetPreviewSprite.jsx",
+          "bytes": 1940
+        },
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/components/StaticPetSprite.jsx",
+          "bytes": 760
+        }
+      ]
+    },
+    {
+      "file": "assets/pet-states-DfEgFYyS.js",
+      "bytes": 717,
+      "gzip": 347,
+      "imports": [],
+      "dynamicImports": [],
+      "modules": [
+        {
+          "id": "C:/Users/HIDROAA/Desktop/beru/src/features/pets/utils/pet-states.js",
+          "bytes": 1236
+        }
+      ]
+    }
+  ],
+  "discarded": [
+    "Earlier CIM child CPU/memory: missed short processes and long sampling gaps",
+    "Partially hidden balanced export FPS",
+    "Eight-source switching FPS without visibility record"
+  ],
+  "checks": {
+    "exports": "Six outputs verified by ffprobe: h264, 1920x1080,30fps,4 seconds; all 3 batches 2/2 succeeded",
+    "productCodeChanged": false,
+    "subagentsUsed": false
+  }
+}

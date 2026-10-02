@@ -1,6 +1,7 @@
 import contract from "../resources/encode-profiles.json" with { type: "json" };
+import { DEFAULT_ENCODE_PROFILE } from "../shared/job-manifest.js";
 
-const DEFAULT_PROFILE = "balanced";
+const DEFAULT_PROFILE = DEFAULT_ENCODE_PROFILE;
 const VALID_PROFILES = new Set(["fast", "balanced", "quality", "uquality"]);
 
 function normalizeProfiles(raw) {

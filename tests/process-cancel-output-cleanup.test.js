@@ -1,14 +1,13 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { removeIncompleteOutput } from "../main/utils/process-output.js";
 
-const processSrc = fs.readFileSync(
-  path.join(process.cwd(), "main", "handlers", "process.js"),
-  "utf-8",
-);
-const runSrc = fs.readFileSync(path.join(process.cwd(), "main", "processing-run.js"), "utf-8");
+vi.mock("electron", () => ({ app: { isPackaged: false } }));
+
+const { createCancelArtifacts, sweepOrphanedArtifacts } =
+  await import("../main/utils/cancel-artifacts.js");
 
 describe("removeIncompleteOutput", () => {
   let tmpDir;
@@ -61,39 +60,79 @@ describe("removeIncompleteOutput", () => {
   });
 });
 
-describe("cancel incomplete-output cleanup wiring (source)", () => {
-  it("caps cancel kill grace at <=1500ms and waits before killProcessTree", () => {
-    expect(processSrc).toMatch(/CANCEL_KILL_GRACE_MS\s*=\s*1500\b/);
-    const cancelFn = processSrc.slice(
-      processSrc.indexOf("export async function cancelActiveProcessing"),
-      processSrc.indexOf("export function registerProcessHandlers"),
-    );
-    const graceIdx = cancelFn.indexOf("waitForProcessClose(proc, CANCEL_KILL_GRACE_MS)");
-    const killIdx = cancelFn.indexOf("killProcessTree(proc)");
-    expect(graceIdx).toBeGreaterThan(-1);
-    expect(killIdx).toBeGreaterThan(graceIdx);
+describe("cancel artifacts (interface)", () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "beru-artifacts-"));
   });
 
-  it("snapshots job outputs at spawn and tracks type:complete only", () => {
-    expect(processSrc).toMatch(/snapshotRunOutputsForCancel\(/);
-    const spawnIdx = processSrc.indexOf("spawn(spawnSpec.command");
-    expect(spawnIdx).toBeGreaterThan(-1);
-    const afterSpawn = processSrc.slice(spawnIdx, spawnIdx + 800);
-    expect(afterSpawn).toMatch(/snapshotRunOutputsForCancel\(/);
-
-    expect(processSrc).toMatch(/markJobOutputComplete/);
-    expect(processSrc).toMatch(/msg\.type === "complete"/);
-    const cancelFn = processSrc.slice(
-      processSrc.indexOf("export async function cancelActiveProcessing"),
-      processSrc.indexOf("export function registerProcessHandlers"),
-    );
-    expect(cancelFn).not.toMatch(/type\s*===\s*["']cancelled["']/);
-    expect(cancelFn).toMatch(/cleanupIncompleteOutputsAfterCancel/);
+  afterEach(() => {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
+    tmpDir = null;
   });
 
-  it("cleanup uses removeIncompleteOutput and completedIndices keep-set", () => {
-    expect(runSrc).toMatch(/removeIncompleteOutput/);
-    expect(runSrc).toMatch(/completedIndices/);
-    expect(processSrc).toMatch(/cleanupIncompleteOutputsAfterCancel/);
+  it("creates a manifest path inside a private beru-jobs dir under temp", async () => {
+    const artifacts = await createCancelArtifacts(tmpDir);
+    const dir = path.dirname(artifacts.manifestPath);
+
+    expect(path.basename(dir)).toMatch(/^beru-jobs-/);
+    expect(path.dirname(dir)).toBe(tmpDir);
+    expect(path.basename(artifacts.manifestPath)).toBe("manifest.json");
+    expect(artifacts.isCancelled()).toBe(false);
+
+    artifacts.dispose();
+  });
+
+  it("markCancelled writes the <stem>.cancel sentinel the processor polls", async () => {
+    const artifacts = await createCancelArtifacts(tmpDir);
+    const sentinel = path.join(path.dirname(artifacts.manifestPath), "manifest.cancel");
+
+    fs.writeFileSync(artifacts.manifestPath, "{}");
+    artifacts.markCancelled();
+
+    expect(artifacts.isCancelled()).toBe(true);
+    expect(fs.existsSync(sentinel)).toBe(true);
+    expect(fs.readFileSync(sentinel, "utf-8")).toBe("1");
+
+    artifacts.dispose();
+  });
+
+  it("dispose removes manifest, sentinel and the private dir, idempotently", async () => {
+    const artifacts = await createCancelArtifacts(tmpDir);
+    const dir = path.dirname(artifacts.manifestPath);
+    fs.writeFileSync(artifacts.manifestPath, "{}");
+    artifacts.markCancelled();
+
+    artifacts.dispose();
+    artifacts.dispose();
+
+    expect(fs.existsSync(dir)).toBe(false);
+  });
+
+  it("dispose tolerates a run cancelled before the manifest was written", async () => {
+    const artifacts = await createCancelArtifacts(tmpDir);
+    expect(artifacts.isCancelled()).toBe(false);
+    artifacts.markCancelled();
+    artifacts.dispose();
+    expect(fs.existsSync(path.dirname(artifacts.manifestPath))).toBe(false);
+  });
+
+  it("sweepOrphanedArtifacts drops beru-jobs leftovers and nothing else", async () => {
+    const orphanDir = fs.mkdtempSync(path.join(tmpDir, "beru-jobs-"));
+    fs.writeFileSync(path.join(orphanDir, "manifest.json"), "{}");
+    fs.writeFileSync(path.join(orphanDir, "manifest.cancel"), "1");
+    fs.writeFileSync(path.join(tmpDir, "beru-jobs-flat.json"), "{}");
+    fs.writeFileSync(path.join(tmpDir, "beru-jobs-flat.cancel"), "1");
+    fs.writeFileSync(path.join(tmpDir, "keep.json"), "{}");
+    fs.writeFileSync(path.join(tmpDir, "keep.cancel"), "1");
+    fs.mkdirSync(path.join(tmpDir, "other-dir"));
+
+    sweepOrphanedArtifacts(tmpDir);
+
+    const remaining = fs.readdirSync(tmpDir).sort();
+    expect(remaining).toEqual(["keep.cancel", "keep.json", "other-dir"]);
   });
 });

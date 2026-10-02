@@ -1,3 +1,4 @@
+import { requireWindows } from "../shared/platform.js";
 import { spawn } from "child_process";
 import http from "http";
 import net from "net";
@@ -6,10 +7,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { shouldRestartElectronForPythonChange } from "./dev-python-watch.mjs";
 
+requireWindows();
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const preferredPort = Number(process.env.BERU_DEV_PORT || 5173);
 const maxPort = preferredPort + 50;
-const isWindows = process.platform === "win32";
 
 function isPortFree(port) {
   return new Promise((resolve) => {
@@ -76,14 +78,10 @@ function waitForHttp(url, timeoutMs = 30000) {
 
 function killTree(child) {
   if (!child?.pid || child.killed) return;
-  if (isWindows) {
-    spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-      stdio: "ignore",
-      windowsHide: true,
-    });
-  } else {
-    child.kill("SIGTERM");
-  }
+  spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
 }
 
 const port = await pickPort();

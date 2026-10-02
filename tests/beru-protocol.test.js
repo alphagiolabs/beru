@@ -1,13 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { writeFileSync, unlinkSync } from "fs";
+import { writeFileSync, unlinkSync, readFileSync } from "fs";
 import path from "path";
 import os from "os";
 import {
   createBeruVideoResponse,
   filePathFromBeruUrl,
+  hasKnownBeruType,
   validateBeruRequestPath,
   invalidateBeruStatCache,
 } from "../main/utils/beru-protocol.js";
+
+const mainSrc = readFileSync(path.join(process.cwd(), "main", "main.js"), "utf8");
 
 describe("beru protocol path parsing", () => {
   it("parses encoded Windows absolute paths", () => {
@@ -132,5 +135,72 @@ describe("beru protocol path parsing", () => {
     } finally {
       if (prev !== undefined) process.env.BERU_PROTOCOL_STAT_CACHE = prev;
     }
+  });
+});
+
+describe("beru protocol fails closed on unknown content types", () => {
+  it.each([".xlsx", ".json", ".csv", ".txt", ".exe", ".pdf", ""])(
+    "rejects %s as unservable instead of streaming octet-stream",
+    (ext) => {
+      expect(hasKnownBeruType(`C:\\videos\\clip${ext}`)).toBe(false);
+    },
+  );
+
+  it("accepts every extension the protocol content-type table covers", () => {
+    for (const ext of [
+      ".mp4",
+      ".m4v",
+      ".mov",
+      ".webm",
+      ".mkv",
+      ".avi",
+      ".wmv",
+      ".flv",
+      ".mpg",
+      ".mpeg",
+      ".webp",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".bmp",
+    ]) {
+      expect(hasKnownBeruType(`C:\\media\\file${ext}`), ext).toBe(true);
+    }
+  });
+
+  it("is case-insensitive on the extension", () => {
+    expect(hasKnownBeruType("C:\\media\\CLIP.MP4")).toBe(true);
+    expect(hasKnownBeruType("C:\\media\\SHEET.XLSX")).toBe(false);
+  });
+
+  it("main.js answers 403 for an unmapped type and never falls back to octet-stream", () => {
+    const handler = mainSrc.slice(
+      mainSrc.indexOf("function registerBeruProtocol"),
+      mainSrc.indexOf("app.commandLine.appendSwitch"),
+    );
+    expect(handler).toMatch(/if \(!hasKnownBeruType\(check\.resolvedPath\)\)/);
+    expect(handler).toMatch(/status: 403/);
+    expect(handler.indexOf("hasKnownBeruType")).toBeLessThan(
+      handler.indexOf("createBeruVideoResponse"),
+    );
+  });
+
+  it("no content-type table entry resolves to application/octet-stream", () => {
+    const protocolSrc = readFileSync(
+      path.join(process.cwd(), "main", "utils", "beru-protocol.js"),
+      "utf8",
+    );
+    const fallback = protocolSrc.match(/function contentTypeFor[\s\S]*?\n}/)?.[0] ?? "";
+    expect(fallback).toContain("|| null");
+    expect(fallback).not.toContain("application/octet-stream");
+  });
+
+  it("registers the beru scheme with corsEnabled disabled", () => {
+    const privileges = mainSrc.slice(
+      mainSrc.indexOf('scheme: "beru"'),
+      mainSrc.indexOf("function registerBeruProtocol"),
+    );
+    expect(privileges).toMatch(/corsEnabled: false/);
   });
 });

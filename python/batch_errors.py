@@ -1,5 +1,11 @@
 import os
 
+_FONT_NOT_FOUND_MSG = (
+    "No se encontró una fuente tipográfica necesaria para el texto. "
+    "Instala la fuente indicada en el overlay o cambia a una fuente del sistema "
+    "(Arial, Times New Roman, etc.) y vuelve a intentar."
+)
+
 
 def is_hardware_encode_error(stderr_text):
     """Detect hardware encoder failures and related GPU/resource errors."""
@@ -10,12 +16,9 @@ def is_hardware_encode_error(stderr_text):
         "nvenc",
         "amf",
         "qsv",
-        "videotoolbox",
-        "vaapi",
         "h264_mf",
         "hwaccel",
         "error code: -22",
-        # POSIX EPERM is a permission error, not GPU. See format_processing_error.
         "no capable devices",
         "cannot create cuda",
         "encoder init",
@@ -104,18 +107,10 @@ def format_processing_error(raw_error, *, max_workers=None):
             "Conservador o actualiza los drivers de video."
         )
     if "fontconfig" in lower:
-        return (
-            "No se encontró una fuente tipográfica necesaria para el texto. "
-            "Instala la fuente indicada en el overlay o cambia a una fuente del sistema "
-            "(Arial, Times New Roman, etc.) y vuelve a intentar."
-        )
+        return _FONT_NOT_FOUND_MSG
     if "enoent" in lower or "no such file" in lower:
         if "fontfile" in lower or "font" in lower or "drawtext" in lower:
-            return (
-                "No se encontró una fuente tipográfica necesaria para el texto. "
-                "Instala la fuente indicada en el overlay o cambia a una fuente del sistema "
-                "(Arial, Times New Roman, etc.) y vuelve a intentar."
-            )
+            return _FONT_NOT_FOUND_MSG
         return (
             "No se encontró un archivo necesario durante el procesamiento. "
             "Verifica que los archivos de entrada estén disponibles localmente "
@@ -143,7 +138,7 @@ def format_processing_error(raw_error, *, max_workers=None):
             "El filtro de una región no se pudo construir. "
             "Revisa que cada región tenga al menos 2 px y esté dentro del video."
         )
-    if any(m in lower for m in ("invalid too big or non positive size", "non positive size")):
+    if "non positive size" in lower:
         return "El tamaño de una región no es válido. Ajusta la selección (mínimo 2 px de lado) y vuelve a intentar."
     if "input link parameters" in lower:
         return (

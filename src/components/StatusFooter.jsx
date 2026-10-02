@@ -1,16 +1,30 @@
 import { useState, useEffect, useCallback } from "react";
 import { shallow } from "zustand/shallow";
-import { Command, Loader2, Zap, Terminal, CheckCircle2, LogOut } from "lucide-react";
+import { Loader2, Zap, Terminal, CheckCircle2 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
-import { isSupabaseConfigured } from "../lib/supabaseClient";
 import { useT } from "../i18n/useT";
 import { getBatchProgress } from "../utils/batch-progress";
 import { APP_VERSION, formatFooterClock } from "../utils/appVersion";
 import { Button } from "./ui/Button";
 import FooterChip from "./status-footer/FooterChip";
 import SegmentedProgress from "./status-footer/SegmentedProgress";
-import ExecutionHistoryPanel from "./status-footer/ExecutionHistoryPanel";
 import UpToDateDialog from "./status-footer/UpToDateDialog";
+
+function jobProgressEqual(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) {
+    if (
+      !Object.prototype.hasOwnProperty.call(b, k) ||
+      Math.round(Number(a[k])) !== Math.round(Number(b[k]))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function useClock(active, intervalMs = 1000) {
   const [, setTick] = useState(0);
@@ -24,27 +38,22 @@ function useClock(active, intervalMs = 1000) {
 export default function StatusFooter() {
   const t = useT();
   const get = useEditorStore.getState;
-  const showToast = useEditorStore((s) => s.showToast);
-  const signOut = useEditorStore((s) => s.signOut);
   const updateModalOpen = useEditorStore((s) => s.updateModalOpen);
 
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const { isProcessing, progressDone, progressTotal, batchSummary, update } = useEditorStore(
+    (s) => ({
+      isProcessing: s.isProcessing,
+      progressDone: s.progressDone,
+      progressTotal: s.progressTotal,
+      queueLength: s.queue.length,
+      batchSummary: s.batchSummary,
+      update: s.update,
+    }),
+    shallow,
+  );
 
-  const { isProcessing, progressDone, progressTotal, jobProgress, batchSummary, update } =
-    useEditorStore(
-      (s) => ({
-        isProcessing: s.isProcessing,
-        progressDone: s.progressDone,
-        progressTotal: s.progressTotal,
-        queueLength: s.queue.length,
-        jobProgress: s.jobProgress,
-        batchSummary: s.batchSummary,
-        update: s.update,
-      }),
-      shallow,
-    );
+  const jobProgress = useEditorStore((s) => s.jobProgress, jobProgressEqual);
 
-  const executionHistory = useEditorStore((s) => (historyOpen ? s.executionHistory : null));
   const [upToDateOpen, setUpToDateOpen] = useState(false);
   const closeUpToDate = useCallback(() => setUpToDateOpen(false), []);
   const [runStartedAt, setRunStartedAt] = useState(null);
@@ -81,30 +90,6 @@ export default function StatusFooter() {
   const runClock = runStartedAt != null ? formatFooterClock(Date.now() - runStartedAt) : "00:00";
   const sessionClock = formatFooterClock(Date.now() - sessionStartedAt);
 
-  const handleSignOut = async () => {
-    const ok = await get().requestConfirm({ message: t("auth.signOutConfirm") });
-    if (!ok) return;
-    await signOut();
-    showToast({ kind: "ok", text: t("auth.signedOut") });
-  };
-
-  const handleClearHistory = async () => {
-    const ok = await get().requestConfirm({ message: t("footer.clearHistoryConfirm") });
-    if (!ok) return;
-    await get().clearExecutionHistory();
-    showToast({ kind: "ok", text: t("footer.historyCleared") });
-  };
-
-  const handleExportLogs = async () => {
-    const state = get();
-    const res = await window.api?.exportProcessingLogs?.(state.exportProcessingLogsText());
-    if (res?.success) {
-      showToast({ kind: "ok", text: t("footer.logsExported") });
-    } else if (!res?.canceled) {
-      showToast({ kind: "err", text: t("footer.logsExportFailed") });
-    }
-  };
-
   const handleManualCheck = async () => {
     setUpToDateOpen(false);
     await get().checkForUpdates();
@@ -114,49 +99,8 @@ export default function StatusFooter() {
   const updateVersionLabel = update?.version ? `v${update.version}` : null;
 
   return (
-    <footer className="status-footer cap-no-drag" role="contentinfo">
+    <footer className="status-footer" role="contentinfo">
       <div className="status-footer-left">
-        {isSupabaseConfigured && (
-          <Button
-            type="button"
-            className="status-footer-icon-btn"
-            variant="tertiary"
-            size="icon"
-            onClick={handleSignOut}
-            title={t("auth.signOut")}
-            aria-label={t("auth.signOut")}
-          >
-            <LogOut size={13} strokeWidth={2.2} />
-          </Button>
-        )}
-
-        <Button
-          type="button"
-          className={`status-footer-icon-btn${historyOpen ? " status-footer-icon-btn--active" : ""}`}
-          variant="tertiary"
-          size="icon"
-          onClick={() => {
-            setHistoryOpen((v) => !v);
-            get().setUpdateModalOpen(false);
-            setUpToDateOpen(false);
-          }}
-          title={t("footer.historyTitle")}
-          aria-label={t("footer.historyTitle")}
-          aria-expanded={historyOpen}
-        >
-          <Command size={13} strokeWidth={2.2} />
-        </Button>
-
-        {historyOpen && (
-          <ExecutionHistoryPanel
-            history={executionHistory || []}
-            onExport={handleExportLogs}
-            onClear={handleClearHistory}
-            onClose={() => setHistoryOpen(false)}
-            t={t}
-          />
-        )}
-
         {!isProcessing && batchSummary && (
           <FooterChip title={t("footer.lastBatch")}>
             <CheckCircle2 size={11} />
@@ -191,7 +135,7 @@ export default function StatusFooter() {
 
         {showProgress && (
           <>
-            <FooterChip className="status-footer-progress-label">
+            <FooterChip>
               {isProcessing ? t("batchProgress.processing") : t("batchProgress.done")} {completed}/
               {total}
             </FooterChip>
@@ -226,7 +170,6 @@ export default function StatusFooter() {
                 setUpToDateOpen(true);
                 get().setUpdateModalOpen(false);
               }
-              setHistoryOpen(false);
             }}
             title={
               hasUpdateBadge

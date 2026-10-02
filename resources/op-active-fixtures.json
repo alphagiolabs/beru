@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "_comment": "Test contract for the Operation time window: is the op active at time t. Not runtime config. Keep JS (src/utils/operation.js isOpActive, camelCase op keys) and Python (python/op_shared.py _is_op_time_disabled + _build_enable_clause, snake_case job keys) in sync. 'start'/'end' are optional bounds; absent means unbounded. Bounds coerce like Python float(): decimal strings parse, anything else means no bound.",
+  "active_cases": [
+    { "id": "no-times-always-active", "t": 10, "expected": true },
+
+    { "id": "start-only-before", "start": 5, "t": 2, "expected": false },
+    { "id": "start-only-at", "start": 5, "t": 5, "expected": true },
+    { "id": "start-only-after", "start": 5, "t": 10, "expected": true },
+
+    { "id": "end-only-before", "end": 8, "t": 2, "expected": true },
+    { "id": "end-only-at", "end": 8, "t": 8, "expected": true },
+    { "id": "end-only-after", "end": 8, "t": 12, "expected": false },
+
+    { "id": "range-inside", "start": 2, "end": 8, "t": 5, "expected": true },
+    { "id": "range-before", "start": 2, "end": 8, "t": 1, "expected": false },
+    { "id": "range-after", "start": 2, "end": 8, "t": 9, "expected": false },
+    { "id": "range-at-start", "start": 2, "end": 8, "t": 2, "expected": true },
+    { "id": "range-at-end", "start": 2, "end": 8, "t": 8, "expected": true },
+
+    { "id": "inverted-before", "start": 5, "end": 2, "t": 0, "expected": false },
+    { "id": "inverted-between", "start": 5, "end": 2, "t": 3, "expected": false },
+    { "id": "inverted-after", "start": 5, "end": 2, "t": 10, "expected": false },
+
+    { "id": "degenerate-at", "start": 5, "end": 5, "t": 5, "expected": false },
+    { "id": "degenerate-before", "start": 5, "end": 5, "t": 2, "expected": false },
+    { "id": "degenerate-after", "start": 5, "end": 5, "t": 8, "expected": false },
+
+    { "id": "zero-start", "start": 0, "t": 0, "expected": true },
+    { "id": "zero-degenerate", "start": 0, "end": 0, "t": 0, "expected": false },
+    { "id": "negative-start", "start": -5, "t": 0, "expected": true },
+    { "id": "fractional-inside", "start": 0.5, "end": 2.5, "t": 0.5, "expected": true },
+    { "id": "fractional-before", "start": 0.5, "end": 2.5, "t": 0.4, "expected": false },
+
+    { "id": "numeric-string-start", "start": "5", "t": 3, "expected": false },
+    { "id": "numeric-string-range", "start": "2", "end": "8", "t": 5, "expected": true },
+    { "id": "non-numeric-start-ignored", "start": "abc", "t": 10, "expected": true },
+    { "id": "non-numeric-end-ignored", "end": "xyz", "t": 10, "expected": true },
+    { "id": "non-numeric-bounds-ignored", "start": "b", "end": "a", "t": 10, "expected": true },
+    { "id": "empty-string-start-ignored", "start": "", "t": -1, "expected": true },
+    { "id": "mixed-non-numeric-end", "start": 5, "end": "abc", "t": 3, "expected": false }
+  ]
+}

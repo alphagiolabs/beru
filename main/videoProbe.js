@@ -1,8 +1,10 @@
-import { spawn } from "child_process";
 import fs from "fs";
 import { hasVideoDimensions } from "../shared/has-video-dimensions.js";
+import { runCapturedProcess } from "./utils/run-captured.js";
 
 const DEFAULT_PIX_FMT = "yuv420p";
+const MAX_PROBE_STDOUT_BYTES = 1024 * 1024;
+const MAX_PROBE_STDERR_BYTES = 256 * 1024;
 
 function emptyVideoInfo(overrides = {}) {
   return {
@@ -19,8 +21,6 @@ function emptyVideoInfo(overrides = {}) {
   };
 }
 
-export { hasVideoDimensions };
-
 function parseFrameRate(rateStr) {
   if (!rateStr) return 0;
   try {
@@ -34,15 +34,29 @@ function parseFrameRate(rateStr) {
   }
 }
 
+function displayDimensions(width, height, rotation) {
+  const degrees = Number(rotation) || 0;
+  const turns = Math.round(degrees / 90);
+  return Math.abs(degrees - turns * 90) < 1 && Math.abs(turns) % 2 === 1
+    ? { width: height, height: width }
+    : { width, height };
+}
+
 export function parseFfprobeJson(stdout) {
   const info = JSON.parse(stdout);
   const streams = Array.isArray(info.streams) ? info.streams : [];
   const videoStream = streams.find((s) => s.codec_type === "video");
   const audioStream = streams.find((s) => s.codec_type === "audio");
+  const rotation =
+    videoStream?.side_data_list?.find((data) => data.rotation != null)?.rotation ??
+    videoStream?.tags?.rotate;
 
   return emptyVideoInfo({
-    width: videoStream ? Number(videoStream.width || 0) : 0,
-    height: videoStream ? Number(videoStream.height || 0) : 0,
+    ...displayDimensions(
+      Number(videoStream?.width || 0),
+      Number(videoStream?.height || 0),
+      rotation,
+    ),
     duration: parseFloat(info.format?.duration) || 0,
     videoCodec: videoStream?.codec_name || "",
     pixFmt: videoStream?.pix_fmt || DEFAULT_PIX_FMT,
@@ -125,8 +139,12 @@ export function parseFfmpegOutput(output) {
   }
 
   return emptyVideoInfo({
-    width: resolution ? Number(resolution[1]) : 0,
-    height: resolution ? Number(resolution[2]) : 0,
+    ...displayDimensions(
+      resolution ? Number(resolution[1]) : 0,
+      resolution ? Number(resolution[2]) : 0,
+      text.match(/rotation of\s+([-\d.]+)\s+degrees/i)?.[1] ??
+        text.match(/\brotate\s*:\s*([-\d.]+)/i)?.[1],
+    ),
     duration: parseDuration(text),
     videoCodec: parseStreamCodec(videoLine, "Video"),
     pixFmt: resolution ? parsePixFmt(videoLine, resolution.index) : DEFAULT_PIX_FMT,
@@ -137,37 +155,10 @@ export function parseFfmpegOutput(output) {
 }
 
 function runProcess(command, args, timeoutMs) {
-  return new Promise((resolve) => {
-    let proc;
-    try {
-      proc = spawn(command, args, { windowsHide: true });
-    } catch (error) {
-      resolve({ code: null, stdout: "", stderr: "", error });
-      return;
-    }
-
-    let stdout = "";
-    let stderr = "";
-    let settled = false;
-    let killTimer = null;
-
-    const finish = (result) => {
-      if (settled) return;
-      settled = true;
-      if (killTimer) clearTimeout(killTimer);
-      resolve({ stdout, stderr, ...result });
-    };
-
-    proc.stdout.on("data", (d) => (stdout += d));
-    proc.stderr.on("data", (d) => (stderr += d));
-    proc.on("close", (code) => finish({ code }));
-    proc.on("error", (error) => finish({ code: null, error }));
-    killTimer = setTimeout(() => {
-      try {
-        proc.kill();
-      } catch {}
-      finish({ code: null, timedOut: true });
-    }, timeoutMs);
+  return runCapturedProcess(command, args, {
+    timeoutMs,
+    maxStdoutBytes: MAX_PROBE_STDOUT_BYTES,
+    maxStderrBytes: MAX_PROBE_STDERR_BYTES,
   });
 }
 
@@ -186,7 +177,8 @@ export async function probeVideoFile(
       ["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", filePath],
       timeoutMs,
     );
-    const raw = result.stdout.trim();
+    const raw =
+      result.outputExceeded || result.timedOut || result.error ? "" : result.stdout.trim();
     if (raw) {
       try {
         ffprobeInfo = parseFfprobeJson(raw);
@@ -199,7 +191,10 @@ export async function probeVideoFile(
 
   if (allowFfmpegFallback && ffmpegPath && fs.existsSync(ffmpegPath)) {
     const result = await runProcess(ffmpegPath, ["-hide_banner", "-i", filePath], timeoutMs);
-    const ffmpegInfo = parseFfmpegOutput(`${result.stdout}\n${result.stderr}`);
+    const ffmpegInfo =
+      result.outputExceeded || result.timedOut || result.error
+        ? emptyVideoInfo()
+        : parseFfmpegOutput(`${result.stdout}\n${result.stderr}`);
     if (hasVideoDimensions(ffmpegInfo)) {
       return {
         ...ffmpegInfo,

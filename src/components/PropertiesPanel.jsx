@@ -8,7 +8,8 @@ import AppliedTextEditor from "./AppliedTextEditor";
 import AppliedDelogoEditor from "./AppliedDelogoEditor";
 import { isRegionUsable } from "../utils/video-utils";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
-import { InspectorGroup, SegmentedControl } from "./inspector";
+import { storeErrorText } from "../utils/store-errors";
+import { InspectorGroup } from "./inspector";
 import {
   Timer,
   FlipHorizontal2,
@@ -19,6 +20,8 @@ import {
   Eye,
   Upload,
   X,
+  Film,
+  SquareDashedMousePointer,
 } from "lucide-react";
 import { Button } from "./ui/Button";
 import { PositionIcon } from "./ui/PositionIcon";
@@ -32,16 +35,59 @@ const DELOGO_ICONS = {
   fill: PaintBucket,
 };
 
+const selectSelectedVideo = (s) => {
+  const item = s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null;
+  if (!item) return null;
+  return {
+    path: item.path,
+    src: item.src,
+    filename: item.filename,
+    width: item.width,
+    height: item.height,
+    duration: item.duration,
+    operations: item.operations,
+    customOutputName: item.customOutputName,
+  };
+};
+
+const selectSelectedOperation = (s) =>
+  s.selectedIdx >= 0 &&
+  s.selectedIdx < s.queue.length &&
+  s.selectedOperationIdx != null &&
+  s.selectedOperationIdx >= 0 &&
+  s.selectedOperationIdx < s.queue[s.selectedIdx].operations.length
+    ? s.queue[s.selectedIdx].operations[s.selectedOperationIdx]
+    : null;
+
+const selectSelectedTemplateRegion = (s) =>
+  s.selectedTemplateRegionId != null
+    ? s.templateRegions.find((tr) => tr.id === s.selectedTemplateRegionId)
+    : null;
+
 export default function PropertiesPanel() {
+  const sel = useEditorStore(selectSelectedVideo, shallow);
+  const selectedOperation = useEditorStore(selectSelectedOperation);
+  const selectedTemplateRegion = useEditorStore(selectSelectedTemplateRegion);
+  const { selectedIdx, selectedOperationIdx, currentRegion, activeTool, sidebarMode } =
+    useEditorStore(
+      (s) => ({
+        selectedIdx: s.selectedIdx,
+        selectedOperationIdx: s.selectedOperationIdx,
+        currentRegion: s.currentRegion,
+        activeTool: s.activeTool,
+        sidebarMode: s.sidebarMode,
+      }),
+      shallow,
+    );
+  const { tempImagePath, tempImageDataUrl, tempImageOpacity } = useEditorStore(
+    (s) => ({
+      tempImagePath: s.tempImagePath,
+      tempImageDataUrl: s.tempImageDataUrl,
+      tempImageOpacity: s.tempImageOpacity,
+    }),
+    shallow,
+  );
   const {
-    sel,
-    currentRegion,
-    activeTool,
-    sidebarMode,
-    tempImagePath,
-    tempImageDataUrl,
-    tempImageOpacity,
-    tempImageScale,
     blurStrength,
     delogoMethod,
     delogoImagePath,
@@ -51,51 +97,8 @@ export default function PropertiesPanel() {
     mosaicSize,
     mirrorSide,
     edgeFeather,
-    selectedIdx,
-    selectedOperationIdx,
-    selectedOperation,
-    selectedTemplateRegion,
-    textInput,
-    tempStart,
-    tempEnd,
   } = useEditorStore(
     (s) => ({
-      selectedIdx: s.selectedIdx,
-      sel: (() => {
-        const item =
-          s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null;
-        if (!item) return null;
-        return {
-          path: item.path,
-          src: item.src,
-          filename: item.filename,
-          width: item.width,
-          height: item.height,
-          duration: item.duration,
-          operations: item.operations,
-          customOutputName: item.customOutputName,
-        };
-      })(),
-      selectedOperationIdx: s.selectedOperationIdx,
-      selectedOperation:
-        s.selectedIdx >= 0 &&
-        s.selectedIdx < s.queue.length &&
-        s.selectedOperationIdx != null &&
-        s.selectedOperationIdx >= 0 &&
-        s.selectedOperationIdx < s.queue[s.selectedIdx].operations.length
-          ? s.queue[s.selectedIdx].operations[s.selectedOperationIdx]
-          : null,
-      selectedTemplateRegion:
-        s.selectedTemplateRegionId != null
-          ? s.templateRegions.find((tr) => tr.id === s.selectedTemplateRegionId)
-          : null,
-      currentRegion: s.currentRegion,
-      activeTool: s.activeTool,
-      sidebarMode: s.sidebarMode,
-      tempImagePath: s.tempImagePath,
-      tempImageDataUrl: s.tempImageDataUrl,
-      tempImageOpacity: s.tempImageOpacity,
-      tempImageScale: s.tempImageScale,
       blurStrength: s.blurStrength,
       delogoMethod: s.delogoMethod,
       delogoImagePath: s.delogoImagePath,
@@ -105,6 +108,11 @@ export default function PropertiesPanel() {
       mosaicSize: s.mosaicSize,
       mirrorSide: s.mirrorSide,
       edgeFeather: s.edgeFeather,
+    }),
+    shallow,
+  );
+  const { textInput, tempStart, tempEnd } = useEditorStore(
+    (s) => ({
       textInput: s.textInput,
       tempStart: s.tempStart,
       tempEnd: s.tempEnd,
@@ -114,51 +122,54 @@ export default function PropertiesPanel() {
   const showToast = useEditorStore((s) => s.showToast);
   const get = useEditorStore.getState;
   const t = useT();
+  const imageScale = currentRegion?.baseW ? currentRegion.w / currentRegion.baseW : 1;
+  const chooseLogoTool = (tool) => {
+    const region = get().currentRegion;
+    get().setActiveTool(tool);
+    if (region) get().setCurrentRegion(region);
+  };
 
   return (
     <div className="inspector-panel">
       <div className="inspector-sticky-chrome">
-        <SegmentedControl
-          ariaLabel="Modo del panel"
-          value={sidebarMode}
-          onChange={(id) => get().setSidebarMode(id)}
-          options={[
-            { id: "logo", label: "Quitar logo" },
-            { id: "batch", label: "Texto en lote" },
-          ]}
-        />
-        <div className="inspector-chrome-meta">
-          {sel?.filename ? (
-            <>
-              <span className="inspector-chrome-meta-key">Región</span>
-              <span className="inspector-chrome-meta-value" title={sel.filename}>
-                {sel.filename}
-              </span>
-            </>
-          ) : (
-            <span className="inspector-chrome-meta-empty">Sin video seleccionado</span>
-          )}
+        <div className="inspector-chrome-title" data-testid="inspector-mode-title">
+          {sidebarMode === "batch" ? t("props.modeBatch") : t("props.modeLogo")}
         </div>
+        {sel?.filename && (
+          <div className="inspector-chrome-meta">
+            <span className="inspector-chrome-meta-key">{t("props.video")}</span>
+            <span className="inspector-chrome-meta-value" title={sel.filename}>
+              {sel.filename}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="inspector-body">
         {!currentRegion &&
-          !(sidebarMode === "logo" && selectedOperation?.mode === "text") &&
-          !(sidebarMode === "logo" && selectedOperation?.mode === "blur") &&
-          !(sidebarMode === "logo" && selectedOperation?.mode === "delogo") &&
-          !(sidebarMode === "logo" && selectedOperation?.mode === "crop") &&
-          !(sidebarMode === "batch" && selectedTemplateRegion) &&
-          !(sidebarMode === "batch") && (
-            <p className="inspector-empty">
-              Dibuja una región en el video para editar propiedades.
-            </p>
-          )}
+          sidebarMode === "logo" &&
+          !selectedOperation &&
+          (sel?.operations?.length ? (
+            <p className="inspector-helper text-center">{t("props.empty.pickLayer")}</p>
+          ) : (
+            <div className="inspector-empty">
+              <span className="inspector-empty-icon" aria-hidden>
+                {sel ? <SquareDashedMousePointer size={16} /> : <Film size={16} />}
+              </span>
+              <p className="inspector-empty-title">
+                {t(sel ? "props.empty.drawTitle" : "props.empty.noVideoTitle")}
+              </p>
+              <p className="inspector-empty-hint">
+                {t(sel ? "props.empty.drawHint" : "props.empty.noVideoHint")}
+              </p>
+            </div>
+          ))}
 
         {currentRegion && (
           <>
-            <section className="inspector-region-strip" aria-label="Región">
+            <section className="inspector-region-strip" aria-label={t("props.regionLabel")}>
               <div className="inspector-region-strip-head">
-                <span className="inspector-region-strip-title">Región</span>
+                <span className="inspector-region-strip-title">{t("props.regionLabel")}</span>
               </div>
               <div className="inspector-region-strip-fields" role="group">
                 {(() => {
@@ -191,6 +202,26 @@ export default function PropertiesPanel() {
               </div>
             </section>
 
+            {sidebarMode === "logo" && ["blur", "delogo", "crop"].includes(activeTool) && (
+              <div className="grid grid-cols-3 gap-1" role="group" aria-label={t("logo.method")}>
+                {[
+                  ["blur", t("toolbar.blur")],
+                  ["crop", t("toolbar.crop")],
+                  ["delogo", t("logo.advancedMethods")],
+                ].map(([tool, label]) => (
+                  <button
+                    key={tool}
+                    type="button"
+                    className={`inspector-chip${activeTool === tool ? " is-selected" : ""}`}
+                    aria-pressed={activeTool === tool}
+                    onClick={() => chooseLogoTool(tool)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {sidebarMode === "batch" && (
               <div className="inspector-actions inspector-actions--region">
                 <Button
@@ -198,28 +229,28 @@ export default function PropertiesPanel() {
                   onClick={() => get().addTemplateRegion()}
                   disabled={!isRegionUsable(currentRegion)}
                   variant="primary"
-                  className="w-full"
+                  className="flex-1 min-w-0"
                 >
-                  Agregar región de texto
+                  {t("props.addRegion")}
                 </Button>
-                <button
+                <Button
                   type="button"
                   onClick={() => get().cancelBatchRegionSelection()}
-                  className="text-[11px] hover:underline block mx-auto"
-                  style={{ color: "var(--text-muted)" }}
+                  variant="tertiary"
+                  title={t("logo.cancelSelection")}
                 >
-                  Cancelar selección
-                </button>
+                  {t("common.cancel")}
+                </Button>
               </div>
             )}
 
             {sidebarMode === "logo" && activeTool === "image" && (
-              <InspectorGroup title="Marca de agua">
+              <InspectorGroup title={t("props.watermark")}>
                 <div className="flex gap-1.5">
                   <input
                     type="text"
                     value={tempImagePath ? tempImagePath.split(/[\\/]/).pop() : ""}
-                    placeholder="Seleccionar logo..."
+                    placeholder={t("logo.pickLogo")}
                     readOnly
                     className="cap-input flex-1 font-mono text-[10px] truncate"
                   />
@@ -233,7 +264,7 @@ export default function PropertiesPanel() {
                         else
                           showToast({
                             kind: "err",
-                            text: r?.error || t("errors.imageReadFailed"),
+                            text: storeErrorText(t, r, "errors.imageReadFailed"),
                           });
                       }
                     }}
@@ -241,7 +272,7 @@ export default function PropertiesPanel() {
                     size="sm"
                     className="!text-[10px] !px-2"
                   >
-                    Elegir
+                    {t("logo.pick")}
                   </Button>
                   {tempImagePath && (
                     <Button
@@ -252,7 +283,7 @@ export default function PropertiesPanel() {
                       variant="tertiary"
                       size="icon"
                       className="text-[var(--rose)]"
-                      style={{ color: "var(--rose)" }}
+                      style={{ color: "var(--text-rose)" }}
                       title={t("common.remove")}
                       aria-label={t("common.remove")}
                     >
@@ -277,7 +308,7 @@ export default function PropertiesPanel() {
                   className="flex items-center gap-2 text-[11px] min-w-0"
                   style={{ color: "var(--text-dim)" }}
                 >
-                  Opacidad
+                  {t("table.opacity")}
                   <input
                     type="range"
                     min="0"
@@ -289,7 +320,7 @@ export default function PropertiesPanel() {
                   />
                   <span
                     className="font-mono text-xs w-8 text-right"
-                    style={{ color: "var(--accent-brand)" }}
+                    style={{ color: "var(--text-brand)" }}
                   >
                     {Math.round(tempImageOpacity * 100)}%
                   </span>
@@ -298,16 +329,15 @@ export default function PropertiesPanel() {
                   className="flex items-center gap-2 text-[11px] min-w-0"
                   style={{ color: "var(--text-dim)" }}
                 >
-                  Escala
+                  {t("props.scale")}
                   <input
                     type="range"
                     min="0.1"
                     max="3"
                     step="0.1"
-                    value={tempImageScale || 1}
+                    value={imageScale}
                     onChange={(e) => {
                       const scale = Number(e.target.value);
-                      get().setTempImageScale(scale);
                       if (currentRegion) {
                         const baseW = currentRegion.baseW || currentRegion.w;
                         const baseH = currentRegion.baseH || currentRegion.h;
@@ -324,21 +354,21 @@ export default function PropertiesPanel() {
                   />
                   <span
                     className="font-mono text-xs w-8 text-right"
-                    style={{ color: "var(--accent-brand)" }}
+                    style={{ color: "var(--text-brand)" }}
                   >
-                    {(tempImageScale || 1).toFixed(1)}x
+                    {imageScale.toFixed(1)}x
                   </span>
                 </div>
                 <div>
-                  <span className="cap-input-label">Posición rápida</span>
+                  <span className="cap-input-label">{t("props.quickPosition")}</span>
                   <div className="grid grid-cols-3 gap-1">
                     {[
                       { id: "top-left", x: 0.02, y: 0.02 },
                       { id: "top-center", x: 0.5, y: 0.02 },
                       { id: "top-right", x: 0.98, y: 0.02 },
-                      { id: "middle-left", x: 0.02, y: 0.5 },
+                      { id: "center-left", x: 0.02, y: 0.5 },
                       { id: "center", x: 0.5, y: 0.5 },
-                      { id: "middle-right", x: 0.98, y: 0.5 },
+                      { id: "center-right", x: 0.98, y: 0.5 },
                       { id: "bottom-left", x: 0.02, y: 0.98 },
                       { id: "bottom-center", x: 0.5, y: 0.98 },
                       { id: "bottom-right", x: 0.98, y: 0.98 },
@@ -357,27 +387,25 @@ export default function PropertiesPanel() {
                           get().setCurrentRegion({ x, y, w, h, baseW: w, baseH: h });
                         }}
                         className="inspector-chip"
-                        title={pos.id}
-                        aria-label={pos.id}
+                        title={t(`position.${pos.id}`)}
+                        aria-label={t(`position.${pos.id}`)}
                       >
                         <PositionIcon position={pos.id} size={14} strokeWidth={2} />
                       </button>
                     ))}
                   </div>
                 </div>
-                <p className="inspector-helper text-center">
-                  Arrastra el logo en el video para posicionarlo
-                </p>
+                <p className="inspector-helper text-center">{t("props.dragImageHint")}</p>
               </InspectorGroup>
             )}
 
             {sidebarMode === "logo" && activeTool === "blur" && (
-              <InspectorGroup title="Desenfoque">
+              <InspectorGroup title={t("props.blurGroup")}>
                 <div
                   className="flex items-center gap-2 text-[11px] min-w-0"
                   style={{ color: "var(--text-dim)" }}
                 >
-                  Intensidad
+                  {t("props.intensity")}
                   <input
                     type="range"
                     min="2"
@@ -388,7 +416,7 @@ export default function PropertiesPanel() {
                   />
                   <span
                     className="font-mono text-xs w-6 text-right"
-                    style={{ color: "var(--accent-brand)" }}
+                    style={{ color: "var(--text-brand)" }}
                   >
                     {blurStrength}
                   </span>
@@ -397,45 +425,50 @@ export default function PropertiesPanel() {
             )}
 
             {sidebarMode === "logo" && activeTool === "delogo" && (
-              <InspectorGroup title="Eliminación de logo">
+              <InspectorGroup title={t("props.delogoGroup")}>
                 <div className="flex items-center justify-between">
-                  <span className="cap-input-label !mb-0">Método</span>
+                  <span className="cap-input-label !mb-0">{t("props.method")}</span>
                   <span
                     className="flex items-center gap-1 text-[10px] font-medium"
-                    style={{ color: "var(--rose)" }}
-                    title="El resultado se muestra en vivo sobre el video"
+                    style={{ color: "var(--text-rose)" }}
+                    title={t("logo.quickPreviewHint")}
                   >
-                    <Eye size={10} /> Vista previa en vivo
+                    <Eye size={10} /> {t("logo.quickPreview")}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-1">
-                  {DELOGO_METHODS.map((m) => {
-                    const Icon = DELOGO_ICONS[m.id];
-                    const active = delogoMethod === m.id;
-                    return (
-                      <button
-                        key={m.id}
-                        onClick={() => get().setDelogoMethod(m.id)}
-                        className={`inspector-chip flex-col gap-0.5 !min-h-[40px]${active ? " is-selected" : ""}`}
-                        style={
-                          active
-                            ? {
-                                background: "var(--rose)",
-                                color: "white",
-                                borderColor: "var(--rose)",
-                              }
-                            : undefined
-                        }
-                        title={m.description}
-                      >
-                        {Icon && <Icon size={11} />}
-                        <span className="text-[10px]">{m.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <details className="mt-2" open={delogoMethod !== "blur" || undefined}>
+                  <summary className="inspector-helper cursor-pointer">
+                    {t("logo.advancedMethods")}
+                  </summary>
+                  <div className="grid grid-cols-3 gap-1 mt-2">
+                    {DELOGO_METHODS.map((m) => {
+                      const Icon = DELOGO_ICONS[m.id];
+                      const active = delogoMethod === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => get().setDelogoMethod(m.id)}
+                          className={`inspector-chip flex-col gap-0.5 !min-h-[40px]${active ? " is-selected" : ""}`}
+                          style={
+                            active
+                              ? {
+                                  background: "var(--rose)",
+                                  color: "var(--text-on-rose)",
+                                  borderColor: "var(--rose)",
+                                }
+                              : undefined
+                          }
+                          title={t(m.descriptionKey)}
+                        >
+                          {Icon && <Icon size={11} />}
+                          <span className="text-[10px]">{t(m.labelKey)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </details>
                 <p className="inspector-helper">
-                  {DELOGO_METHODS.find((m) => m.id === delogoMethod)?.description}
+                  {t(DELOGO_METHODS.find((m) => m.id === delogoMethod)?.descriptionKey || "")}
                 </p>
 
                 {delogoMethod === "temporal" && (
@@ -443,7 +476,7 @@ export default function PropertiesPanel() {
                     className="flex items-center gap-2 text-[11px] min-w-0"
                     style={{ color: "var(--text-dim)" }}
                   >
-                    Radio (frames)
+                    {t("props.radiusFrames")}
                     <input
                       type="range"
                       min="1"
@@ -454,7 +487,7 @@ export default function PropertiesPanel() {
                     />
                     <span
                       className="font-mono text-xs w-6 text-right"
-                      style={{ color: "var(--accent-brand)" }}
+                      style={{ color: "var(--text-brand)" }}
                     >
                       {temporalRadius}
                     </span>
@@ -466,7 +499,7 @@ export default function PropertiesPanel() {
                     className="flex items-center gap-2 text-[11px] min-w-0"
                     style={{ color: "var(--text-dim)" }}
                   >
-                    Tamaño bloque
+                    {t("props.blockSize")}
                     <input
                       type="range"
                       min="4"
@@ -477,7 +510,7 @@ export default function PropertiesPanel() {
                     />
                     <span
                       className="font-mono text-xs w-6 text-right"
-                      style={{ color: "var(--accent-brand)" }}
+                      style={{ color: "var(--text-brand)" }}
                     >
                       {mosaicSize}px
                     </span>
@@ -486,7 +519,7 @@ export default function PropertiesPanel() {
 
                 {delogoMethod === "mirror" && (
                   <div>
-                    <span className="cap-input-label">Lado a reflejar</span>
+                    <span className="cap-input-label">{t("props.mirrorSide")}</span>
                     <div className="grid grid-cols-2 gap-1">
                       {MIRROR_SIDES.map((s) => (
                         <button
@@ -497,13 +530,13 @@ export default function PropertiesPanel() {
                             mirrorSide === s.id
                               ? {
                                   background: "var(--rose)",
-                                  color: "white",
+                                  color: "var(--text-on-rose)",
                                   borderColor: "var(--rose)",
                                 }
                               : undefined
                           }
                         >
-                          {s.label}
+                          {t(s.labelKey)}
                         </button>
                       ))}
                     </div>
@@ -515,7 +548,7 @@ export default function PropertiesPanel() {
                     className="flex items-center gap-2 text-[11px] min-w-0"
                     style={{ color: "var(--text-dim)" }}
                   >
-                    Intensidad blur
+                    {t("props.intensity")}
                     <input
                       type="range"
                       min="2"
@@ -526,7 +559,7 @@ export default function PropertiesPanel() {
                     />
                     <span
                       className="font-mono text-xs w-6 text-right"
-                      style={{ color: "var(--accent-brand)" }}
+                      style={{ color: "var(--text-brand)" }}
                     >
                       {blurStrength}
                     </span>
@@ -536,7 +569,7 @@ export default function PropertiesPanel() {
                 {delogoMethod === "fill" && (
                   <div className="space-y-2">
                     <label className="flex items-center gap-2">
-                      <span className="cap-input-label !mb-0">Color</span>
+                      <span className="cap-input-label !mb-0">{t("table.color")}</span>
                       <input
                         type="color"
                         value={delogoFillColor}
@@ -551,7 +584,7 @@ export default function PropertiesPanel() {
                       className="flex items-center gap-2 text-[11px] min-w-0"
                       style={{ color: "var(--text-dim)" }}
                     >
-                      Opacidad
+                      {t("table.opacity")}
                       <input
                         type="range"
                         min="0"
@@ -563,7 +596,7 @@ export default function PropertiesPanel() {
                       />
                       <span
                         className="font-mono text-xs w-6 text-right"
-                        style={{ color: "var(--accent-brand)" }}
+                        style={{ color: "var(--text-brand)" }}
                       >
                         {delogoFillOpacity.toFixed(2)}
                       </span>
@@ -573,12 +606,12 @@ export default function PropertiesPanel() {
 
                 {delogoMethod === "cover" && (
                   <div>
-                    <span className="cap-input-label">Imagen de cobertura</span>
+                    <span className="cap-input-label">{t("props.coverImage")}</span>
                     <div className="flex gap-1.5">
                       <input
                         type="text"
                         value={delogoImagePath ? delogoImagePath.split(/[\\/]/).pop() : ""}
-                        placeholder="Seleccionar imagen..."
+                        placeholder={t("logo.coverImagePlaceholder")}
                         readOnly
                         className="cap-input flex-1 font-mono text-[10px] truncate"
                       />
@@ -594,7 +627,7 @@ export default function PropertiesPanel() {
                           } else if (res && !res.canceled) {
                             get().showToast({
                               kind: "err",
-                              text: res.error || "No se pudo cargar la imagen",
+                              text: storeErrorText(t, res, "errors.imageReadFailed"),
                             });
                           }
                         }}
@@ -602,7 +635,7 @@ export default function PropertiesPanel() {
                         size="sm"
                         className="!text-[10px] !px-2"
                       >
-                        <Upload size={12} /> Elegir
+                        <Upload size={12} /> {t("logo.pick")}
                       </Button>
                       {delogoImagePath && (
                         <Button
@@ -610,7 +643,7 @@ export default function PropertiesPanel() {
                           variant="tertiary"
                           size="icon"
                           className="text-[var(--rose)]"
-                          style={{ color: "var(--rose)" }}
+                          style={{ color: "var(--text-rose)" }}
                           title={t("common.remove")}
                           aria-label={t("common.remove")}
                         >
@@ -619,8 +652,10 @@ export default function PropertiesPanel() {
                       )}
                     </div>
                     {!delogoImagePath && (
-                      <p className="inspector-helper mt-1" style={{ color: "var(--rose)" }}>
-                        Selecciona una imagen o el método caerá a “Desenfoque”.
+                      <p className="inspector-helper mt-1" style={{ color: "var(--text-rose)" }}>
+                        {t("props.coverFallbackHint", {
+                          method: t("catalog.delogoMethod.blur"),
+                        })}
                       </p>
                     )}
                   </div>
@@ -630,9 +665,7 @@ export default function PropertiesPanel() {
                   className="flex items-center gap-2 text-[11px] pt-1 min-w-0"
                   style={{ color: "var(--text-dim)" }}
                 >
-                  <span title="Suaviza el borde entre la zona restaurada y el video original">
-                    Feather borde
-                  </span>
+                  <span title={t("logo.edgeFeatherHint")}>{t("logo.edgeFeather")}</span>
                   <input
                     type="range"
                     min="0"
@@ -643,7 +676,7 @@ export default function PropertiesPanel() {
                   />
                   <span
                     className="font-mono text-xs w-8 text-right"
-                    style={{ color: "var(--accent-brand)" }}
+                    style={{ color: "var(--text-brand)" }}
                   >
                     {edgeFeather}px
                   </span>
@@ -654,19 +687,26 @@ export default function PropertiesPanel() {
             {(activeTool === "text" || sidebarMode === "batch") && (
               <div className="space-y-2.5">
                 {sidebarMode === "logo" && (
-                  <InspectorGroup title="Contenido">
+                  <InspectorGroup title={t("props.content")}>
                     <input
                       type="text"
                       value={textInput}
                       onChange={(e) => get().setTextInput(e.target.value)}
-                      placeholder="Texto..."
+                      placeholder={t("props.textPlaceholder")}
                       className="cap-input"
                     />
                   </InspectorGroup>
                 )}
                 <StyleEditor />
-                <InspectorGroup title="Posición automática" className="inspector-group--auto-pos">
-                  <div className="inspector-auto-pos" role="group" aria-label="Posición automática">
+                <InspectorGroup
+                  title={t("logo.autoPosition")}
+                  className="inspector-group--auto-pos"
+                >
+                  <div
+                    className="inspector-auto-pos"
+                    role="group"
+                    aria-label={t("logo.autoPosition")}
+                  >
                     {[
                       ["top-left", { x: 0.05, y: 0.05, w: 0.4, h: 0.08 }],
                       ["center", { x: 0.3, y: 0.46, w: 0.4, h: 0.08 }],
@@ -679,8 +719,8 @@ export default function PropertiesPanel() {
                         type="button"
                         onClick={() => get().setCurrentRegion(region)}
                         className="inspector-auto-pos-btn"
-                        title={pos}
-                        aria-label={pos}
+                        title={t(`position.${pos}`)}
+                        aria-label={t(`position.${pos}`)}
                       >
                         <PositionIcon position={pos} size={14} strokeWidth={2} />
                       </button>
@@ -692,10 +732,10 @@ export default function PropertiesPanel() {
             )}
 
             {sidebarMode === "logo" && (
-              <InspectorGroup title="Rango temporal">
+              <InspectorGroup title={t("logo.timeRange")}>
                 <div className="grid grid-cols-2 gap-2">
                   <label>
-                    <span className="cap-input-label">Inicio (s)</span>
+                    <span className="cap-input-label">{t("props.startSec")}</span>
                     <input
                       type="number"
                       value={tempStart ?? ""}
@@ -707,14 +747,14 @@ export default function PropertiesPanel() {
                     />
                   </label>
                   <label>
-                    <span className="cap-input-label">Fin (s)</span>
+                    <span className="cap-input-label">{t("props.endSec")}</span>
                     <input
                       type="number"
                       value={tempEnd ?? ""}
                       onChange={(e) =>
                         get().setTempEnd(e.target.value ? Number(e.target.value) : null)
                       }
-                      placeholder="final"
+                      placeholder={t("logo.endPlaceholder")}
                       className="cap-input font-mono text-[11px]"
                     />
                   </label>
@@ -722,10 +762,9 @@ export default function PropertiesPanel() {
                 {tempStart != null && tempEnd != null && tempEnd <= tempStart && (
                   <div
                     className="cap-card text-[11px] leading-relaxed"
-                    style={{ color: "#ef4444", borderColor: "rgba(239,68,68,0.3)" }}
+                    style={{ color: "var(--text-rose)", borderColor: "rgba(239,68,68,0.3)" }}
                   >
-                    El rango es inválido (Fin ≤ Inicio). La operación no se aplicará en la
-                    exportación. Ajusta Fin para que sea mayor que Inicio.
+                    {t("logo.rangeInvalid")} {t("logo.rangeInvalidHint")}
                   </div>
                 )}
               </InspectorGroup>
@@ -739,24 +778,15 @@ export default function PropertiesPanel() {
                   variant="primary"
                   className="w-full"
                 >
-                  Aplicar{" "}
-                  {activeTool === "blur"
-                    ? "Desenfoque"
-                    : activeTool === "crop"
-                      ? "Recorte"
-                      : activeTool === "delogo"
-                        ? "Remover"
-                        : activeTool === "image"
-                          ? "Imagen"
-                          : "Texto"}
+                  {t("props.apply", { op: t(`catalog.applyOp.${activeTool}`) })}
                 </Button>
                 <button
                   type="button"
                   onClick={() => get().setCurrentRegion(null)}
                   className="text-[11px] hover:underline block mx-auto"
-                  style={{ color: "var(--text-muted)" }}
+                  style={{ color: "var(--text-dim)" }}
                 >
-                  Cancelar selección
+                  {t("logo.cancelSelection")}
                 </button>
               </div>
             )}
@@ -775,7 +805,8 @@ export default function PropertiesPanel() {
           sidebarMode === "logo" &&
           (selectedOperation?.mode === "blur" ||
             selectedOperation?.mode === "delogo" ||
-            selectedOperation?.mode === "crop") && (
+            selectedOperation?.mode === "crop" ||
+            selectedOperation?.mode === "image") && (
             <AppliedDelogoEditor
               op={selectedOperation}
               videoIdx={selectedIdx}
@@ -793,7 +824,7 @@ export default function PropertiesPanel() {
               ...(selectedTemplateRegion.style || {}),
             }}
             video={sel}
-            title="Región aplicada"
+            title={t("props.appliedRegion")}
             showContent={false}
             onPatch={(patch) => get().updateTemplateRegion(selectedTemplateRegion.id, patch)}
           />

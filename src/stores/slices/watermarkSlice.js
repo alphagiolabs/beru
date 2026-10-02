@@ -1,18 +1,8 @@
-export function createWatermarkSlice(set, get) {
+import { restoreWatermark } from "../../utils/sanitize-preset.js";
+
+export function createWatermarkSlice(set) {
   return {
-    watermark: {
-      enabled: false,
-      type: "text",
-      text: "",
-      imagePath: "",
-      imageDataUrl: "",
-      opacity: 0.5,
-      scale: 1,
-      position: "bottom-right",
-      fontSize: 18,
-      fontColor: "#ffffff",
-      fontFamily: "Arial",
-    },
+    watermark: restoreWatermark({}),
     showWatermarkModal: false,
 
     setShowWatermarkModal: (val) => set({ showWatermarkModal: !!val }),

@@ -1,3 +1,5 @@
+import { DEFAULT_PIX_FMT } from "../../shared/job-manifest.js";
+
 export function getLockedDimensions(item) {
   const width = Number(item?.sourceWidth || item?.width || 0);
   const height = Number(item?.sourceHeight || item?.height || 0);
@@ -18,7 +20,7 @@ export function mergeProbeIntoQueueItem(item, info = {}) {
     sourceHeight,
     duration: info.duration || item.duration || 0,
     videoCodec: info.videoCodec || item.videoCodec || "",
-    pixFmt: info.pixFmt || item.pixFmt || "yuv420p",
+    pixFmt: info.pixFmt || item.pixFmt || DEFAULT_PIX_FMT,
     frameRate: info.frameRate || item.frameRate || 0,
     audioCodec: info.audioCodec || item.audioCodec || "",
     audioChannels: info.audioChannels || item.audioChannels || 0,

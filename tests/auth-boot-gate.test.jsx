@@ -9,7 +9,7 @@ vi.mock("../src/lib/supabaseClient.js", () => ({
 
 import BeruRoot from "../src/BeruRoot.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
-import { seedAuthenticatedAuthSync } from "./helpers/authTestState.js";
+import { seedAuthenticatedAuth } from "./helpers/authTestState.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -24,7 +24,6 @@ window.api = {
   onJobError: noop,
   onFinished: noop,
   onError: noop,
-  onLog: noop,
   onUpdaterEvent: noop,
   checkForUpdates: asyncNoop,
   resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
@@ -102,7 +101,7 @@ describe("Auth boot gate", () => {
   });
 
   it("shows the app when already authenticated", async () => {
-    await seedAuthenticatedAuthSync({
+    await seedAuthenticatedAuth({
       initAuth: vi.fn(async () => ({ ok: true })),
     });
 

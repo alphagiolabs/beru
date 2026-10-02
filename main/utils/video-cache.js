@@ -1,20 +1,13 @@
 import fs from "fs";
-import { probeVideoFile, hasVideoDimensions } from "../videoProbe.js";
+import { probeVideoFile } from "../videoProbe.js";
+import { hasVideoDimensions } from "../../shared/has-video-dimensions.js";
 import { getFfprobePath, getFfmpegPath } from "./paths.js";
+import { trimOldest } from "./cache-trim.js";
 
 const videoInfoCache = new Map();
 const VIDEO_INFO_CACHE_MAX = 500;
 
 const pendingProbes = new Map();
-
-function trimVideoInfoCache() {
-  if (videoInfoCache.size <= VIDEO_INFO_CACHE_MAX) return;
-  const keys = videoInfoCache.keys();
-  const excess = videoInfoCache.size - VIDEO_INFO_CACHE_MAX;
-  for (let i = 0; i < excess; i++) {
-    videoInfoCache.delete(keys.next().value);
-  }
-}
 
 function getVideoMtimeMs(filePath) {
   try {
@@ -24,7 +17,7 @@ function getVideoMtimeMs(filePath) {
   }
 }
 
-function getCachedVideoInfo(filePath, mtime = getVideoMtimeMs(filePath)) {
+function getCachedVideoInfo(filePath, mtime) {
   if (mtime < 0) return null;
   const hit = videoInfoCache.get(filePath);
   if (!hit || hit.mtime !== mtime || !hasVideoDimensions(hit.info)) return null;
@@ -34,7 +27,7 @@ function getCachedVideoInfo(filePath, mtime = getVideoMtimeMs(filePath)) {
 function setCachedVideoInfo(filePath, mtime, info) {
   if (mtime < 0 || !hasVideoDimensions(info)) return;
   videoInfoCache.set(filePath, { mtime, info });
-  trimVideoInfoCache();
+  trimOldest(videoInfoCache, VIDEO_INFO_CACHE_MAX);
 }
 
 function probeVideoCached(filePath, { key, timeoutMs, allowFfmpegFallback }) {

@@ -1,6 +1,7 @@
 import { X, Type, Image as ImageIcon, Upload } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
+import { storeErrorText } from "../utils/store-errors";
 import { WATERMARK_POSITIONS } from "../utils/watermark-position";
 import { Button } from "./ui/Button";
 import { PositionIcon } from "./ui/PositionIcon";
@@ -48,7 +49,7 @@ export default function WatermarkModal() {
               className="accent-[var(--accent)] w-4 h-4"
             />
             <span className="text-[12px] font-medium" style={{ color: "var(--text-secondary)" }}>
-              Activar marca de agua
+              {t("watermark.enable")}
             </span>
           </label>
 
@@ -68,7 +69,7 @@ export default function WatermarkModal() {
                 color: isText ? "var(--bg-app)" : "var(--text-dim)",
               }}
             >
-              <Type size={13} /> Texto
+              <Type size={13} /> {t("watermark.typeText")}
             </Button>
             <Button
               type="button"
@@ -82,7 +83,7 @@ export default function WatermarkModal() {
                 color: !isText ? "var(--bg-app)" : "var(--text-dim)",
               }}
             >
-              <ImageIcon size={13} /> Imagen
+              <ImageIcon size={13} /> {t("watermark.typeImage")}
             </Button>
           </div>
 
@@ -93,13 +94,13 @@ export default function WatermarkModal() {
                   className="text-[9px] font-semibold tracking-wider uppercase mb-1 block"
                   style={{ color: "var(--text-dim)" }}
                 >
-                  Texto
+                  {t("watermark.typeText")}
                 </span>
                 <input
                   type="text"
                   value={wm.text}
                   onChange={(e) => setWatermark({ text: e.target.value })}
-                  placeholder="Ej: © Mi Empresa 2025"
+                  placeholder={t("modal.watermark.textPlaceholder")}
                   className="cap-input w-full text-[12px]"
                 />
               </label>
@@ -109,7 +110,7 @@ export default function WatermarkModal() {
                     className="text-[9px] font-semibold tracking-wider uppercase mb-1 block"
                     style={{ color: "var(--text-dim)" }}
                   >
-                    Tamaño
+                    {t("table.size")}
                   </span>
                   <input
                     type="number"
@@ -125,7 +126,7 @@ export default function WatermarkModal() {
                     className="text-[9px] font-semibold tracking-wider uppercase mb-1 block"
                     style={{ color: "var(--text-dim)" }}
                   >
-                    Color
+                    {t("table.color")}
                   </span>
                   <div className="flex gap-1.5 items-center">
                     <input
@@ -134,7 +135,7 @@ export default function WatermarkModal() {
                       onChange={(e) => setWatermark({ fontColor: e.target.value })}
                       className="w-8 h-8 rounded cursor-pointer border-0"
                     />
-                    <span className="font-mono text-[10px]" style={{ color: "var(--text-muted)" }}>
+                    <span className="font-mono text-[10px]" style={{ color: "var(--text-dim)" }}>
                       {wm.fontColor}
                     </span>
                   </div>
@@ -150,13 +151,13 @@ export default function WatermarkModal() {
                   className="text-[9px] font-semibold tracking-wider uppercase mb-1 block"
                   style={{ color: "var(--text-dim)" }}
                 >
-                  Imagen
+                  {t("watermark.typeImage")}
                 </span>
                 <div className="flex gap-1.5">
                   <input
                     type="text"
                     value={wm.imagePath ? wm.imagePath.split(/[\\/]/).pop() : ""}
-                    placeholder="Seleccionar imagen..."
+                    placeholder={t("modal.watermark.imagePlaceholder")}
                     readOnly
                     className="cap-input flex-1 font-mono text-[10px] truncate"
                   />
@@ -164,14 +165,11 @@ export default function WatermarkModal() {
                     type="button"
                     onClick={async () => {
                       const res = await window.api?.pickImage();
-                      if (!res || res.canceled) {
-                        setWatermark({ imagePath: "", imageDataUrl: "" });
-                        return;
-                      }
+                      if (!res || res.canceled) return;
                       if (!res.success) {
                         showToast?.({
                           kind: "err",
-                          text: res.error || "No se pudo cargar la imagen",
+                          text: storeErrorText(t, res, "errors.imageReadFailed"),
                         });
                         return;
                       }
@@ -181,16 +179,15 @@ export default function WatermarkModal() {
                       } else {
                         showToast?.({
                           kind: "err",
-                          text: r?.error || "No se pudo leer la imagen seleccionada",
+                          text: storeErrorText(t, r, "errors.imageReadFailed"),
                         });
-                        setWatermark({ imagePath: "", imageDataUrl: "" });
                       }
                     }}
                     variant="secondary"
                     size="sm"
                     className="!text-[10px] !px-2"
                   >
-                    <Upload size={12} /> Elegir
+                    <Upload size={12} /> {t("logo.pick")}
                   </Button>
                   {wm.imagePath && (
                     <Button
@@ -201,7 +198,7 @@ export default function WatermarkModal() {
                       title={t("common.remove")}
                       aria-label={t("common.remove")}
                       className="text-[var(--rose)]"
-                      style={{ color: "var(--rose)" }}
+                      style={{ color: "var(--text-rose)" }}
                     >
                       <X size={12} />
                     </Button>
@@ -214,7 +211,7 @@ export default function WatermarkModal() {
                   >
                     <img
                       src={wm.imageDataUrl}
-                      alt="watermark preview"
+                      alt={t("watermark.previewAlt")}
                       className="block w-full max-h-24 object-contain"
                       style={{ background: "var(--bg-app)" }}
                     />
@@ -226,7 +223,7 @@ export default function WatermarkModal() {
                   className="text-[9px] font-semibold tracking-wider uppercase mb-1 block"
                   style={{ color: "var(--text-dim)" }}
                 >
-                  Escala
+                  {t("watermark.scale")}
                 </span>
                 <div className="flex items-center gap-2">
                   <input
@@ -240,7 +237,7 @@ export default function WatermarkModal() {
                   />
                   <span
                     className="font-mono text-xs w-10 text-right"
-                    style={{ color: "var(--accent)" }}
+                    style={{ color: "var(--text-accent)" }}
                   >
                     {wm.scale.toFixed(1)}x
                   </span>
@@ -254,7 +251,7 @@ export default function WatermarkModal() {
               className="text-[9px] font-semibold tracking-wider uppercase mb-1 block"
               style={{ color: "var(--text-dim)" }}
             >
-              Opacidad
+              {t("table.opacity")}
             </span>
             <div className="flex items-center gap-2">
               <input
@@ -268,7 +265,7 @@ export default function WatermarkModal() {
               />
               <span
                 className="font-mono text-xs w-10 text-right"
-                style={{ color: "var(--accent)" }}
+                style={{ color: "var(--text-accent)" }}
               >
                 {Math.round(wm.opacity * 100)}%
               </span>
@@ -280,30 +277,28 @@ export default function WatermarkModal() {
               className="text-[9px] font-semibold tracking-wider uppercase mb-1 block"
               style={{ color: "var(--text-dim)" }}
             >
-              Posición
+              {t("watermark.position")}
             </span>
             <div className="grid grid-cols-3 gap-1">
-              {WATERMARK_POSITIONS.map((pos) => {
-                return (
-                  <Button
-                    type="button"
-                    key={pos.key}
-                    onClick={() => setWatermark({ position: pos.key })}
-                    variant="secondary"
-                    size="sm"
-                    className="!text-xs !p-2"
-                    style={{
-                      background: wm.position === pos.key ? "var(--accent)" : "var(--bg-elevated)",
-                      color: wm.position === pos.key ? "var(--bg-app)" : "var(--text-dim)",
-                      borderColor: wm.position === pos.key ? "var(--accent)" : "var(--border)",
-                    }}
-                    title={pos.key}
-                    aria-label={pos.key}
-                  >
-                    <PositionIcon position={pos.key} size={14} strokeWidth={2} />
-                  </Button>
-                );
-              })}
+              {WATERMARK_POSITIONS.map((pos) => (
+                <Button
+                  type="button"
+                  key={pos.key}
+                  onClick={() => setWatermark({ position: pos.key })}
+                  variant="secondary"
+                  size="sm"
+                  className="!text-xs !p-2"
+                  style={{
+                    background: wm.position === pos.key ? "var(--accent)" : "var(--bg-elevated)",
+                    color: wm.position === pos.key ? "var(--bg-app)" : "var(--text-dim)",
+                    borderColor: wm.position === pos.key ? "var(--accent)" : "var(--border)",
+                  }}
+                  title={t(`position.${pos.key}`)}
+                  aria-label={t(`position.${pos.key}`)}
+                >
+                  <PositionIcon position={pos.key} size={14} strokeWidth={2} />
+                </Button>
+              ))}
             </div>
           </div>
         </div>

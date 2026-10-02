@@ -57,14 +57,25 @@ describe("applyBatchTextOperations", () => {
 });
 
 describe("buildBatchTextOperationsForPreview", () => {
-  it("keeps the region label when the excel cell is empty", () => {
+  it("resolves cell text through getCellTextForRegion, not the editing-aid text", () => {
+    const state = {
+      queue: [{ operations: [] }],
+      templateRegions: templates,
+      getCellTextForRegion: () => "Celda",
+      getBatchPreviewText: () => "TEXT_1",
+    };
+    const ops = buildBatchTextOperationsForPreview(state, 0);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].text).toBe("Celda");
+  });
+
+  it("emits no text op without a cell resolver — the region label is never export content", () => {
     const state = {
       queue: [{ operations: [] }],
       templateRegions: templates,
       getBatchPreviewText: () => "TEXT_1",
     };
     const ops = buildBatchTextOperationsForPreview(state, 0);
-    expect(ops).toHaveLength(1);
-    expect(ops[0].text).toBe("TEXT_1");
+    expect(ops.filter((op) => op.mode === "text")).toHaveLength(0);
   });
 });

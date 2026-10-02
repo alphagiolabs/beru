@@ -54,14 +54,14 @@ describe("Excel row matching with extension in ID column", () => {
     });
   });
 
-  it("_reapplyExcel links rows when Excel ID includes the file extension", () => {
-    const report = useEditorStore.getState()._reapplyExcel();
-    expect(report.matched).toBe(1);
+  it("updateExcelMapping links rows when Excel ID includes the file extension", () => {
+    useEditorStore.getState().updateExcelMapping({ idColumn: "id", columns: { r1: "TEXT_1" } });
+    expect(useEditorStore.getState().excelMatchStatus[0]).toBe("matched");
     expect(useEditorStore.getState().queue[0].operations[0].text).toBe("Titulo");
   });
 
   it("getCellTextForRegion reads Excel text after extension-normalized match", () => {
-    useEditorStore.getState()._reapplyExcel();
+    useEditorStore.getState().updateExcelMapping({ idColumn: "id", columns: { r1: "TEXT_1" } });
     expect(useEditorStore.getState().getCellTextForRegion(0, "r1")).toBe("Titulo");
   });
 });
