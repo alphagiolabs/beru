@@ -48,7 +48,7 @@ describe("native picker read consent", () => {
       await mocks.handlers.get(channel)({});
       expect(security.validateReadableFile(selected, kind)).toMatchObject({
         ok: true,
-        resolvedPath: selected,
+        resolvedPath: fs.realpathSync.native(selected),
       });
       expect(security.registerAllowedPath(sibling, kind).ok).toBe(false);
       expect(security.validateReadableFile(sibling, kind).ok).toBe(false);

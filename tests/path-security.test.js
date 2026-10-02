@@ -119,9 +119,9 @@ describe("pathSecurity", () => {
     expect(security.getOutputDirectory()).toBeNull();
     expect(security.registerOutputDirectory(outputDirectory)).toEqual({
       ok: true,
-      resolvedPath: fs.realpathSync(outputDirectory),
+      resolvedPath: fs.realpathSync.native(outputDirectory),
     });
-    expect(security.getOutputDirectory()).toBe(fs.realpathSync(outputDirectory));
+    expect(security.getOutputDirectory()).toBe(fs.realpathSync.native(outputDirectory));
     expect(security.registerOutputDirectory(tmpFile).ok).toBe(false);
   });
 

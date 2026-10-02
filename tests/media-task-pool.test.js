@@ -80,12 +80,13 @@ describe("media task pool", () => {
   });
 
   it("reduces admission under pressure, then uses recovered memory without killing active work", async () => {
+    const pool = createMediaTaskPool({ maxActive: 8 });
     const free = vi.spyOn(os, "freemem");
     free.mockReturnValue(1536 * 1024 ** 2);
     let active = 0;
     const release = [];
     const tasks = Array.from({ length: 10 }, () =>
-      runMediaTask(
+      pool.run(
         () =>
           new Promise((resolve) => {
             active++;
@@ -111,9 +112,10 @@ describe("media task pool", () => {
   });
 
   it("promotes one pending thumbnail ahead of background work while preserving selected-video priority", async () => {
+    const pool = createMediaTaskPool({ maxActive: 1 });
     vi.spyOn(os, "freemem").mockReturnValue(256 * 1024 ** 2);
     let finish;
-    const blocker = runMediaTask(
+    const blocker = pool.run(
       () =>
         new Promise((resolve) => {
           finish = resolve;
@@ -121,31 +123,31 @@ describe("media task pool", () => {
     );
     await Promise.resolve();
     const order = [];
-    const background = runMediaTask(() => {
+    const background = pool.run(() => {
       order.push("background");
       return "background";
     });
-    const thumb = runMediaTask(
+    const thumb = pool.run(
       () => {
         order.push("thumbnail");
         return "jpeg";
       },
       { key: "thumbnail:visible" },
     );
-    const promoted = runMediaTask(
+    const promoted = pool.run(
       () => {
         throw new Error("duplicate thumbnail");
       },
       { key: "thumbnail:visible", visible: true },
     );
-    const selected = runMediaTask(
+    const selected = pool.run(
       () => {
         order.push("selected");
         return "selected";
       },
       { interactive: true },
     );
-    const metadata = runMediaTask(
+    const metadata = pool.run(
       () => {
         order.push("metadata");
         return "metadata";
@@ -160,16 +162,17 @@ describe("media task pool", () => {
   });
 
   it("lets a failed keyed job be retried and makes progress when memory cannot be read", async () => {
+    const pool = createMediaTaskPool({ maxActive: 1 });
     vi.spyOn(os, "freemem").mockReturnValue(Number.NaN);
     await expect(
-      runMediaTask(
+      pool.run(
         () => {
           throw new Error("decode failed");
         },
         { key: "retry" },
       ),
     ).rejects.toThrow("decode failed");
-    await expect(runMediaTask(() => "recovered", { key: "retry" })).resolves.toBe("recovered");
+    await expect(pool.run(() => "recovered", { key: "retry" })).resolves.toBe("recovered");
   });
 });
 
