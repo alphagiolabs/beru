@@ -2,10 +2,13 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
-const src = fs.readFileSync(path.join(process.cwd(), "src/components/VideoPreview.jsx"), "utf-8");
+const src = fs.readFileSync(
+  path.join(process.cwd(), "src/components/video-preview/WatermarkOverlay.jsx"),
+  "utf-8",
+);
 
 function watermarkPreviewBody(maxLen) {
-  const wmStart = src.indexOf("watermark?.enabled");
+  const wmStart = src.indexOf("video.offsetWidth");
   expect(wmStart).toBeGreaterThan(-1);
   return src.slice(wmStart, wmStart + maxLen);
 }

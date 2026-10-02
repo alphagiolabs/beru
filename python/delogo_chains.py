@@ -1,13 +1,4 @@
-"""Delogo filter-chain builders for processor.py.
-
-Extracted from the ``processor.py`` monolith.  These are pure graph builders
-(not monkeypatched by the test suite) that import the shared operation helpers
-from ``op_shared``.  ``processor.py`` calls ``_build_delogo_chain`` from
-``build_filter_complex``.
-
-Logger is fetched lazily via ``logging.getLogger("beru")`` to avoid a circular
-import with ``processor`` (which configures the "beru" logger at import time).
-"""
+"""Delogo filter-chain builders using shared operation helpers."""
 
 import logging
 import os
@@ -28,20 +19,26 @@ def _clamp_delogo_rect(x, y, w, h, video_w, video_h):
     """Clamp a selected logo box without changing its visible frame edges."""
     if video_w <= 0 or video_h <= 0 or w <= 0 or h <= 0:
         return None
-    x = max(0, min(int(x), video_w - 1))
-    y = max(0, min(int(y), video_h - 1))
-    w = max(1, min(int(w), video_w - x))
-    h = max(1, min(int(h), video_h - y))
-    return x, y, w, h
+    left = max(0, int(x))
+    top = max(0, int(y))
+    right = min(video_w, int(x) + int(w))
+    bottom = min(video_h, int(y) + int(h))
+    if right <= left or bottom <= top:
+        return None
+    return left, top, right - left, bottom - top
 
 
-def _build_boxblur_filter(luma_radius, chroma_radius=None):
-    """Build a boxblur whose radii stay valid for the runtime pixel format."""
+def _build_boxblur_filter(luma_radius, chroma_radius=None, power=1):
+    """Build a boxblur whose radii stay valid for the runtime pixel format.
+
+    ``power`` counts blur passes; 3 passes approximate the gaussian the live
+    canvas preview draws (sigma ~= radius), so exports match the preview.
+    """
     luma = max(0, int(luma_radius))
     chroma = luma if chroma_radius is None else max(0, int(chroma_radius))
     return (
-        f"boxblur=luma_radius=min({luma}\\,min(w\\,h)/2):luma_power=1:"
-        f"chroma_radius=min({chroma}\\,min(cw\\,ch)/2):chroma_power=1"
+        f"boxblur=luma_radius=min({luma}\\,min(w\\,h)/2):luma_power={int(power)}:"
+        f"chroma_radius=min({chroma}\\,min(cw\\,ch)/2):chroma_power={int(power)}"
     )
 
 
@@ -63,15 +60,27 @@ def _seamless_feather_widths(feather, left, top, right, bottom):
     return tuple(max(0, min(f, int(side))) for side in (left, top, right, bottom))
 
 
-def _seamless_box_alpha_filter(left, top, w, h, feather_widths):
-    """Alpha for a padded patch: fully opaque over the logo box at
-    ``(left, top, w, h)`` (crop-local coords), linear ramp to transparent
-    across ``f`` pixels of surrounding context.
+def _with_enable(filter_str, enable_clause):
+    return f"{filter_str}:{enable_clause}" if enable_clause else filter_str
 
-    Blending toward the original frame is only correct OUTSIDE the logo box:
-    inside, the frame still shows the logo, so the box itself must stay
-    opaque. Commas live inside single quotes so the filtergraph parser
-    treats them as literal (per ffmpeg docs).
+
+def _seamless_alpha_mask_chain(left, top, w, h, feather_widths):
+    """Filter chain that turns a patch's first frame into its alpha mask.
+
+    The seam ramp is fully opaque over the logo box at ``(left, top, w, h)``
+    (crop-local coords), then ramps linearly to transparent across ``f``
+    pixels of surrounding context. Blending toward the original frame is
+    only correct OUTSIDE the logo box: inside, the frame still shows the
+    logo, so the box itself must stay opaque.
+
+    The ramp is a pure function of (X, Y), so geq runs once on a single
+    gray frame and the result is looped, instead of paying geq's per-pixel,
+    per-frame expression eval on the video patch (~3-4x faster filter stage
+    in benchmarks). Feeding the mask off the patch itself (select frame 0)
+    keeps mask size identical to whatever ``crop`` actually emitted —
+    subsampled inputs can round odd patch dims to even. ``alphamerge`` then
+    copies this luma into the patch alpha every frame. Commas live inside
+    single quotes so the filtergraph parser treats them as literal.
     """
     left_f, top_f, right_f, bottom_f = feather_widths
     right_edge = left + w - 1
@@ -89,7 +98,10 @@ def _seamless_box_alpha_filter(left, top, w, h, feather_widths):
     for ramp in ramps:
         opacity = f"min({opacity},{ramp})"
     expr = f"255*max({opacity},0)"
-    return f"format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{expr}'"
+    return (
+        f"select='eq(n\\,0)',format=gray,geq=lum='{expr}',"
+        f"loop=loop=-1:size=1,setpts=N/TB"
+    )
 
 
 def _build_padded_region(x, y, w, h, video_w, video_h, pad):
@@ -105,7 +117,7 @@ def _build_padded_region(x, y, w, h, video_w, video_h, pad):
     return x0, y0, rw, rh
 
 
-def _build_cleanup_filter(method, op, rw, rh):
+def _build_cleanup_filter(method, op, rw, rh, enable_clause=""):
     """Single-input cleanup filters for a cropped patch (rw x rh).
 
     Mirror and inpaint are handled separately on the full frame.
@@ -126,18 +138,19 @@ def _build_cleanup_filter(method, op, rw, rh):
         strength = _coerce_int(op.get("blur_strength"), 20, 1, 100)
         luma = max(1, min(100, strength // 3))
         chroma = max(1, luma // 2)
-        return _build_boxblur_filter(luma, chroma)
+        return _with_enable(_build_boxblur_filter(luma, chroma, power=3), enable_clause)
 
     if method == "fill":
         fill_color = _validate_drawtext_color(
             op.get("delogo_fill_color") or "black", "delogo_fill_color"
         )
         fill_opacity = _coerce_float(op.get("delogo_fill_opacity"), 1.0, 0.0, 1.0)
-        return (
-            f"drawbox=x=0:y=0:w={rw}:h={rh}:color={fill_color}@{fill_opacity}:t=fill"
+        return _with_enable(
+            f"drawbox=x=0:y=0:w={rw}:h={rh}:color={fill_color}@{fill_opacity}:t=fill",
+            enable_clause,
         )
 
-    return _build_boxblur_filter(10, 5)
+    return _with_enable(_build_boxblur_filter(10, 5), enable_clause)
 
 
 def _build_mirror_patch(side, x, y, w, h, video_w, video_h, in_label, out_label):
@@ -207,8 +220,12 @@ def _seamless_overlay_tail(clean_label, s, idx, x0, y0, rw, rh, box, feather, en
     )
     if not any(feather_widths):
         return f"[full{s}][{clean_label}]overlay={_overlay_opts(x0, y0, enable_clause)}[tmp{idx}]"
+    mask = _seamless_alpha_mask_chain(left, top, w, h, feather_widths)
     return (
-        f"[{clean_label}]{_seamless_box_alpha_filter(left, top, w, h, feather_widths)}[soft{s}];"
+        f"[{clean_label}]split=2[cmrg{s}][msrc{s}];"
+        f"[msrc{s}]{mask}[mask{s}];"
+        f"[cmrg{s}]format=rgba[rgba{s}];"
+        f"[rgba{s}][mask{s}]alphamerge=shortest=1[soft{s}];"
         f"[full{s}][soft{s}]overlay={_overlay_opts(x0, y0, enable_clause)}[tmp{idx}]"
     )
 
@@ -217,24 +234,32 @@ def _inpaint_filter_graph(src, s, idx, x, y, w, h, x0, y0, rw, rh, feather, enab
     delogo = f"delogo=x={x}:y={y}:w={w}:h={h}"
     if feather <= 0 and not enable_clause:
         return f"{src}{delogo}[tmp{idx}]"
+    if x0 % 2 == 0 and y0 % 2 == 0:
+        patch_delogo = _with_enable(
+            f"delogo=x={x - x0}:y={y - y0}:w={w}:h={h}", enable_clause
+        )
+        work = f"[work{s}]crop={rw}:{rh}:{x0}:{y0},{patch_delogo}[crop{s}];"
+    else:
+        work = (
+            f"[work{s}]{_with_enable(delogo, enable_clause)}[work_clean{s}];"
+            f"[work_clean{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
+        )
     if feather <= 0:
         # feather=0 with time bounds: FFmpeg boxblur treats 0 as 1.
         return (
             f"{src}split[full{s}][work{s}];"
-            f"[work{s}]{delogo}[work_clean{s}];"
-            f"[work_clean{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
+            f"{work}"
             f"[full{s}][crop{s}]overlay={_overlay_opts(x0, y0, enable_clause)}[tmp{idx}]"
         )
-    # Interior treatment (unchanged): soften delogo interpolation streaks,
-    # then grain-match so the patch does not read as flat plastic against
-    # compressed-video grain. The box-aware alpha seam (tail) confines all of
-    # this to the patch — no halo beyond it.
     feather_blur = max(1, feather)
+    interior = ",".join(
+        _with_enable(f, enable_clause)
+        for f in (_build_boxblur_filter(feather_blur), "noise=alls=4:allf=t")
+    )
     head = (
         f"{src}split[full{s}][work{s}];"
-        f"[work{s}]{delogo}[work_clean{s}];"
-        f"[work_clean{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
-        f"[crop{s}]{_build_boxblur_filter(feather_blur)},noise=alls=4:allf=t[clean{s}];"
+        f"{work}"
+        f"[crop{s}]{interior}[clean{s}];"
     )
     return head + _seamless_overlay_tail(
         f"clean{s}", s, idx, x0, y0, rw, rh, (x - x0, y - y0, w, h),
@@ -266,31 +291,29 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
         return None
     x, y, w, h = rect
     feather = _coerce_int(op.get("edge_feather"), 6, 0, 40)
-    pad = max(2, feather)
-    padded = _build_padded_region(x, y, w, h, video_w, video_h, pad)
-    if padded is None:
-        return None
-    x0, y0, rw, rh = padded
 
     enable_clause = _build_enable_clause(op)
     src = "[0:v]" if prev_label is None else f"[{prev_label}]"
     s = f"d{idx}"
 
+    def blur_fallback():
+        return _build_delogo_chain(
+            {
+                **op,
+                "region": {"x": x, "y": y, "w": w, "h": h},
+                "delogo_method": "blur",
+            },
+            prev_label,
+            idx,
+            video_w,
+            video_h,
+            img_input_index,
+        )
+
     if method == "inpaint":
         touches_frame = x == 0 or y == 0 or x + w == video_w or y + h == video_h
         if touches_frame:
-            return _build_delogo_chain(
-                {
-                    **op,
-                    "region": {"x": x, "y": y, "w": w, "h": h},
-                    "delogo_method": "blur",
-                },
-                prev_label,
-                idx,
-                video_w,
-                video_h,
-                img_input_index,
-            )
+            return blur_fallback()
         x, y, w, h = _fit_delogo_rect(x, y, w, h, video_w, video_h)
         x0, y0, rw, rh = _build_padded_region(
             x, y, w, h, video_w, video_h, max(2, feather)
@@ -305,29 +328,14 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
             mirror_side, x, y, w, h, video_w, video_h, f"work{s}", f"clean{s}"
         )
         if mirror_chain is None:
-            return _build_delogo_chain(
-                {
-                    **op,
-                    "region": {"x": x, "y": y, "w": w, "h": h},
-                    "delogo_method": "blur",
-                },
-                prev_label,
-                idx,
-                video_w,
-                video_h,
-                img_input_index,
-            )
+            return blur_fallback()
         if feather <= 0:
             return (
                 f"{src}split[full{s}][work{s}];"
                 f"{mirror_chain};"
                 f"[full{s}][clean{s}]overlay={_overlay_opts(x, y, enable_clause)}[tmp{idx}]"
             )
-        # Widen the mirrored patch into the surroundings so the seam ramp
-        # blends mirrored context with original context (both logo-free)
-        # instead of leaking logo pixels back along the box edge. The box
-        # itself stays fully opaque. If there is no room to widen, the tail
-        # degrades to a hard overlay of the exact mirrored box.
+        # Blend logo-free context at the seam; keep the logo box fully opaque.
         exp = max(1, int(feather))
         mx, my = max(0, x - exp), max(0, y - exp)
         mw = min(w + 2 * exp, video_w - mx)
@@ -345,18 +353,7 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
                 f"clean{s}", s, idx, mx, my, mw, mh, (x - mx, y - my, w, h),
                 feather, enable_clause,
             )
-        return _build_delogo_chain(
-            {
-                **op,
-                "region": {"x": x, "y": y, "w": w, "h": h},
-                "delogo_method": "blur",
-            },
-            prev_label,
-            idx,
-            video_w,
-            video_h,
-            img_input_index,
-        )
+        return blur_fallback()
 
     if method == "cover":
         img_path = op.get("delogo_image_path")
@@ -374,7 +371,10 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
             f"{src}[cover{s}]overlay={overlay_opts}[tmp{idx}]"
         )
 
-    cleanup = _build_cleanup_filter(method, op, rw, rh)
+    x0, y0, rw, rh = _build_padded_region(
+        x, y, w, h, video_w, video_h, max(2, feather)
+    )
+    cleanup = _build_cleanup_filter(method, op, rw, rh, enable_clause)
 
     if feather <= 0:
         return (

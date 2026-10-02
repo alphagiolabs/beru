@@ -2,8 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   binarySearchAutoFitFontSize,
   drawtextLineSpacingPx,
-  elementOverflows,
-  getTextLayoutCss,
   layoutExportText,
   verticalAlignToFlex,
   wrapTextToWidth,
@@ -15,20 +13,6 @@ describe("text-layout utilities", () => {
     expect(verticalAlignToFlex("top")).toBe("flex-start");
     expect(verticalAlignToFlex("center")).toBe("center");
     expect(verticalAlignToFlex("bottom")).toBe("flex-end");
-  });
-
-  it("returns nowrap + ellipsis css when wrap is disabled", () => {
-    expect(getTextLayoutCss({ textWrap: false, truncate: "ellipsis" })).toMatchObject({
-      whiteSpace: "nowrap",
-      textOverflow: "ellipsis",
-    });
-  });
-
-  it("returns pre-wrap css when wrapping is enabled", () => {
-    expect(getTextLayoutCss({ textWrap: true })).toMatchObject({
-      whiteSpace: "pre-wrap",
-      wordBreak: "break-word",
-    });
   });
 
   it("binarySearchAutoFitFontSize picks the largest fitting size", () => {
@@ -59,18 +43,6 @@ describe("text-layout utilities", () => {
       fontSize: 32,
       displayText: "one\ntwo\nthree\nfour\nfive\nsix",
     });
-  });
-
-  it("can measure overflow against explicit usable bounds", () => {
-    const el = {
-      scrollWidth: 118,
-      scrollHeight: 28,
-      clientWidth: 100,
-      clientHeight: 24,
-    };
-
-    expect(elementOverflows(el)).toBe(true);
-    expect(elementOverflows(el, 1, { width: 120, height: 32 })).toBe(false);
   });
 });
 

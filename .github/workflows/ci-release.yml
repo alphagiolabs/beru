@@ -17,8 +17,8 @@ jobs:
   # When a tag is pushed, this job must pass before release starts.
   test:
     name: Lint & Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -29,42 +29,27 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install dependencies
         run: npm ci
 
       - name: Prepare ffmpeg
         # npm ci runs postinstall, but this is idempotent and keeps the CI
-        # dependency local to the repo instead of waiting on apt mirrors.
+        # dependency local to the repo.
         timeout-minutes: 2
         run: npm run fetch:ffmpeg
 
-      - name: Lint
-        run: npm run lint
-
-      - name: Format check
-        run: npm run format:check
-
-      - name: Run tests
-        run: npm test
-
-      - name: Run Python delogo smoke tests
-        # Run Python pipeline tests to catch regressions in the FFmpeg filter
-        # graph builder. These tests validate delogo chains, e2e pipeline, and
-        # edge cases. They require ffmpeg which is fetched above.
-        # Uses continue-on-error so a missing ffmpeg binary on CI does not
-        # block the JS quality gate. The definitive Python validation happens
-        # on the Windows build job.
-        continue-on-error: true
+      - name: Verify
         run: |
-          if [ -f bin/ffmpeg ] || [ -f bin/ffmpeg.exe ]; then
-            python python/test_delogo.py
-            python python/test_delogo_robust.py
-          else
-            echo "ffmpeg not found in bin/ — skipping Python tests"
-          fi
+          python -m pip install --quiet numpy
+          npm run verify
 
   # Build & publish: only runs on tag pushes.
-  # `needs: test` ensures tests pass (in Ubuntu) before building on Windows.
+  # `needs: test` ensures the Windows quality gate passes before packaging.
   release:
     name: Build & Release (Windows)
     if: ${{ startsWith(github.ref, 'refs/tags/') }}
@@ -133,7 +118,7 @@ jobs:
           if (-not $cscLink) {
             Write-Warning "WINDOWS_CERTIFICATE_BASE64 secret is not set — publishing an UNSIGNED installer. Set the secret to enable Authenticode signing."
           }
-          npx electron-builder --publish always
+          npx electron-builder --win --publish always
 
       - name: Verify installer signature
         # Post-build diagnostic: log the Authenticode signature status of the

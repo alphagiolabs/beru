@@ -4,31 +4,36 @@ import { useT } from "../i18n/useT";
 const STATUS_META = {
   matched: {
     icon: Check,
-    color: "var(--accent)",
+    color: "var(--text-accent)",
     labelKey: "match.coincide",
     descKey: "match.coincideDesc",
   },
   unmatched: {
     icon: AlertCircle,
-    color: "var(--amber)",
+    color: "var(--text-amber)",
     labelKey: "match.sinMatch",
     descKey: "match.sinMatchDesc",
   },
   duplicate: {
     icon: Copy,
-    color: "var(--rose)",
+    color: "var(--text-rose)",
     labelKey: "match.multiple",
     descKey: "match.multipleDesc",
   },
-  none: { icon: Minus, color: "var(--text-dim)", labelKey: null, descKey: null },
+  none: {
+    icon: Minus,
+    color: "var(--text-dim)",
+    labelKey: "match.noExcel",
+    descKey: "match.noExcelDesc",
+  },
 };
 
 export default function MatchBadge({ status, size = 10 }) {
   const t = useT();
   const meta = STATUS_META[status] || STATUS_META.none;
   const Icon = meta.icon;
-  const label = meta.labelKey ? t(meta.labelKey) : "Sin Excel";
-  const desc = meta.descKey ? t(meta.descKey) : "Aún no se importó ningún Excel";
+  const label = meta.labelKey ? t(meta.labelKey) : "";
+  const desc = meta.descKey ? t(meta.descKey) : "";
   return (
     <span
       title={`${label} · ${desc}`}

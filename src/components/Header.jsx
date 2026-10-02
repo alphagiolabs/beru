@@ -6,40 +6,25 @@ import {
   FolderOutput,
   Undo2,
   Redo2,
-  Settings,
   FlaskConical,
   X,
   FolderOpen,
   ExternalLink,
   Save,
   FolderInput,
-  Library,
-  ChevronDown,
   BookmarkPlus,
-  Sun,
-  Moon,
-  Languages,
-  History,
-  Droplets,
 } from "lucide-react";
 import { shallow } from "zustand/shallow";
-import { useT, SUPPORTED_LANGUAGES } from "../i18n/useT";
+import { useT } from "../i18n/useT";
 import useEditorStore from "../stores/useEditorStore";
-import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
-import { resolveThemeName } from "../theme/engine.js";
 import { importVideosFromDialog } from "../utils/import-videos";
-import { queueCapacityInput } from "../utils/batch-capacity";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "./ui/dropdown-menu";
+import { queueCapacityInput, capacityJobsSignature } from "../utils/batch-capacity";
 import { Button } from "./ui/Button";
+import { Tooltip, TooltipProvider } from "./ui/tooltip";
+import { Select } from "./ui/select";
 
 const api = window.api;
+const WORKER_COUNTS = [1, 2, 3, 4, 5, 6, 8];
 
 export default function Header() {
   const {
@@ -52,13 +37,6 @@ export default function Header() {
     outputDir,
     queueLength,
     selectedIdx,
-    presets,
-    themeActiveSlot,
-    themeSlot1,
-    themeSlot2,
-    customThemes,
-    language,
-    recent,
     batchSummary,
   } = useEditorStore(
     (s) => ({
@@ -71,13 +49,6 @@ export default function Header() {
       outputDir: s.outputDir,
       queueLength: s.queue.length,
       selectedIdx: s.selectedIdx,
-      presets: s.presets,
-      themeActiveSlot: s.themeActiveSlot,
-      themeSlot1: s.themeSlot1,
-      themeSlot2: s.themeSlot2,
-      customThemes: s.customThemes,
-      language: s.language,
-      recent: s.recent,
       batchSummary: s.batchSummary,
     }),
     shallow,
@@ -85,30 +56,22 @@ export default function Header() {
   const showToast = useEditorStore((s) => s.showToast);
   const canUndo = useEditorStore((s) => (s.undoStack?.length ?? 0) > 0);
   const canRedo = useEditorStore((s) => (s.redoStack?.length ?? 0) > 0);
-  const capacityInput = useEditorStore(
-    (s) => queueCapacityInput(s.queue, s.templateRegions),
-    shallow,
-  );
+  const capacitySig = useEditorStore((s) => capacityJobsSignature(s.queue, s.templateRegions));
   const t = useT();
   const get = useEditorStore.getState;
   const [testResult, setTestResult] = useState(null);
   const [autoWorkerHint, setAutoWorkerHint] = useState(5);
-  const [presetsOpen, setPresetsOpen] = useState(false);
   const [savePresetOpen, setSavePresetOpen] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
-  const [recentOpen, setRecentOpen] = useState(false);
-  const presetsRef = useRef(null);
   const savePresetInputRef = useRef(null);
-  const recentRef = useRef(null);
-
-  useCloseOnOutsideClick(presetsRef, presetsOpen, setPresetsOpen);
-  useCloseOnOutsideClick(recentRef, recentOpen, setRecentOpen);
 
   useEffect(() => {
     if (!api?.getBatchCapacity) return undefined;
     let cancelled = false;
     let timer = 0;
     timer = setTimeout(() => {
+      const { queue, templateRegions } = get();
+      const capacityInput = queueCapacityInput(queue, templateRegions);
       api
         .getBatchCapacity({
           jobCount: Math.max(1, capacityInput.queueLength),
@@ -128,34 +91,9 @@ export default function Header() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [
-    capacityInput.queueLength,
-    capacityInput.maxSourcePixels,
-    capacityInput.hasVideoFilters,
-    encodeProfile,
-  ]);
+  }, [capacitySig, encodeProfile, get]);
 
   const flashToast = (kind, text) => showToast({ kind, text });
-
-  const handleTogglePresets = async () => {
-    if (!presetsOpen && presets.length === 0) {
-      await get().loadPresets();
-    }
-    setPresetsOpen((v) => !v);
-  };
-
-  const handleApplyPreset = async (preset) => {
-    setPresetsOpen(false);
-    if (queueLength > 0) {
-      const ok = await get().requestConfirm({
-        message: t("header.confirmApplyPreset", { name: preset.name }),
-      });
-      if (!ok) return;
-    }
-    const res = get().applyPreset(preset.data);
-    if (res.ok) flashToast("ok", t("header.presetApplied", { name: preset.name }));
-    else flashToast("err", res.error || t("header.couldNotApply"));
-  };
 
   const handleSaveProject = async () => {
     const res = await get().saveProject();
@@ -194,32 +132,9 @@ export default function Header() {
     else flashToast("err", res.error || t("header.couldNotLoad"));
   };
 
-  const handleOpenRecent = async (entry) => {
-    setRecentOpen(false);
-    if (!entry?.path) return;
-    if (queueLength > 0) {
-      const ok = await get().requestConfirm({ message: t("header.confirmLoadRecent") });
-      if (!ok) return;
-    }
-    const res = await get().loadProjectFromPath(entry.path);
-    if (res.ok)
-      flashToast(
-        "ok",
-        t("header.loadedFrom", { name: entry.name || entry.path.split(/[\\/]/).pop() }),
-      );
-    else if (res.error && /no encontrad|not found|missing/i.test(res.error))
-      flashToast("err", t("header.recentMissing"));
-    else flashToast("err", res.error || t("header.couldNotLoad"));
-  };
-
-  const handleRemoveRecent = async (e, entry) => {
-    e.stopPropagation();
-    await get().removeRecent(entry.path);
-  };
-
   const handleSelectOutput = async () => {
     if (!api) {
-      console.error("[beru] API not available");
+      showToast({ kind: "err", text: t("errors.noApi") });
       return;
     }
     try {
@@ -229,6 +144,7 @@ export default function Header() {
       }
     } catch (err) {
       console.error("[beru] Error selecting output directory:", err);
+      showToast({ kind: "err", text: t("errors.outputDirFailed") });
     }
   };
 
@@ -238,12 +154,12 @@ export default function Header() {
 
   const handleProcessAll = async () => {
     const result = await get().processAll();
-    if (!result || result.ok) return;
+    if (!result || result.ok || result.cancelled || result.superseded || result.notified) return;
     if (result.code === "api_unavailable") {
       showToast({ kind: "err", text: t("errors.noApi") });
       return;
     }
-    if (result.code === "busy") {
+    if (result.code === "busy" || result.code === "already_processing") {
       showToast({ kind: "warn", text: t("queue.processingBusy") });
       return;
     }
@@ -283,9 +199,21 @@ export default function Header() {
   };
 
   const handleTestCurrent = async () => {
-    if (!api || selectedIdx < 0) return;
+    if (!api) {
+      showToast({ kind: "err", text: t("errors.noApi") });
+      return;
+    }
+    if (selectedIdx < 0) return;
     setTestResult({ status: "running" });
     const res = await get().processSingle(selectedIdx);
+    if (res.superseded) return;
+    if (res.cancelled || res.code === "already_processing") {
+      setTestResult(null);
+      if (res.code === "already_processing") {
+        showToast({ kind: "warn", text: t("queue.processingBusy") });
+      }
+      return;
+    }
     setTestResult({
       status: res.ok ? "ok" : "error",
       outputPath: res.outputPath,
@@ -297,434 +225,225 @@ export default function Header() {
     await get().cancelProcessing();
   };
 
-  const canTest = !isProcessing && selectedIdx >= 0 && selectedIdx < queueLength;
+  const canTest = Boolean(api) && !isProcessing && selectedIdx >= 0 && selectedIdx < queueLength;
 
   return (
-    <header
-      className="app-header cap-titlebar-drag flex flex-nowrap items-center gap-3 px-4 py-2 border-b flex-shrink-0"
-      style={{
-        background: "var(--bg-elevated)",
-        borderColor: "var(--border)",
-        paddingTop: "max(0.5rem, env(titlebar-area-height, 0px))",
-      }}
-    >
-      <div className="app-header-brand flex flex-shrink-0 items-center gap-3">
-        <svg viewBox="0 0 300 400" width="22" height="28" aria-label="Beru">
-          <path
-            fill="currentColor"
-            fillRule="evenodd"
-            d="M0 0L140 0C260 0 260 195 140 195L165 195C295 195 295 400 165 400L0 400ZM60 50L120 50C195 50 195 145 120 145L60 145ZM60 240L140 240C225 240 225 350 140 350L60 350ZM100 168L195 195L100 222Z"
-          />
-        </svg>
-        <span className="text-sm font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>
-          BERU
-        </span>
-      </div>
+    <header className="app-header cap-titlebar-drag">
+      <TooltipProvider>
+        <div data-testid="header-actions" className="app-header-actions flex-nowrap">
+          <div className="app-header-group">
+            <Tooltip label={t("header.importVideos")}>
+              <Button
+                onClick={handleAddVideos}
+                disabled={isProcessing}
+                variant="tertiary"
+                size="sm"
+                aria-label={t("header.importVideos")}
+              >
+                <Upload size={13} />
+                <span className="app-header-label">{t("header.importVideos")}</span>
+              </Button>
+            </Tooltip>
+            <Tooltip
+              label={outputDir ? t("header.outputSelected") : t("header.selectOutput")}
+              description={outputDir || undefined}
+            >
+              <Button
+                onClick={handleSelectOutput}
+                disabled={isProcessing}
+                variant="tertiary"
+                size="sm"
+                aria-label={t("header.selectOutput")}
+              >
+                <FolderOutput size={13} />
+                <span className="app-header-label">
+                  {outputDir ? t("header.outputSelected") : t("header.selectOutput")}
+                </span>
+              </Button>
+            </Tooltip>
+          </div>
 
-      <div
-        data-testid="header-actions"
-        className="app-header-actions flex min-w-0 flex-1 flex-nowrap items-center justify-end gap-2"
-      >
-        <Button
-          onClick={handleAddVideos}
-          disabled={isProcessing}
-          variant="secondary"
-          size="sm"
-          className="header-primary-action text-[11px] whitespace-nowrap"
-          title={t("header.importVideos")}
-        >
-          <Upload size={14} /> {t("header.importVideos")}
-        </Button>
+          <div className="app-header-settings" role="group" aria-label={t("header.exportSettings")}>
+            <Tooltip label={t("header.exportFormat")}>
+              <Select
+                variant="ghost"
+                value={exportFormat}
+                onValueChange={(v) => get().setExportFormat(v)}
+                aria-label={t("header.exportFormat")}
+                disabled={isProcessing}
+                options={[
+                  { value: "mp4", label: "MP4" },
+                  { value: "mov", label: "MOV" },
+                  { value: "avi", label: "AVI" },
+                ]}
+              />
+            </Tooltip>
+            <Tooltip label={t("header.encodeProfile")}>
+              <Select
+                variant="ghost"
+                value={encodeProfile}
+                onValueChange={(v) => get().setEncodeProfile(v)}
+                aria-label={t("header.encodeProfile")}
+                disabled={isProcessing}
+                options={[
+                  { value: "fast", label: t("header.encodeFast") },
+                  { value: "balanced", label: t("header.encodeBalanced") },
+                  { value: "quality", label: t("header.encodeQuality") },
+                  { value: "uquality", label: t("header.encodeUltraQuality") },
+                ]}
+              />
+            </Tooltip>
+            <Tooltip label={t("header.workerCount")}>
+              <Select
+                variant="ghost"
+                value={String(batchWorkers)}
+                onValueChange={(v) => get().setBatchWorkers(v)}
+                aria-label={t("header.workerCount")}
+                disabled={isProcessing}
+                options={[
+                  { value: "0", label: t("header.workersAuto", { count: autoWorkerHint }) },
+                  ...WORKER_COUNTS.map((n) => ({ value: String(n), label: String(n) })),
+                ]}
+              />
+            </Tooltip>
+            <Tooltip label={t("header.workerPolicy")}>
+              <Select
+                variant="ghost"
+                value={batchWorkersMode === "conservative" ? "conservative" : "balanced"}
+                onValueChange={(v) => get().setBatchWorkersMode(v)}
+                aria-label={t("header.workerPolicy")}
+                disabled={isProcessing || Number(batchWorkers) > 0}
+                options={[
+                  { value: "balanced", label: t("header.workersModeBalanced") },
+                  { value: "conservative", label: t("header.workersModeConservative") },
+                ]}
+              />
+            </Tooltip>
+            <Tooltip label={t("header.retryFailed")}>
+              <label className="app-header-check">
+                <input
+                  type="checkbox"
+                  checked={batchRetryFailed}
+                  onChange={(e) => get().setBatchRetryFailed(e.target.checked)}
+                  disabled={isProcessing}
+                  aria-label={t("header.retryFailed")}
+                />
+                <span className="app-header-label">{t("header.batchRetry")}</span>
+              </label>
+            </Tooltip>
+          </div>
 
-        <Button
-          onClick={handleSelectOutput}
-          disabled={isProcessing}
-          variant="secondary"
-          size="sm"
-          className="header-primary-action text-[11px] whitespace-nowrap"
-          title={outputDir ? `Salida: ${outputDir}` : t("header.selectOutput")}
-        >
-          <FolderOutput size={14} />{" "}
-          {outputDir ? t("header.outputSelected") : t("header.selectOutput")}
-        </Button>
-
-        <select
-          value={exportFormat}
-          onChange={(e) => get().setExportFormat(e.target.value)}
-          className="app-header-select app-header-select--format cap-input !w-[72px] !py-1 text-[11px]"
-          aria-label={t("header.exportFormat")}
-          disabled={isProcessing}
-        >
-          <option value="mp4">MP4</option>
-          <option value="mov">MOV</option>
-          <option value="avi">AVI</option>
-        </select>
-
-        <select
-          value={encodeProfile}
-          onChange={(e) => get().setEncodeProfile(e.target.value)}
-          className="app-header-select app-header-select--profile cap-input !w-[116px] !py-1 text-[11px]"
-          aria-label={t("header.encodeProfile")}
-          disabled={isProcessing}
-          title={t("header.encodeProfileHint")}
-        >
-          <option value="fast">{t("header.encodeFast")}</option>
-          <option value="balanced">{t("header.encodeBalanced")}</option>
-          <option value="quality">{t("header.encodeQuality")}</option>
-          <option value="uquality">{t("header.encodeUltraQuality")}</option>
-        </select>
-
-        <select
-          value={String(batchWorkers)}
-          onChange={(e) => get().setBatchWorkers(e.target.value)}
-          className="app-header-select app-header-select--workers cap-input !w-[88px] !py-1 text-[11px]"
-          aria-label={t("header.workerCount")}
-          disabled={isProcessing}
-          title={t("header.batchWorkersHint")}
-        >
-          <option value="0">{t("header.workersAuto", { count: autoWorkerHint })}</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-          <option value="3">3</option>
-          <option value="4">4</option>
-          <option value="5">5</option>
-          <option value="6">6</option>
-          <option value="8">8</option>
-        </select>
-
-        {batchSummary?.workers != null && !isProcessing && (
-          <span
-            className="text-[10px] whitespace-nowrap"
-            style={{ color: "var(--text-dim)" }}
-            title={t("header.workersLastRunHint")}
-          >
-            {t("header.workersLastRun", { count: batchSummary.workers })}
-          </span>
-        )}
-
-        <select
-          value={batchWorkersMode === "conservative" ? "conservative" : "balanced"}
-          onChange={(e) => get().setBatchWorkersMode(e.target.value)}
-          className="app-header-select app-header-select--workers-mode cap-input !w-[128px] !py-1 text-[11px]"
-          aria-label={t("header.workerPolicy")}
-          disabled={isProcessing || Number(batchWorkers) > 0}
-          title={t("header.batchWorkersModeHint")}
-        >
-          <option value="balanced">{t("header.workersModeBalanced")}</option>
-          <option value="conservative">{t("header.workersModeConservative")}</option>
-        </select>
-
-        <label
-          className="flex items-center gap-1 text-[10px] cursor-pointer select-none whitespace-nowrap"
-          style={{ color: "var(--text-dim)" }}
-          title={t("header.batchRetryHint")}
-        >
-          <input
-            type="checkbox"
-            checked={batchRetryFailed}
-            onChange={(e) => get().setBatchRetryFailed(e.target.checked)}
-            disabled={isProcessing}
-            className="w-3 h-3 accent-[var(--accent)]"
-            aria-label={t("header.retryFailed")}
-          />
-          {t("header.batchRetry")}
-        </label>
-
-        <Button
-          onClick={handleTestCurrent}
-          disabled={!canTest}
-          variant="secondary"
-          size="sm"
-          className="header-secondary-action text-[11px] whitespace-nowrap"
-          title={t("header.processSelected")}
-        >
-          <FlaskConical size={14} /> {t("header.testRender")}
-        </Button>
-
-        {!isProcessing ? (
-          <Button
-            data-testid="header-process-all"
-            onClick={handleProcessAll}
-            disabled={queueLength === 0}
-            variant="primary"
-            className="header-process-action whitespace-nowrap"
-          >
-            <Play size={14} /> {t("header.processAll")}
-          </Button>
-        ) : (
-          <Button
-            onClick={handleCancel}
-            variant="danger"
-            className="header-process-action whitespace-nowrap"
-          >
-            <Square size={14} /> {t("header.cancel")}
-          </Button>
-        )}
-
-        <div className="app-header-divider w-px h-5 mx-1" style={{ background: "var(--border)" }} />
-
-        <Button
-          onClick={get().undo}
-          disabled={!canUndo}
-          variant="secondary"
-          size="icon"
-          className="app-header-icon-btn"
-          title={`${t("header.undo")} (Ctrl+Z)`}
-        >
-          <Undo2 size={14} />
-        </Button>
-        <Button
-          onClick={get().redo}
-          disabled={!canRedo}
-          variant="secondary"
-          size="icon"
-          className="app-header-icon-btn"
-          title={`${t("header.redo")} (Ctrl+Y)`}
-        >
-          <Redo2 size={14} />
-        </Button>
-        <div className="relative" ref={presetsRef}>
-          <Button
-            type="button"
-            onClick={handleTogglePresets}
-            variant="secondary"
-            size="icon"
-            className={`app-header-icon-btn header-presets-trigger${presetsOpen ? " is-open" : ""}`}
-            title={t("header.presetsLibrary")}
-            aria-haspopup="menu"
-            aria-expanded={presetsOpen}
-          >
-            <Library size={14} />
-            <ChevronDown
-              size={10}
-              className={`header-presets-chevron${presetsOpen ? " is-open" : ""}`}
-            />
-          </Button>
-          {presetsOpen && (
-            <div className="header-presets-menu" role="menu" aria-label={t("header.presets")}>
-              <div className="header-presets-menu-chrome">
-                <div className="header-presets-menu-title">{t("header.presets")}</div>
-              </div>
-              <div className="header-presets-menu-scroll">
-                {presets.length === 0 ? (
-                  <div className="header-presets-empty">
-                    <Library size={16} strokeWidth={1.75} className="header-presets-empty-icon" />
-                    <span>{t("header.noPresets")}</span>
-                  </div>
-                ) : (
-                  presets.map((p, i) => {
-                    const isBundled = p.source === "bundled";
-                    const showSection = i === 0 || presets[i - 1].source !== p.source;
-                    return (
-                      <div key={`${p.source}-${p.filename}`} className="header-presets-group">
-                        {showSection ? (
-                          <div className="header-presets-section" aria-hidden="true">
-                            {isBundled ? t("header.presetsBundled") : t("header.presetsCustom")}
-                          </div>
-                        ) : null}
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => handleApplyPreset(p)}
-                          className="header-presets-item"
-                        >
-                          <div className="header-presets-item-row">
-                            <span className="header-presets-item-name">{p.name}</span>
-                            <span
-                              className={`header-presets-tag${
-                                isBundled
-                                  ? " header-presets-tag--bundled"
-                                  : " header-presets-tag--custom"
-                              }`}
-                            >
-                              {isBundled ? t("header.presetBundled") : t("header.presetCustom")}
-                            </span>
-                          </div>
-                          {p.description ? (
-                            <span className="header-presets-item-desc">{p.description}</span>
-                          ) : null}
-                        </button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
+          {batchSummary?.workers != null && !isProcessing && (
+            <Tooltip label={t("header.workersLastRunHint")}>
+              <span className="app-header-meta">
+                {t("header.workersLastRun", { count: batchSummary.workers })}
+              </span>
+            </Tooltip>
           )}
+
+          <div className="app-header-group">
+            <Tooltip label={t("header.processSelected")}>
+              <Button
+                onClick={handleTestCurrent}
+                disabled={!canTest}
+                variant="tertiary"
+                size="sm"
+                aria-label={t("header.processSelected")}
+              >
+                <FlaskConical size={13} />
+                <span className="app-header-label">{t("header.testRender")}</span>
+              </Button>
+            </Tooltip>
+            {!isProcessing ? (
+              <Button
+                data-testid="header-process-all"
+                onClick={handleProcessAll}
+                disabled={queueLength === 0}
+                variant="primary"
+                size="sm"
+                className="app-header-process"
+              >
+                <Play size={12} /> {t("header.processAll")}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleCancel}
+                variant="danger"
+                size="sm"
+                className="app-header-process"
+              >
+                <Square size={12} /> {t("header.cancel")}
+              </Button>
+            )}
+          </div>
+
+          <span className="app-header-divider" aria-hidden />
+
+          <div className="app-header-group">
+            <Tooltip label={t("header.undo")} shortcut="Ctrl+Z">
+              <Button
+                onClick={get().undo}
+                disabled={!canUndo}
+                variant="tertiary"
+                size="icon"
+                className="app-header-icon-btn"
+                aria-label={t("header.undo")}
+              >
+                <Undo2 size={13} />
+              </Button>
+            </Tooltip>
+            <Tooltip label={t("header.redo")} shortcut="Ctrl+Y">
+              <Button
+                onClick={get().redo}
+                disabled={!canRedo}
+                variant="tertiary"
+                size="icon"
+                className="app-header-icon-btn"
+                aria-label={t("header.redo")}
+              >
+                <Redo2 size={13} />
+              </Button>
+            </Tooltip>
+
+            <span className="app-header-subdivider" aria-hidden />
+
+            <Tooltip label={t("header.loadProject")}>
+              <Button
+                onClick={handleLoadProject}
+                disabled={isProcessing}
+                variant="tertiary"
+                size="icon"
+                className="app-header-icon-btn"
+                aria-label={t("header.loadProject")}
+              >
+                <FolderInput size={13} />
+              </Button>
+            </Tooltip>
+            <Tooltip label={t("header.saveProject")}>
+              <Button
+                onClick={handleSaveProject}
+                variant="tertiary"
+                size="icon"
+                className="app-header-icon-btn"
+                aria-label={t("header.saveProject")}
+              >
+                <Save size={13} />
+              </Button>
+            </Tooltip>
+            <Tooltip label={t("header.savePreset")}>
+              <Button
+                onClick={openSavePreset}
+                variant="tertiary"
+                size="icon"
+                className="app-header-icon-btn"
+                aria-label={t("header.savePreset")}
+              >
+                <BookmarkPlus size={13} />
+              </Button>
+            </Tooltip>
+          </div>
         </div>
-        <Button
-          onClick={handleLoadProject}
-          disabled={isProcessing}
-          variant="secondary"
-          size="icon"
-          className="app-header-icon-btn"
-          title={t("header.loadProject")}
-        >
-          <FolderInput size={14} />
-        </Button>
-        <div className="relative" ref={recentRef}>
-          <Button
-            onClick={() => setRecentOpen((v) => !v)}
-            variant="secondary"
-            size="icon"
-            className="app-header-icon-btn"
-            title={t("header.recent")}
-          >
-            <History size={14} />
-            <ChevronDown size={10} />
-          </Button>
-          {recentOpen && (
-            <div
-              className="absolute right-0 top-full mt-1 rounded shadow-lg z-50 w-[280px]"
-              style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)" }}
-            >
-              {recent.length === 0 ? (
-                <div className="px-3 py-2 text-[11px]" style={{ color: "var(--text-dim)" }}>
-                  {t("header.noRecents")}
-                </div>
-              ) : (
-                <div className="py-1 max-h-[280px] overflow-y-auto">
-                  {recent.map((r) => (
-                    <div
-                      key={r.path}
-                      onClick={() => handleOpenRecent(r)}
-                      onKeyDown={(e) => {
-                        if (e.target !== e.currentTarget) return;
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          handleOpenRecent(r);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={r.name}
-                      className="header-recent-item group flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:opacity-80"
-                      style={{ opacity: r.exists === false ? 0.4 : 1 }}
-                    >
-                      <History
-                        size={11}
-                        style={{ color: "var(--text-dim)" }}
-                        className="flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className="text-[11px] font-medium truncate"
-                          style={{ color: "var(--text-primary)" }}
-                        >
-                          {r.name || r.path.split(/[\\/]/).pop()}
-                        </div>
-                        <div
-                          className="text-[9px] truncate"
-                          style={{ color: "var(--text-dim)" }}
-                          title={r.path}
-                        >
-                          {r.path}
-                        </div>
-                      </div>
-                      <button
-                        onClick={(e) => handleRemoveRecent(e, r)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 flex-shrink-0"
-                        style={{ color: "var(--text-dim)" }}
-                        title={t("common.remove")}
-                      >
-                        <X size={11} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <Button
-          onClick={handleSaveProject}
-          variant="secondary"
-          size="icon"
-          className="app-header-icon-btn"
-          title={t("header.saveProject")}
-        >
-          <Save size={14} />
-        </Button>
-        <Button
-          onClick={openSavePreset}
-          variant="secondary"
-          size="icon"
-          className="app-header-icon-btn"
-          title={t("header.savePreset")}
-        >
-          <BookmarkPlus size={14} />
-        </Button>
-        <Button
-          onClick={() => get().toggleTheme()}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            get().setSettingsTab("appearance");
-            get().setShowSettings(true);
-          }}
-          variant="secondary"
-          size="icon"
-          className={`app-header-icon-btn header-theme-toggle ${
-            themeActiveSlot === 1 ? "header-theme-toggle--slot1" : "header-theme-toggle--slot2"
-          }`}
-          title={t("header.themeSwitchTo", {
-            name: resolveThemeName(
-              themeActiveSlot === 1 ? themeSlot2 : themeSlot1,
-              customThemes,
-              t,
-            ),
-          })}
-        >
-          {themeActiveSlot === 1 ? <Sun size={14} /> : <Moon size={14} />}
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="secondary"
-              size="icon"
-              className="app-header-icon-btn header-lang-trigger"
-              title={t("header.language")}
-            >
-              <Languages size={14} />
-              <span className="header-lang-code">{language.toUpperCase()}</span>
-              <ChevronDown size={10} className="header-lang-chevron" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={6} className="min-w-[168px]">
-            <DropdownMenuLabel>{t("header.language")}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup
-              value={language}
-              onValueChange={(code) => get().setLanguage(code)}
-            >
-              {SUPPORTED_LANGUAGES.map((lng) => (
-                <DropdownMenuRadioItem key={lng.code} value={lng.code}>
-                  {lng.label}
-                  <span className="header-lang-item-code">{lng.code.toUpperCase()}</span>
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <Button
-          onClick={() => get().setShowWatermarkModal(true)}
-          variant="secondary"
-          size="icon"
-          className="app-header-icon-btn"
-          title={t("header.watermark")}
-          disabled={isProcessing}
-        >
-          <Droplets size={15} />
-        </Button>
-        <Button
-          onClick={() => get().setShowSettings(true)}
-          variant="secondary"
-          size="icon"
-          className="app-header-icon-btn"
-          title={t("header.settings")}
-        >
-          <Settings size={14} />
-        </Button>
-      </div>
+      </TooltipProvider>
 
       {testResult && (
         <div
@@ -791,7 +510,7 @@ export default function Header() {
 
             {testResult.status === "error" && (
               <>
-                <p className="text-[11px] mb-3" style={{ color: "var(--rose)" }}>
+                <p className="text-[11px] mb-3" style={{ color: "var(--text-rose)" }}>
                   {testResult.error || t("modal.testResult.unknownError")}
                 </p>
                 <div className="flex justify-end">

@@ -1,9 +1,9 @@
 import { ipcMain, dialog } from "electron";
-import path from "path";
 import { getMainWindow } from "../shared-state.js";
+import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 
 export function registerDialogHandlers(pathSecurity) {
-  ipcMain.handle("dialog:openVideos", async () => {
+  ipcMain.handle(IPC_INVOKE.openVideos, async () => {
     const win = getMainWindow();
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: "Seleccionar videos",
@@ -11,11 +11,10 @@ export function registerDialogHandlers(pathSecurity) {
       properties: ["openFile", "multiSelections"],
     });
     if (canceled || filePaths.length === 0) return [];
-    pathSecurity.registerAllowedPaths(filePaths, "video");
-    return filePaths;
+    return pathSecurity.registerSelectedPaths(filePaths, "video");
   });
 
-  ipcMain.handle("dialog:openExcel", async () => {
+  ipcMain.handle(IPC_INVOKE.openExcel, async () => {
     const win = getMainWindow();
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: "Seleccionar archivo Excel",
@@ -23,11 +22,11 @@ export function registerDialogHandlers(pathSecurity) {
       properties: ["openFile"],
     });
     if (canceled || filePaths.length === 0) return null;
-    pathSecurity.registerAllowedPath(filePaths[0], "excel");
-    return filePaths[0];
+    const check = pathSecurity.registerSelectedPath(filePaths[0], "excel");
+    return check.ok ? check.resolvedPath : null;
   });
 
-  ipcMain.handle("dialog:selectOutputDir", async () => {
+  ipcMain.handle(IPC_INVOKE.selectOutputDir, async () => {
     const win = getMainWindow();
     try {
       const { canceled, filePaths } = await dialog.showOpenDialog(win, {
@@ -47,7 +46,7 @@ export function registerDialogHandlers(pathSecurity) {
     }
   });
 
-  ipcMain.handle("dialog:saveExcel", async (_event, defaultName = "beru-export.xlsx") => {
+  ipcMain.handle(IPC_INVOKE.saveExcelDialog, async (_event, defaultName = "beru-export.xlsx") => {
     const win = getMainWindow();
     const safeName =
       typeof defaultName === "string" && defaultName.trim()
@@ -59,6 +58,7 @@ export function registerDialogHandlers(pathSecurity) {
       filters: [{ name: "Excel", extensions: ["xlsx"] }],
     });
     if (canceled || !filePath) return { canceled: true };
+    pathSecurity.registerWritePath(filePath);
     return { canceled: false, filePath };
   });
 }

@@ -31,7 +31,7 @@ export function cursorForHandle(handle) {
 }
 
 /**
- * contentW/H is the visible letterboxed content in CSS pixels (getBoundingClientRect).
+ * contentPx is the visible letterboxed content measured in CSS pixels.
  *
  * @param {{ clientX: number, clientY: number }} start
  * @param {{ clientX: number, clientY: number }} now

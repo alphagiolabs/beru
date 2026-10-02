@@ -56,19 +56,16 @@ describe("process-media-validation", () => {
       security,
     );
 
-    expect(result.input_path).toBe(fs.realpathSync(videoFile));
+    expect(result.input_path).toBe(fs.realpathSync.native(videoFile));
     expect(result.input_root).toBe(path.dirname(result.input_path));
     expect(result.asset_roots).toEqual([path.dirname(result.operations[0].image_path)]);
-    expect(result.operations[0].image_path).toBe(fs.realpathSync(imageFile));
+    expect(result.operations[0].image_path).toBe(fs.realpathSync.native(imageFile));
     expect(result.output_path).toBeUndefined();
     expect(result.output_root).toBeUndefined();
   });
 
   it("sanitizeJobMedia rejects unauthorized overlay images", () => {
-    const outsideImage =
-      process.platform === "win32"
-        ? "C:\\Windows\\System32\\beru-evil-overlay.png"
-        : "/etc/beru-evil-overlay.png";
+    const outsideImage = "C:\\Windows\\System32\\beru-evil-overlay.png";
     expect(() =>
       sanitizeJobMedia(
         {

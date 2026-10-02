@@ -5,15 +5,10 @@ import {
   applyResizeRaw,
   cursorForHandle,
   pointerDeltaToNorm,
-  RESIZE_HANDLES,
 } from "../src/utils/region-interaction.js";
 
 describe("region-interaction", () => {
   const start = { x: 0.2, y: 0.3, w: 0.3, h: 0.2 };
-
-  it("exports eight resize handles", () => {
-    expect(RESIZE_HANDLES).toHaveLength(8);
-  });
 
   it("maps handle cursors", () => {
     expect(cursorForHandle("tl")).toBe("nwse-resize");

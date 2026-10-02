@@ -15,13 +15,6 @@ describe("blur preview rendering path", () => {
     expect(read("src/components/DelogoLivePreview.jsx")).not.toContain("backdropFilter");
   });
 
-  it("draws the video pixels into a canvas blur preview", () => {
-    const preview = read("src/components/video-preview/draw-blurred-video-region.js");
-    expect(preview).toContain("ctx.drawImage(");
-    expect(preview).toContain("video,");
-    expect(preview).toContain("ctx.filter = `blur(");
-  });
-
   it("samples beyond the selected box so the blurred edges remain filled", () => {
     let filterAtDraw = "";
     const ctx = {
@@ -40,5 +33,44 @@ describe("blur preview rendering path", () => {
     expect(drawBlurredVideoRegion(ctx, video, region, screen, 30)).toBe(true);
     expect(filterAtDraw).toBe("blur(2.5px)");
     expect(ctx.drawImage).toHaveBeenCalledWith(video, 60, 25, 120, 85, -5, -5, 30, 21.25);
+  });
+
+  it("rounds the source origin like the FFmpeg job payload", () => {
+    const ctx = {
+      filter: "none",
+      save() {},
+      restore() {},
+      clearRect() {},
+      drawImage: vi.fn(),
+    };
+    drawBlurredVideoRegion(
+      ctx,
+      { videoWidth: 320, videoHeight: 180 },
+      { x: 0.255, y: 0.25, w: 0.25, h: 0.25 },
+      { w: 20, h: 11.25, sx: 0.25, sy: 0.25 },
+      30,
+    );
+    expect(ctx.drawImage.mock.calls[0][1]).toBe(62);
+  });
+
+  it("caps live blur intensity to the same small-region radius as FFmpeg", () => {
+    let filterAtDraw = "";
+    const ctx = {
+      filter: "none",
+      save() {},
+      restore() {},
+      clearRect() {},
+      drawImage() {
+        filterAtDraw = ctx.filter;
+      },
+    };
+    drawBlurredVideoRegion(
+      ctx,
+      { videoWidth: 320, videoHeight: 180 },
+      { x: 0.2, y: 0.2, w: 0.1, h: 0.05 },
+      { w: 32, h: 9, sx: 1, sy: 1 },
+      100,
+    );
+    expect(filterAtDraw).toBe("blur(4px)");
   });
 });

@@ -14,7 +14,7 @@ export default function PetSurface({
   spritesheet,
   scale,
   opacity = 1.0,
-  movement = "fijo",
+  movement = "fixed",
   position = null,
   onPositionChange,
   onShiftClick,
@@ -88,13 +88,15 @@ export default function PetSurface({
       isDraggingRef.current = false;
       setDragging(false);
       setDragPosition(null);
-      nodeRef.current?.releasePointerCapture(event.pointerId);
+      if (nodeRef.current?.hasPointerCapture?.(event.pointerId)) {
+        nodeRef.current.releasePointerCapture(event.pointerId);
+      }
     },
     [dragPosition, onPositionChange],
   );
 
   useEffect(() => {
-    if (movement !== "caminar") {
+    if (movement !== "walk") {
       setWalkState(null);
       targetRef.current = null;
       if (timerRef.current) cancelAnimationFrame(timerRef.current);
@@ -114,7 +116,7 @@ export default function PetSurface({
     const loop = (time) => {
       timerRef.current = requestAnimationFrame(loop);
 
-      if (isDraggingRef.current) {
+      if (isDraggingRef.current || document.hidden) {
         lastTime = time;
         return;
       }

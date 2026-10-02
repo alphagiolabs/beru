@@ -2,32 +2,33 @@ import { BrowserWindow, dialog } from "electron";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { setMainWindow, isDev } from "../shared-state.js";
-import { hasActiveProcessing } from "../processing-run.js";
-import { cancelActiveProcessing } from "../handlers/process.js";
+import { setMainWindow, isDev, DEV_URL } from "../shared-state.js";
+import { cancelRun, hasActiveProcessing } from "../processing-run.js";
 import { readSettings } from "./settings.js";
-import { applyWindowTheme, resolveWindowTheme, TITLEBAR_OVERLAY_COLOR } from "./windowTheme.js";
+import {
+  applyWindowTheme,
+  resolveWindowTheme,
+  TITLEBAR_OVERLAY_COLOR,
+  TITLEBAR_OVERLAY_HEIGHT,
+} from "./windowTheme.js";
 import * as updater from "../updater.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const DEV_URL = process.env.BERU_DEV_URL || `http://localhost:${process.env.BERU_DEV_PORT || 5173}`;
 const BUILD_INDEX = path.join(__dirname, "..", "..", "build", "index.html");
 
 function loadProductionBuild(win) {
   if (!fs.existsSync(BUILD_INDEX)) {
     console.error("[beru] Missing build/index.html — run: npm run build");
-    return false;
+    return;
   }
   win.loadFile(BUILD_INDEX);
-  return true;
 }
 
 export function createWindow() {
   // setTitleBarOverlay can fail before the window is ready. Apply again after load.
   const theme = readSettings().theme;
   const initialTheme = resolveWindowTheme(theme);
-  const useOverlay = process.platform === "win32" || process.platform === "darwin";
 
   const win = new BrowserWindow({
     width: 1400,
@@ -38,16 +39,12 @@ export function createWindow() {
     icon: path.join(__dirname, "..", "..", "brand", "icon.ico"),
     backgroundColor: initialTheme.background,
     autoHideMenuBar: true,
-    ...(useOverlay
-      ? {
-          titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
-          titleBarOverlay: {
-            color: TITLEBAR_OVERLAY_COLOR,
-            symbolColor: initialTheme.symbols,
-            height: 32,
-          },
-        }
-      : {}),
+    titleBarStyle: "hidden",
+    titleBarOverlay: {
+      color: TITLEBAR_OVERLAY_COLOR,
+      symbolColor: initialTheme.symbols,
+      height: TITLEBAR_OVERLAY_HEIGHT,
+    },
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -81,7 +78,7 @@ export function createWindow() {
         if (response !== 0) return;
         closeConfirmed = true;
         try {
-          await cancelActiveProcessing();
+          await cancelRun();
         } catch (e) {
           console.error("[beru] cancel on close failed:", e?.message || e);
         }
@@ -125,6 +122,6 @@ export function createWindow() {
 
   win.webContents.once("did-finish-load", () => {
     applyWindowTheme(win, theme);
-    updater.init(win);
+    updater.init();
   });
 }

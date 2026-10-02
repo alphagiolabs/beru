@@ -35,3 +35,17 @@ export function buildIdTextOutputName(idValue, textValue, exportFormat) {
   if (!id || !text) return "";
   return `${id}_${text}.${ext.replace(/^\.+/, "") || "mp4"}`;
 }
+
+export function summarizeQueue(queue = []) {
+  const list = Array.isArray(queue) ? queue : [];
+  const succeeded = list.filter((item) => item.status === "done").length;
+  const failed = list.filter((item) => item.status === "error").length;
+  const terminal = succeeded + failed;
+  if (terminal === 0) return null;
+  return {
+    total: terminal,
+    succeeded,
+    failed,
+    cancelled: 0,
+  };
+}

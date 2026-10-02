@@ -1,13 +1,4 @@
-"""Pure text-layout/drawtext math helpers for processor.py.
-
-Extracted from the ``processor.py`` monolith.  These are the stateless
-wrapping / fitting / spacing helpers used by ``build_drawtext`` (which stays
-in ``processor.py`` because it calls monkeypatched functions like
-``_resolve_font`` and ``_drawtext_supports``).  None of these helpers are
-monkeypatched by the test suite, so they are safe to live in their own module.
-
-No logger is needed here — these helpers are pure string/number math.
-"""
+"""Pure text wrapping, fitting and spacing math for drawtext."""
 
 import re
 import unicodedata
@@ -44,10 +35,10 @@ def _wrap_text_to_width(text, max_width_px, font_size):
                 if line.strip():
                     lines.append(line.rstrip())
                 line = token.lstrip()
-        if line.strip() or paragraph == "":
-            lines.append(line.rstrip() if line.strip() else "")
-        elif line:
+        if line.strip():
             lines.append(line.rstrip())
+        elif line or paragraph == "":
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -264,7 +255,7 @@ def _text_glyph_positions(
         total_w = len(clusters) * char_w + max(0, len(clusters) - 1) * spacing_px
         line_layouts.append((positions, total_w))
 
-    block_h = max(line_step, len(lines) * line_step)
+    block_h = len(lines) * line_step
     if vertical_align == "center" and region_h > 0:
         y0 = (region_h - block_h) / 2.0
     elif vertical_align == "bottom" and region_h > 0:

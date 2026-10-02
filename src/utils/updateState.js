@@ -84,7 +84,6 @@ export function reduceUpdaterEvent(current, payload) {
       };
     }
     if (current?.status === "available") return current;
-    if (current?.status === "checking") return { ...IDLE_UPDATE };
     return { ...IDLE_UPDATE };
   }
 

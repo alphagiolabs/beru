@@ -58,8 +58,8 @@ Write-Host "  Workers: $(if ($Workers -gt 0) { $Workers } else { 'auto' })"
 Write-Host "  Output : $outDir"
 
 $sw = [Diagnostics.Stopwatch]::StartNew()
-$py = if (Get-Command py -ErrorAction SilentlyContinue) { "py" } else { "python" }
-& $py -3 $Processor $manifest
+$pyCmd = if (Get-Command py -ErrorAction SilentlyContinue) { "py" } else { "python" }
+if ($pyCmd -eq "py") { & py -3 $Processor $manifest } else { & python $Processor $manifest }
 $code = $LASTEXITCODE
 $sw.Stop()
 

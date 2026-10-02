@@ -2,7 +2,6 @@ import React, { act } from "react";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import { seedAuthenticatedAuth } from "./helpers/authTestState.js";
-
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 globalThis.ResizeObserver = class {
@@ -10,11 +9,8 @@ globalThis.ResizeObserver = class {
   unobserve() {}
   disconnect() {}
 };
-
 const noop = () => () => {};
-
 let root = null;
-
 describe("App update check", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -23,7 +19,6 @@ describe("App update check", () => {
     document.body.innerHTML = '<div id="root"></div>';
     root = createRoot(document.getElementById("root"));
   });
-
   afterEach(async () => {
     if (root) {
       await act(() => {
@@ -34,7 +29,6 @@ describe("App update check", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
-
   it("checks the native updater silently instead of rendering the old top banner", async () => {
     const checkForUpdates = vi.fn(async () => ({ ok: true, version: "9.9.9" }));
     window.api = {
@@ -45,33 +39,26 @@ describe("App update check", () => {
       onJobError: noop,
       onFinished: noop,
       onError: noop,
-      onLog: noop,
       onUpdaterEvent: noop,
       getUpdaterSnapshot: async () => null,
       checkForUpdates,
       resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
     };
-
     const { default: BeruRoot } = await import("../src/BeruRoot.jsx");
     await seedAuthenticatedAuth();
-
     await act(async () => {
       root.render(<BeruRoot />);
     });
-
     expect(document.body.textContent).not.toMatch(/Preparando actualización/i);
     expect(document.body.textContent).not.toMatch(/Actualizar/i);
-
     await act(async () => {
       vi.advanceTimersByTime(2500);
       await Promise.resolve();
     });
-
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
     expect(document.body.textContent).not.toMatch(/Preparando actualización/i);
     expect(document.body.textContent).not.toMatch(/Actualizar/i);
   });
-
   it("does not render updater check failures as a visible red banner", async () => {
     let updaterHandler = null;
     window.api = {
@@ -82,7 +69,6 @@ describe("App update check", () => {
       onJobError: noop,
       onFinished: noop,
       onError: noop,
-      onLog: noop,
       onUpdaterEvent: vi.fn((handler) => {
         updaterHandler = handler;
         return noop();
@@ -91,26 +77,20 @@ describe("App update check", () => {
       checkForUpdates: vi.fn(async () => ({ ok: false, error: "This operation was aborted" })),
       resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
     };
-
     const { default: BeruRoot } = await import("../src/BeruRoot.jsx");
     await seedAuthenticatedAuth();
-
     await act(async () => {
       root.render(<BeruRoot />);
     });
-
     expect(typeof updaterHandler).toBe("function");
-
     await act(async () => {
       updaterHandler({ type: "error", message: "This operation was aborted" });
     });
-
     expect(document.body.textContent).toMatch(/Importar videos/i);
     expect(document.body.textContent).not.toMatch(/No se pudo verificar actualizaciones/i);
     expect(document.body.textContent).not.toMatch(/This operation was aborted/i);
     expect(document.body.textContent).not.toMatch(/Reintentar/i);
   });
-
   it("hydrates from a ready snapshot so the install modal appears on restart", async () => {
     window.api = {
       onProgress: noop,
@@ -120,7 +100,6 @@ describe("App update check", () => {
       onJobError: noop,
       onFinished: noop,
       onError: noop,
-      onLog: noop,
       onUpdaterEvent: noop,
       getUpdaterSnapshot: async () => ({
         type: "ready",
@@ -129,18 +108,14 @@ describe("App update check", () => {
       }),
       checkForUpdates: vi.fn(async () => ({ ok: true })),
     };
-
     const { default: BeruRoot } = await import("../src/BeruRoot.jsx");
     await seedAuthenticatedAuth();
-
     await act(async () => {
       root.render(<BeruRoot />);
     });
-
     await act(async () => {
       await Promise.resolve();
     });
-
     const { update } = await import("../src/stores/useEditorStore").then((m) =>
       m.default.getState(),
     );

@@ -1,12 +1,11 @@
-import { useMemo, Suspense, lazy } from "react";
-import { X, Settings, Palette, Users, PawPrint } from "lucide-react";
+import { useMemo, Suspense } from "react";
+import { X, Palette, Users, PawPrint } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
-import UserManagementPanel from "./settings/UserManagementPanel";
-import AppearancePanel from "./settings/AppearancePanel";
 import { Button } from "./ui/Button";
-
-const PetdexPanel = lazy(() => import("../features/pets/settings/PetdexPanel.jsx"));
+import { Tooltip, TooltipProvider } from "./ui/tooltip";
+import PanelLoading from "./PanelLoading";
+import { PetdexPanel, UserManagementPanel, AppearancePanel } from "./settings/settings-panels";
 
 function accountInitial(email) {
   const ch = email?.trim()?.[0];
@@ -44,51 +43,39 @@ export default function SettingsModal() {
       >
         <div className="settings-modal-header">
           <div className="settings-modal-header-brand">
-            <div className="settings-modal-header-icon" aria-hidden="true">
-              <Settings size={15} strokeWidth={2.25} />
-            </div>
             <div>
               <h2 id="settings-modal-title">{t("settings.title")}</h2>
               <p className="settings-modal-header-sub">{subtitle}</p>
             </div>
           </div>
-          <Button
-            type="button"
-            className="settings-modal-close"
-            onClick={close}
-            title={t("common.close")}
-            aria-label={t("common.close")}
-            variant="tertiary"
-            size="icon"
-          >
-            <X size={15} />
-          </Button>
+          <TooltipProvider>
+            <Tooltip label={t("common.close")}>
+              <Button
+                type="button"
+                className="settings-modal-close"
+                onClick={close}
+                aria-label={t("common.close")}
+                variant="tertiary"
+                size="icon"
+              >
+                <X size={15} />
+              </Button>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         <div className="settings-modal-body">
           <aside className="settings-modal-rail">
-            {profile && (
-              <div className="settings-modal-account">
-                <div className="settings-modal-account-avatar" aria-hidden="true">
-                  {accountInitial(profile.email)}
-                </div>
-                <div className="settings-modal-account-info">
-                  <span className="settings-modal-account-label">{t("auth.signedInAs")}</span>
-                  <span className="settings-modal-account-email">{profile.email}</span>
-                  {profile.role === "admin" && (
-                    <span className="settings-modal-account-badge">{t("auth.roleAdmin")}</span>
-                  )}
-                </div>
-              </div>
-            )}
-
             <nav className="settings-modal-nav" aria-label={t("settings.title")}>
               <Button
                 type="button"
                 variant="tertiary"
                 size="sm"
                 className={`settings-modal-nav-item ${settingsTab === "appearance" ? "settings-modal-nav-item--active" : ""}`}
+                aria-current={settingsTab === "appearance" ? "page" : undefined}
                 onClick={() => setSettingsTab("appearance")}
+                onPointerEnter={AppearancePanel.preload}
+                onFocus={AppearancePanel.preload}
               >
                 <Palette size={14} />
                 {t("settings.nav.appearance")}
@@ -99,7 +86,10 @@ export default function SettingsModal() {
                   variant="tertiary"
                   size="sm"
                   className={`settings-modal-nav-item ${settingsTab === "users" ? "settings-modal-nav-item--active" : ""}`}
+                  aria-current={settingsTab === "users" ? "page" : undefined}
                   onClick={() => setSettingsTab("users")}
+                  onPointerEnter={UserManagementPanel.preload}
+                  onFocus={UserManagementPanel.preload}
                 >
                   <Users size={14} />
                   {t("settings.nav.users")}
@@ -110,24 +100,58 @@ export default function SettingsModal() {
                 variant="tertiary"
                 size="sm"
                 className={`settings-modal-nav-item ${settingsTab === "pets" ? "settings-modal-nav-item--active" : ""}`}
+                aria-current={settingsTab === "pets" ? "page" : undefined}
                 onClick={() => setSettingsTab("pets")}
+                onPointerEnter={PetdexPanel.preload}
+                onFocus={PetdexPanel.preload}
               >
                 <PawPrint size={14} />
                 {t("settings.nav.pets")}
               </Button>
             </nav>
+            {profile && (
+              <div className="settings-modal-account">
+                <div className="settings-modal-account-avatar" aria-hidden="true">
+                  {accountInitial(profile.email)}
+                </div>
+                <div className="settings-modal-account-info">
+                  <TooltipProvider>
+                    <Tooltip label={profile.email}>
+                      <span className="settings-modal-account-email">{profile.email}</span>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <span className="settings-modal-account-role">
+                    {t(isAdmin ? "auth.roleAdmin" : "auth.roleUser")}
+                  </span>
+                </div>
+              </div>
+            )}
           </aside>
 
-          <div className="settings-modal-main">
-            {settingsTab === "users" && isAdmin ? (
-              <UserManagementPanel />
-            ) : settingsTab === "pets" ? (
-              <Suspense fallback={null}>
+          <div
+            className={`settings-modal-main${settingsTab === "pets" ? " settings-modal-main--pets" : ""}`}
+          >
+            <Suspense
+              fallback={
+                <PanelLoading
+                  label={t(
+                    settingsTab === "users" && isAdmin
+                      ? "settings.nav.users"
+                      : settingsTab === "pets"
+                        ? "settings.nav.pets"
+                        : "settings.nav.appearance",
+                  )}
+                />
+              }
+            >
+              {settingsTab === "users" && isAdmin ? (
+                <UserManagementPanel />
+              ) : settingsTab === "pets" ? (
                 <PetdexPanel />
-              </Suspense>
-            ) : (
-              <AppearancePanel />
-            )}
+              ) : (
+                <AppearancePanel />
+              )}
+            </Suspense>
           </div>
         </div>
       </div>

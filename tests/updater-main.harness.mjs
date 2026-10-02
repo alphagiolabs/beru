@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import vm from "vm";
 import { vi } from "vitest";
+import { IPC_EVENTS } from "../shared/ipc-channels.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const sourcePath = path.join(__dirname, "..", "main", "updater.js");
@@ -23,8 +24,12 @@ function buildSource() {
     ].join("\n"),
   );
   src = src.replace(
-    /import\s*\{\s*cancelActiveProcessing\s*\}\s*from\s*["']\.\/handlers\/process\.js["'];?/,
-    "const cancelActiveProcessing = () => (globalThis.__mockCancelActiveProcessing ? globalThis.__mockCancelActiveProcessing() : Promise.resolve({ success: true, idle: true }));",
+    /import\s*\{\s*cancelRun\s*\}\s*from\s*["']\.\/processing-run\.js["'];?/,
+    "const cancelRun = () => (globalThis.__mockCancelRun ? globalThis.__mockCancelRun() : Promise.resolve({ success: true, idle: true }));",
+  );
+  src = src.replace(
+    /import\s*\{\s*IPC_EVENTS\s*\}\s*from\s*["']\.\.\/shared\/ipc-channels\.js["'];?/,
+    "const IPC_EVENTS = globalThis.__mockIpcEvents;",
   );
   src = src.replace(/import\.meta\.url/g, '"file:///test/updater.js"');
   src = src.replace(
@@ -89,9 +94,8 @@ export function createUpdaterHarness() {
   context.globalThis = context;
   context.__mockElectronApp = fakeApp;
   context.__mockCreateRequire = createRequireMock;
-  context.__mockCancelActiveProcessing = vi.fn(() =>
-    Promise.resolve({ success: true, idle: true }),
-  );
+  context.__mockCancelRun = vi.fn(() => Promise.resolve({ success: true, idle: true }));
+  context.__mockIpcEvents = IPC_EVENTS;
   context.__mockSetAppIsQuitting = vi.fn();
 
   const module = { exports: {} };
@@ -106,7 +110,9 @@ export function createUpdaterHarness() {
   const fakeWindow = {
     isDestroyed: () => false,
     webContents: {
-      send: (_channel, payload) => events.push(payload),
+      send: (channel, payload) => {
+        if (channel === IPC_EVENTS.onUpdaterEvent) events.push(payload);
+      },
     },
   };
   context.__mockGetMainWindow = () => fakeWindow;
@@ -142,8 +148,8 @@ export function createUpdaterHarness() {
     get autoUpdater() {
       return autoUpdater;
     },
-    get cancelActiveProcessing() {
-      return context.__mockCancelActiveProcessing;
+    get cancelRun() {
+      return context.__mockCancelRun;
     },
     get setAppIsQuitting() {
       return context.__mockSetAppIsQuitting;

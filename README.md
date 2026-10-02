@@ -4,10 +4,12 @@ Editor de video por lotes con overlays de texto desde Excel, desenfoque, recorte
 
 ## Requisitos
 
+Beru admite exclusivamente Windows. El desarrollo, las pruebas y la compilación también requieren Windows.
+
 | Componente       | Desarrollo (`npm run dev`) | Instalador `.exe`             |
 | ---------------- | -------------------------- | ----------------------------- |
-| Node.js 18+      | Sí                         | No (incluido en el build)     |
-| Python 3.8+      | Sí (solo para desarrollo)  | **No** — incluido empaquetado |
+| Node.js 22.12+   | Sí                         | No (incluido en el build)     |
+| Python 3.9+      | Sí (solo para desarrollo)  | **No** — incluido empaquetado |
 | FFmpeg / ffprobe | Auto con `npm install`     | Incluidos en el instalador    |
 
 El instalador de Windows incluye **FFmpeg, ffprobe y el procesador de video** (`beru-processor.exe`). No hace falta instalar Python ni FFmpeg manualmente.

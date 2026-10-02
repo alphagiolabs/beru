@@ -6,7 +6,7 @@ import { applyMove, applyResizeRaw, cursorForHandle } from "../utils/region-inte
 const HANDLE_THRESHOLD_PX = 16;
 const MOVE_INSET_PX = 4;
 
-export default function useCanvas(videoEl) {
+export default function useCanvas(videoEl, videoKey) {
   const currentRegion = useEditorStore((s) => s.currentRegion);
   const activeTool = useEditorStore((s) => s.activeTool);
   const sidebarMode = useEditorStore((s) => s.sidebarMode);
@@ -18,18 +18,8 @@ export default function useCanvas(videoEl) {
   const isDrawing = useRef(false);
   const resizeInfo = useRef(null);
   const moveInfo = useRef(null);
-
-  const resizeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const video = videoEl?.current;
-    if (!canvas || !video) return;
-    const w = video.offsetWidth;
-    const h = video.offsetHeight;
-    canvas.width = w;
-    canvas.height = h;
-    canvas.style.width = w + "px";
-    canvas.style.height = h + "px";
-  }, [videoEl]);
+  const pendingMoveRef = useRef(null);
+  const moveRafRef = useRef(null);
 
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -50,15 +40,11 @@ export default function useCanvas(videoEl) {
   useEffect(() => {
     const video = videoEl?.current;
     if (!video || !canvasRef.current) return;
-    const ro = new ResizeObserver(() => {
-      resizeCanvas();
-      redrawCanvas();
-    });
+    const ro = new ResizeObserver(() => redrawCanvas());
     ro.observe(video);
-    resizeCanvas();
     redrawCanvas();
     return () => ro.disconnect();
-  }, [videoEl, resizeCanvas, redrawCanvas]);
+  }, [videoEl, videoKey, redrawCanvas]);
 
   useEffect(() => {
     redrawCanvas();
@@ -168,19 +154,37 @@ export default function useCanvas(videoEl) {
     [videoEl, setCurrentRegion],
   );
 
+  const flushPendingMove = useCallback(() => {
+    moveRafRef.current = null;
+    const pt = pendingMoveRef.current;
+    pendingMoveRef.current = null;
+    if (pt) applyPointerMove(pt);
+  }, [applyPointerMove]);
+
+  const onMouseUp = useCallback(() => {
+    if (moveRafRef.current != null) {
+      cancelAnimationFrame(moveRafRef.current);
+      moveRafRef.current = null;
+    }
+    flushPendingMove();
+    endGesture();
+  }, [flushPendingMove, endGesture]);
+
   useEffect(() => {
     const onMove = (e) => {
       if (!isDrawing.current && !resizeInfo.current && !moveInfo.current) return;
-      applyPointerMove(e);
+      pendingMoveRef.current = { clientX: e.clientX, clientY: e.clientY };
+      if (moveRafRef.current != null) return;
+      moveRafRef.current = requestAnimationFrame(flushPendingMove);
     };
-    const onUp = () => endGesture();
     window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("mouseup", onMouseUp);
     return () => {
       window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("mouseup", onMouseUp);
+      if (moveRafRef.current != null) cancelAnimationFrame(moveRafRef.current);
     };
-  }, [applyPointerMove, endGesture]);
+  }, [flushPendingMove, onMouseUp]);
 
   const onMouseDown = useCallback(
     (e) => {
@@ -255,8 +259,6 @@ export default function useCanvas(videoEl) {
     },
     [activeTool, currentRegion, hitTestHandle, hitTestRegion, canvasOwnsSelection],
   );
-
-  const onMouseUp = endGesture;
 
   return { canvasRef, onMouseDown, onMouseMove, onMouseUp };
 }

@@ -50,6 +50,7 @@ describe("SettingsModal appearance", () => {
 
     await act(async () => {
       root.render(<SettingsModal />);
+      await import("../src/components/settings/AppearancePanel.jsx");
     });
 
     expect(document.body.textContent).toContain("Acceso rápido");
@@ -76,10 +77,12 @@ describe("SettingsModal appearance", () => {
 
     await act(async () => {
       usersTab.click();
+      await import("../src/components/settings/UserManagementPanel.jsx");
     });
 
     expect(useEditorStore.getState().settingsTab).toBe("users");
     expect(document.body.textContent).toContain("Usuarios");
+    expect(document.querySelector(".settings-users")).toBeTruthy();
   });
 
   it("switches to pets tab and shows companion settings", async () => {

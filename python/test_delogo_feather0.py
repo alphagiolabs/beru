@@ -47,10 +47,8 @@ def test_inpaint_feather6_with_time_applies_seamless_blend():
     op = _op("inpaint", 6, 5, 10)
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     assert chain is not None
-    # Seamless blend: interior streak-smoothing blur + grain match composited
-    # through an alpha ramp (no halo blur over the surroundings).
     assert "luma_radius=min(6" in chain
-    assert "geq=" in chain
+    assert "alphamerge" in chain
     assert "noise=alls=" in chain
     assert "overlay=" in chain and "enable=" in chain
 
@@ -60,8 +58,7 @@ def test_mirror_fallback_feather0_with_time_no_boxblur():
     op["region"] = {"x": 600, "y": 100, "w": 80, "h": 60}  # flush at right edge of 640
     op["mirror_side"] = "right"
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
-    if chain is None:
-        return
+    assert chain is not None
     assert "boxblur=1" not in chain, (
         f"feather=0 fallback must not apply boxblur=1, got: {chain!r}"
     )

@@ -5,7 +5,7 @@ import App from "../src/App.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { createQueueItem } from "../src/utils/types.js";
 import { createOperation } from "../src/utils/operation.js";
-import { seedAuthenticatedAuthSync } from "./helpers/authTestState.js";
+import { seedAuthenticatedAuth } from "./helpers/authTestState.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -37,7 +37,6 @@ window.api = {
   onJobError: noop,
   onFinished: noop,
   onError: noop,
-  onLog: noop,
   onUpdaterEvent: noop,
   checkForUpdates: asyncNoop,
   resolveDroppedPaths: async (paths) => ({ videoPaths: [], ignoredCount: paths.length }),
@@ -71,7 +70,7 @@ describe("App render", () => {
         releaseUrl: null,
       },
     });
-    await seedAuthenticatedAuthSync();
+    await seedAuthenticatedAuth();
   });
 
   afterEach(async () => {
@@ -230,6 +229,13 @@ describe("App render", () => {
       await new Promise((r) => setTimeout(r, 10));
     });
 
+    await act(async () => {
+      await Promise.all([
+        import("../src/components/PropertiesPanel.jsx"),
+        import("../src/components/LayerList.jsx"),
+      ]);
+    });
+
     const layerButton = Array.from(document.querySelectorAll("button")).find((button) =>
       button.textContent.includes("Auditoria"),
     );
@@ -319,10 +325,5 @@ describe("App render", () => {
     const canvas = document.querySelector("canvas");
     expect(canvas).toBeTruthy();
     expect(Number(canvas.style.zIndex)).toBeGreaterThanOrEqual(30);
-
-    const frame = document.querySelector("[data-text-region-frame]");
-    if (frame) {
-      expect(Number(frame.style.zIndex)).toBeGreaterThanOrEqual(50);
-    }
   });
 });

@@ -1,205 +1,328 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync, mkdtempSync, rmSync, writeFileSync, unlinkSync } from "fs";
+import { describe, it, expect, beforeAll } from "vitest";
 import { spawnSync } from "child_process";
-import path from "path";
+import fs from "fs";
 import os from "os";
+import path from "path";
+import { fileURLToPath } from "url";
 
-const PY = process.env.BERU_PYTHON || (process.platform === "win32" ? "py" : "python3");
-const PY_ARGS = process.platform === "win32" ? ["-3"] : [];
-const FFMPEG_BIN = path.resolve("bin", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, "..");
+const PY = process.env.BERU_PYTHON || "py";
 
-const hasPy = (() => {
-  try {
-    return spawnSync(PY, [...PY_ARGS, "--version"], { encoding: "utf8" }).status === 0;
-  } catch {
-    return false;
-  }
-})();
-const hasFfmpeg =
-  existsSync(FFMPEG_BIN) && spawnSync(FFMPEG_BIN, ["-version"], { encoding: "utf8" }).status === 0;
+const W = 160;
+const H = 120;
+const FPS = 10;
+const DUR = 3;
+const T = 2.0;
 
-// ffmpeg-static on Linux CI has no libfreetype/drawtext. Windows build does.
-const hasDrawtext = (() => {
-  if (!hasFfmpeg) return false;
-  const r = spawnSync(FFMPEG_BIN, ["-hide_banner", "-filters"], { encoding: "utf8" });
-  if (r.status !== 0) return false;
-  return /(^|\s)drawtext\s+/.test(r.stdout || "");
-})();
+const FFMPEG =
+  process.env.BERU_FFMPEG ||
+  ["bin/ffmpeg.exe", "bin/ffmpeg"].map((p) => path.join(ROOT, p)).find((p) => fs.existsSync(p)) ||
+  "ffmpeg";
 
-const describeIf = hasPy && hasFfmpeg ? describe : describe.skip;
+let videoPath;
 
-function makeVideo(tmpDir) {
-  const videoPath = path.join(tmpDir, "src.mp4");
+function makeVideo() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "beru-preview-seek-"));
+  const out = path.join(dir, "src.mp4");
   const r = spawnSync(
-    FFMPEG_BIN,
+    FFMPEG,
     [
-      "-hide_banner",
-      "-loglevel",
+      "-v",
       "error",
       "-y",
       "-f",
       "lavfi",
       "-i",
-      "testsrc=size=160x120:rate=10",
-      "-t",
-      "3",
+      `testsrc2=s=${W}x${H}:r=${FPS}:d=${DUR}`,
+      "-vf",
+      "drawbox=x=10:y=10:w=60:h=40:color=white:t=fill",
+      "-c:v",
+      "libx264",
       "-pix_fmt",
       "yuv420p",
-      videoPath,
+      out,
     ],
-    { encoding: "utf8" },
+    { timeout: 30000 },
   );
-  if (r.status !== 0) throw new Error(`ffmpeg makeVideo failed: ${r.stderr}`);
-  return videoPath;
+  if (r.status !== 0) throw new Error(`ffmpeg fixture failed: ${r.stderr?.toString()}`);
+  return out;
 }
 
-function renderWithSeekPlacement(videoPath, timestamp, seekBefore) {
-  const tmpOut = path.join(os.tmpdir(), `beru-seek-diag-${Date.now()}.jpg`);
-  const args = ["-hide_banner", "-loglevel", "error", "-y"];
-  if (seekBefore) {
-    args.push("-ss", timestamp.toFixed(3));
+function runPy(code) {
+  const r = spawnSync(PY, ["-3", "-c", code], {
+    cwd: ROOT,
+    encoding: "utf-8",
+    timeout: 60000,
+  });
+  if (r.status !== 0) {
+    throw new Error(`python failed: ${r.stderr?.toString().slice(-400)}`);
   }
-  args.push("-i", videoPath);
-  if (!seekBefore) {
-    args.push("-ss", timestamp.toFixed(3));
-  }
-  args.push(
-    "-vf",
-    "drawtext=text='%{t}':x=10:y=10:fontsize=24:fontcolor=white",
-    "-frames:v",
-    "1",
-    "-f",
-    "image2",
-    tmpOut,
-  );
-  const r = spawnSync(FFMPEG_BIN, args, { encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`ffmpeg render failed: ${r.stderr}`);
-  return tmpOut;
+  return r.stdout.trim();
 }
 
-function renderPreviewWithOp(videoPath, timestamp, opStart, opEnd) {
-  const payload = {
-    input_path: videoPath,
-    timestamp,
-    source_width: 160,
-    source_height: 120,
-    operations: [
-      {
-        mode: "blur",
-        region: { x: 0, y: 0, w: 160, h: 120 },
-        blurStrength: 40,
-        start_time: opStart,
-        end_time: opEnd,
-      },
+function decodeJpegToRgb(jpegB64) {
+  const r = spawnSync(
+    FFMPEG,
+    [
+      "-v",
+      "error",
+      "-f",
+      "image2pipe",
+      "-i",
+      "pipe:0",
+      "-f",
+      "rawvideo",
+      "-pix_fmt",
+      "rgb24",
+      "pipe:1",
     ],
-  };
-  const payloadFile = path.join(
-    os.tmpdir(),
-    `beru-payload-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
+    { input: Buffer.from(jpegB64, "base64"), timeout: 30000, encoding: "buffer" },
   );
-  writeFileSync(payloadFile, JSON.stringify(payload));
-  try {
-    const code = `
-import json, sys
-sys.path.insert(0, "python")
+  if (r.status !== 0) throw new Error("jpeg decode failed");
+  return r.stdout;
+}
+
+function renderPreviewRgb(ts, operations) {
+  const out = runPy(`
+import sys, json
+sys.path.insert(0, r"${path.join(ROOT, "python")}")
 import processor
 processor.FFMPEG = processor.find_ffmpeg()
 processor.FFPROBE = processor.find_ffprobe(processor.FFMPEG)
-with open(${JSON.stringify(payloadFile)}, "r", encoding="utf-8") as f:
-    payload = json.load(f)
-print(json.dumps(processor.render_preview_frame(payload)))
-`;
-    const r = spawnSync(PY, [...PY_ARGS, "-c", code], {
-      encoding: "utf8",
-      cwd: process.cwd(),
-      timeout: 30000,
-    });
-    if (r.status !== 0) throw new Error(`python render failed: ${r.stderr || r.stdout}`);
-    return JSON.parse(r.stdout.trim());
-  } finally {
-    try {
-      unlinkSync(payloadFile);
-    } catch {}
-  }
+res = processor.render_preview_frame({
+    "input_path": r"${videoPath}",
+    "width": ${W}, "height": ${H},
+    "timestamp": ${ts},
+    "operations": ${JSON.stringify(operations)},
+    "asset_roots": [r"${path.dirname(videoPath)}"],
+})
+assert res["ok"], res.get("error")
+print(res["data_url"].split(",", 1)[1])
+`);
+  return decodeJpegToRgb(out);
 }
 
-function renderPreviewNoOp(videoPath, timestamp) {
-  return renderPreviewWithOp(videoPath, timestamp, null, null);
-}
-
-function dataUrlToBytes(dataUrl) {
-  const b64 = dataUrl.split(",")[1] || "";
+function renderExportRgb(ts, operations) {
+  const b64 = runPy(`
+import sys, base64, subprocess
+sys.path.insert(0, r"${path.join(ROOT, "python")}")
+import processor
+processor.FFMPEG = processor.find_ffmpeg()
+ops = [processor._normalize_operation(o) for o in ${JSON.stringify(operations)}]
+graph, label, imgs = processor.build_filter_complex(ops, ${W}, ${H})
+cmd = [processor.FFMPEG, "-v", "error", "-i", r"${videoPath}"]
+for p in imgs:
+    cmd += ["-loop", "1", "-t", "3", "-i", p]
+if graph:
+    cmd += ["-filter_complex", graph, "-map", label]
+else:
+    cmd += ["-map", "0:v:0"]
+cmd += ["-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"]
+raw = subprocess.run(cmd, capture_output=True, check=True).stdout
+size = ${W} * ${H} * 3
+idx = int(round(${ts} * ${FPS}))
+sys.stdout.write(base64.b64encode(raw[idx*size:(idx+1)*size]).decode())
+`);
   return Buffer.from(b64, "base64");
 }
 
-function fingerprint(bytes) {
+function meanAbsErr(a, b) {
   let sum = 0;
-  let sq = 0;
-  for (let i = 0; i < bytes.length; i++) {
-    const v = bytes[i];
-    sum += v;
-    sq += v * v;
-  }
-  return { sum, sq, len: bytes.length };
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / n;
 }
 
-describeIf("render_preview_frame: -ss placement and filter-graph t", () => {
-  let tmpDir;
-  let videoPath;
+function regionMeanAbsErr(a, b, x0, y0, w, h) {
+  let sum = 0;
+  let n = 0;
+  for (let y = y0; y < y0 + h; y++) {
+    for (let x = x0; x < x0 + w; x++) {
+      const i = (y * W + x) * 3;
+      sum += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+      n += 3;
+    }
+  }
+  return sum / n;
+}
 
+const fillOp = (start_time, end_time) => [
+  {
+    mode: "delogo",
+    delogo_method: "fill",
+    delogo_fill_color: "red",
+    delogo_fill_opacity: 1,
+    edge_feather: 0,
+    region: { x: 10, y: 10, w: 60, h: 40 },
+    start_time,
+    end_time,
+  },
+];
+const FILL_BOX = [10, 10, 60, 40];
+
+describe("preview frame seek parity (real ffmpeg, decoded pixels)", () => {
   beforeAll(() => {
-    tmpDir = mkdtempSync(path.join(os.tmpdir(), "beru-seek-diag-"));
-    videoPath = makeVideo(tmpDir);
+    videoPath = makeVideo();
+  }, 60000);
+
+  it("no-op preview (zero operations) equals the raw export frame", { timeout: 60000 }, () => {
+    const preview = renderPreviewRgb(T, []);
+    const exported = renderExportRgb(T, []);
+    expect(meanAbsErr(preview, exported)).toBeLessThanOrEqual(4);
   });
 
-  afterAll(() => {
-    try {
-      rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
-  });
-
-  (hasDrawtext ? it : it.skip)(
-    "drawtext %{t} shows the correct timestamp at output seek t=2.0",
+  it(
+    "op active at t=2.0 fires in preview exactly like the export frame",
+    { timeout: 120000 },
     () => {
-      const out = renderWithSeekPlacement(videoPath, 2.0, false);
-      expect(existsSync(out)).toBe(true);
-      try {
-        unlinkSync(out);
-      } catch {}
+      const ops = fillOp(1.9, 2.1);
+      const preview = renderPreviewRgb(T, ops);
+      const exported = renderExportRgb(T, ops);
+      const noop = renderPreviewRgb(T, []);
+      expect(meanAbsErr(preview, exported)).toBeLessThanOrEqual(6);
+      expect(regionMeanAbsErr(preview, noop, ...FILL_BOX)).toBeGreaterThan(20);
     },
   );
 
-  it("op with start_time=1.9,end_time=2.1 IS active at preview timestamp=2.0 (matches export)", () => {
-    const withOp = renderPreviewWithOp(videoPath, 2.0, 1.9, 2.1);
-    const noOp = renderPreviewNoOp(videoPath, 2.0);
+  it(
+    "op inactive at t=2.0 stays invisible in preview like the export frame",
+    { timeout: 120000 },
+    () => {
+      const ops = fillOp(0.0, 0.5);
+      const preview = renderPreviewRgb(T, ops);
+      const exported = renderExportRgb(T, ops);
+      const noop = renderPreviewRgb(T, []);
+      expect(meanAbsErr(preview, exported)).toBeLessThanOrEqual(4);
+      expect(meanAbsErr(preview, noop)).toBeLessThanOrEqual(4);
+    },
+  );
 
-    expect(withOp.ok).toBe(true);
-    expect(noOp.ok).toBe(true);
+  it(
+    "start boundary: op from t=2.0 is active on the export frame at t=2.0",
+    { timeout: 120000 },
+    () => {
+      const ops = fillOp(2.0, 2.6);
+      const preview = renderPreviewRgb(T, ops);
+      const exported = renderExportRgb(T, ops);
+      expect(meanAbsErr(preview, exported)).toBeLessThanOrEqual(6);
+      expect(regionMeanAbsErr(preview, renderPreviewRgb(T, []), ...FILL_BOX)).toBeGreaterThan(20);
+    },
+  );
 
-    const fOp = fingerprint(dataUrlToBytes(withOp.data_url));
-    const fNo = fingerprint(dataUrlToBytes(noOp.data_url));
+  it(
+    "end boundary: op until t=2.0 is still active on the export frame at t=2.0",
+    { timeout: 120000 },
+    () => {
+      const ops = fillOp(1.4, 2.0);
+      const preview = renderPreviewRgb(T, ops);
+      const exported = renderExportRgb(T, ops);
+      expect(meanAbsErr(preview, exported)).toBeLessThanOrEqual(6);
+      expect(regionMeanAbsErr(preview, renderPreviewRgb(T, []), ...FILL_BOX)).toBeGreaterThan(20);
+    },
+  );
 
-    const sumDelta = Math.abs(fOp.sum - fNo.sum);
-    const sqDelta = Math.abs(fOp.sq - fNo.sq);
-
-    expect(sumDelta).toBeGreaterThan(50);
-    expect(sqDelta).toBeGreaterThan(500);
+  it("past the window end the op is gone in both preview and export", { timeout: 120000 }, () => {
+    const ops = fillOp(0.5, 1.5);
+    const preview = renderPreviewRgb(T, ops);
+    const exported = renderExportRgb(T, ops);
+    const noop = renderPreviewRgb(T, []);
+    expect(meanAbsErr(preview, exported)).toBeLessThanOrEqual(4);
+    expect(meanAbsErr(preview, noop)).toBeLessThanOrEqual(4);
   });
 
-  it("op with start_time=0.0,end_time=0.1 is NOT active at preview timestamp=2.0 (matches export)", () => {
-    const withOp = renderPreviewWithOp(videoPath, 2.0, 0.0, 0.1);
-    const noOp = renderPreviewNoOp(videoPath, 2.0);
+  it("uses the last frame when previewing at the video end", { timeout: 60000 }, () => {
+    const output = JSON.parse(
+      runPy(`
+import sys, json
+sys.path.insert(0, r"${path.join(ROOT, "python")}")
+import processor
+processor.FFMPEG = processor.find_ffmpeg()
+processor.FFPROBE = processor.find_ffprobe(processor.FFMPEG)
+payload = {"input_path": r"${videoPath}", "width": ${W}, "height": ${H}, "video_duration": ${DUR}, "frame_rate": ${FPS}, "operations": []}
+result = {}
+for name, render in (("preview", processor.render_preview_frame), ("source", processor.render_source_frame)):
+    result[name] = [render({**payload, "timestamp": ts}) for ts in (${DUR - 1 / FPS}, ${DUR - 0.05}, ${DUR})]
+    result[name].append(render({**payload, "frame_rate": 0, "timestamp": ${DUR}}))
+print(json.dumps(result))
+`),
+    );
 
-    expect(withOp.ok).toBe(true);
-    expect(noOp.ok).toBe(true);
+    for (const frames of Object.values(output)) {
+      expect(frames.map((frame) => frame.error)).toEqual([
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      expect(frames.every((frame) => frame.ok)).toBe(true);
+      const lastFrame = decodeJpegToRgb(frames[0].data_url.split(",")[1]);
+      for (const frame of frames.slice(1)) {
+        expect(meanAbsErr(decodeJpegToRgb(frame.data_url.split(",")[1]), lastFrame)).toBeLessThan(
+          4,
+        );
+      }
+    }
 
-    const fOp = fingerprint(dataUrlToBytes(withOp.data_url));
-    const fNo = fingerprint(dataUrlToBytes(noOp.data_url));
+    const lastFrameWithOp = renderPreviewRgb(DUR - 1 / FPS, fillOp(DUR - 1 / FPS, DUR));
+    const endWithOp = renderPreviewRgb(DUR, fillOp(DUR - 1 / FPS, DUR));
+    expect(meanAbsErr(endWithOp, lastFrameWithOp)).toBeLessThan(4);
+  });
 
-    const sumDelta = Math.abs(fOp.sum - fNo.sum);
-    const sqDelta = Math.abs(fOp.sq - fNo.sq);
+  it("uses the last video frame when audio continues after video", { timeout: 60000 }, () => {
+    const source = path.join(path.dirname(videoPath), "audio-longer.mp4");
+    const mux = spawnSync(
+      FFMPEG,
+      [
+        "-v",
+        "error",
+        "-y",
+        "-i",
+        videoPath,
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440:duration=6",
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "aac",
+        source,
+      ],
+      { timeout: 30000 },
+    );
+    expect(mux.status).toBe(0);
 
-    expect(sumDelta).toBeLessThan(200);
-    expect(sqDelta).toBeLessThan(5000);
+    const output = JSON.parse(
+      runPy(`
+import json, sys
+sys.path.insert(0, r"${path.join(ROOT, "python")}")
+import processor
+processor.FFMPEG = processor.find_ffmpeg()
+processor.FFPROBE = processor.find_ffprobe(processor.FFMPEG)
+source = r"${source}"
+payload = {"input_path": source, "source_width": ${W}, "source_height": ${H}, "video_duration": 6, "frame_rate": ${FPS}, "operations": []}
+result = {}
+for name, render in (("preview", processor.render_preview_frame), ("source", processor.render_source_frame)):
+    result[name] = [render({**payload, "timestamp": ts}) for ts in (${DUR - 1 / FPS}, 5.9)]
+payload["operations"] = ${JSON.stringify(fillOp(DUR - 1 / FPS, DUR))}
+result["filtered"] = [processor.render_preview_frame({**payload, "timestamp": ts}) for ts in (${DUR - 1 / FPS}, 5.9)]
+print(json.dumps(result))
+`),
+    );
+
+    for (const frames of Object.values(output)) {
+      expect(frames.map((frame) => frame.error)).toEqual([undefined, undefined]);
+      const lastFrame = decodeJpegToRgb(frames[0].data_url.split(",")[1]);
+      const audioTailFrame = decodeJpegToRgb(frames[1].data_url.split(",")[1]);
+      expect(meanAbsErr(audioTailFrame, lastFrame)).toBeLessThan(4);
+    }
+    const filtered = decodeJpegToRgb(output.filtered[0].data_url.split(",")[1]);
+    const unfiltered = decodeJpegToRgb(output.preview[0].data_url.split(",")[1]);
+    expect(regionMeanAbsErr(filtered, unfiltered, ...FILL_BOX)).toBeGreaterThan(20);
   });
 });

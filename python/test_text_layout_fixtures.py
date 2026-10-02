@@ -1,7 +1,5 @@
 """Load resources/text-layout-fixtures.json and assert Python helpers match."""
 
-from __future__ import annotations
-
 import json
 import unittest
 from pathlib import Path

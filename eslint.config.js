@@ -14,6 +14,8 @@ export default [
       "node_modules/**",
       "terminals/**",
       "agent-tools/**",
+      ".tmp/**",
+      ".audit-tmp/**",
     ],
   },
   js.configs.recommended,
@@ -47,6 +49,18 @@ export default [
       "react/no-unescaped-entities": "off",
       "no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "no-empty": ["error", { allowEmptyCatch: true }],
+    },
+  },
+  {
+    files: ["src/**/*.jsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXOpeningElement[name.name='select']",
+          message: "Usa <Select> de src/components/ui/select.jsx (ver DESIGN.md).",
+        },
+      ],
     },
   },
   {

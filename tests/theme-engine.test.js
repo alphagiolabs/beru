@@ -16,6 +16,22 @@ import {
 } from "../src/theme/engine.js";
 import { CSS_VAR_MAP, DEFAULT_SLOT1_PRESET, DEFAULT_SLOT2_PRESET } from "../src/theme/tokens.js";
 
+function textContrast(foreground, background) {
+  const luminance = (hex) => {
+    const channels = hex
+      .slice(1)
+      .match(/../g)
+      .map((channel) => parseInt(channel, 16) / 255);
+    const linear = channels.map((channel) =>
+      channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+    );
+    return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+  };
+  const first = luminance(foreground);
+  const second = luminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
 describe("theme engine", () => {
   it("exposes at least 11 built-in presets", () => {
     expect(THEME_PRESETS.length).toBeGreaterThanOrEqual(11);
@@ -84,6 +100,69 @@ describe("theme engine", () => {
     expect(document.documentElement.style.getPropertyValue(CSS_VAR_MAP.bgApp)).toBe("#f5f5f5");
     expect(document.documentElement.getAttribute("data-theme-slot")).toBe("1");
     expect(document.documentElement.getAttribute("data-theme")).toBe("light");
+  });
+
+  it("keeps text readable in every preset without changing its saved palette", () => {
+    const textVariables = [
+      "--text-primary",
+      "--text-secondary",
+      "--text-dim",
+      "--text-accent",
+      "--text-brand",
+      "--text-amber",
+      "--text-rose",
+      "--text-purple",
+    ];
+    for (const preset of THEME_PRESETS) {
+      const savedPalette = structuredClone(preset.tokens);
+      applyThemeTokens(preset.tokens, 2);
+      for (const variable of textVariables) {
+        const foreground = document.documentElement.style.getPropertyValue(variable);
+        for (const background of [
+          preset.tokens.bgApp,
+          preset.tokens.bgSurface,
+          preset.tokens.bgElevated,
+        ]) {
+          expect(
+            textContrast(foreground, background),
+            `${preset.id}: ${variable} on ${background}`,
+          ).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+      for (const [variable, background] of [
+        ["--text-on-brand", preset.tokens.accentBrand],
+        ["--text-on-rose", preset.tokens.rose],
+      ]) {
+        expect(
+          textContrast(document.documentElement.style.getPropertyValue(variable), background),
+          `${preset.id}: ${variable}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+      for (const key of [
+        "bgApp",
+        "bgSurface",
+        "bgElevated",
+        "accentBrand",
+        "amber",
+        "rose",
+        "purple",
+        "border",
+      ]) {
+        expect(document.documentElement.style.getPropertyValue(CSS_VAR_MAP[key])).toBe(
+          savedPalette[key],
+        );
+      }
+      expect(preset.tokens).toEqual(savedPalette);
+    }
+  });
+
+  it("keeps a custom accent readable while preserving its decorative color", () => {
+    const tokens = { ...getPresetById("beru-dark").tokens, accent: "#ff0000" };
+    applyThemeTokens(tokens, 2);
+    const foreground = document.documentElement.style.getPropertyValue("--text-accent");
+    expect(textContrast(foreground, tokens.bgElevated)).toBeGreaterThanOrEqual(4.5);
+    expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#ff0000");
+    expect(tokens.accent).toBe("#ff0000");
   });
 
   it("derives electron window chrome from tokens", () => {

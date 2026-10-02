@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-const PYTHON = process.platform === "win32" ? "python" : "python3";
+const PYTHON = "python";
 const PYTHON_PREFIX = "import sys; sys.path.insert(0, 'python'); import processor; ";
 
 function runPython(code, args = []) {

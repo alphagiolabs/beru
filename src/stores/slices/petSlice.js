@@ -1,4 +1,5 @@
 import { swallow } from "../../utils/swallow.js";
+import { normalizePetMovement } from "../../utils/types.js";
 import { beruLocalUrl } from "../../features/pets/utils/pet-url.js";
 
 const FEATURED_SLUGS = ["boba", "doraemon", "wangcai", "eve", "mallow", "noir-webling"];
@@ -13,6 +14,15 @@ function clampPetScale(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return PET_SCALE_DEFAULT;
   return Math.min(PET_SCALE_MAX, Math.max(PET_SCALE_MIN, Math.round(n * 100) / 100));
+}
+
+function normalizePetPosition(position) {
+  return position && Number.isFinite(position.x) && Number.isFinite(position.y)
+    ? {
+        x: Math.max(0, Math.floor(position.x)),
+        y: Math.max(0, Math.floor(position.y)),
+      }
+    : null;
 }
 
 async function persistPetSettings(partial) {
@@ -34,16 +44,14 @@ export function createPetSlice(set, get) {
     petPoppedOut: false,
     petScale: PET_SCALE_DEFAULT,
     petOpacity: 1.0,
-    petMovement: "fijo",
+    petMovement: "fixed",
     petSpritesheet: null,
     petSpritesheetLoading: false,
     petManifest: EMPTY_MANIFEST,
-    petManifestError: null,
     petManifestLoading: false,
     petInstalled: [],
     petInstalledLoading: false,
     petInstallingSlug: null,
-    petUninstallingSlug: null,
     showPetPalette: false,
     petsInitialized: false,
 
@@ -54,31 +62,15 @@ export function createPetSlice(set, get) {
           typeof settings?.petActiveSlug === "string" && settings.petActiveSlug
             ? settings.petActiveSlug
             : null,
-        petPosition:
-          settings?.petPosition &&
-          Number.isFinite(settings.petPosition.x) &&
-          Number.isFinite(settings.petPosition.y)
-            ? {
-                x: Math.max(0, Math.floor(settings.petPosition.x)),
-                y: Math.max(0, Math.floor(settings.petPosition.y)),
-              }
-            : null,
-        petPopoutPosition:
-          settings?.petPopoutPosition &&
-          Number.isFinite(settings.petPopoutPosition.x) &&
-          Number.isFinite(settings.petPopoutPosition.y)
-            ? {
-                x: Math.max(0, Math.floor(settings.petPopoutPosition.x)),
-                y: Math.max(0, Math.floor(settings.petPopoutPosition.y)),
-              }
-            : null,
+        petPosition: normalizePetPosition(settings?.petPosition),
+        petPopoutPosition: normalizePetPosition(settings?.petPopoutPosition),
         petPoppedOut: settings?.petPoppedOut === true,
         petScale: clampPetScale(settings?.petScale ?? PET_SCALE_DEFAULT),
         petOpacity:
           typeof settings?.petOpacity === "number"
             ? Math.min(1, Math.max(0.1, settings.petOpacity))
             : 1.0,
-        petMovement: typeof settings?.petMovement === "string" ? settings.petMovement : "fijo",
+        petMovement: normalizePetMovement(settings?.petMovement),
       });
     },
 
@@ -122,7 +114,7 @@ export function createPetSlice(set, get) {
     },
 
     setPetMovement: async (movement) => {
-      const next = movement === "caminar" ? "caminar" : "fijo";
+      const next = normalizePetMovement(movement);
       set({ petMovement: next });
       await persistPetSettings({ petMovement: next });
       if (get().petPoppedOut) {
@@ -131,25 +123,13 @@ export function createPetSlice(set, get) {
     },
 
     setPetPosition: async (position) => {
-      const next =
-        position && Number.isFinite(position.x) && Number.isFinite(position.y)
-          ? {
-              x: Math.max(0, Math.floor(position.x)),
-              y: Math.max(0, Math.floor(position.y)),
-            }
-          : null;
+      const next = normalizePetPosition(position);
       set({ petPosition: next });
       await persistPetSettings({ petPosition: next });
     },
 
     setPetPopoutPosition: async (position) => {
-      const next =
-        position && Number.isFinite(position.x) && Number.isFinite(position.y)
-          ? {
-              x: Math.max(0, Math.floor(position.x)),
-              y: Math.max(0, Math.floor(position.y)),
-            }
-          : null;
+      const next = normalizePetPosition(position);
       set({ petPopoutPosition: next });
       await persistPetSettings({ petPopoutPosition: next });
     },
@@ -264,12 +244,12 @@ export function createPetSlice(set, get) {
     fetchPetManifest: async ({ background = false } = {}) => {
       const api = window.api;
       if (!api?.fetchPetManifest) {
-        set({ petManifest: EMPTY_MANIFEST, petManifestError: null });
+        set({ petManifest: EMPTY_MANIFEST });
         return { ok: true };
       }
 
       if (!background || !get().petManifest?.pets?.length) {
-        set({ petManifestLoading: true, petManifestError: null });
+        set({ petManifestLoading: true });
       }
 
       try {
@@ -279,7 +259,6 @@ export function createPetSlice(set, get) {
           const hasFallback = fallback.pets.length > 0;
           set({
             petManifest: fallback,
-            petManifestError: hasFallback ? null : res?.error || "fetch-failed",
             petManifestLoading: false,
           });
           return { ok: hasFallback, error: hasFallback ? null : res?.error || "fetch-failed" };
@@ -287,7 +266,6 @@ export function createPetSlice(set, get) {
 
         set({
           petManifest: res.manifest,
-          petManifestError: null,
           petManifestLoading: false,
         });
         return { ok: true };
@@ -297,7 +275,6 @@ export function createPetSlice(set, get) {
         const error = e?.message || String(e);
         set({
           petManifest: fallback,
-          petManifestError: hasFallback ? null : error,
           petManifestLoading: false,
         });
         return { ok: hasFallback, error: hasFallback ? null : error };
@@ -392,33 +369,6 @@ export function createPetSlice(set, get) {
         return { ok: true, pet: res.pet };
       } catch (e) {
         set({ petInstallingSlug: null });
-        return { ok: false, error: e?.message || String(e) };
-      }
-    },
-
-    uninstallPetEntry: async (slug) => {
-      const api = window.api;
-      if (!api?.uninstallPet || !slug) return { ok: false, error: "invalid-slug" };
-
-      const installed = get().petInstalled.find((pet) => pet.slug === slug);
-      if (installed?.source === "codex") {
-        return { ok: false, error: "codex-pet" };
-      }
-
-      set({ petUninstallingSlug: slug });
-      try {
-        const res = await api.uninstallPet(slug);
-        set({ petUninstallingSlug: null });
-        if (!res?.success) return { ok: false, error: res?.error };
-        const { petActiveSlug } = get();
-        if (petActiveSlug === slug) {
-          set({ petActiveSlug: null, petEnabled: false, petSpritesheet: null });
-          await persistPetSettings({ petActiveSlug: null, petEnabled: false });
-        }
-        await get().loadInstalledPets();
-        return { ok: true };
-      } catch (e) {
-        set({ petUninstallingSlug: null });
         return { ok: false, error: e?.message || String(e) };
       }
     },

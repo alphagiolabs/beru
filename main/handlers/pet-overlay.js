@@ -1,4 +1,5 @@
-import { ipcMain } from "electron";
+import { IPC_INVOKE } from "../../shared/ipc-channels.js";
+import { handleIpc } from "../utils/ipc.js";
 import {
   closePetOverlayWindow,
   createPetOverlayWindow,
@@ -10,17 +11,17 @@ import {
 } from "../utils/pet-overlay.js";
 
 export function registerPetOverlayHandlers() {
-  ipcMain.handle("petOverlay:open", async (_event, position) => {
+  handleIpc(IPC_INVOKE.openPetOverlay, async (_event, position) => {
     createPetOverlayWindow(position);
     return { success: true, open: true };
   });
 
-  ipcMain.handle("petOverlay:close", async () => {
+  handleIpc(IPC_INVOKE.closePetOverlay, async () => {
     closePetOverlayWindow();
     return { success: true, open: false };
   });
 
-  ipcMain.handle("petOverlay:toggle", async (_event, position) => {
+  handleIpc(IPC_INVOKE.togglePetOverlay, async (_event, position) => {
     if (isPetOverlayOpen()) {
       closePetOverlayWindow();
       return { success: true, open: false };
@@ -29,21 +30,21 @@ export function registerPetOverlayHandlers() {
     return { success: true, open: true };
   });
 
-  ipcMain.handle("petOverlay:sync", async (_event, payload) => {
+  handleIpc(IPC_INVOKE.syncPetOverlayState, async (_event, payload) => {
     syncPetOverlay(payload);
     return { success: true };
   });
 
-  ipcMain.handle("petOverlay:getState", async () => {
+  handleIpc(IPC_INVOKE.getPetOverlayState, async () => {
     return { success: true, state: getLastPetOverlayPayload() };
   });
 
-  ipcMain.handle("petOverlay:popIn", async () => {
+  handleIpc(IPC_INVOKE.popInPetOverlay, async () => {
     reportOverlayPopIn();
     return { success: true };
   });
 
-  ipcMain.handle("petOverlay:dragBy", async (_event, delta) => {
+  handleIpc(IPC_INVOKE.dragPetOverlayBy, async (_event, delta) => {
     const position = dragPetOverlayWindow(delta);
     return { success: true, position };
   });

@@ -2,6 +2,9 @@ import { createWithEqualityFn } from "zustand/traditional";
 import { createProcessingSlice } from "./slices/processingSlice.js";
 import { createBatchSlice } from "./slices/batchSlice.js";
 import { createQueueSlice } from "./slices/queueSlice.js";
+import { createThemeSlice } from "./slices/themeSlice.js";
+import { createUpdaterSlice } from "./slices/updaterSlice.js";
+import { createSettingsSlice } from "./slices/settingsSlice.js";
 import { createUiSlice } from "./slices/uiSlice.js";
 import { createEditorStyleSlice } from "./slices/editorStyleSlice.js";
 import { createProjectSlice } from "./slices/projectSlice.js";
@@ -9,6 +12,7 @@ import { createWatermarkSlice } from "./slices/watermarkSlice.js";
 import { createAuthSlice } from "./slices/authSlice.js";
 import { createPetSlice } from "./slices/petSlice.js";
 import {
+  hasPersistedFieldChanged,
   readSessionSnapshotFromStorage,
   writeSessionSnapshotToStorage,
 } from "../utils/session-persist.js";
@@ -40,6 +44,9 @@ const useEditorStore = createWithEqualityFn(
     ...createProcessingSlice(set, get),
     ...createBatchSlice(set, get),
     ...createQueueSlice(set, get),
+    ...createThemeSlice(set, get),
+    ...createUpdaterSlice(set, get),
+    ...createSettingsSlice(set, get),
     ...createUiSlice(set, get),
     ...createEditorStyleSlice(set, get),
     ...createProjectSlice(set, get),
@@ -52,23 +59,10 @@ const useEditorStore = createWithEqualityFn(
 );
 
 if (typeof window !== "undefined") {
-  let prev = useEditorStore.getState();
-  useEditorStore.subscribe((state) => {
-    const changed =
-      state.queue !== prev.queue ||
-      state.outputDir !== prev.outputDir ||
-      state.templateRegions !== prev.templateRegions ||
-      state.selectedTemplateRegionId !== prev.selectedTemplateRegionId ||
-      state.nextRegionLabel !== prev.nextRegionLabel ||
-      state.excelPath !== prev.excelPath ||
-      state.excelHeaders !== prev.excelHeaders ||
-      state.excelRows !== prev.excelRows ||
-      state.excelMapping !== prev.excelMapping ||
-      state.excelMatchStatus !== prev.excelMatchStatus ||
-      state.excelRowIndexByFilename !== prev.excelRowIndexByFilename ||
-      state.watermark !== prev.watermark;
-    prev = state;
-    if (changed) persistSession(() => useEditorStore.getState());
+  useEditorStore.subscribe((state, prev) => {
+    if (hasPersistedFieldChanged(state, prev)) {
+      persistSession(() => useEditorStore.getState());
+    }
   });
 
   if (typeof window.addEventListener === "function") {

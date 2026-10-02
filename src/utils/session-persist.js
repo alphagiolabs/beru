@@ -1,3 +1,4 @@
+import { reconcileBatchExport } from "./batch-export.js";
 import { persistWatermark, restoreWatermark } from "./sanitize-preset.js";
 
 export const SESSION_PERSIST_KEY = "beru-queue-session";
@@ -12,6 +13,8 @@ function sanitizeQueueItem(item) {
     width: item.width || 0,
     height: item.height || 0,
     duration: item.duration || 0,
+    trimStart: item.trimStart ?? null,
+    trimEnd: item.trimEnd ?? null,
     operations: item.operations || [],
     customOutputName: item.customOutputName || "",
   };
@@ -27,27 +30,38 @@ function restoreQueueItem(item) {
   };
 }
 
-export function buildSessionSnapshot(state) {
-  const queue = (Array.isArray(state?.queue) ? state.queue : [])
-    .map(sanitizeQueueItem)
-    .filter(Boolean);
-  if (queue.length === 0) return null;
+const asArray = (value) => (Array.isArray(value) ? value : []);
+const symmetric = (normalize) => ({ save: normalize, restore: normalize });
 
-  return {
-    version: SESSION_PERSIST_VERSION,
-    queue,
-    outputDir: state.outputDir || null,
-    templateRegions: Array.isArray(state.templateRegions) ? state.templateRegions : [],
-    selectedTemplateRegionId: state.selectedTemplateRegionId ?? null,
-    nextRegionLabel: state.nextRegionLabel ?? 1,
-    excelPath: state.excelPath || null,
-    excelHeaders: Array.isArray(state.excelHeaders) ? state.excelHeaders : [],
-    excelRows: Array.isArray(state.excelRows) ? state.excelRows : [],
-    excelMapping: state.excelMapping || { idColumn: null, columns: {} },
-    excelMatchStatus: state.excelMatchStatus || {},
-    excelRowIndexByFilename: state.excelRowIndexByFilename || {},
-    watermark: persistWatermark(state.watermark),
-  };
+export const SESSION_PERSIST_FIELDS = {
+  queue: {
+    save: (items) => (Array.isArray(items) ? items : []).map(sanitizeQueueItem).filter(Boolean),
+    restore: (items) =>
+      (Array.isArray(items) ? items : []).filter((item) => item?.path).map(restoreQueueItem),
+  },
+  outputDir: symmetric((v) => v || null),
+  templateRegions: symmetric(asArray),
+  selectedTemplateRegionId: symmetric((v) => v ?? null),
+  nextRegionLabel: symmetric((v) => v ?? 1),
+  excelPath: symmetric((v) => v || null),
+  excelHeaders: symmetric(asArray),
+  excelRows: symmetric(asArray),
+  excelMapping: symmetric((v) => v || { idColumn: null, columns: {} }),
+  watermark: { save: persistWatermark, restore: restoreWatermark, optional: true },
+};
+
+export const SESSION_PERSIST_KEYS = Object.keys(SESSION_PERSIST_FIELDS);
+
+export function hasPersistedFieldChanged(state, prev) {
+  return SESSION_PERSIST_KEYS.some((key) => state[key] !== prev[key]);
+}
+
+export function buildSessionSnapshot(state) {
+  const snapshot = { version: SESSION_PERSIST_VERSION };
+  for (const key of SESSION_PERSIST_KEYS) {
+    snapshot[key] = SESSION_PERSIST_FIELDS[key].save(state?.[key]);
+  }
+  return snapshot.queue.length === 0 ? null : snapshot;
 }
 
 /**
@@ -55,47 +69,21 @@ export function buildSessionSnapshot(state) {
  * @returns {object|null} store patch fields, or null if invalid/empty
  */
 export function parseSessionSnapshot(raw) {
-  if (Array.isArray(raw)) {
-    if (raw.length === 0) return null;
-    const queue = raw.filter((item) => item?.path).map(restoreQueueItem);
-    if (queue.length === 0) return null;
-    return {
-      queue,
-      selectedIdx: 0,
-      outputDir: null,
-      templateRegions: [],
-      selectedTemplateRegionId: null,
-      nextRegionLabel: 1,
-      excelPath: null,
-      excelHeaders: [],
-      excelRows: [],
-      excelMapping: { idColumn: null, columns: {} },
-      excelMatchStatus: {},
-      excelRowIndexByFilename: {},
-    };
-  }
-
-  if (!raw || typeof raw !== "object" || !Array.isArray(raw.queue)) return null;
-  const queue = raw.queue.filter((item) => item?.path).map(restoreQueueItem);
+  const legacy = Array.isArray(raw);
+  const source = legacy ? {} : raw;
+  const queue = SESSION_PERSIST_FIELDS.queue.restore(legacy ? raw : source?.queue);
   if (queue.length === 0) return null;
 
-  const watermark = restoreWatermark(raw.watermark);
+  const restored = { queue, selectedIdx: 0 };
+  for (const key of SESSION_PERSIST_KEYS) {
+    if (key === "queue") continue;
+    const field = SESSION_PERSIST_FIELDS[key];
+    const value = field.restore(source?.[key]);
+    if (field.optional && !value) continue;
+    restored[key] = value;
+  }
 
-  return {
-    queue,
-    selectedIdx: 0,
-    outputDir: raw.outputDir || null,
-    templateRegions: Array.isArray(raw.templateRegions) ? raw.templateRegions : [],
-    selectedTemplateRegionId: raw.selectedTemplateRegionId ?? null,
-    nextRegionLabel: raw.nextRegionLabel ?? 1,
-    excelPath: raw.excelPath || null,
-    excelHeaders: Array.isArray(raw.excelHeaders) ? raw.excelHeaders : [],
-    excelRows: Array.isArray(raw.excelRows) ? raw.excelRows : [],
-    excelMapping: raw.excelMapping || { idColumn: null, columns: {} },
-    excelMatchStatus: raw.excelMatchStatus || {},
-    excelRowIndexByFilename: raw.excelRowIndexByFilename || {},
-    ...(watermark ? { watermark } : {}),
-  };
+  return { ...restored, ...reconcileBatchExport(restored).patch };
 }
 
 function defaultSessionStorage() {
@@ -118,6 +106,8 @@ export function readSessionSnapshotFromStorage(storage = defaultSessionStorage()
 }
 
 let _lastSessionJson = null;
+let _lastExcelRowsRef = null;
+let _lastExcelRowsJson = "[]";
 
 export function writeSessionSnapshotToStorage(state, storage = defaultSessionStorage()) {
   try {
@@ -130,7 +120,13 @@ export function writeSessionSnapshotToStorage(state, storage = defaultSessionSto
       }
       return;
     }
-    const json = JSON.stringify(snapshot);
+    if (snapshot.excelRows !== _lastExcelRowsRef) {
+      _lastExcelRowsRef = snapshot.excelRows;
+      _lastExcelRowsJson = JSON.stringify(snapshot.excelRows);
+    }
+    const { excelRows: _rows, ...rest } = snapshot;
+    const restJson = JSON.stringify(rest);
+    const json = `${restJson.slice(0, -1)},"excelRows":${_lastExcelRowsJson}}`;
     if (json === _lastSessionJson) return;
     storage.setItem(SESSION_PERSIST_KEY, json);
     _lastSessionJson = json;
@@ -139,4 +135,6 @@ export function writeSessionSnapshotToStorage(state, storage = defaultSessionSto
 
 export function resetSessionWriteCache() {
   _lastSessionJson = null;
+  _lastExcelRowsRef = null;
+  _lastExcelRowsJson = "[]";
 }

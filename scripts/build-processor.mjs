@@ -1,15 +1,17 @@
-
+import { requireWindows } from "../shared/platform.js";
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+requireWindows();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 const pythonDir = join(root, "python");
 const binDir = join(root, "bin");
 const specPath = join(pythonDir, "beru-processor.spec");
-const exeName = process.platform === "win32" ? "beru-processor.exe" : "beru-processor";
+const exeName = "beru-processor.exe";
 const outputExe = join(binDir, exeName);
 const profilesJson = join(root, "resources", "encode-profiles.json");
 
@@ -17,17 +19,11 @@ function resolveBuildPython() {
   if (process.env.BERU_PYTHON && existsSync(process.env.BERU_PYTHON)) {
     return { command: process.env.BERU_PYTHON, args: [] };
   }
-  const candidates =
-    process.platform === "win32"
-      ? [
-          { command: "py", args: ["-3"] },
-          { command: "python", args: [] },
-          { command: "python3", args: [] },
-        ]
-      : [
-          { command: "python3", args: [] },
-          { command: "python", args: [] },
-        ];
+  const candidates = [
+    { command: "py", args: ["-3"] },
+    { command: "python", args: [] },
+    { command: "python3", args: [] },
+  ];
 
   for (const candidate of candidates) {
     try {
@@ -37,7 +33,7 @@ function resolveBuildPython() {
       });
       if (probe.status === 0) return candidate;
     } catch {
-      // try next
+      // Candidate not runnable; fall through to the next one.
     }
   }
   return null;
@@ -68,7 +64,18 @@ function isUpToDate() {
     join(pythonDir, "processor.py"),
     join(pythonDir, "encode_profiles.py"),
     join(pythonDir, "batch_errors.py"),
+    join(pythonDir, "batch_context.py"),
+    join(pythonDir, "capacity.py"),
+    join(pythonDir, "encoders.py"),
+    join(pythonDir, "encode_args.py"),
+    join(pythonDir, "ffmpeg_runner.py"),
+    join(pythonDir, "filters.py"),
+    join(pythonDir, "fonts.py"),
+    join(pythonDir, "job_classify.py"),
+    join(pythonDir, "media_paths.py"),
+    join(pythonDir, "media_probe.py"),
     join(pythonDir, "op_shared.py"),
+    join(pythonDir, "preview.py"),
     join(pythonDir, "delogo_chains.py"),
     join(pythonDir, "text_layout_helpers.py"),
     join(pythonDir, "color_validation.py"),

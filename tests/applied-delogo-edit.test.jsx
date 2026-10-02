@@ -8,11 +8,6 @@ import useEditorStore from "../src/stores/useEditorStore.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-globalThis.ResizeObserver = class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-};
 if (globalThis.HTMLCanvasElement) {
   globalThis.HTMLCanvasElement.prototype.getContext = () => ({
     clearRect() {},
@@ -210,14 +205,28 @@ describe("AppliedDelogoEditor — seguir editando zonas aplicadas", () => {
     expect(useEditorStore.getState().queue[0].operations[0].delogoMethod).toBe("mosaic");
     act(() => root.unmount());
   });
+});
 
-  it("mover la región vía updateOperationRegion conserva el resto de la operación", () => {
-    const st = useEditorStore.getState();
-    st.updateOperationRegion(0, { x: 0.3, y: 0.3, w: 0.2, h: 0.15 }, { recordHistory: false });
-    const op = useEditorStore.getState().queue[0].operations[0];
-    expect(op.region).toEqual({ x: 0.3, y: 0.3, w: 0.2, h: 0.15 });
-    expect(op.blurStrength).toBe(20);
-    expect(op.mode).toBe("blur");
+describe("Quitar logo — método principal", () => {
+  it("cambiar de desenfoque a recorte conserva la selección", () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.2 };
+    useEditorStore.setState({
+      sidebarMode: "logo",
+      activeTool: "blur",
+      currentRegion: region,
+      selectedIdx: 0,
+      queue: [queueItem([])],
+      selectedOperationIdx: null,
+    });
+    const root = renderPanel();
+    const group = document.querySelector('[role="group"][aria-label="Método para quitar el logo"]');
+    const crop = Array.from(group.querySelectorAll("button")).find((button) =>
+      button.textContent.includes("Recortar"),
+    );
+    act(() => crop.click());
+    expect(useEditorStore.getState().activeTool).toBe("crop");
+    expect(useEditorStore.getState().currentRegion).toEqual(region);
+    act(() => root.unmount());
   });
 });
 

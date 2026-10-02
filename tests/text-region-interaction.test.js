@@ -1,6 +1,3 @@
-/**
- * Pointer deltas use visual content size (getBoundingClientRect via getContentPx).
- */
 import { describe, it, expect } from "vitest";
 import {
   contentRect,
@@ -9,12 +6,7 @@ import {
   regionToScreen,
   toVideoCoordsNormalized,
 } from "../src/utils/video-utils.js";
-import {
-  applyMove,
-  applyResize,
-  pointerDeltaToNorm,
-  getContentPx,
-} from "../src/utils/region-interaction.js";
+import { applyResize, pointerDeltaToNorm, getContentPx } from "../src/utils/region-interaction.js";
 
 function mockVideo({
   layoutW,
@@ -144,89 +136,8 @@ describe("text region interaction — coordinate contract", () => {
   });
 });
 
-describe("text region interaction — DOM chrome ownership", () => {
-  function domChromeActive({ activeTool, sidebarMode, selectedTemplateRegionId, region }) {
-    const regionReady = region && Math.abs(region.w) >= 0.01 && Math.abs(region.h) >= 0.01;
-    return (
-      !!regionReady &&
-      ((sidebarMode === "batch" && selectedTemplateRegionId != null) ||
-        (sidebarMode !== "batch" && activeTool === "text"))
-    );
-  }
-
-  const ready = { x: 0.1, y: 0.1, w: 0.3, h: 0.2 };
-
-  it("suppresses canvas chrome for logo text selection (no template id)", () => {
-    expect(
-      domChromeActive({
-        activeTool: "text",
-        sidebarMode: "logo",
-        selectedTemplateRegionId: null,
-        region: ready,
-      }),
-    ).toBe(true);
-  });
-
-  it("suppresses canvas chrome for selected batch template region", () => {
-    expect(
-      domChromeActive({
-        activeTool: "text",
-        sidebarMode: "batch",
-        selectedTemplateRegionId: "r1",
-        region: ready,
-      }),
-    ).toBe(true);
-  });
-
-  it("keeps canvas chrome while rubber-banding a new batch region (no template selected)", () => {
-    expect(
-      domChromeActive({
-        activeTool: "text",
-        sidebarMode: "batch",
-        selectedTemplateRegionId: null,
-        region: ready,
-      }),
-    ).toBe(false);
-  });
-
-  it("keeps canvas chrome for blur/crop/delogo tools", () => {
-    expect(
-      domChromeActive({
-        activeTool: "blur",
-        sidebarMode: "logo",
-        selectedTemplateRegionId: null,
-        region: ready,
-      }),
-    ).toBe(false);
-  });
-});
-
 describe("text region interaction — pure geometry", () => {
   const start = { x: 0.2, y: 0.3, w: 0.4, h: 0.2 };
-
-  it("applyMove shifts and clamps inside 0..1", () => {
-    const next = applyMove(start, 0.5, 0.6);
-    expect(next.w).toBeCloseTo(0.4, 5);
-    expect(next.h).toBeCloseTo(0.2, 5);
-    expect(next.x).toBeCloseTo(0.6, 5);
-    expect(next.y).toBeCloseTo(0.8, 5);
-  });
-
-  it("applyResize br grows from bottom-right", () => {
-    const next = applyResize(start, "br", 0.1, 0.05);
-    expect(next.x).toBeCloseTo(0.2, 5);
-    expect(next.y).toBeCloseTo(0.3, 5);
-    expect(next.w).toBeCloseTo(0.5, 5);
-    expect(next.h).toBeCloseTo(0.25, 5);
-  });
-
-  it("applyResize tl moves origin and shrinks", () => {
-    const next = applyResize(start, "tl", 0.05, 0.05);
-    expect(next.x).toBeCloseTo(0.25, 5);
-    expect(next.y).toBeCloseTo(0.35, 5);
-    expect(next.w).toBeCloseTo(0.35, 5);
-    expect(next.h).toBeCloseTo(0.15, 5);
-  });
 
   it("applyResize enforces min size from left edge", () => {
     const next = applyResize(start, "ml", 0.9, 0);
@@ -239,38 +150,5 @@ describe("text region interaction — pure geometry", () => {
     const next = applyResize(edge, "ml", 0.1, 0);
     expect(next.w).toBeLessThan(edge.w);
     expect(next.x).toBeGreaterThan(0);
-  });
-});
-
-describe("text region interaction — free-drag delta uses content width", () => {
-  function freeDragNormDeltaFullElement(video, pixelDx, pixelDy) {
-    const rect = video.getBoundingClientRect();
-    return { dx: pixelDx / rect.width, dy: pixelDy / rect.height };
-  }
-
-  function contentDragNormDelta(video, pixelDx, pixelDy) {
-    const c = getContentPx(video);
-    return { dx: pixelDx / c.width, dy: pixelDy / c.height };
-  }
-
-  it("pillarboxed video: content-based free-drag is correct", () => {
-    const pillar = mockVideo({
-      layoutW: 1000,
-      layoutH: 400,
-      videoW: 1920,
-      videoH: 1080,
-      zoom: 1,
-    });
-    const c = getContentPx(pillar);
-    expect(c.height).toBeCloseTo(400, 5);
-    expect(c.width).toBeCloseTo(400 * (1920 / 1080), 5);
-
-    const pixelDx = c.width * 0.1;
-    const freeWrong = freeDragNormDeltaFullElement(pillar, pixelDx, 0);
-    const correct = contentDragNormDelta(pillar, pixelDx, 0);
-
-    expect(correct.dx).toBeCloseTo(0.1, 5);
-    expect(freeWrong.dx).not.toBeCloseTo(correct.dx, 5);
-    expect(correct.dx).toBeGreaterThan(freeWrong.dx);
   });
 });

@@ -4,5 +4,7 @@ dist-electron
 node_modules
 terminals
 agent-tools
+coverage
 .pytest_cache
 package-lock.json
+/.audit-tmp/

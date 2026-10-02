@@ -37,8 +37,6 @@ function seedExportReadyState(overrides = {}) {
     language: "es",
     sidebarMode: "logo",
     templateRegions: [],
-    activeExecutionId: null,
-    executionHistory: [],
     showToast,
     ...overrides,
   });

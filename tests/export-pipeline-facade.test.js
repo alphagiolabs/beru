@@ -11,11 +11,9 @@ import {
   createBatchStartPatch,
   createSingleStartPatch,
 } from "../src/utils/export-pipeline.js";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { prepareRun } from "../src/utils/export-run.js";
+import { normalizeJob } from "../shared/job-manifest.js";
+import { MINIMAL_JOB_NORMALIZED } from "./fixtures/job-manifest.js";
 
 function item(overrides = {}) {
   return {
@@ -71,13 +69,49 @@ describe("export-pipeline", () => {
       expect(buildExportJob(null, 0, { encodeProfile: "balanced", outputPath: "x" })).toBeNull();
     });
 
-    it("includes enabled watermark from ctx", () => {
-      const wm = { enabled: true, text: "x" };
-      const job = buildExportJob(item(), 0, {
-        encodeProfile: "balanced",
-        outputPath: "C:\\out\\a.mp4",
-        watermark: wm,
+    it("emits a normalized job (schema defaults come from normalizeJob, not the builder)", () => {
+      const job = buildExportJob(item(), 0, { outputPath: "C:\\out\\a.mp4" });
+      expect(job).toEqual(normalizeJob(job));
+      expect(job).toMatchObject({
+        id: 0,
+        pix_fmt: "yuv420p",
+        encode_profile: "balanced",
+        trim_start: 0,
+        trim_end: null,
+        watermark: null,
+        video_info_probed: true,
       });
+    });
+
+    it("an unprobed item yields a job the processor still has to probe", () => {
+      const bare = item({
+        duration: 0,
+        videoCodec: undefined,
+        pixFmt: undefined,
+        frameRate: undefined,
+        audioCodec: undefined,
+        audioChannels: undefined,
+      });
+      const job = buildExportJob(bare, 0, { outputPath: "C:\\out\\b.mp4" });
+      expect(job).toEqual({
+        ...MINIMAL_JOB_NORMALIZED,
+        input_path: "C:\\videos\\a.mp4",
+        output_path: "C:\\out\\b.mp4",
+        width: 1920,
+        height: 1080,
+        source_width: 1920,
+        source_height: 1080,
+      });
+    });
+
+    it("forwards the enabled watermark into the run's job", () => {
+      const wm = { enabled: true, text: "x" };
+      const job = prepareRun({
+        queue: [item()],
+        outputPaths: ["C:\\out\\a.mp4"],
+        encodeProfile: "balanced",
+        watermark: wm,
+      }).jobs[0];
       expect(job.watermark).toBe(wm);
     });
   });
@@ -100,15 +134,16 @@ describe("export-pipeline", () => {
   describe("applyJobProgressBatch", () => {
     it("updates queue progress when progressMap is false", () => {
       const queue = [item(), item({ path: "b.mp4" })];
+      const jobProgress = {};
       const result = applyJobProgressBatch({
         queue,
-        jobProgress: {},
+        jobProgress,
         messages: [{ index: 0, percent: 42 }],
         progressMap: false,
       });
       expect(result.queue[0]).toMatchObject({ status: "processing", progress: 42 });
       expect(result.queue).not.toBe(queue);
-      expect(result.jobProgress).toBe(result.jobProgress);
+      expect(result.jobProgress).toBe(jobProgress);
     });
 
     it("keeps queue referentially stable when nothing changes", () => {
@@ -273,15 +308,6 @@ describe("export-pipeline", () => {
       expect(patch.progressTotal).toBe(1);
       expect(patch.queue[1]).toMatchObject({ status: "processing", progress: 0, error: null });
       expect(patch.queue[0].status).toBe("idle");
-    });
-  });
-
-  describe("main cancel contract", () => {
-    it("process.js forwards type cancelled and legacy Cancelled error", () => {
-      const src = readFileSync(join(__dirname, "../main/handlers/process.js"), "utf8");
-      expect(src).toContain('msg.type === "cancelled"');
-      expect(src).toContain("process:jobCancelled");
-      expect(src).toContain('errText === "Cancelled"');
     });
   });
 });

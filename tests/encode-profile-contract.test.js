@@ -7,9 +7,8 @@ import {
   profileAllowsHardware,
   normalizeEncodeProfile,
 } from "../main/encodeProfiles.js";
-import { resolveBatchWorkers } from "../main/workerPolicy.js";
 
-const PY = process.platform === "win32" ? "python" : "python3";
+const PY = "python";
 
 const hasPython = (() => {
   try {
@@ -73,20 +72,6 @@ describe("encode profile contract (JS helpers)", () => {
 
   it("getEffectiveHwEncoder disables hardware for U Quality", () => {
     expect(getEffectiveHwEncoder("uquality", "h264_nvenc")).toBeNull();
-  });
-
-  it("resolveBatchWorkers applies balanced GPU caps to quality + filters", () => {
-    expect(
-      resolveBatchWorkers({
-        hwEncoder: "h264_nvenc",
-        jobCount: 8,
-        maxSourcePixels: 1920 * 1080,
-        mode: "balanced",
-        hasVideoFilters: true,
-        encodeProfile: "quality",
-        availableRamMb: 64 * 1024,
-      }),
-    ).toBe(3);
   });
 });
 

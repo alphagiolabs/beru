@@ -1,14 +1,30 @@
 import { describe, expect, it } from "vitest";
 import fs from "fs";
-import path from "path";
-import { extractHiddenImports, extractLocalImports } from "./helpers/python-imports.js";
+import path from "node:path";
+import { createRequire } from "node:module";
+import vm from "node:vm";
 
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf-8"));
-const pythonDir = path.join(process.cwd(), "python");
-const processorPath = path.join(pythonDir, "processor.py");
-const specPath = path.join(pythonDir, "beru-processor.spec");
 
 describe("installer packaging config", () => {
+  it("keeps electron-builder dependency handling enabled after the processor build", async () => {
+    const hook = { exports: {} };
+    const require = createRequire(import.meta.url);
+    vm.runInNewContext(fs.readFileSync(pkg.build.beforeBuild, "utf8"), {
+      module: hook,
+      __dirname: path.resolve("scripts"),
+      process: { execPath: process.execPath },
+      require: (name) =>
+        name === "node:child_process" ? { spawnSync: () => ({ status: 0 }) } : require(name),
+    });
+    await expect(hook.exports()).resolves.toBe(true);
+  });
+  it("limits package installation and CI to Windows", () => {
+    expect(pkg.os).toEqual(["win32"]);
+    const workflow = fs.readFileSync(".github/workflows/ci-release.yml", "utf8");
+    const runners = [...workflow.matchAll(/runs-on:\s*(\S+)/g)].map((match) => match[1]);
+    expect(runners).toEqual(["windows-latest", "windows-latest"]);
+  });
   it("keeps static ffmpeg packages out of runtime dependencies", () => {
     expect(pkg.dependencies).not.toHaveProperty("ffmpeg-static");
     expect(pkg.dependencies).not.toHaveProperty("ffprobe-static");
@@ -38,23 +54,6 @@ describe("installer packaging config", () => {
     expect(pkg.build.beforeBuild).toBe("scripts/build-processor.hook.cjs");
   });
 
-  it("covers every processor.py local import via beru-processor.spec hiddenimports (bundled path)", () => {
-    const pySrc = fs.readFileSync(processorPath, "utf-8");
-    const specSrc = fs.readFileSync(specPath, "utf-8");
-    const localImports = extractLocalImports(pySrc);
-    const hidden = extractHiddenImports(specSrc);
-
-    expect(localImports.length).toBeGreaterThan(0);
-    const missing = localImports.filter((mod) => !hidden.includes(mod));
-    if (missing.length > 0) {
-      throw new Error(
-        `processor.py imports ${missing.join(", ")} but beru-processor.spec hiddenimports is missing: ` +
-          missing.join(", ") +
-          " (installer ships the PyInstaller binary from bin/, not loose scripts)",
-      );
-    }
-  });
-
   it("includes the updater runtime modules in the packaged app", () => {
     expect(pkg.dependencies).toHaveProperty("electron-updater");
 
@@ -71,6 +70,24 @@ describe("installer packaging config", () => {
         "node_modules/sax/**/*",
         "node_modules/argparse/**/*",
         "node_modules/graceful-fs/**/*",
+      ]),
+    );
+  });
+
+  it("includes the xlsx parser modules in the packaged app", () => {
+    expect(pkg.dependencies).toHaveProperty("xlsx");
+
+    expect(pkg.build.files).toEqual(
+      expect.arrayContaining([
+        "node_modules/xlsx/**/*",
+        "node_modules/adler-32/**/*",
+        "node_modules/cfb/**/*",
+        "node_modules/crc-32/**/*",
+        "node_modules/codepage/**/*",
+        "node_modules/ssf/**/*",
+        "node_modules/frac/**/*",
+        "node_modules/wmf/**/*",
+        "node_modules/word/**/*",
       ]),
     );
   });

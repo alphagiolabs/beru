@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import ExcelMappingModal from "../src/components/ExcelMappingModal.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
+import { prepareRun } from "../src/utils/export-run.js";
 
 window.api = {
   startProcessing: vi.fn(async () => ({ success: true })),
@@ -10,6 +11,9 @@ window.api = {
 };
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+Element.prototype.scrollIntoView ??= () => {};
+Element.prototype.hasPointerCapture ??= () => false;
+Element.prototype.releasePointerCapture ??= () => {};
 
 const queueItem = (filename) => ({
   path: `C:\\videos\\${filename}`,
@@ -80,12 +84,18 @@ describe("ExcelMappingModal", () => {
       root.render(<ExcelMappingModal />);
     });
 
-    const selects = Array.from(document.querySelectorAll("select"));
-    const region2Select = selects[2];
+    const region2Trigger = document.querySelector('[role="combobox"][aria-label="TEXT_2"]');
 
     act(() => {
-      region2Select.value = "TEXT_1";
-      region2Select.dispatchEvent(new Event("change", { bubbles: true }));
+      region2Trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+
+    const option = Array.from(document.querySelectorAll('[role="option"]')).find(
+      (el) => el.textContent === "TEXT_1",
+    );
+
+    act(() => {
+      option.click();
     });
 
     const apply = Array.from(document.querySelectorAll("button")).find((button) =>
@@ -102,21 +112,11 @@ describe("ExcelMappingModal", () => {
       "89989989865",
       "89989989865",
     ]);
-    expect(
-      useEditorStore
-        .getState()
-        ._buildJobFor(useEditorStore.getState().queue[0], 0)
-        .operations.map((op) => op.text),
-    ).toEqual(["89989989865", "89989989865"]);
-  });
-
-  it("caps the modal width instead of stretching to the overlay", async () => {
-    root = createRoot(document.getElementById("root"));
-
-    await act(async () => {
-      root.render(<ExcelMappingModal />);
-    });
-
-    expect(document.querySelector(".cap-modal-panel")?.className).toContain("max-w-[960px]");
+    const s = useEditorStore.getState();
+    const prepared = prepareRun({ queue: s.queue, videoIdx: 0 });
+    expect(prepared.jobs[0].operations.map((op) => op.text)).toEqual([
+      "89989989865",
+      "89989989865",
+    ]);
   });
 });

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, PawPrint, Power, Search, Settings, X } from "lucide-react";
 import useEditorStore from "../../../stores/useEditorStore";
 import { useT } from "../../../i18n/useT";
+import { storeErrorText } from "../../../utils/store-errors.js";
 import PetPreviewSprite from "./PetPreviewSprite.jsx";
 import { Button } from "../../../components/ui/Button";
 
@@ -62,7 +63,7 @@ export default function PetPaletteModal() {
         close();
         return;
       }
-      showToast({ kind: "err", text: res.error || t("settings.petdex.selectFailed") });
+      showToast({ kind: "err", text: storeErrorText(t, res, "settings.petdex.selectFailed") });
     },
     [selectPet, showToast, t, close],
   );

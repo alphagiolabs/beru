@@ -13,3 +13,6 @@ export const setAppIsQuitting = (quitting) => {
 };
 
 export const isDev = !app.isPackaged;
+
+export const DEV_URL =
+  process.env.BERU_DEV_URL || `http://localhost:${process.env.BERU_DEV_PORT || 5173}`;

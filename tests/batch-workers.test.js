@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import os from "os";
 import {
   resolveBatchWorkers,
   recommendBatchWorkers,
@@ -66,7 +67,9 @@ describe("workerPolicy", () => {
     ).toBe(2);
   });
 
-  it("1080p quality batches with filters use balanced GPU caps", () => {
+  it("1080p quality batches with filters scale workers with cores", () => {
+    const cpus = os.cpus()?.length || 4;
+    const filterCap = Math.max(3, Math.min(6, cpus - 4));
     expect(
       resolveBatchWorkers({
         hwEncoder: "h264_nvenc",
@@ -77,7 +80,7 @@ describe("workerPolicy", () => {
         encodeProfile: "quality",
         availableRamMb: PLENTY_OF_RAM_MB,
       }),
-    ).toBe(3);
+    ).toBe(Math.min(5, filterCap));
   });
 
   it("quality profile reports GPU policy when a hardware encoder exists", () => {
@@ -152,7 +155,6 @@ describe("workerPolicy", () => {
   });
 
   it("memory cap clamps balanced NVENC when RAM is tight", () => {
-    // 512 MB free -> floor(512*0.8/256) = 1 worker
     expect(
       resolveBatchWorkers({
         hwEncoder: "h264_nvenc",
@@ -161,7 +163,6 @@ describe("workerPolicy", () => {
         availableRamMb: 512,
       }),
     ).toBe(1);
-    // 1024 MB free -> floor(819/256) = 3 workers
     expect(
       resolveBatchWorkers({
         hwEncoder: "h264_nvenc",
@@ -173,8 +174,6 @@ describe("workerPolicy", () => {
   });
 
   it("memory cap uses per-job estimates when jobEntries are provided", () => {
-    // 4K HEVC 10-bit software job: 512*1.25*1.5*2.5 = 2400 MB
-    // 1920 MB free -> floor(1536/2400) = 1 worker (binds below any cpu cap)
     expect(
       resolveBatchWorkers({
         hwEncoder: null,
@@ -198,7 +197,7 @@ describe("workerPolicy", () => {
         encodeProfile: "quality",
         sourcePixels: 1920 * 1080,
       }),
-    ).toBe(576); // 256*1.5 (filters) *1.5 (1080p), no quality 1.35x with hw
+    ).toBe(576);
     expect(
       estimateJobRamMb({
         hwEncoder: null,
@@ -206,7 +205,7 @@ describe("workerPolicy", () => {
         encodeProfile: "quality",
         sourcePixels: 3840 * 2160,
       }),
-    ).toBe(3362); // 512*1.3(medium preset)*1.5(filters)*1.35(quality, no hw)*2.5(4K), floor at each step
+    ).toBe(3362); // Floor after each multiplier, as the processor does.
     expect(
       memoryCapWorkers({
         hwEncoder: null,
@@ -216,6 +215,21 @@ describe("workerPolicy", () => {
         desiredWorkers: 8,
         availableRamMb: 8405,
       }),
-    ).toBe(2); // floor(8405*0.8/3362) = 2
+    ).toBe(2);
+  });
+
+  it("does not admit two measured 4K HEVC10 filtered QSV jobs into 2600 MiB", () => {
+    const input = {
+      hwEncoder: "h264_qsv",
+      jobCount: 2,
+      maxSourcePixels: 3840 * 2160,
+      hasVideoFilters: true,
+      encodeProfile: "balanced",
+      jobEntries: [
+        { videoCodec: "hevc", pixFmt: "yuv420p10le", sourceWidth: 3840, sourceHeight: 2160 },
+      ],
+    };
+    expect(resolveBatchWorkers({ ...input, availableRamMb: 2600 })).toBe(1);
+    expect(resolveBatchWorkers({ ...input, availableRamMb: 4000 })).toBe(2);
   });
 });

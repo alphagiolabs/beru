@@ -5,6 +5,7 @@ import useEditorStore from "../../stores/useEditorStore";
 import { applyThemeTokens, validateThemeTokens } from "../../theme/engine.js";
 import { TOKEN_LABEL_KEYS } from "../../theme/tokens.js";
 import { getPresetById } from "../../theme/presets.js";
+import { getThemeTextColors } from "../../theme/contrast.js";
 import ThemePreviewCard from "./ThemePreviewCard.jsx";
 import { Button } from "../ui/Button";
 
@@ -115,6 +116,7 @@ export default function ThemeEditor({
   const [name, setName] = useState(initialName);
   const [tokens, setTokens] = useState(() => ({ ...initialTokens }));
   const [error, setError] = useState("");
+  const text = getThemeTextColors(tokens);
 
   useEffect(() => {
     setName(initialName);
@@ -256,16 +258,16 @@ export default function ThemeEditor({
               borderColor: tokens.border,
             }}
           >
-            <span style={{ color: tokens.textPrimary }}>
+            <span style={{ color: text.textPrimary }}>
               {name.trim() || t("settings.appearance.editor.name")}
             </span>
-            <span style={{ color: tokens.textSecondary }}>
+            <span style={{ color: text.textSecondary }}>
               {t("settings.appearance.editor.sampleText")}
             </span>
             <button
               type="button"
               className="theme-editor-sample-btn"
-              style={{ background: tokens.accentBrand, color: tokens.bgApp }}
+              style={{ background: tokens.accentBrand, color: text.onBrand }}
             >
               {t("settings.appearance.editor.sampleButton")}
             </button>

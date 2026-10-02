@@ -3,25 +3,22 @@ import fs from "fs";
 import path from "path";
 import { getMainWindow } from "../shared-state.js";
 import { OUTPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
+import { IPC_INVOKE } from "../../shared/ipc-channels.js";
+import { handleIpc } from "../utils/ipc.js";
 import { IMAGE_CONTENT_TYPES } from "../utils/beru-protocol.js";
+import { parseExcelBuffer } from "../utils/excel.js";
 
 export function registerFileHandlers(pathSecurity) {
-  ipcMain.handle("fs:readExcel", async (_event, filePath) => {
+  handleIpc(IPC_INVOKE.readExcel, async (_event, filePath) => {
     const check = pathSecurity.validateReadableFile(filePath, "excel");
     if (!check.ok) return { success: false, error: check.error };
-    try {
-      const buffer = await fs.promises.readFile(check.resolvedPath);
-      return {
-        success: true,
-        data: buffer.toString("base64"),
-        name: path.basename(check.resolvedPath),
-      };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    const buffer = await fs.promises.readFile(check.resolvedPath);
+    if (buffer.length === 0) return { success: false, error: "Empty Excel file data" };
+    const { rows, headers } = await parseExcelBuffer(buffer);
+    return { success: true, rows, headers };
   });
 
-  ipcMain.handle("fs:writeExcel", async (_event, filePath, base64Data) => {
+  handleIpc(IPC_INVOKE.writeExcel, async (_event, filePath, base64Data) => {
     if (typeof base64Data !== "string" || !base64Data) {
       return { success: false, error: "Empty Excel data" };
     }
@@ -33,21 +30,21 @@ export function registerFileHandlers(pathSecurity) {
     if (ext !== ".xlsx" && ext !== ".xls") {
       return { success: false, error: "Only .xlsx/.xls exports are allowed" };
     }
-    try {
-      const buf = Buffer.from(base64Data, "base64");
-      if (buf.length === 0) return { success: false, error: "Empty Excel buffer" };
-      if (buf.length > 25 * 1024 * 1024) {
-        return { success: false, error: "Excel export too large (max 25MB)" };
-      }
-      await fs.promises.writeFile(resolved, buf);
-      pathSecurity.registerAllowedPath(resolved, "excel");
-      return { success: true, filePath: resolved };
-    } catch (e) {
-      return { success: false, error: e.message };
+    const writeTarget = pathSecurity.consumeWritePath(resolved);
+    if (!writeTarget) {
+      return { success: false, error: "La ruta debe elegirse con el diálogo de guardar" };
     }
+    const buf = Buffer.from(base64Data, "base64");
+    if (buf.length === 0) return { success: false, error: "Empty Excel buffer" };
+    if (buf.length > 25 * 1024 * 1024) {
+      return { success: false, error: "Excel export too large (max 25MB)" };
+    }
+    await fs.promises.writeFile(writeTarget, buf);
+    pathSecurity.registerAllowedPath(writeTarget, "excel");
+    return { success: true, filePath: writeTarget };
   });
 
-  ipcMain.handle("image:read", async (_event, imagePath) => {
+  handleIpc(IPC_INVOKE.readImage, async (_event, imagePath) => {
     const check = pathSecurity.validateReadableFile(imagePath, "image");
     if (!check.ok) return { success: false, error: check.error };
     const ext = path.extname(check.resolvedPath).toLowerCase();
@@ -55,16 +52,12 @@ export function registerFileHandlers(pathSecurity) {
     if (!mime) {
       return { success: false, error: `Formato no soportado: ${ext}` };
     }
-    try {
-      const buf = await fs.promises.readFile(check.resolvedPath);
-      const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
-      return { success: true, dataUrl, size: buf.length, mime };
-    } catch (e) {
-      return { success: false, error: e.message };
-    }
+    const buf = await fs.promises.readFile(check.resolvedPath);
+    const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
+    return { success: true, dataUrl, size: buf.length, mime };
   });
 
-  ipcMain.handle("image:pick", async () => {
+  handleIpc(IPC_INVOKE.pickImage, async () => {
     const win = getMainWindow();
     const { canceled, filePaths } = await dialog.showOpenDialog(win, {
       title: "Elegir imagen",
@@ -72,11 +65,12 @@ export function registerFileHandlers(pathSecurity) {
       filters: [{ name: "Imágenes", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],
     });
     if (canceled || !filePaths || filePaths.length === 0) return { success: false, canceled: true };
-    pathSecurity.registerAllowedPath(filePaths[0], "image");
-    return { success: true, path: filePaths[0] };
+    const check = pathSecurity.registerSelectedPath(filePaths[0], "image");
+    if (!check.ok) return { success: false, error: check.error };
+    return { success: true, path: check.resolvedPath };
   });
 
-  ipcMain.handle("shell:openPath", async (_event, filePath) => {
+  handleIpc(IPC_INVOKE.openPath, async (_event, filePath) => {
     const check = pathSecurity.validateShellPath(filePath);
     if (!check.ok) return { success: false, error: check.error };
     filePath = check.resolvedPath;
@@ -92,14 +86,17 @@ export function registerFileHandlers(pathSecurity) {
     return { success: true };
   });
 
-  ipcMain.handle("shell:showItemInFolder", async (_event, filePath) => {
+  handleIpc(IPC_INVOKE.showItemInFolder, async (_event, filePath) => {
     const check = pathSecurity.validateShellPath(filePath);
     if (!check.ok) return { success: false, error: check.error };
+    if (!fs.existsSync(check.resolvedPath)) {
+      return { success: false, error: "Archivo no existe" };
+    }
     shell.showItemInFolder(check.resolvedPath);
     return { success: true };
   });
 
-  ipcMain.handle("session:restorePaths", async (_event, payload = {}) => {
+  ipcMain.handle(IPC_INVOKE.restoreSessionPaths, async (_event, payload = {}) => {
     const result = { ok: true, outputDir: null, videos: 0, excel: false, errors: [] };
     const outputDir = payload?.outputDir;
     if (outputDir) {

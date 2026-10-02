@@ -70,7 +70,9 @@ export default function PetOverlayApp() {
 
   const onPointerUp = useCallback((event) => {
     setDragging(false);
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   }, []);
 
   if (!overlayState.enabled || !overlayState.spritesheet) {

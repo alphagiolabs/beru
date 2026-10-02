@@ -87,7 +87,7 @@ describe("WatermarkModal — image picker consistency", () => {
     expect(state.imageDataUrl).toBe("");
   });
 
-  it("clears stale imageDataUrl when user cancels image pick", async () => {
+  it("keeps the configured image when user cancels image pick", async () => {
     useEditorStore.setState({
       watermark: {
         enabled: true,
@@ -110,7 +110,7 @@ describe("WatermarkModal — image picker consistency", () => {
     });
 
     const state = useEditorStore.getState().watermark;
-    expect(state.imagePath).toBe("");
-    expect(state.imageDataUrl).toBe("");
+    expect(state.imagePath).toBe("C:\\old.png");
+    expect(state.imageDataUrl).toBe("data:image/png;base64,OLD");
   });
 });

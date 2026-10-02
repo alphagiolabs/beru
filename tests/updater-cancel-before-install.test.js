@@ -30,9 +30,13 @@ describe("main/updater.js cancel before quitAndInstall", () => {
 
     await vi.runAllTimersAsync();
 
-    expect(harness.cancelActiveProcessing).toHaveBeenCalled();
+    expect(harness.cancelRun).toHaveBeenCalled();
     expect(harness.setAppIsQuitting).toHaveBeenCalledWith(true);
     expect(harness.autoUpdater.quitAndInstall).toHaveBeenCalled();
+
+    expect(harness.cancelRun.mock.invocationCallOrder[0]).toBeLessThan(
+      harness.autoUpdater.quitAndInstall.mock.invocationCallOrder[0],
+    );
   });
 
   it("resets appIsQuitting when install grace timeout fires", async () => {

@@ -117,37 +117,37 @@ export default function LayerList() {
   const handleMoveDown = useCallback((i) => getState().moveOperation(i, i + 1), [getState]);
   const handleDuplicate = useCallback((i) => getState().duplicateOperation(i), [getState]);
   const handleRemove = useCallback((i) => getState().removeOperation(i), [getState]);
-  const layerCount = ops?.length ?? 0;
+  if (!ops?.length) return null;
 
   return (
     <div className="inspector-layers">
-      <InspectorGroup title={`${t("props.layers")} (${layerCount})`}>
-        {!ops || ops.length === 0 ? (
-          <p className="inspector-helper">{t("props.noLayers")}</p>
-        ) : (
-          <div className="inspector-layer-list">
-            {ops.map((op, i) => (
-              <LayerRow
-                key={op.id}
-                op={op}
-                i={i}
-                count={ops.length}
-                label={t(labelKeys[op.mode] || op.mode)}
-                color={colors[op.mode]}
-                moveUpTitle={t("props.actions.moveUp")}
-                moveDownTitle={t("props.actions.moveDown")}
-                duplicateTitle={t("props.actions.duplicate")}
-                removeTitle={t("props.actions.deleteLayer")}
-                isSelected={selectedOperationIdx === i}
-                onSelect={handleSelect}
-                onMoveUp={handleMoveUp}
-                onMoveDown={handleMoveDown}
-                onDuplicate={handleDuplicate}
-                onRemove={handleRemove}
-              />
-            ))}
-          </div>
-        )}
+      <InspectorGroup
+        title={t("props.layers")}
+        className="inspector-group--flat"
+        headerAccessory={<span className="inspector-region-count">{ops.length}</span>}
+      >
+        <div className="inspector-layer-list">
+          {ops.map((op, i) => (
+            <LayerRow
+              key={op.id}
+              op={op}
+              i={i}
+              count={ops.length}
+              label={t(labelKeys[op.mode] || op.mode)}
+              color={colors[op.mode]}
+              moveUpTitle={t("props.actions.moveUp")}
+              moveDownTitle={t("props.actions.moveDown")}
+              duplicateTitle={t("props.actions.duplicate")}
+              removeTitle={t("props.actions.deleteLayer")}
+              isSelected={selectedOperationIdx === i}
+              onSelect={handleSelect}
+              onMoveUp={handleMoveUp}
+              onMoveDown={handleMoveDown}
+              onDuplicate={handleDuplicate}
+              onRemove={handleRemove}
+            />
+          ))}
+        </div>
       </InspectorGroup>
     </div>
   );

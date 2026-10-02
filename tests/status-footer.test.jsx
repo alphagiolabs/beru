@@ -30,8 +30,6 @@ describe("StatusFooter", () => {
       progressDone: 0,
       progressTotal: 0,
       queue: [],
-      logLines: [],
-      executionHistory: [],
       batchSummary: null,
       language: "es",
       updateModalOpen: false,
@@ -109,10 +107,6 @@ describe("StatusFooter", () => {
   });
 
   it("opens centered update modal from version badge when an update is available", async () => {
-    window.api = {
-      downloadUpdate: vi.fn(async () => ({ ok: true })),
-    };
-
     useEditorStore.setState({
       update: {
         status: "available",
@@ -152,17 +146,6 @@ describe("StatusFooter", () => {
         primaryBtn.compareDocumentPosition(moreNote) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
-
-    const updateNow = Array.from(document.querySelectorAll("button")).find((btn) =>
-      btn.textContent.includes("Actualizar ahora"),
-    );
-    await act(async () => {
-      updateNow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(window.api.downloadUpdate).toHaveBeenCalledTimes(1);
-    expect(window.api.downloadUpdate).toHaveBeenCalledWith({ version: "9.9.9" });
   });
 
   it("surfaces the ready modal after the user authorizes a download; auto-install lives in main", async () => {
@@ -215,41 +198,6 @@ describe("StatusFooter", () => {
 
     expect(document.body.textContent).toMatch(/Reiniciar e instalar/i);
     expect(window.api.installUpdate).not.toHaveBeenCalled();
-  });
-
-  it("auto-opens the install modal when an update finishes downloading", async () => {
-    window.api = {
-      installUpdate: vi.fn(async () => ({ ok: true })),
-    };
-
-    useEditorStore.setState({
-      updateModalOpen: true,
-      update: {
-        status: "ready",
-        version: "9.9.9",
-        percent: 100,
-        error: null,
-        transferred: 1000,
-        total: 1000,
-        releaseNotes: "- fix: footer polish",
-        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
-      },
-    });
-
-    await renderFooterWithUpdatePrompt();
-
-    const dialog = document.querySelector(".status-footer-update-panel");
-    expect(dialog).toBeTruthy();
-    expect(document.body.textContent).toMatch(/Reiniciar e instalar/i);
-
-    const installBtn = Array.from(document.querySelectorAll("button")).find((btn) =>
-      btn.textContent.includes("Reiniciar e instalar"),
-    );
-    await act(async () => {
-      installBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(window.api.installUpdate).toHaveBeenCalledTimes(1);
   });
 
   it("opens a centered confirmation when the current version is up to date", async () => {

@@ -1,4 +1,6 @@
 import React from "react";
+import { tStatic } from "../utils/format-message";
+import useEditorStore from "../stores/useEditorStore";
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -23,10 +25,15 @@ export default class ErrorBoundary extends React.Component {
         className="min-h-screen flex flex-col items-center justify-center gap-4 p-8 text-center"
         style={{ background: "#0a0a0a", color: "#fff" }}
       >
-        <h1 className="text-lg font-semibold">Beru no pudo iniciar la interfaz</h1>
+        <h1 className="text-lg font-semibold">
+          {tStatic("errorBoundary.title", null, useEditorStore.getState().language)}
+        </h1>
         <p className="text-sm max-w-md" style={{ color: "#999" }}>
-          Revisa la consola (F12) o reinicia con{" "}
-          <code style={{ color: "#00f0ea" }}>npm run dev</code>.
+          {tStatic(
+            "errorBoundary.hint",
+            { cmd: "npm run dev" },
+            useEditorStore.getState().language,
+          )}
         </p>
         <pre
           className="text-left text-[11px] max-w-xl w-full overflow-auto p-3 rounded"

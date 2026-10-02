@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Shield, ShieldOff, UserPlus, Users } from "lucide-react";
+import { Loader2, Shield, UserPlus, Users } from "lucide-react";
 import { Button } from "../ui/Button";
+import { Tooltip, TooltipProvider } from "../ui/tooltip";
 import useEditorStore from "../../stores/useEditorStore";
 import { useT } from "../../i18n/useT";
 
@@ -92,7 +93,7 @@ export default function UserManagementPanel() {
 
   if (!isAdmin) {
     return (
-      <div className="settings-card settings-users-empty settings-users-empty--wide">
+      <div className="settings-users-empty">
         <div className="settings-users-empty-icon">
           <Shield size={18} />
         </div>
@@ -102,138 +103,177 @@ export default function UserManagementPanel() {
   }
 
   return (
-    <div className="settings-users settings-users--horizontal">
-      <section className="settings-card settings-card--add">
-        <header className="settings-card-head">
-          <div className="settings-card-head-left">
-            <UserPlus size={14} strokeWidth={2.25} />
-            <span>{t("auth.addUser")}</span>
-          </div>
-        </header>
-        <form className="settings-users-form settings-users-form--compact" onSubmit={handleCreate}>
-          <label className="settings-field settings-field--full">
-            <span className="settings-field-label">{t("auth.fullNameLabel")}</span>
-            <input
-              type="text"
-              placeholder={t("auth.fullNamePlaceholder")}
-              value={form.fullName}
-              onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
-              disabled={creating}
-              autoComplete="name"
-            />
-          </label>
-          <label className="settings-field">
-            <span className="settings-field-label">{t("auth.email")}</span>
-            <input
-              type="email"
-              placeholder="usuario@empresa.com"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              disabled={creating}
-              required
-              autoComplete="off"
-            />
-          </label>
-          <label className="settings-field">
-            <span className="settings-field-label">{t("auth.password")}</span>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              disabled={creating}
-              minLength={6}
-              required
-              autoComplete="new-password"
-            />
-          </label>
-          <div className="settings-users-form-actions">
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              className="settings-users-submit"
-              loading={creating}
-              disabled={creating}
-            >
-              <UserPlus size={14} strokeWidth={2.25} />
-              {t("auth.addUserBtn")}
-            </Button>
-          </div>
-        </form>
-      </section>
+    <TooltipProvider>
+      <div className="settings-users">
+        <section className="settings-users-directory" aria-labelledby="settings-users-title">
+          <header className="settings-users-heading">
+            <h3 id="settings-users-title">{t("auth.userList")}</h3>
+            {!loading && <span className="settings-users-count">{users.length}</span>}
+          </header>
 
-      <section className="settings-card settings-card--list">
-        <header className="settings-card-head">
-          <div className="settings-card-head-left">
-            <Users size={14} strokeWidth={2.25} />
-            <span>{t("auth.userList")}</span>
+          <div className="settings-users-list-scroll" aria-busy={loading}>
+            {loading ? (
+              <div
+                className="settings-users-loading"
+                role="status"
+                aria-label={t("auth.loadingUsers")}
+              >
+                <Loader2 size={18} className="login-screen-spin" aria-hidden />
+              </div>
+            ) : users.length === 0 ? (
+              <div className="settings-users-empty-inline">
+                <Users size={20} strokeWidth={1.5} aria-hidden />
+                <p>{t("auth.noUsers")}</p>
+              </div>
+            ) : (
+              <table className="settings-users-table">
+                <caption className="sr-only">{t("auth.userList")}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("auth.roleUser")}</th>
+                    <th scope="col" className="settings-users-role-column">
+                      {t("auth.roleColumn")}
+                    </th>
+                    <th scope="col" className="settings-users-status-column">
+                      {t("auth.statusColumn")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((u) => {
+                    const isSelf = u.id === user?.id;
+                    const displayName = u.full_name?.trim() || u.email;
+                    const statusLabel = t(u.is_active ? "auth.active" : "auth.inactive");
+                    const toggleLabel = `${t(u.is_active ? "auth.disable" : "auth.enable")}: ${u.email}`;
+                    const status = (
+                      <>
+                        {togglingId === u.id ? (
+                          <Loader2 size={12} className="login-screen-spin" aria-hidden />
+                        ) : (
+                          <span className="settings-users-status-dot" aria-hidden />
+                        )}
+                        <span>{statusLabel}</span>
+                      </>
+                    );
+                    return (
+                      <tr
+                        key={u.id}
+                        className={`settings-users-row${u.is_active ? "" : " settings-users-row--disabled"}`}
+                      >
+                        <td>
+                          <div className="settings-users-person">
+                            <div className="settings-users-avatar" aria-hidden>
+                              {userInitial(displayName)}
+                            </div>
+                            <div className="settings-users-row-info">
+                              <div className="settings-users-row-top">
+                                <Tooltip label={displayName}>
+                                  <span className="settings-users-row-title">{displayName}</span>
+                                </Tooltip>
+                                {isSelf && (
+                                  <span className="settings-users-you">{t("auth.you")}</span>
+                                )}
+                              </div>
+                              {u.full_name?.trim() && (
+                                <Tooltip label={u.email}>
+                                  <span className="settings-users-row-sub">{u.email}</span>
+                                </Tooltip>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="settings-users-row-role">
+                          {t(u.role === "admin" ? "auth.roleAdmin" : "auth.roleUser")}
+                        </td>
+                        <td>
+                          {isSelf ? (
+                            <span
+                              className={`settings-users-status${u.is_active ? "" : " settings-users-toggle--off"}`}
+                            >
+                              {status}
+                            </span>
+                          ) : (
+                            <Tooltip label={toggleLabel}>
+                              <Button
+                                type="button"
+                                variant="tertiary"
+                                size="sm"
+                                className={`settings-users-toggle${u.is_active ? "" : " settings-users-toggle--off"}`}
+                                onClick={() => handleToggle(u)}
+                                disabled={togglingId === u.id}
+                                aria-label={toggleLabel}
+                              >
+                                {status}
+                              </Button>
+                            </Tooltip>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
-          <span className="settings-users-count">{users.length}</span>
-        </header>
+        </section>
 
-        <div className="settings-users-list-scroll">
-          {loading ? (
-            <div className="settings-users-loading">
-              <Loader2 size={18} className="login-screen-spin" />
+        <section className="settings-users-add" aria-labelledby="settings-users-add-title">
+          <header className="settings-users-heading">
+            <h3 id="settings-users-add-title">{t("auth.addUser")}</h3>
+          </header>
+          <form className="settings-users-form" onSubmit={handleCreate}>
+            <label className="settings-field">
+              <span className="settings-field-label">{t("auth.fullNameLabel")}</span>
+              <input
+                type="text"
+                placeholder={t("auth.fullNamePlaceholder")}
+                value={form.fullName}
+                onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))}
+                disabled={creating}
+                autoComplete="name"
+              />
+            </label>
+            <label className="settings-field">
+              <span className="settings-field-label">{t("auth.email")}</span>
+              <input
+                type="email"
+                placeholder={t("auth.emailPlaceholder")}
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                disabled={creating}
+                required
+                autoComplete="off"
+              />
+            </label>
+            <label className="settings-field">
+              <span className="settings-field-label">{t("auth.password")}</span>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                disabled={creating}
+                minLength={6}
+                required
+                autoComplete="new-password"
+              />
+            </label>
+            <div className="settings-users-form-actions">
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                className="settings-users-submit"
+                loading={creating}
+                disabled={creating}
+              >
+                <UserPlus size={14} strokeWidth={2.25} />
+                {t("auth.addUserBtn")}
+              </Button>
             </div>
-          ) : users.length === 0 ? (
-            <div className="settings-users-empty-inline">
-              <Users size={16} strokeWidth={2} />
-              <p>{t("auth.noUsers")}</p>
-            </div>
-          ) : (
-            <ul className="settings-users-list">
-              {users.map((u) => {
-                const isSelf = u.id === user?.id;
-                const isAdminUser = u.role === "admin";
-                const displayName = u.full_name?.trim() || u.email;
-                return (
-                  <li
-                    key={u.id}
-                    className={`settings-users-row${u.is_active ? "" : " settings-users-row--disabled"}`}
-                  >
-                    <div
-                      className={`settings-users-avatar${isAdminUser ? " settings-users-avatar--admin" : ""}`}
-                      aria-hidden="true"
-                    >
-                      {userInitial(displayName)}
-                    </div>
-                    <div className="settings-users-row-info">
-                      <div className="settings-users-row-top">
-                        <span className="settings-users-row-title">{displayName}</span>
-                        {isSelf && <span className="settings-users-you">{t("auth.you")}</span>}
-                        <span className="settings-users-row-role">
-                          {isAdminUser ? t("auth.roleAdmin") : t("auth.roleUser")}
-                        </span>
-                      </div>
-                      {u.full_name?.trim() && (
-                        <span className="settings-users-row-sub">{u.email}</span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      className={`settings-users-toggle${u.is_active ? "" : " settings-users-toggle--off"}`}
-                      onClick={() => handleToggle(u)}
-                      disabled={isSelf || togglingId === u.id}
-                      title={u.is_active ? t("auth.disable") : t("auth.enable")}
-                    >
-                      {togglingId === u.id ? (
-                        <Loader2 size={12} className="login-screen-spin" />
-                      ) : u.is_active ? (
-                        <Shield size={12} strokeWidth={2.25} />
-                      ) : (
-                        <ShieldOff size={12} strokeWidth={2.25} />
-                      )}
-                      <span>{u.is_active ? t("auth.active") : t("auth.inactive")}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      </section>
-    </div>
+          </form>
+        </section>
+      </div>
+    </TooltipProvider>
   );
 }

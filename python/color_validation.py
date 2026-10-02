@@ -1,10 +1,4 @@
-"""Color validation for FFmpeg filter strings.
-
-Extracted from ``processor.py`` so that filter-chain builders (e.g.
-``delogo_chains.py``) can re-validate colors defensively without importing
-``processor`` (which would be circular).  ``processor.py`` re-exports
-``_validate_drawtext_color`` for backwards compatibility with the test suite.
-"""
+"""FFmpeg color validation shared by filter builders to avoid circular imports."""
 
 import re
 

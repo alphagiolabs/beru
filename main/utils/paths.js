@@ -3,49 +3,37 @@ import fs from "fs";
 import { execFileSync } from "child_process";
 import { fileURLToPath } from "url";
 import { isDev } from "../shared-state.js";
+import { app } from "electron";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export function getThumbnailCacheDirectory() {
+  return path.join(app.getPath("userData"), "cache", "thumbnails-v1");
+}
 
 export function getPythonPath() {
   return path.join(__dirname, "..", "..", "python", "processor.py");
 }
 
 function _whichOnPath(binName) {
-  if (process.platform === "win32") {
-    try {
-      const output = execFileSync("where", [binName], {
-        windowsHide: true,
-        encoding: "utf-8",
-        timeout: 5000,
-      });
-      const first = String(output || "")
-        .trim()
-        .split(/\r?\n/)[0];
-      if (first && fs.existsSync(first)) return first;
-    } catch {}
-    return null;
-  }
-
-  for (const candidate of [`/usr/bin/${binName}`, `/usr/local/bin/${binName}`]) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
   try {
-    const output = execFileSync("which", [binName], {
+    const output = execFileSync("where", [binName], {
+      windowsHide: true,
       encoding: "utf-8",
       timeout: 5000,
     });
-    const resolved = String(output || "").trim();
-    if (resolved && fs.existsSync(resolved)) return resolved;
+    const first = String(output || "")
+      .trim()
+      .split(/\r?\n/)[0];
+    if (first && fs.existsSync(first)) return first;
   } catch {}
   return null;
 }
 
-const _exe = process.platform === "win32" ? ".exe" : "";
-
 function resolveBinary(name) {
-  const devBin = path.join(__dirname, "..", "..", "bin", `${name}${_exe}`);
+  const devBin = path.join(__dirname, "..", "..", "bin", `${name}.exe`);
   if (fs.existsSync(devBin)) return devBin;
-  const packaged = path.join(process.resourcesPath, "bin", `${name}${_exe}`);
+  const packaged = path.join(process.resourcesPath, "bin", `${name}.exe`);
   if (!isDev && fs.existsSync(packaged)) return packaged;
   return _whichOnPath(name) || null;
 }

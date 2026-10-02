@@ -8,6 +8,8 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
   const panRef = useRef({ x: 0, y: 0 });
   const panDragRef = useRef(null);
   const isSplitCompareRef = useRef(false);
+  const panRafRef = useRef(null);
+  const pendingPanRef = useRef(null);
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -104,6 +106,13 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     [panToolActive],
   );
 
+  const flushPendingPan = useCallback(() => {
+    panRafRef.current = null;
+    const p = pendingPanRef.current;
+    pendingPanRef.current = null;
+    if (p) setPan(p);
+  }, []);
+
   const onPanMouseMove = useCallback(
     (e) => {
       const d = panDragRef.current;
@@ -111,17 +120,25 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
       const dx = e.clientX - d.x;
       const dy = e.clientY - d.y;
       const clamped = clampPan(d.panX + dx, d.panY + dy, zoomRef.current);
-      setPanBoth(clamped);
+      panRef.current = clamped;
+      pendingPanRef.current = clamped;
+      if (panRafRef.current != null) return;
+      panRafRef.current = requestAnimationFrame(flushPendingPan);
     },
-    [clampPan, setPanBoth],
+    [clampPan, flushPendingPan],
   );
 
   const onPanMouseUp = useCallback(() => {
+    if (panRafRef.current != null) {
+      cancelAnimationFrame(panRafRef.current);
+      panRafRef.current = null;
+    }
+    flushPendingPan();
     if (panDragRef.current) {
       panDragRef.current = null;
       setIsPanning(false);
     }
-  }, []);
+  }, [flushPendingPan]);
 
   useEffect(() => {
     window.addEventListener("mousemove", onPanMouseMove);
@@ -129,6 +146,7 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     return () => {
       window.removeEventListener("mousemove", onPanMouseMove);
       window.removeEventListener("mouseup", onPanMouseUp);
+      if (panRafRef.current != null) cancelAnimationFrame(panRafRef.current);
     };
   }, [onPanMouseMove, onPanMouseUp]);
 
@@ -146,6 +164,7 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
   }, [applyZoom]);
 
   useEffect(() => {
+    isSplitCompareRef.current = isSplitCompare;
     if (isSplitCompare) {
       setZoomBoth(1);
       setPanBoth({ x: 0, y: 0 });

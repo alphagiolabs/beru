@@ -4,20 +4,9 @@ import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import { isSupabaseConfigured } from "../lib/supabaseClient";
 import { Button } from "./ui/Button";
+import BrandFace from "./BrandFace";
 
 const VIDEO_URL = "https://res.cloudinary.com/dzhp64paw/video/upload/v1782516787/login.mp4";
-
-function BeruLogo({ className = "h-8 md:h-10" }) {
-  return (
-    <svg viewBox="0 0 300 400" className={className} aria-hidden="true">
-      <path
-        fill="currentColor"
-        fillRule="evenodd"
-        d="M0 0L140 0C260 0 260 195 140 195L165 195C295 195 295 400 165 400L0 400ZM60 50L120 50C195 50 195 145 120 145L60 145ZM60 240L140 240C225 240 225 350 140 350L60 350ZM100 168L195 195L100 222Z"
-      />
-    </svg>
-  );
-}
 
 export default function LoginScreen() {
   const t = useT();
@@ -83,7 +72,7 @@ export default function LoginScreen() {
             className="animate-blur-fade-up flex items-center gap-3 mb-6"
             style={{ animationDelay: "300ms" }}
           >
-            <BeruLogo className="h-10 md:h-12 w-auto text-white" />
+            <BrandFace />
             <h1 className="text-2xl md:text-3xl font-semibold tracking-tight m-0">BERU</h1>
           </div>
 
@@ -122,7 +111,7 @@ export default function LoginScreen() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="usuario@empresa.com"
+                    placeholder={t("auth.emailPlaceholder")}
                     autoComplete="email"
                     disabled={submitting}
                     required

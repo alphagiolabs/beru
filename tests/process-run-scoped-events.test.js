@@ -1,49 +1,198 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { EventEmitter } from "events";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import {
+  IPC_EVENTS,
+  IPC_INVOKE,
+  RUN_SCOPED_CHANNELS,
+  emitRunEvent,
+} from "../shared/ipc-channels.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const mocks = vi.hoisted(() => ({
+  handlers: new Map(),
+  sendToRenderer: vi.fn(),
+  killProcessTree: vi.fn(async () => {}),
+  proc: null,
+  done: null,
+  resolveDone: null,
+  emitLine: null,
+  tempRoot: "",
+  jobs: [],
+}));
 
-describe("run-scoped terminal events (plan 025)", () => {
-  it("main process tags finished/error with runId and emits process:runStarted", () => {
-    const processSrc = readFileSync(join(__dirname, "../main/handlers/process.js"), "utf8");
-    expect(processSrc).toContain('sendToRenderer("process:runStarted"');
-    expect(processSrc).toContain("runId");
-    expect(processSrc).toMatch(/process:finished[\s\S]*runId/);
-    expect(processSrc).toMatch(/process:error[\s\S]*runId/);
+vi.mock("electron", () => ({
+  ipcMain: { handle: (channel, handler) => mocks.handlers.set(channel, handler) },
+  app: { isPackaged: false, getPath: () => mocks.tempRoot },
+}));
 
-    const processingRun = readFileSync(join(__dirname, "../main/processing-run.js"), "utf8");
-    expect(processingRun).toContain("runId: staleRunId");
+vi.mock("../main/shared-state.js", () => ({ getAppIsQuitting: () => false }));
+vi.mock("../main/utils/paths.js", () => ({ validateMediaBinaries: () => ({ ok: true }) }));
+vi.mock("../main/utils/processor-spawn.js", () => ({
+  validateProcessorAvailableAsync: async () => ({ ok: true, command: "noop", args: [] }),
+}));
+vi.mock("../main/utils/job-worker.js", () => ({
+  startJobRun: vi.fn(async ({ onLine, jobsFile }) => {
+    mocks.jobs = JSON.parse(fs.readFileSync(jobsFile, "utf8")).jobs;
+    mocks.emitLine = onLine;
+    return { proc: mocks.proc, done: mocks.done, stderrTail: () => "" };
+  }),
+}));
+vi.mock("../main/utils/media-task-pool.js", () => ({
+  setMediaProcessingActive: vi.fn(),
+  waitForMediaTasksToDrain: async () => {},
+}));
+vi.mock("../main/utils/concurrency.js", () => ({
+  runWithConcurrency: async (jobs) => jobs,
+}));
+vi.mock("../main/utils/video-cache.js", () => ({ probeVideo: vi.fn() }));
+vi.mock("../main/utils/settings.js", () => ({ readSettings: () => ({}) }));
+vi.mock("../main/utils/renderer.js", () => ({
+  sendToRenderer: (...args) => mocks.sendToRenderer(...args),
+}));
+vi.mock("../main/utils/jobManifest.js", () => ({
+  unwrapJobManifest: (jobs) => ({ jobs, manifest: null }),
+  createProcessorManifest: (_manifest, jobs) => ({ jobs }),
+}));
+vi.mock("../main/utils/process-input-validation.js", () => ({
+  findUnreadableInputsAsync: async () => [],
+  translateProcessorErrorMessage: (m) => m,
+}));
+vi.mock("../main/utils/process-media-validation.js", () => ({
+  sanitizeJobMedia: (job, _security, { outputDirectory }) => ({
+    ...job,
+    output_path: job.output_path || path.join(outputDirectory, "out.mp4"),
+  }),
+}));
+vi.mock("../main/utils/kill-process-tree.js", () => ({
+  killProcessTree: (...args) => mocks.killProcessTree(...args),
+}));
 
-    const preload = readFileSync(join(__dirname, "../main/preload.cjs"), "utf8");
-    expect(preload).toContain("onRunStarted");
-    expect(preload).toContain("process:runStarted");
+const { registerProcessHandlers } = await import("../main/handlers/process.js");
+const runModule = await import("../main/processing-run.js");
 
-    const hook = readFileSync(join(__dirname, "../src/hooks/useProcessing.js"), "utf8");
-    expect(hook).toContain("isStaleRunEvent");
-    expect(hook).toContain("activeProcessRunId");
-    expect(hook).toContain("onRunStarted");
+let tmpDirs = [];
+
+function tmpDir() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "beru-runscope-test-"));
+  tmpDirs.push(dir);
+  return dir;
+}
+
+function fakeProc(pid = 9100) {
+  const proc = new EventEmitter();
+  proc.pid = pid;
+  proc.exitCode = null;
+  proc.signalCode = null;
+  proc.killed = false;
+  proc.kill = vi.fn(() => {
+    proc.killed = true;
+    return true;
   });
+  return proc;
+}
+
+const calls = (channel) => mocks.sendToRenderer.mock.calls.filter(([c]) => c === channel);
+
+beforeEach(() => {
+  mocks.tempRoot = tmpDir();
+  mocks.proc = fakeProc();
+  mocks.done = new Promise((resolve) => {
+    mocks.resolveDone = resolve;
+  });
+  mocks.emitLine = null;
+  mocks.sendToRenderer.mockClear();
+  registerProcessHandlers({ getOutputDirectory: () => tmpDir() });
 });
 
-describe("useProcessing stale-run helper (unit)", () => {
-  beforeEach(() => {
-    vi.resetModules();
+afterEach(async () => {
+  await runModule.cancelRun();
+  for (const dir of tmpDirs) {
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {}
+  }
+  tmpDirs = [];
+});
+
+describe("run-scoped process events", () => {
+  it("RUN_SCOPED_CHANNELS is exactly the process:* subset of IPC_EVENTS", () => {
+    const processChannels = Object.values(IPC_EVENTS).filter((c) => c.startsWith("process:"));
+    expect([...RUN_SCOPED_CHANNELS].sort()).toEqual(processChannels.sort());
   });
 
-  it("store tracks activeProcessRunId and clears on abort", async () => {
-    const { default: useEditorStore } = await import("../src/stores/useEditorStore.js");
-    useEditorStore.setState({
-      isProcessing: true,
-      activeProcessRunId: "run-a",
-      queue: [],
+  it("emitRunEvent stamps runId onto the payload", () => {
+    const send = vi.fn();
+    emitRunEvent(send, IPC_EVENTS.onProgress, "run-1", { percent: 50 });
+    expect(send).toHaveBeenCalledWith(IPC_EVENTS.onProgress, { percent: 50, runId: "run-1" });
+    emitRunEvent(send, IPC_EVENTS.onRunStarted, "run-2");
+    expect(send).toHaveBeenLastCalledWith(IPC_EVENTS.onRunStarted, { runId: "run-2" });
+  });
+
+  it("every event a run emits is run-scoped and carries that run's runId", async () => {
+    const outputDir = tmpDir();
+    const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)({}, [
+      { input_path: "a.mp4", output_path: path.join(outputDir, "a.mp4") },
+    ]);
+
+    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
+    mocks.emitLine('{"type":"progress","index":0,"percent":10}');
+    mocks.emitLine('{"type":"job_progress","index":0,"percent":20}');
+    fs.writeFileSync(mocks.jobs[0].output_path, "exported");
+    mocks.emitLine('{"type":"complete","index":0}');
+    mocks.emitLine('{"type":"summary","done":1}');
+    mocks.resolveDone({ ok: true });
+    await pending;
+
+    const started = calls(IPC_EVENTS.onRunStarted);
+    expect(started).toHaveLength(1);
+    const runId = started[0][1].runId;
+    expect(runId).toBeTruthy();
+
+    const emitted = mocks.sendToRenderer.mock.calls;
+    expect(emitted.length).toBeGreaterThanOrEqual(6);
+    for (const [channel, payload] of emitted) {
+      expect(RUN_SCOPED_CHANNELS.has(channel), `channel ${channel}`).toBe(true);
+      expect(payload.runId, `payload of ${channel}`).toBe(runId);
+    }
+    expect(calls(IPC_EVENTS.onFinished)[0][1]).toMatchObject({ code: 0, runId });
+  });
+
+  it("cancel emits process:finished once, cancelled and run-scoped", async () => {
+    const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)({}, [
+      { input_path: "clip.mp4" },
+    ]);
+    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
+
+    const cancel = mocks.handlers.get(IPC_INVOKE.cancelProcessing)({});
+    mocks.proc.emit("close", 0);
+    await Promise.all([cancel, pending]);
+
+    const runId = calls(IPC_EVENTS.onRunStarted)[0][1].runId;
+    const finished = calls(IPC_EVENTS.onFinished);
+    expect(finished).toHaveLength(1);
+    expect(finished[0][1]).toMatchObject({ cancelled: true, runId });
+  });
+
+  it.each([
+    { type: "cancelled", index: 7 },
+    { type: "error", index: 7, error: "Cancelled" },
+  ])("forwards $type job cancellation through its run-scoped IPC channel", async (message) => {
+    const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)({}, [
+      { id: 7, input_path: "clip.mp4" },
+    ]);
+    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
+    mocks.emitLine(JSON.stringify(message));
+    mocks.resolveDone({ ok: true });
+    const result = await pending;
+    expect(calls(IPC_EVENTS.onJobCancelled)).toHaveLength(1);
+    expect(calls(IPC_EVENTS.onJobCancelled)[0][1]).toMatchObject({
+      type: "cancelled",
+      index: 7,
+      runId: result.runId,
     });
-    expect(useEditorStore.getState().activeProcessRunId).toBe("run-a");
-    useEditorStore.getState().setActiveProcessRunId("run-b");
-    expect(useEditorStore.getState().activeProcessRunId).toBe("run-b");
-    useEditorStore.getState().abortActiveProcessing();
-    expect(useEditorStore.getState().activeProcessRunId).toBeNull();
-    expect(useEditorStore.getState().isProcessing).toBe(false);
+    expect(calls(IPC_EVENTS.onJobError)).toHaveLength(0);
+    expect(calls(IPC_EVENTS.onError)).toHaveLength(0);
   });
 });
