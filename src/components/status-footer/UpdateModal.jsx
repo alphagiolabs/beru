@@ -42,11 +42,9 @@ export default function UpdateModal({
   if (typeof document === "undefined") return null;
 
   const title =
-    status === "ready"
-      ? t("updater.modal.title")
-      : status === "downloading"
-        ? t("footer.updateDownloading", { percent, version })
-        : t("updater.modal.title");
+    status === "downloading"
+      ? t("footer.updateDownloading", { percent, version })
+      : t("updater.modal.title");
 
   return createPortal(
     <div className="cap-modal-overlay status-footer-update-overlay" onClick={onClose}>

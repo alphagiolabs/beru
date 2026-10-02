@@ -9,17 +9,13 @@ import {
 const MAX_BATCH_WORKERS = 16;
 export const AUTO_TARGET_WORKERS = 5;
 
-// Keep in sync with python/processor.py (_RAM_PER_JOB_MB, _X264_PRESET_RAM_MULT,
-// _HEAVY_DECODE_CODECS, _HIGH_BIT_DEPTH_PIX_TOKENS, _estimate_job_ram_mb,
-// _memory_cap_workers). The Auto hint must use the same math as the processor.
+// Keep RAM estimates and worker caps in sync with python/capacity.py.
 const RAM_PER_JOB_MB = {
   software: 512,
   nvenc: 256,
-  qsv: 128,
+  qsv: 192,
   amf: 128,
   mf: 64,
-  vaapi: 128,
-  videotoolbox: 128,
 };
 
 const X264_PRESET_RAM_MULT = {
@@ -38,7 +34,7 @@ const HEAVY_DECODE_CODECS = new Set(["hevc", "h265", "av1", "vp9", "prores", "wm
 
 const HIGH_BIT_DEPTH_TOKENS = ["p10", "p12", "p16", "10le", "10be", "12le", "12be", "16le", "16be"];
 
-export function getAvailableRamMb() {
+function getAvailableRamMb() {
   try {
     return Math.max(0, Math.floor(os.freemem() / (1024 * 1024)));
   } catch {
@@ -46,9 +42,6 @@ export function getAvailableRamMb() {
   }
 }
 
-/**
- * Mirror of processor._estimate_job_ram_mb. Returns MB of peak RAM per job.
- */
 export function estimateJobRamMb({
   hwEncoder = null,
   hasVideoFilters = false,
@@ -68,11 +61,9 @@ export function estimateJobRamMb({
   else if (hwEncoder === "h264_qsv") key = "qsv";
   else if (hwEncoder === "h264_amf") key = "amf";
   else if (hwEncoder === "h264_mf") key = "mf";
-  else if (hwEncoder === "h264_vaapi") key = "vaapi";
-  else if (hwEncoder === "h264_videotoolbox") key = "videotoolbox";
   else key = "software";
 
-  let perJob = RAM_PER_JOB_MB[key] ?? 512;
+  let perJob = RAM_PER_JOB_MB[key];
   if (key === "software") {
     const preset = String(speedPreset || ENCODE_PROFILES[profile]?.preset || "fast")
       .trim()
@@ -95,10 +86,6 @@ export function estimateJobRamMb({
   return Math.max(64, perJob);
 }
 
-/**
- * Mirror of processor._memory_cap_workers: clamp desired workers by 80% of
- * available RAM divided by the peak per-job estimate.
- */
 export function memoryCapWorkers({
   hwEncoder = null,
   maxSourcePixels = 0,
@@ -116,7 +103,6 @@ export function memoryCapWorkers({
     perJob = Math.max(
       ...entries.map((j) => estimateJobRamMb({ hwEncoder, hasVideoFilters, encodeProfile, ...j })),
     );
-    if (!Number.isFinite(perJob)) perJob = 0;
   }
   if (perJob <= 0) {
     perJob = estimateJobRamMb({
@@ -136,16 +122,12 @@ const ENCODER_CAPS = {
     h264_nvenc: 2,
     h264_qsv: 2,
     h264_amf: 2,
-    h264_vaapi: 2,
-    h264_videotoolbox: 2,
   },
   balanced: {
     h264_mf: 1,
     h264_nvenc: 5,
     h264_qsv: 5,
     h264_amf: 4,
-    h264_vaapi: 4,
-    h264_videotoolbox: 4,
   },
 };
 
@@ -174,7 +156,7 @@ export function resolveBatchWorkers({
   let workers;
 
   if (effectiveHwEncoder) {
-    const cap = caps[effectiveHwEncoder] ?? caps.h264_nvenc ?? 2;
+    const cap = caps[effectiveHwEncoder] ?? caps.h264_nvenc;
     workers = Math.max(1, Math.min(cap, jobs));
   } else if (m === "conservative") {
     workers = Math.max(1, Math.min(Math.max(2, cpus - 1), 6, jobs));
@@ -191,7 +173,7 @@ export function resolveBatchWorkers({
   if (hasVideoFilters && (!profileAllowsHardware(profile) || qualitySoftwareFilters)) {
     workers = Math.min(workers, 2);
   } else if (hasVideoFilters && maxSourcePixels >= 1920 * 1080) {
-    workers = Math.min(workers, 3);
+    workers = Math.min(workers, Math.max(3, Math.min(6, cpus - 4)));
   }
 
   workers = memoryCapWorkers({
@@ -214,8 +196,6 @@ export function recommendBatchWorkers(opts = {}) {
     ...opts,
     hwEncoder: encoder,
     encodeProfile: profile,
-    jobEntries: opts.jobEntries,
-    availableRamMb: opts.availableRamMb,
   });
   const mode = opts.mode === "conservative" ? "conservative" : "balanced";
   let reason = "cpu";
@@ -232,18 +212,10 @@ export function recommendBatchWorkers(opts = {}) {
 }
 
 const WIN_ENCODER_PRIORITY = ["h264_nvenc", "h264_qsv", "h264_mf", "h264_amf"];
-const DARWIN_ENCODER_PRIORITY = ["h264_videotoolbox", "h264_nvenc", "h264_qsv"];
-const LINUX_ENCODER_PRIORITY = ["h264_nvenc", "h264_vaapi", "h264_qsv", "h264_amf"];
 
 export function pickHwEncoderFromEncodersText(text) {
   if (!text || typeof text !== "string") return null;
-  const priority =
-    process.platform === "win32"
-      ? WIN_ENCODER_PRIORITY
-      : process.platform === "darwin"
-        ? DARWIN_ENCODER_PRIORITY
-        : LINUX_ENCODER_PRIORITY;
-  for (const enc of priority) {
+  for (const enc of WIN_ENCODER_PRIORITY) {
     if (text.includes(enc)) return enc;
   }
   return null;

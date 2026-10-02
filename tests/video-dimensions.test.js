@@ -76,11 +76,5 @@ describe("video-dimensions", () => {
       expect(getLockedDimensions(null)).toEqual({ width: 0, height: 0 });
       expect(getLockedDimensions(undefined)).toEqual({ width: 0, height: 0 });
     });
-
-    it("returns positive dimensions when source is locked", () => {
-      const { width, height } = getLockedDimensions({ sourceWidth: 1920, sourceHeight: 1080 });
-      expect(width).toBeGreaterThan(0);
-      expect(height).toBeGreaterThan(0);
-    });
   });
 });

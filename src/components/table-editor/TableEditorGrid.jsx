@@ -1,49 +1,15 @@
-import { memo, useMemo, useCallback } from "react";
+import { memo, useCallback, useState, useEffect } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import useEditorStore from "../../stores/useEditorStore";
 import { findTextOpForRegion } from "../../utils/text-style";
 import { useT } from "../../i18n/useT";
 import useOverlayScroll from "./useOverlayScroll";
-
-function usePrecomputedCells(
-  queue,
-  templateRegions,
-  excelMapping,
-  excelRows,
-  excelRowIndexByFilename,
-) {
-  return useMemo(() => {
-    const get = useEditorStore.getState;
-    const rowCount = queue.length;
-    const colCount = templateRegions.length;
-    const displayIds = new Array(rowCount);
-    const cellText = new Array(rowCount);
-    const hasOpText = new Array(rowCount);
-
-    for (let r = 0; r < rowCount; r++) {
-      const item = queue[r];
-      displayIds[r] = get().getExcelDisplayId(r);
-      const cols = new Array(colCount);
-      const opFlags = new Array(colCount);
-      for (let c = 0; c < colCount; c++) {
-        const tr = templateRegions[c];
-        const { op } = findTextOpForRegion(item.operations, tr.region, tr.id);
-        opFlags[c] = Boolean(op?.text);
-        cols[c] = get().getCellTextForRegion(r, tr.id);
-      }
-      cellText[r] = cols;
-      hasOpText[r] = opFlags;
-    }
-    return { displayIds, cellText, hasOpText };
-  }, [queue, templateRegions, excelMapping, excelRows, excelRowIndexByFilename]);
-}
+import { PERF_FLAGS } from "../../utils/perf-flags.js";
 
 const TableRow = memo(
   function TableRow({
     item,
     idx,
-    cols,
-    opFlags,
-    displayId,
     matchStatus,
     excelPath,
     templateRegions,
@@ -59,6 +25,8 @@ const TableRow = memo(
     cancelInlineEdit,
   }) {
     const t = useT();
+    const get = useEditorStore.getState;
+    const displayId = get().getExcelDisplayId(idx);
 
     return (
       <tr
@@ -81,9 +49,10 @@ const TableRow = memo(
             </span>
           )}
         </td>
-        {templateRegions.map((tr, c) => {
-          const cellText = cols[c];
-          const fromExcelOnly = !opFlags[c] && !!cellText && excelMapping.columns?.[tr.id];
+        {templateRegions.map((tr) => {
+          const { op } = findTextOpForRegion(item.operations, tr.region, tr.id);
+          const cellText = get().getCellTextForRegion(idx, tr.id);
+          const fromExcelOnly = !op?.text && !!cellText && excelMapping.columns?.[tr.id];
           const isCellFocused = isFocusedRow && focusedRegionId === tr.id;
           const isEditing =
             editingCell && editingCell.videoIdx === idx && editingCell.regionId === tr.id;
@@ -144,9 +113,7 @@ const TableRow = memo(
     return (
       prev.item === next.item &&
       prev.idx === next.idx &&
-      prev.cols === next.cols &&
-      prev.opFlags === next.opFlags &&
-      prev.displayId === next.displayId &&
+      prev.excelRow === next.excelRow &&
       prev.matchStatus === next.matchStatus &&
       prev.excelPath === next.excelPath &&
       prev.templateRegions === next.templateRegions &&
@@ -184,19 +151,14 @@ export default function TableEditorGrid({
 }) {
   const t = useT();
   const bindScroll = useOverlayScroll();
+  const get = useEditorStore.getState;
   const excelRows = useEditorStore((s) => s.excelRows);
-  const excelRowIndexByFilename = useEditorStore((s) => s.excelRowIndexByFilename);
+  useEditorStore((s) => s.excelRowIndexByFilename);
 
-  const { displayIds, cellText, hasOpText } = usePrecomputedCells(
-    queue,
-    templateRegions,
-    excelMapping,
-    excelRows,
-    excelRowIndexByFilename,
-  );
-
+  const [gridEl, setGridEl] = useState(null);
   const setGridNode = useCallback(
     (node) => {
+      setGridEl(node);
       bindScroll(node);
       if (!tableRef) return;
       if (typeof tableRef === "function") tableRef(node);
@@ -204,6 +166,49 @@ export default function TableEditorGrid({
     },
     [bindScroll, tableRef],
   );
+
+  const virtualize = PERF_FLAGS.virtualize && queue.length >= PERF_FLAGS.virtualizeThreshold;
+  const colSpan = templateRegions.length + 3;
+  const rowVirtualizer = useVirtualizer({
+    count: virtualize ? queue.length : 0,
+    getScrollElement: () => gridEl,
+    estimateSize: () => 30,
+    overscan: 10,
+  });
+  const virtualItems = rowVirtualizer.getVirtualItems();
+
+  useEffect(() => {
+    if (!virtualize) return;
+    rowVirtualizer.scrollToIndex(focused.videoIdx, { align: "auto" });
+  }, [virtualize, focused.videoIdx, rowVirtualizer]);
+
+  const renderRow = (idx) => {
+    const item = queue[idx];
+    const rowIdx = get().getExcelRowIndexForVideo(idx);
+    const isEditingThis =
+      editingCell && editingCell.videoIdx === idx && editingCell.regionId != null;
+    return (
+      <TableRow
+        key={idx}
+        item={item}
+        idx={idx}
+        excelRow={rowIdx >= 0 ? excelRows[rowIdx] : undefined}
+        matchStatus={excelMatchStatus[idx]}
+        excelPath={excelPath}
+        templateRegions={templateRegions}
+        excelMapping={excelMapping}
+        isFocusedRow={focused.videoIdx === idx}
+        focusedRegionId={focused.regionId}
+        editingCell={isEditingThis ? editingCell : null}
+        editValue={isEditingThis ? editValue : ""}
+        setFocused={setFocused}
+        setEditValue={setEditValue}
+        startInlineEdit={startInlineEdit}
+        commitInlineEdit={commitInlineEdit}
+        cancelInlineEdit={cancelInlineEdit}
+      />
+    );
+  };
 
   return (
     <div
@@ -250,33 +255,36 @@ export default function TableEditorGrid({
             </tr>
           </thead>
           <tbody>
-            {queue.map((item, idx) => {
-              const isEditingThis =
-                editingCell && editingCell.videoIdx === idx && editingCell.regionId != null;
-              return (
-                <TableRow
-                  key={idx}
-                  item={item}
-                  idx={idx}
-                  cols={cellText[idx]}
-                  opFlags={hasOpText[idx]}
-                  displayId={displayIds[idx]}
-                  matchStatus={excelMatchStatus[idx]}
-                  excelPath={excelPath}
-                  templateRegions={templateRegions}
-                  excelMapping={excelMapping}
-                  isFocusedRow={focused.videoIdx === idx}
-                  focusedRegionId={focused.regionId}
-                  editingCell={isEditingThis ? editingCell : null}
-                  editValue={isEditingThis ? editValue : ""}
-                  setFocused={setFocused}
-                  setEditValue={setEditValue}
-                  startInlineEdit={startInlineEdit}
-                  commitInlineEdit={commitInlineEdit}
-                  cancelInlineEdit={cancelInlineEdit}
-                />
-              );
-            })}
+            {virtualize ? (
+              <>
+                {virtualItems.length > 0 && virtualItems[0].start > 0 && (
+                  <tr aria-hidden="true">
+                    <td
+                      colSpan={colSpan}
+                      style={{ height: virtualItems[0].start, padding: 0, border: "none" }}
+                    />
+                  </tr>
+                )}
+                {virtualItems.map((vi) => renderRow(vi.index))}
+                {virtualItems.length > 0 &&
+                  rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end > 0 && (
+                    <tr aria-hidden="true">
+                      <td
+                        colSpan={colSpan}
+                        style={{
+                          height:
+                            rowVirtualizer.getTotalSize() -
+                            virtualItems[virtualItems.length - 1].end,
+                          padding: 0,
+                          border: "none",
+                        }}
+                      />
+                    </tr>
+                  )}
+              </>
+            ) : (
+              queue.map((_, idx) => renderRow(idx))
+            )}
           </tbody>
         </table>
       )}

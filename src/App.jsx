@@ -1,34 +1,37 @@
-import { useEffect, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import useEditorStore from "./stores/useEditorStore";
 import useKeyboard from "./hooks/useKeyboard";
 import useProcessing from "./hooks/useProcessing";
 import Header from "./components/Header";
+import AppRail from "./components/AppRail";
 import QueueSidebar from "./components/QueueSidebar";
 import VideoPreview from "./components/VideoPreview";
-import ToolBar from "./components/ToolBar";
-import PropertiesPanel from "./components/PropertiesPanel";
-import LayerList from "./components/LayerList";
+import { PropertiesPanel, LayerList } from "./components/editor-panels";
 import StatusFooter from "./components/StatusFooter";
-import DragOverlay from "./components/DragOverlay";
+import LogoSidePanel from "./components/LogoSidePanel";
+import DeferredPanel from "./components/DeferredPanel";
+import PanelLoading from "./components/PanelLoading";
 import { useT } from "./i18n/useT";
-
-const ShortcutsModal = lazy(() => import("./components/ShortcutsModal"));
-const TableEditor = lazy(() => import("./components/TableEditor"));
-const ExcelMappingModal = lazy(() => import("./components/ExcelMappingModal"));
-const WatermarkModal = lazy(() => import("./components/WatermarkModal"));
+import {
+  ShortcutsModal,
+  TableEditor,
+  ExcelMappingModal,
+  WatermarkModal,
+} from "./components/modal-panels";
 
 const api = window.api;
 
 export default function App() {
+  const isDragging = useEditorStore((s) => s.isDragging);
   const setIsDragging = useEditorStore((s) => s.setIsDragging);
   const addVideos = useEditorStore((s) => s.addVideos);
   const loadPresets = useEditorStore((s) => s.loadPresets);
   const loadPresetsFromStorage = useEditorStore((s) => s.loadPresetsFromStorage);
   const loadSettings = useEditorStore((s) => s.loadSettings);
   const loadRecents = useEditorStore((s) => s.loadRecents);
-  const loadExecutionHistory = useEditorStore((s) => s.loadExecutionHistory);
   const ensurePetsReady = useEditorStore((s) => s.ensurePetsReady);
   const showToast = useEditorStore((s) => s.showToast);
+  const isLogoMode = useEditorStore((s) => s.sidebarMode === "logo");
   const t = useT();
   const [mobilePanel, setMobilePanel] = useState("editor");
   const dragDepthRef = useRef(0);
@@ -49,7 +52,6 @@ export default function App() {
   useEffect(() => {
     const settingsReady = loadSettings();
     loadRecents();
-    loadExecutionHistory();
     void (async () => {
       await loadPresets();
       loadPresetsFromStorage();
@@ -59,14 +61,7 @@ export default function App() {
         await ensurePetsReady();
       }
     })();
-  }, [
-    loadPresets,
-    loadPresetsFromStorage,
-    loadSettings,
-    loadRecents,
-    loadExecutionHistory,
-    ensurePetsReady,
-  ]);
+  }, [loadPresets, loadPresetsFromStorage, loadSettings, loadRecents, ensurePetsReady]);
 
   useEffect(() => {
     const resetDragState = () => {
@@ -79,6 +74,7 @@ export default function App() {
 
   const onDragEnter = (e) => {
     e.preventDefault();
+    if (!Array.from(e.dataTransfer?.types || []).includes("Files")) return;
     dragDepthRef.current = Math.min(dragDepthRef.current + 1, DRAG_DEPTH_MAX);
     if (dragDepthRef.current === 1) setIsDragging(true);
   };
@@ -103,7 +99,7 @@ export default function App() {
     }
 
     const rawPaths = Array.from(e.dataTransfer.files)
-      .map((f) => f.path)
+      .map((f) => api?.getPathForFile?.(f) || f.path)
       .filter(Boolean);
 
     if (rawPaths.length === 0) {
@@ -143,55 +139,87 @@ export default function App() {
   return (
     <div
       {...dropHandlers}
-      className="h-screen flex flex-col overflow-hidden"
-      style={{ background: "var(--bg-app)", color: "var(--text-primary)" }}
+      className={`app-shell h-screen flex overflow-hidden${isDragging ? " is-file-dragging" : ""}`}
     >
-      <Header />
-      <nav className="mobile-workspace-nav" aria-label={t("workspace.navigation")}>
-        {[
-          ["queue", t("workspace.queue")],
-          ["editor", t("workspace.editor")],
-          ["properties", t("workspace.properties")],
-        ].map(([panel, label]) => (
-          <button
-            key={panel}
-            type="button"
-            className={mobilePanel === panel ? "is-active" : ""}
-            aria-current={mobilePanel === panel ? "page" : undefined}
-            onClick={() => setMobilePanel(panel)}
+      <AppRail />
+      <div className="flex flex-col flex-1 min-w-0 min-h-0">
+        <Header />
+        <div className="app-canvas">
+          {!isLogoMode && (
+            <nav className="mobile-workspace-nav" aria-label={t("workspace.navigation")}>
+              {[
+                ["queue", t("workspace.queue")],
+                ["editor", t("workspace.editor")],
+                ["properties", t("workspace.properties")],
+              ].map(([panel, label]) => (
+                <button
+                  key={panel}
+                  type="button"
+                  className={mobilePanel === panel ? "is-active" : ""}
+                  aria-current={mobilePanel === panel ? "page" : undefined}
+                  onClick={() => setMobilePanel(panel)}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+          )}
+          <div
+            className={`workspace-layout flex-1 flex overflow-hidden min-h-0${isLogoMode ? " workspace-layout--logo" : ""}`}
           >
-            {label}
-          </button>
-        ))}
-      </nav>
-      <div className="workspace-layout flex-1 flex overflow-hidden min-h-0">
-        <div
-          className={`workspace-panel workspace-panel--queue${mobilePanel === "queue" ? " is-mobile-active" : ""}`}
-        >
-          <QueueSidebar />
+            <div
+              className={`workspace-panel workspace-panel--queue${mobilePanel === "queue" ? " is-mobile-active" : ""}`}
+            >
+              {isLogoMode ? <LogoSidePanel /> : <QueueSidebar />}
+            </div>
+            <div
+              className={`workspace-panel workspace-panel--editor${mobilePanel === "editor" ? " is-mobile-active" : ""}`}
+            >
+              <VideoPreview />
+            </div>
+            {!isLogoMode && (
+              <aside
+                className={`workspace-panel workspace-panel--properties inspector w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l${mobilePanel === "properties" ? " is-mobile-active" : ""}`}
+                style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+              >
+                <Suspense fallback={<PanelLoading label={t("workspace.properties")} />}>
+                  <PropertiesPanel />
+                  <LayerList />
+                </Suspense>
+              </aside>
+            )}
+          </div>
         </div>
-        <div
-          className={`workspace-panel workspace-panel--editor${mobilePanel === "editor" ? " is-mobile-active" : ""}`}
-        >
-          <VideoPreview />
-          <ToolBar />
-        </div>
-        <aside
-          className={`workspace-panel workspace-panel--properties inspector w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l${mobilePanel === "properties" ? " is-mobile-active" : ""}`}
-          style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
-        >
-          <PropertiesPanel />
-          <LayerList />
-        </aside>
+        <StatusFooter />
       </div>
-      <StatusFooter />
-      <DragOverlay />
-      <Suspense fallback={null}>
+      <DeferredPanel
+        when={(s) => s.showShortcuts}
+        label={t("modal.shortcuts.title")}
+        onClose={() => useEditorStore.getState().setShowShortcuts(false)}
+      >
         <ShortcutsModal />
+      </DeferredPanel>
+      <DeferredPanel
+        when={(s) => s.showTableEditor}
+        label={t("table.title")}
+        onClose={() => useEditorStore.getState().setShowTableEditor(false)}
+      >
         <TableEditor />
+      </DeferredPanel>
+      <DeferredPanel
+        when={(s) => s.showMappingModal}
+        label={t("excel.title")}
+        onClose={() => useEditorStore.getState().setShowMappingModal(false)}
+      >
         <ExcelMappingModal />
+      </DeferredPanel>
+      <DeferredPanel
+        when={(s) => s.showWatermarkModal}
+        label={t("header.watermark")}
+        onClose={() => useEditorStore.getState().setShowWatermarkModal(false)}
+      >
         <WatermarkModal />
-      </Suspense>
+      </DeferredPanel>
     </div>
   );
 }

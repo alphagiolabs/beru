@@ -1,4 +1,5 @@
 import { cursorForHandle, RESIZE_HANDLES } from "../utils/region-interaction";
+import { useT } from "../i18n/useT";
 
 const HANDLE_VISUAL = 8;
 const HANDLE_HIT = 18;
@@ -46,6 +47,7 @@ export default function TextRegionFrame({
   zIndex = 50,
   label,
 }) {
+  const t = useT();
   if (!screen || !region || !gesture) return null;
 
   const dragging = gesture.active;
@@ -103,7 +105,7 @@ export default function TextRegionFrame({
           key={id}
           data-handle={id}
           role="presentation"
-          title="Redimensionar"
+          title={t("preview.resize")}
           style={handleStyle(id, color)}
           onPointerDown={(e) => {
             e.stopPropagation();

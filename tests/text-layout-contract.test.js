@@ -10,7 +10,7 @@ import {
   wrapTextToWidth,
 } from "../src/utils/text-layout.js";
 
-const PY = process.platform === "win32" ? "python" : "python3";
+const PY = "python";
 const PY_CODE_PREFIX = "import sys; sys.path.insert(0, 'python'); ";
 
 const hasPython = (() => {

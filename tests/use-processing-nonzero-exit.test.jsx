@@ -24,18 +24,6 @@ describe("useProcessing process:finished non-zero exit", () => {
     root = createRoot(document.getElementById("root"));
     useEditorStore.setState({
       isProcessing: true,
-      activeExecutionId: "run-1",
-      executionHistory: [
-        {
-          id: "run-1",
-          kind: "batch",
-          startedAt: Date.now(),
-          endedAt: null,
-          jobCount: 1,
-          lines: [],
-          summary: null,
-        },
-      ],
       queue: [
         {
           path: "C:\\videos\\a.mp4",

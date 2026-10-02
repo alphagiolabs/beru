@@ -247,4 +247,133 @@ describe("TableEditor keyboard", () => {
 
     expect(useEditorStore.getState().showTableEditor).toBe(false);
   });
+
+  it("Escape inside a focus-panel field blurs it instead of closing the editor", () => {
+    const ops = [
+      {
+        id: "op-1",
+        mode: "text",
+        batchRegionId: "region-1",
+        region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 },
+        text: "abc",
+      },
+    ];
+    useEditorStore.setState({
+      queue: [queueItem("1.mp4", ops), queueItem("2.mp4")],
+    });
+
+    root = createRoot(document.getElementById("root"));
+    act(() => {
+      root.render(
+        <>
+          <KeyboardHarness />
+          <TableEditor />
+        </>,
+      );
+    });
+
+    const textarea = document.querySelector(".te-textarea");
+    expect(textarea).toBeTruthy();
+
+    act(() => {
+      textarea.focus();
+      dispatchKey(textarea, "Escape");
+    });
+
+    expect(useEditorStore.getState().showTableEditor).toBe(true);
+    expect(document.activeElement).not.toBe(textarea);
+
+    act(() => {
+      dispatchKey(document.body, "Escape");
+    });
+    expect(useEditorStore.getState().showTableEditor).toBe(false);
+  });
+
+  it("create button on an empty cell does not leak the last edited text", () => {
+    root = createRoot(document.getElementById("root"));
+    act(() => {
+      root.render(<TableEditor />);
+    });
+
+    const grid = document.querySelector('[tabindex="0"]');
+
+    act(() => {
+      dispatchKey(grid, "Enter");
+    });
+    const input = document.querySelector("tbody input");
+    expect(input).toBeTruthy();
+
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    act(() => {
+      setter.call(input, "Hola");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => {
+      dispatchKey(input, "Enter");
+    });
+
+    act(() => {
+      dispatchKey(grid, "ArrowDown");
+      dispatchKey(grid, "ArrowRight");
+    });
+
+    const createBtn = document.querySelector(".te-primary");
+    expect(createBtn).toBeTruthy();
+    act(() => {
+      createBtn.click();
+    });
+
+    const video1Ops = useEditorStore.getState().queue[1].operations;
+    expect(video1Ops).toHaveLength(1);
+    expect(video1Ops[0].mode).toBe("text");
+    expect(String(video1Ops[0].batchRegionId)).toBe("region-2");
+    expect(video1Ops[0].text).toBe("");
+  });
+
+  it("create button prefills the op with the cell's Excel text", () => {
+    useEditorStore.setState({
+      excelPath: "C:\\data\\book.xlsx",
+      excelHeaders: ["id", "col1"],
+      excelRows: [{ id: "1", col1: "Desde Excel" }],
+      excelMapping: { idColumn: "id", columns: { "region-1": "col1" } },
+    });
+
+    root = createRoot(document.getElementById("root"));
+    act(() => {
+      root.render(<TableEditor />);
+    });
+
+    const createBtn = document.querySelector(".te-primary");
+    expect(createBtn).toBeTruthy();
+    act(() => {
+      createBtn.click();
+    });
+
+    const ops = useEditorStore.getState().queue[0].operations;
+    expect(ops).toHaveLength(1);
+    expect(ops[0].text).toBe("Desde Excel");
+  });
+
+  it("Delete on an Excel-only cell clears the Excel value", () => {
+    useEditorStore.setState({
+      excelPath: "C:\\data\\book.xlsx",
+      excelHeaders: ["id", "col1"],
+      excelRows: [{ id: "1", col1: "Desde Excel" }],
+      excelMapping: { idColumn: "id", columns: { "region-1": "col1" } },
+    });
+
+    root = createRoot(document.getElementById("root"));
+    act(() => {
+      root.render(<TableEditor />);
+    });
+    expect(useEditorStore.getState().getCellTextForRegion(0, "region-1")).toBe("Desde Excel");
+
+    const grid = document.querySelector('[tabindex="0"]');
+    act(() => {
+      dispatchKey(grid, "Delete");
+    });
+
+    expect(useEditorStore.getState().excelRows[0].col1).toBe("");
+    expect(useEditorStore.getState().getCellTextForRegion(0, "region-1")).toBe("");
+  });
 });

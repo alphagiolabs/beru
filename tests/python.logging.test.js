@@ -4,7 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-const PY = process.platform === "win32" ? "python" : "python3";
+const PY = "python";
 const hasPython = (() => {
   try {
     const r = spawnSync(PY, ["--version"], { encoding: "utf8" });

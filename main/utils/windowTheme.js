@@ -10,6 +10,7 @@ const WINDOW_THEME = {
 };
 
 export const TITLEBAR_OVERLAY_COLOR = "#00000000";
+export const TITLEBAR_OVERLAY_HEIGHT = 40;
 
 export function resolveWindowTheme(themeOrColors) {
   if (themeOrColors && typeof themeOrColors === "object" && themeOrColors.background) {
@@ -25,13 +26,11 @@ export function applyWindowTheme(win, themeOrColors) {
   if (!win || win.isDestroyed()) return;
   const colors = resolveWindowTheme(themeOrColors);
   win.setBackgroundColor(colors.background);
-  if (process.platform === "win32" || process.platform === "darwin") {
-    try {
-      win.setTitleBarOverlay({
-        color: TITLEBAR_OVERLAY_COLOR,
-        symbolColor: colors.symbols,
-        height: 32,
-      });
-    } catch {}
-  }
+  try {
+    win.setTitleBarOverlay({
+      color: TITLEBAR_OVERLAY_COLOR,
+      symbolColor: colors.symbols,
+      height: TITLEBAR_OVERLAY_HEIGHT,
+    });
+  } catch {}
 }

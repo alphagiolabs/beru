@@ -1,21 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import useEditorStore from "../../../stores/useEditorStore";
+import { summarizeQueue } from "../../../utils/batch-process.js";
 import {
   celebrationDurationMs,
   resolveBatchCelebration,
   resolvePetActivity,
 } from "../utils/pet-activity.js";
-
-function summarizeQueue(queue) {
-  let succeeded = 0;
-  let failed = 0;
-  for (const item of queue) {
-    if (item.status === "done") succeeded += 1;
-    else if (item.status === "error") failed += 1;
-  }
-  const total = succeeded + failed;
-  return total > 0 ? { total, succeeded, failed } : null;
-}
 
 export default function usePetState() {
   const isProcessing = useEditorStore((s) => s.isProcessing);

@@ -3,8 +3,10 @@ import { X, FileSpreadsheet, ArrowRight, RotateCcw } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { rowGet, normalizeMatchId } from "../utils/video-utils";
+import { ID_COLUMN_ALIASES } from "../utils/types";
 import { useT } from "../i18n/useT";
 import { Button } from "./ui/Button";
+import { Select } from "./ui/select";
 
 const PREVIEW_ROWS = 5;
 
@@ -31,14 +33,24 @@ export default function ExcelMappingModal() {
   const idCol = draft.idColumn || "";
   const sample = useMemo(() => excelRows.slice(0, PREVIEW_ROWS), [excelRows]);
 
+  const rowIndexById = useMemo(() => {
+    const map = new Map();
+    if (!showMappingModal || !idCol) return map;
+    for (let i = 0; i < excelRows.length; i++) {
+      const v = rowGet(excelRows[i], idCol);
+      if (v === undefined || v === null) continue;
+      const key = normalizeMatchId(v);
+      if (!map.has(key)) map.set(key, i);
+    }
+    return map;
+  }, [excelRows, idCol, showMappingModal]);
+
   const videoPreview = useMemo(() => {
-    if (!idCol) return [];
+    if (!showMappingModal || !idCol) return [];
     return queue.map((item) => {
       const id = normalizeMatchId(item.filename);
-      const row = excelRows.find((r) => {
-        const v = rowGet(r, idCol);
-        return v !== undefined && v !== null && normalizeMatchId(v) === id;
-      });
+      const rowIdx = rowIndexById.get(id);
+      const row = rowIdx === undefined ? undefined : excelRows[rowIdx];
       return {
         filename: item.filename,
         id,
@@ -54,8 +66,12 @@ export default function ExcelMappingModal() {
         }),
       };
     });
-  }, [queue, excelRows, idCol, draft.columns, templateRegions]);
+  }, [queue, excelRows, idCol, draft.columns, templateRegions, showMappingModal]);
 
+  const headerOptions = useMemo(
+    () => excelHeaders.map((h) => ({ value: h, label: h })),
+    [excelHeaders],
+  );
   const matchedCount = videoPreview.filter((v) => v.found).length;
   const unmatchedCount = videoPreview.length - matchedCount;
 
@@ -69,19 +85,8 @@ export default function ExcelMappingModal() {
   };
 
   const handleReset = () => {
-    const idAliases = [
-      "id",
-      "code",
-      "codigo",
-      "video",
-      "archivo",
-      "filename",
-      "name",
-      "nombre",
-      "identificador",
-    ];
     const idColumn =
-      excelHeaders.find((h) => idAliases.includes(h.toLowerCase().trim())) ||
+      excelHeaders.find((h) => ID_COLUMN_ALIASES.includes(h.toLowerCase().trim())) ||
       excelHeaders[0] ||
       null;
     const columns = {};
@@ -104,11 +109,14 @@ export default function ExcelMappingModal() {
           style={{ borderColor: "var(--border)" }}
         >
           <div className="flex items-center gap-2">
-            <FileSpreadsheet size={16} style={{ color: "var(--purple)" }} />
+            <FileSpreadsheet size={16} style={{ color: "var(--text-purple)" }} />
             <span className="text-sm font-semibold">{t("excel.title")}</span>
             <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-              {excelRows.length} filas · {excelHeaders.length} columnas · {templateRegions.length}{" "}
-              regiones
+              {t("excel.metaStats", {
+                rows: excelRows.length,
+                cols: excelHeaders.length,
+                regions: templateRegions.length,
+              })}
             </span>
           </div>
           <Button
@@ -128,20 +136,14 @@ export default function ExcelMappingModal() {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div>
             <div className="cap-input-label mb-1">{t("excel.idColumn")}</div>
-            <select
+            <Select
               value={idCol}
-              onChange={(e) => setDraft((d) => ({ ...d, idColumn: e.target.value || null }))}
-              className="cap-input text-[12px]"
-            >
-              <option value="">— Seleccionar columna —</option>
-              {excelHeaders.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
+              onValueChange={(v) => setDraft((d) => ({ ...d, idColumn: v || null }))}
+              aria-label={t("excel.idColumn")}
+              options={[{ value: "", label: t("excel.selectColumn") }, ...headerOptions]}
+            />
             <div className="text-[10px] mt-1" style={{ color: "var(--text-dim)" }}>
-              El ID se compara con el nombre del video sin extensión (case-insensitive, trim).
+              {t("excel.idHint")}
             </div>
           </div>
 
@@ -152,8 +154,7 @@ export default function ExcelMappingModal() {
                 className="text-[11px] p-3 rounded"
                 style={{ background: "var(--bg-surface)", color: "var(--text-secondary)" }}
               >
-                No hay regiones de plantilla. Dibujá una región en el video y agrégala desde "Texto
-                en lote" antes de mapear.
+                {t("excel.noRegions")}
               </div>
             ) : (
               <div className="space-y-1.5">
@@ -165,30 +166,25 @@ export default function ExcelMappingModal() {
                   >
                     <span
                       className="text-[11px] font-mono truncate"
-                      style={{ color: "var(--purple)" }}
+                      style={{ color: "var(--text-purple)" }}
                     >
                       {tr.label}
                     </span>
                     <ArrowRight size={12} style={{ color: "var(--text-dim)" }} />
-                    <select
+                    <Select
+                      size="sm"
                       value={draft.columns[tr.id] || ""}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setDraft((d) => {
                           const next = { ...d.columns };
-                          if (e.target.value) next[tr.id] = e.target.value;
+                          if (v) next[tr.id] = v;
                           else delete next[tr.id];
                           return { ...d, columns: next };
                         })
                       }
-                      className="cap-input text-[11px]"
-                    >
-                      <option value="">— No mapear —</option>
-                      {excelHeaders.map((h) => (
-                        <option key={h} value={h}>
-                          {h}
-                        </option>
-                      ))}
-                    </select>
+                      aria-label={tr.label}
+                      options={[{ value: "", label: t("excel.noMap") }, ...headerOptions]}
+                    />
                   </div>
                 ))}
               </div>
@@ -199,7 +195,7 @@ export default function ExcelMappingModal() {
             <div className="flex items-center justify-between mb-1.5">
               <div className="cap-input-label">{t("excel.preview")}</div>
               <div className="text-[10px]" style={{ color: "var(--text-dim)" }}>
-                {matchedCount} matcheados · {unmatchedCount} sin match
+                {t("excel.matchSummary", { matched: matchedCount, unmatched: unmatchedCount })}
               </div>
             </div>
             <div className="rounded overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -214,7 +210,7 @@ export default function ExcelMappingModal() {
                           borderBottom: "1px solid var(--border)",
                         }}
                       >
-                        Video
+                        {t("props.video")}
                       </th>
                       <th
                         className="text-left p-1.5"
@@ -230,7 +226,7 @@ export default function ExcelMappingModal() {
                           key={tr.id}
                           className="text-left p-1.5"
                           style={{
-                            color: "var(--purple)",
+                            color: "var(--text-purple)",
                             borderBottom: "1px solid var(--border)",
                             borderLeft: "1px solid var(--border)",
                           }}
@@ -259,7 +255,7 @@ export default function ExcelMappingModal() {
                         </td>
                         <td
                           className="p-1.5 font-mono"
-                          style={{ color: v.found ? "var(--accent)" : "var(--rose)" }}
+                          style={{ color: v.found ? "var(--text-accent)" : "var(--text-rose)" }}
                         >
                           {v.id}
                         </td>
@@ -272,7 +268,7 @@ export default function ExcelMappingModal() {
                               borderLeft: "1px solid var(--border)",
                             }}
                           >
-                            {vv.value || (vv.mapped ? "—" : "—")}
+                            {vv.value || "—"}
                           </td>
                         ))}
                       </tr>
@@ -284,7 +280,7 @@ export default function ExcelMappingModal() {
                           className="p-4 text-center"
                           style={{ color: "var(--text-dim)" }}
                         >
-                          No hay videos en la cola
+                          {t("excel.queueEmpty")}
                         </td>
                       </tr>
                     )}
@@ -295,7 +291,7 @@ export default function ExcelMappingModal() {
                           className="p-2 text-center text-[9px]"
                           style={{ color: "var(--text-dim)" }}
                         >
-                          Mostrando 20 de {videoPreview.length} videos
+                          {t("excel.showingSubset", { shown: 20, total: videoPreview.length })}
                         </td>
                       </tr>
                     )}
@@ -307,7 +303,7 @@ export default function ExcelMappingModal() {
 
           <details>
             <summary className="text-[10px] cursor-pointer" style={{ color: "var(--text-dim)" }}>
-              Ver primeras {PREVIEW_ROWS} filas del Excel
+              {t("excel.showFirstRows", { count: PREVIEW_ROWS })}
             </summary>
             <div
               className="mt-2 rounded overflow-x-auto"
@@ -321,7 +317,7 @@ export default function ExcelMappingModal() {
                         key={h}
                         className="text-left p-1.5"
                         style={{
-                          color: h === idCol ? "var(--accent)" : "var(--text-dim)",
+                          color: h === idCol ? "var(--text-accent)" : "var(--text-dim)",
                           borderBottom: "1px solid var(--border)",
                         }}
                       >

@@ -6,6 +6,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+import processor  # noqa: E402
 from processor import build_filter_complex  # noqa: E402
 
 
@@ -27,9 +28,10 @@ def test_watermark_only_builds_drawtext_filter():
 
 
 def test_stream_copy_gate_requires_no_watermark():
-    src = (HERE / "processor.py").read_text(encoding="utf-8")
-    assert "wm_enabled" in src
-    assert "not raw_operations and not wm_enabled" in src
+    wm = {"enabled": True, "type": "text", "text": "WM"}
+    assert not processor._job_takes_copy_path({"operations": [], "watermark": wm})
+    assert processor._job_takes_copy_path({"operations": []})
+    assert processor._job_takes_copy_path({"watermark": {"enabled": False}})
 
 
 if __name__ == "__main__":

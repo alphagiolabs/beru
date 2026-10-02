@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
+import { useT } from "../i18n/useT";
 import { InspectorGroup } from "./inspector";
 
 export default function PresetManager() {
   const presets = useEditorStore((s) => s.presets);
+  const t = useT();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingFilename, setDeletingFilename] = useState(null);
@@ -33,28 +35,23 @@ export default function PresetManager() {
     setSaving(false);
     if (res?.ok) {
       setName("");
-      setFeedback({ kind: "ok", text: `Guardado: ${res.fileName}` });
+      setFeedback({ kind: "ok", text: t("modal.preset.savedFeedback", { name: res.fileName }) });
     } else {
-      setFeedback({ kind: "err", text: res?.error || "No se pudo guardar el preset" });
+      setFeedback({ kind: "err", text: res?.error || t("header.couldNotSavePreset") });
     }
     scheduleFeedbackClear();
   };
 
   const handleDelete = async (preset) => {
-    if (preset.source === "bundled") {
-      setFeedback({ kind: "err", text: "Los presets incluidos no se pueden eliminar" });
-      scheduleFeedbackClear();
-      return;
-    }
     if (deletingFilename) return;
     setDeletingFilename(preset.filename);
     setFeedback(null);
     const res = await getState().deletePreset(preset);
     setDeletingFilename(null);
     if (res?.ok) {
-      setFeedback({ kind: "ok", text: `Eliminado: ${preset.name}` });
+      setFeedback({ kind: "ok", text: t("modal.preset.deletedFeedback", { name: preset.name }) });
     } else {
-      setFeedback({ kind: "err", text: res?.error || "No se pudo eliminar el preset" });
+      setFeedback({ kind: "err", text: res?.error || t("header.couldNotSavePreset") });
     }
     scheduleFeedbackClear();
   };
@@ -63,7 +60,7 @@ export default function PresetManager() {
 
   return (
     <InspectorGroup
-      title="Presets"
+      title={t("header.presets")}
       className="inspector-group--user-presets"
       collapsible
       defaultOpen
@@ -75,57 +72,48 @@ export default function PresetManager() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Nombre…"
+              placeholder={t("modal.preset.namePlaceholder")}
               className="inspector-user-presets-input"
               onKeyDown={(e) => e.key === "Enter" && handleSave()}
               disabled={saving}
-              aria-label="Nombre del preset"
+              aria-label={t("modal.preset.nameAria")}
             />
             <button
               type="button"
               onClick={handleSave}
               disabled={!canSave}
               className={`inspector-user-presets-save-btn${canSave ? " is-ready" : ""}`}
-              title="Guardar preset"
-              aria-label="Guardar preset"
+              title={t("modal.preset.save")}
+              aria-label={t("modal.preset.save")}
             >
               <Plus size={14} strokeWidth={2.25} />
             </button>
           </div>
 
           {presets.length > 0 ? (
-            <ul className="inspector-user-presets-list" aria-label="Presets guardados">
+            <ul className="inspector-user-presets-list" aria-label={t("modal.preset.listAria")}>
               {presets.map((p) => {
-                const isBundled = p.source === "bundled";
                 const isDeleting = deletingFilename === p.filename;
                 return (
-                  <li
-                    key={`${p.source}-${p.filename}`}
-                    className={`inspector-user-presets-item${isBundled ? " is-bundled" : ""}`}
-                  >
+                  <li key={p.filename} className="inspector-user-presets-item">
                     <button
                       type="button"
                       className="inspector-user-presets-load"
-                      onClick={() => getState().loadPreset(p)}
-                      title={isBundled ? `${p.name} (incluido)` : `Cargar: ${p.name}`}
+                      onClick={() => getState().applyPreset(p.data)}
+                      title={t("modal.preset.load", { name: p.name })}
                     >
                       <span className="inspector-user-presets-name">{p.name}</span>
-                      {isBundled ? (
-                        <span className="inspector-user-presets-tag">Incluido</span>
-                      ) : null}
                     </button>
-                    {!isBundled ? (
-                      <button
-                        type="button"
-                        className="inspector-user-presets-delete"
-                        onClick={() => handleDelete(p)}
-                        disabled={isDeleting}
-                        title="Eliminar preset"
-                        aria-label={`Eliminar ${p.name}`}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    ) : null}
+                    <button
+                      type="button"
+                      className="inspector-user-presets-delete"
+                      onClick={() => handleDelete(p)}
+                      disabled={isDeleting}
+                      title={t("modal.preset.delete")}
+                      aria-label={t("modal.preset.deleteAria", { name: p.name })}
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </li>
                 );
               })}

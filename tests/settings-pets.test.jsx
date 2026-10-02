@@ -42,7 +42,6 @@ describe("SettingsModal pets", () => {
         installedPets = [pet];
         return { success: true, pet };
       }),
-      uninstallPet: vi.fn(async () => ({ success: true, pet: { slug: "boba" } })),
       getPetSpritesheet: vi.fn(async () => ({
         success: true,
         path: bobaSpritesheetPath,

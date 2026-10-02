@@ -7,10 +7,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from processor import build_filter_complex, _region_to_pixels, _normalize_operation  # noqa: E402
+from processor import build_filter_complex, _region_to_pixels, _normalize_operation, find_ffmpeg  # noqa: E402
 from delogo_chains import _build_delogo_chain  # noqa: E402
 
-FFMPEG = HERE.parent / "bin" / "ffmpeg.exe"
+FFMPEG = Path(find_ffmpeg())
 
 
 def run(cmd):
@@ -20,8 +20,7 @@ def run(cmd):
 def assert_graph(ops, vw, vh, label=""):
     fc, out, _ = build_filter_complex(ops, vw, vh)
     assert fc is not None, f"{label}: graph is None"
-    if not FFMPEG.exists():
-        return
+    assert FFMPEG.exists(), f"ffmpeg not found at {FFMPEG}"
     cmd = [
         str(FFMPEG), "-y",
         "-f", "lavfi", "-i", f"color=c=green:s={vw}x{vh}:rate=30:d=1",
@@ -72,7 +71,7 @@ def test_feather_zero():
         "edge_feather": 0,
     }
     fc, _, _ = build_filter_complex([op], 320, 180)
-    assert "boxblur=6" not in fc or fc.count("boxblur") == 0 or "soft" not in fc
+    assert "boxblur" not in fc, f"feather=0 must not inject a blur, got: {fc}"
 
 
 def test_small_blur_region_max_strength():
@@ -180,9 +179,7 @@ def test_image_opacity_zero_preserved():
 
 
 def test_cover_keeps_contain_letterbox_transparent():
-    if not FFMPEG.exists():
-        print("  [skip] cover transparency e2e - no ffmpeg")
-        return
+    assert FFMPEG.exists(), f"ffmpeg not found at {FFMPEG}"
     with tempfile.TemporaryDirectory(prefix="beru_delogo_cover_") as tmp_dir:
         tmp = Path(tmp_dir)
         cover = tmp / "cover.ppm"
@@ -241,10 +238,9 @@ def test_delogo_color_injection_rejected():
 
 
 def test_temporal_removes_static_logo():
-    if not FFMPEG.exists():
-        print("  [skip] temporal e2e — no ffmpeg")
-        return
-    tmp = Path(tempfile.mkdtemp(prefix="beru_delogo_robust_"))
+    assert FFMPEG.exists(), f"ffmpeg not found at {FFMPEG}"
+    tmp_holder = tempfile.TemporaryDirectory(prefix="beru_delogo_robust_")
+    tmp = Path(tmp_holder.name)
     truth = tmp / "truth.mp4"
     logo = tmp / "logo.mp4"
     out = tmp / "out.mp4"

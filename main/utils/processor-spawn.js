@@ -1,21 +1,18 @@
-import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { isDev } from "../shared-state.js";
 import { getPythonPath } from "./paths.js";
+import { runCapturedProcess } from "./run-captured.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const _exe = process.platform === "win32" ? ".exe" : "";
-const PROCESSOR_NAME = `beru-processor${_exe}`;
+const PROCESSOR_NAME = "beru-processor.exe";
+const PROCESSOR_SOURCE_DIR = path.join(__dirname, "..", "..", "python");
+const IGNORED_SOURCE_DIRS = new Set(["__pycache__", "build", "dist"]);
 
 let systemPythonCache = { resolved: false, value: null };
-let bundledProcessorCache = { resolved: false, value: null };
 let systemPythonPromise = null;
-
-function processorSpawnCacheEnabled() {
-  return process.env.BERU_PROCESSOR_SPAWN_CACHE === "1";
-}
+let staleProcessorWarned = false;
 
 const WINDOWS_CANDIDATES = [
   { command: "py", args: ["-3"] },
@@ -23,46 +20,22 @@ const WINDOWS_CANDIDATES = [
   { command: "python3", args: [] },
 ];
 
-const UNIX_CANDIDATES = [
-  { command: "python3", args: [] },
-  { command: "python", args: [] },
-];
-
-function getPythonCandidates() {
-  return process.platform === "win32" ? WINDOWS_CANDIDATES : UNIX_CANDIDATES;
-}
-
 function getConfiguredPython() {
   const command = process.env.BERU_PYTHON;
   return command && fs.existsSync(command) ? { command, args: [] } : null;
 }
 
-function probePythonCandidateAsync(candidate) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(candidate.command, [...candidate.args, "--version"], {
-      windowsHide: true,
-      stdio: "ignore",
-    });
-    let settled = false;
-    let timeout;
-    const finish = (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (error) reject(error);
-      else resolve(candidate);
-    };
-    proc.once("error", finish);
-    proc.once("close", (code) =>
-      finish(code === 0 ? null : new Error(`${candidate.command} exited with code ${code}`)),
-    );
-    timeout = setTimeout(() => {
-      try {
-        proc.kill();
-      } catch {}
-      finish(new Error(`${candidate.command} probe timed out`));
-    }, 5000);
+async function probePythonCandidateAsync(candidate) {
+  const result = await runCapturedProcess(candidate.command, [...candidate.args, "--version"], {
+    timeoutMs: 5000,
+    capture: false,
   });
+  if (result.error) throw result.error;
+  if (result.timedOut) throw new Error(`${candidate.command} probe timed out`);
+  if (result.code !== 0) {
+    throw new Error(`${candidate.command} exited with code ${result.code}`);
+  }
+  return candidate;
 }
 
 async function resolveSystemPythonSpawnAsync() {
@@ -71,7 +44,7 @@ async function resolveSystemPythonSpawnAsync() {
   systemPythonPromise = (async () => {
     let value = getConfiguredPython();
     if (!value) {
-      for (const candidate of getPythonCandidates()) {
+      for (const candidate of WINDOWS_CANDIDATES) {
         try {
           value = await probePythonCandidateAsync(candidate);
           break;
@@ -85,20 +58,57 @@ async function resolveSystemPythonSpawnAsync() {
   return systemPythonPromise;
 }
 
+function newestMtimeMs(dir) {
+  let newest = 0;
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (IGNORED_SOURCE_DIRS.has(entry.name)) continue;
+      newest = Math.max(newest, newestMtimeMs(full));
+      continue;
+    }
+    if (!entry.name.endsWith(".py") && !entry.name.endsWith(".spec")) continue;
+    if (entry.name.startsWith("test_")) continue;
+    try {
+      newest = Math.max(newest, fs.statSync(full).mtimeMs);
+    } catch {}
+  }
+  return newest;
+}
+
+function warnIfProcessorStale(bundledPath) {
+  if (!isDev || staleProcessorWarned || !bundledPath) return;
+  staleProcessorWarned = true;
+  try {
+    const sourceMtime = newestMtimeMs(PROCESSOR_SOURCE_DIR);
+    if (sourceMtime === 0) return;
+    if (fs.statSync(bundledPath).mtimeMs < sourceMtime) {
+      console.warn(
+        `[beru] El procesador incluido está desactualizado (${path.basename(bundledPath)} es ` +
+          `anterior a python/). Las correcciones de python/ no se aplicarán. ` +
+          `Ejecute "npm run build:processor".`,
+      );
+    }
+  } catch {}
+}
+
 export function getBundledProcessorPath() {
-  if (processorSpawnCacheEnabled() && bundledProcessorCache.resolved) {
-    return bundledProcessorCache.value;
-  }
   const devBin = path.join(__dirname, "..", "..", "bin", PROCESSOR_NAME);
-  let value = null;
   if (fs.existsSync(devBin)) {
-    value = devBin;
-  } else if (!isDev && process.resourcesPath) {
-    const packaged = path.join(process.resourcesPath, "bin", PROCESSOR_NAME);
-    if (fs.existsSync(packaged)) value = packaged;
+    warnIfProcessorStale(devBin);
+    return devBin;
   }
-  if (processorSpawnCacheEnabled()) bundledProcessorCache = { resolved: true, value };
-  return value;
+  if (!isDev && process.resourcesPath) {
+    const packaged = path.join(process.resourcesPath, "bin", PROCESSOR_NAME);
+    if (fs.existsSync(packaged)) return packaged;
+  }
+  return null;
 }
 
 function buildProcessorSpawn(bundled, python, userArgs) {

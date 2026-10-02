@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""
-Beru Video Processor
-Reads a JSON job manifest and processes videos with:
-  - Text overlay (via drawtext filter)
-  - Blur regions (via boxblur + crop overlay)
-  - Crop regions
-  - Delogo (inpaint / blur / color fill)
-Outputs progress as JSON lines to stdout.
+"""Batch scheduling, per-job execution and CLI/NDJSON worker entrypoints.
+
+Consumes JSON job manifests and emits progress as NDJSON on stdout.
+Imported helpers remain re-exported for compatibility; wrappers forward
+processor state and patched dependencies to the helper modules.
 """
 
-import base64
+import concurrent.futures
 import json
-import re
-import platform
 import logging
 import logging.handlers
-import subprocess
-import sys
+import math
 import os
 import shutil
-import time
+import subprocess
+import sys
 import threading
-import concurrent.futures
 from collections import deque
+from dataclasses import replace
 from pathlib import Path
+
+import filters
+import fonts
+import media_probe
+import preview
 
 from encode_profiles import (
     ENCODE_PROFILES,
@@ -39,333 +39,99 @@ from batch_errors import (
 
 from op_shared import (
     _build_enable_clause,
-    _coerce_float,
-    _coerce_int,
     _is_op_time_disabled,
     _normalize_operation,
     _optimize_delogo_for_speed,
-    _overlay_opts,
     _region_to_pixels,
 )
-from color_validation import _validate_drawtext_color
-from delogo_chains import _build_boxblur_filter, _build_delogo_chain
-from text_layout_helpers import (
-    _apply_letter_spacing_fallback,
-    _build_region_bg_drawbox,
-    _layout_export_text,
-    _text_bg_enabled,
-    _text_box_pad,
-    _text_glyph_positions,
-    _text_layout_bounds,
+from media_paths import (
+    FONT_EXTENSIONS,
+    IMAGE_EXTENSIONS,
+    VIDEO_INPUT_EXTENSIONS,
+    VIDEO_OUTPUT_EXTENSIONS,
+    _path_parent,
+    _validated_job_media,
+    validate_media_path,
+)
+from job_classify import (
+    _job_dimensions,
+    _job_requires_encode,
+    _job_takes_copy_path,
+    _jobs_allow_hardware,
+    _jobs_require_fonts,
+    _parse_trim_window,
+)
+from capacity import (
+    MAX_WORKERS_CAP,
+    _ENCODER_CAPS,
+    _REMUX_JOB_RAM_MB,
+    _estimate_job_ram_mb,
+    _get_available_ram_mb,
+    _max_estimated_job_ram_mb,
+    _memory_cap_workers,
+    resolve_copy_workers,
+    resolve_max_workers,
+)
+from batch_context import BatchContext, _ResourceAdmission, _cancel_event, _check_cancelled
+from encoders import _test_hw_encoder_real, detect_hw_encoder
+from encode_args import (
+    _ANIMATED_IMAGE_EXTS,
+    _AUDIO_COPY_CODECS,
+    _COPY_SAFE_STREAM_TYPES,
+    _FASTSTART_EXTS,
+    build_audio_args,
+)
+from media_probe import find_ffmpeg, find_ffprobe
+from fonts import (
+    FONT_DIRS,
+    _font_name_key,
+    _get_normalized_fonts,
+    _resolve_font,
+    get_system_fonts,
+)
+from filters import (
+    _DRAWTEXT_CACHE,
+    _drawtext_cache_enabled,
+    _drawtext_cache_store,
+    _drawtext_supports,
+    _escape_drawtext_text,
+    _get_drawtext_options,
+    _validate_drawtext_text,
+)
+from ffmpeg_runner import (
+    StderrBuffer,
+    _cleanup_ffmpeg_partial,
+    _emit_batch_progress,
+    _emit_job_complete,
+    _emit_job_progress,
+    _extract_error_line,
+    _input_path_from_ffmpeg_cmd,
+    _is_transient_error,
+    _job_cancelled_result,
+    _job_failed_result,
+    _kill_ffmpeg_process,
+    _last_job_progress_emit,
+    _native_stream_copy,
+    _output_path_from_ffmpeg_cmd,
+    _retry_failed_enabled,
+    _run_ffmpeg,
+    _run_ffmpeg_stream,
+    _safe_print,
+    _should_retry_failed_job,
+    _should_retry_ffmpeg,
+    MAX_RETRIES,
+    RETRY_DELAYS,
 )
 
-FFMPEG = os.environ.get("BERU_FFMPEG", "ffmpeg")
-FFPROBE = os.environ.get("BERU_FFPROBE", "ffprobe")
+FFMPEG = media_probe.FFMPEG
+FFPROBE = media_probe.FFPROBE
 JOB_MANIFEST_TYPE = "beru-job-manifest"
 JOB_MANIFEST_VERSION = 1
-
-VIDEO_INPUT_EXTENSIONS = frozenset(
-    {".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv", ".m4v", ".mpg", ".mpeg"}
-)
-VIDEO_OUTPUT_EXTENSIONS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".webm"})
-IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
-FONT_EXTENSIONS = frozenset({".ttf", ".otf", ".ttc"})
-
-
-def validate_media_path(path, allowed_root, allowed_extensions):
-    """Return a canonical media path constrained to an approved root and extension."""
-    if not isinstance(path, (str, os.PathLike)):
-        raise ValueError("Media path must be a string")
-
-    raw_path = os.fspath(path)
-    if not raw_path or "\x00" in raw_path or any(ord(char) < 32 or ord(char) == 127 for char in raw_path):
-        raise ValueError("Media path contains forbidden characters")
-    if any(part == ".." for part in re.split(r"[\\/]+", raw_path)):
-        raise ValueError("Media path traversal is not allowed")
-
-    extensions = {
-        extension.lower() if str(extension).startswith(".") else f".{str(extension).lower()}"
-        for extension in (allowed_extensions or ())
-    }
-    extension = os.path.splitext(raw_path)[1].lower()
-    if not extensions or extension not in extensions:
-        raise ValueError(f"Media extension is not allowed: {extension or '(none)'}")
-
-    roots = allowed_root if isinstance(allowed_root, (list, tuple, set, frozenset)) else [allowed_root]
-    canonical_path = os.path.realpath(os.path.abspath(raw_path))
-    for root in roots:
-        if not isinstance(root, (str, os.PathLike)) or not os.fspath(root):
-            continue
-        canonical_root = os.path.realpath(os.path.abspath(os.fspath(root)))
-        try:
-            if os.path.commonpath(
-                [os.path.normcase(canonical_path), os.path.normcase(canonical_root)]
-            ) == os.path.normcase(canonical_root):
-                return canonical_path
-        except ValueError:
-            continue
-
-    raise ValueError("Media path is outside the allowed root")
-
-
-def _path_parent(path):
-    return os.path.dirname(os.path.abspath(os.fspath(path)))
-
-
-def _validated_job_media(job, *, require_output):
-    """Validate and canonicalize every renderer-controlled media path in a job."""
-    validated = dict(job)
-    input_path = job.get("input_path")
-    input_root = job.get("input_root") or (_path_parent(input_path) if input_path else None)
-    validated["input_path"] = validate_media_path(
-        input_path, input_root, VIDEO_INPUT_EXTENSIONS
-    )
-
-    if require_output:
-        output_path = job.get("output_path")
-        output_root = job.get("output_root") or (_path_parent(output_path) if output_path else None)
-        validated["output_path"] = validate_media_path(
-            output_path, output_root, VIDEO_OUTPUT_EXTENSIONS
-        )
-
-    asset_roots = job.get("asset_roots")
-    operations = []
-    for raw_operation in job.get("operations", []) or []:
-        operation = dict(_normalize_operation(raw_operation))
-        for color_field in (
-            "font_color",
-            "border_color",
-            "text_shadow_color",
-            "bg_color",
-            "delogo_fill_color",
-        ):
-            if color_field in operation:
-                operation[color_field] = _validate_drawtext_color(
-                    operation[color_field], color_field
-                )
-        for field, extensions in (
-            ("image_path", IMAGE_EXTENSIONS),
-            ("delogo_image_path", IMAGE_EXTENSIONS),
-            ("font_path", FONT_EXTENSIONS),
-        ):
-            media_path = operation.get(field)
-            if not media_path:
-                continue
-            if field == "font_path":
-                # Fonts may live outside overlay asset roots; keep parent fallback.
-                roots = asset_roots or _path_parent(media_path)
-            else:
-                if not asset_roots:
-                    raise ValueError(
-                        f"asset_roots required for {field} when media path is set"
-                    )
-                roots = asset_roots
-            operation[field] = validate_media_path(media_path, roots, extensions)
-        operations.append(operation)
-    validated["operations"] = operations
-
-    watermark = job.get("watermark")
-    if isinstance(watermark, dict):
-        watermark = dict(watermark)
-        watermark_image = watermark.get("imagePath") or watermark.get("watermark_image")
-        if watermark_image:
-            if not asset_roots:
-                raise ValueError(
-                    "asset_roots required for watermark image when media path is set"
-                )
-            watermark["imagePath"] = validate_media_path(
-                watermark_image, asset_roots, IMAGE_EXTENSIONS
-            )
-        validated["watermark"] = watermark
-
-    return validated
-
-FONT_DIRS = []
-
-
-def _init_font_dirs():
-    global FONT_DIRS
-    system = platform.system()
-    if system == "Windows":
-        # WINDIR / SystemRoot: Windows is not always on C:\.
-        windir = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or "C:/Windows"
-        FONT_DIRS = [
-            Path(windir) / "Fonts",
-            # Windows 10+ per-user font directory
-            Path.home() / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts",
-        ]
-    elif system == "Darwin":
-        FONT_DIRS = [
-            Path("/System/Library/Fonts"),
-            Path("/Library/Fonts"),
-            Path.home() / "Library/Fonts",
-        ]
-    else:
-        FONT_DIRS = [
-            Path("/usr/share/fonts"),
-            Path("/usr/local/share/fonts"),
-            Path.home() / ".fonts",
-        ]
-
-
-_init_font_dirs()
-
-_SYSTEM_FONTS_CACHE = None
-
-
-def _windows_registry_fonts():
-    """Return Windows font display names mapped to their installed files."""
-    if platform.system() != "Windows":
-        return {}
-    try:
-        import winreg
-    except ImportError:
-        return {}
-
-    fonts = {}
-    registry_path = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Fonts"
-    for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
-        try:
-            key = winreg.OpenKey(hive, registry_path)
-        except OSError:
-            continue
-        try:
-            value_count = winreg.QueryInfoKey(key)[1]
-            for index in range(value_count):
-                try:
-                    display_name, raw_path, _kind = winreg.EnumValue(key, index)
-                except OSError:
-                    continue
-                if not isinstance(display_name, str) or not isinstance(raw_path, str):
-                    continue
-                filename = raw_path.split(",", 1)[0].strip()
-                font_path = Path(filename)
-                if not font_path.is_absolute():
-                    windir = os.environ.get("WINDIR") or os.environ.get("SystemRoot") or "C:/Windows"
-                    font_path = Path(windir) / "Fonts" / filename
-                if not font_path.exists():
-                    continue
-                # Skip .fon. _resolve_font would raise and fail the job when a .ttf exists.
-                if font_path.suffix.lower() not in FONT_EXTENSIONS:
-                    continue
-
-                clean_name = re.sub(r"\s+\([^)]*\)\s*$", "", display_name).strip()
-                aliases = [clean_name]
-                if " & " in clean_name:
-                    aliases.extend(part.strip() for part in clean_name.split(" & "))
-                for alias in aliases:
-                    if alias:
-                        fonts[alias.lower()] = (str(font_path), font_path.stem)
-        finally:
-            winreg.CloseKey(key)
-    return fonts
-
-
-def get_system_fonts():
-    """Return a dict mapping lowercase font stem -> (full_path, stem).
-    Cached globally for performance."""
-    global _SYSTEM_FONTS_CACHE
-    if _SYSTEM_FONTS_CACHE is not None:
-        return _SYSTEM_FONTS_CACHE
-
-    fonts = {}
-    for font_dir in FONT_DIRS:
-        if not font_dir.exists():
-            continue
-        for pattern in ["*.ttf", "*.otf", "*.ttc"]:
-            for f in font_dir.rglob(pattern):
-                stem = f.stem
-                fonts[stem.lower()] = (str(f), stem)
-    fonts.update(_windows_registry_fonts())
-    _SYSTEM_FONTS_CACHE = fonts
-    return fonts
-
-
-def _font_name_key(value):
-    return re.sub(r"[^a-z0-9]+", "", str(value or "").lower())
-
-
-def _font_style_candidates(font_family, font_weight=None, italic=False, bold=False):
-    try:
-        weight = int(font_weight)
-    except (TypeError, ValueError):
-        weight = 700 if bold else 400
-
-    if weight <= 200:
-        weights = ["thin", "light"]
-    elif weight <= 350:
-        weights = ["light"]
-    elif weight <= 450:
-        weights = []
-    elif weight <= 550:
-        weights = ["medium", "semibold"]
-    elif weight <= 650:
-        weights = ["semibold", "bold", "medium"]
-    elif weight <= 800:
-        weights = ["bold", "semibold"]
-    else:
-        weights = ["black", "bold"]
-
-    candidates = []
-    if italic:
-        candidates.extend(f"{font_family} {label} italic" for label in weights)
-        candidates.extend(f"{font_family} {label} oblique" for label in weights)
-        candidates.extend([f"{font_family} italic", f"{font_family} oblique"])
-    else:
-        candidates.extend(f"{font_family} {label}" for label in weights)
-    candidates.append(font_family)
-    return candidates
-
-
-_resolve_font_cache = {}
-_resolve_font_cache_lock = threading.Lock()
-
-
-def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
-    """Resolve a font family name to a fontfile path or fallback name.
-    Returns (option_key, value, is_fontfile) where option_key is 'fontfile' or 'font'."""
-    cache_key = (font_family, font_weight, italic, bold)
-    cached = _resolve_font_cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    fonts = get_system_fonts()
-    normalized_fonts = {_font_name_key(name): value for name, value in fonts.items()}
-
-    def _format_fontfile(full_path):
-        """Escape a font path for use in an FFmpeg drawtext filter option."""
-        return full_path.replace("\\", "/").replace(":", "\\:")
-
-    result = None
-    for candidate in _font_style_candidates(font_family, font_weight, italic, bold):
-        match = fonts.get(candidate.lower()) or normalized_fonts.get(_font_name_key(candidate))
-        if match:
-            full_path, _stem = match
-            # Registry paths can be stale. Missing file → FFmpeg ENOENT.
-            if os.path.isfile(full_path):
-                validate_media_path(full_path, _path_parent(full_path), FONT_EXTENSIONS)
-                result = ("fontfile", _format_fontfile(full_path), True)
-                break
-            logger.debug("Font file missing, skipping: %s", full_path)
-
-    if result is None:
-        key = _font_name_key(font_family)
-        for fkey, (fpath, _) in fonts.items():
-            normalized_key = _font_name_key(fkey)
-            if key in normalized_key or normalized_key in key:
-                if os.path.isfile(fpath):
-                    validate_media_path(fpath, _path_parent(fpath), FONT_EXTENSIONS)
-                    result = ("fontfile", _format_fontfile(fpath), True)
-                    break
-                logger.debug("Font file missing (partial), skipping: %s", fpath)
-
-    if result is None:
-        # Fallback: let FFmpeg try fontconfig / system lookup
-        result = ("font", font_family, False)
-
-    with _resolve_font_cache_lock:
-        _resolve_font_cache[cache_key] = result
-    return result
+PREVIEW_MAX_DIMENSION = preview.PREVIEW_MAX_DIMENSION
+PREVIEW_MAX_JPEG_BYTES = preview.PREVIEW_MAX_JPEG_BYTES
+PREVIEW_MAX_STDERR_BYTES = preview.PREVIEW_MAX_STDERR_BYTES
+PREVIEW_MAX_REQUEST_BYTES = preview.PREVIEW_MAX_REQUEST_BYTES
+JOB_WORKER_MAX_REQUEST_BYTES = 64 * 1024
 
 
 def setup_logging():
@@ -404,194 +170,90 @@ def setup_logging():
 
 logger = setup_logging()
 
-_AUDIO_COPY_CODECS = {
-    ".mp4": frozenset({"aac", "mp3", "mp4a"}),
-    ".mov": frozenset({"aac", "mp3", "alac"}),
-    ".m4v": frozenset({"aac"}),
-    ".mkv": frozenset({"aac", "mp3", "opus", "flac", "vorbis", "eac3", "ac3"}),
-    ".avi": frozenset({"mp3", "ac3", "pcm_s16le", "pcm_s24le"}),
-}
-
-_HW_ENCODER_CACHE = None
-_DRAWTEXT_OPTIONS_CACHE = None
-_DRAWTEXT_OPTIONS_CACHE_FOR = None
-
-
-def _test_hw_encoder_real(ffmpeg_path, encoder):
-    """Smoke-test the encoder with a tiny 1-frame encode to verify it actually works."""
-    test_src = "testsrc=duration=0.1:size=320x240:rate=1"
-    preset_args = (
-        ["-preset", "p1"] if encoder == "h264_nvenc"
-        else ["-preset", "veryfast"] if encoder == "h264_qsv"
-        else []
-    )
-    try:
-        result = subprocess.run(
-            [
-                ffmpeg_path, "-hide_banner", "-f", "lavfi", "-i", test_src,
-                "-c:v", encoder, *preset_args, "-frames:v", "1",
-                "-f", "null", "-",
-            ],
-            capture_output=True, text=True, timeout=20,
-        )
-        if result.returncode == 0:
-            return True
-        err = (result.stderr or "")[:500]
-        logger.info("Encoder %s probe failed: %s", encoder, err)
-        return False
-    except Exception as e:
-        logger.info("Encoder %s probe exception: %s", encoder, e)
-        return False
-
-
-def detect_hw_encoder(ffmpeg_path, *, force_test=False):
-    """Detect first usable hardware H.264 encoder.
-
-    Cached for process lifetime. If force_test is True, also validates the
-    encoder with a real 1-frame encode (recommended before a batch run).
-    """
-    global _HW_ENCODER_CACHE
-    if _HW_ENCODER_CACHE is not None and not force_test:
-        return _HW_ENCODER_CACHE or None
-
-    encoders_text = ""
-    try:
-        result = subprocess.run(
-            [ffmpeg_path, "-hide_banner", "-encoders"],
-            capture_output=True, text=True, timeout=15,
-        )
-        encoders_text = (result.stdout or "") + (result.stderr or "")
-    except Exception as e:
-        logger.warning("HW encoder detection failed: %s", e)
-        _HW_ENCODER_CACHE = ""
-        return None
-
-    if platform.system() == "Windows":
-        priority = ["h264_nvenc", "h264_qsv", "h264_mf", "h264_amf"]
-    elif platform.system() == "Darwin":
-        priority = ["h264_videotoolbox", "h264_nvenc", "h264_qsv"]
-    else:
-        priority = ["h264_nvenc", "h264_vaapi", "h264_qsv", "h264_amf"]
-
-    candidates = [enc for enc in priority if enc in encoders_text]
-
-    if force_test and candidates:
-        # Default ON. BERU_HW_PROBE_PARALLEL=0 for GPUs that flake on concurrent 1-frame encodes.
-        raw_par = (os.environ.get("BERU_HW_PROBE_PARALLEL") or "1").strip().lower()
-        probe_parallel = raw_par not in ("0", "false", "no", "off")
-        if probe_parallel and len(candidates) > 1:
-            results = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=len(candidates)) as pool:
-                future_map = {
-                    pool.submit(_test_hw_encoder_real, ffmpeg_path, enc): enc
-                    for enc in candidates
-                }
-                for future in concurrent.futures.as_completed(future_map):
-                    enc = future_map[future]
-                    try:
-                        results[enc] = future.result()
-                    except Exception as e:
-                        logger.info("Encoder %s probe exception: %s", enc, e)
-                        results[enc] = False
-            for enc in candidates:  # respect priority order
-                if results.get(enc):
-                    _HW_ENCODER_CACHE = enc
-                    logger.info("Using hardware encoder: %s (verified, parallel)", enc)
-                    return enc
-        else:
-            for enc in candidates:
-                if _test_hw_encoder_real(ffmpeg_path, enc):
-                    _HW_ENCODER_CACHE = enc
-                    logger.info("Using hardware encoder: %s (verified)", enc)
-                    return enc
-    else:
-        for enc in candidates:
-            _HW_ENCODER_CACHE = enc
-            logger.info("Using hardware encoder: %s", enc)
-            return enc
-
-    _HW_ENCODER_CACHE = ""
-    return None
-
-
-def _get_drawtext_options():
-    """Return supported drawtext option names for the active FFmpeg binary."""
-    global _DRAWTEXT_OPTIONS_CACHE, _DRAWTEXT_OPTIONS_CACHE_FOR
-    if _DRAWTEXT_OPTIONS_CACHE is not None and _DRAWTEXT_OPTIONS_CACHE_FOR == FFMPEG:
-        return _DRAWTEXT_OPTIONS_CACHE
-
-    options = set()
-    try:
-        result = subprocess.run(
-            [FFMPEG, "-hide_banner", "-h", "filter=drawtext"],
-            capture_output=True, text=True, timeout=10,
-        )
-        help_text = (result.stdout or "") + (result.stderr or "")
-        options = set(re.findall(r"^\s+([A-Za-z0-9_]+)\s+<", help_text, re.MULTILINE))
-    except Exception as e:
-        logger.warning("drawtext option detection failed: %s", e)
-
-    _DRAWTEXT_OPTIONS_CACHE = options
-    _DRAWTEXT_OPTIONS_CACHE_FOR = FFMPEG
-    return options
-
-
-def _drawtext_supports(option_name):
-    return option_name in _get_drawtext_options()
-
-
-MAX_WORKERS_CAP = 16
-
-_ENCODER_CAPS = {
-    "conservative": {
-        "h264_mf": 1,
-        "h264_nvenc": 2,
-        "h264_qsv": 2,
-        "h264_amf": 2,
-        "h264_vaapi": 2,
-        "h264_videotoolbox": 2,
-    },
-    "balanced": {
-        "h264_mf": 1,
-        "h264_nvenc": 5,
-        "h264_qsv": 5,
-        "h264_amf": 4,
-        "h264_vaapi": 4,
-        "h264_videotoolbox": 4,
-    },
-}
-
 _BATCH_ACTIVE_WORKERS = 1
 _SOFTWARE_FALLBACK_ADMISSION = None
 
 
-class _ResourceAdmission:
-    def __init__(self, max_workers, per_job_ram_mb):
-        self.max_workers = max(1, int(max_workers))
-        self.per_job_ram_mb = max(0, int(per_job_ram_mb))
-        self.active = 0
-        self.condition = threading.Condition()
+def _sync_probe_binaries():
+    """Propagate this module's (possibly patched) seams into the extracted
+    modules: binary paths, the font catalogue provider, and the drawtext
+    cache scalars the test suite mutates on ``processor``."""
+    media_probe.FFMPEG = FFMPEG
+    media_probe.FFPROBE = FFPROBE
+    fonts.get_system_fonts = get_system_fonts
+    mod_globals = globals()
+    if "_DRAWTEXT_OPTIONS_CACHE" in mod_globals:
+        filters._DRAWTEXT_OPTIONS_CACHE = mod_globals["_DRAWTEXT_OPTIONS_CACHE"]
+        filters._DRAWTEXT_OPTIONS_CACHE_FOR = mod_globals.get("_DRAWTEXT_OPTIONS_CACHE_FOR")
+    if "_DRAWTEXT_CACHE_ENABLED" in mod_globals:
+        filters._DRAWTEXT_CACHE_ENABLED = mod_globals["_DRAWTEXT_CACHE_ENABLED"]
 
-    def acquire(self):
-        while not _check_cancelled():
-            with self.condition:
-                available = _get_available_ram_mb()
-                memory_ok = (
-                    self.active == 0
-                    or self.per_job_ram_mb <= 0
-                    or available <= 0
-                    or available >= self.per_job_ram_mb
-                )
-                if self.active < self.max_workers and memory_ok:
-                    self.active += 1
-                    return True
-                self.condition.wait(timeout=0.5)
+
+def ffprobe(path):
+    """Probe wrapper: resolves this module's patchable FFMPEG/FFPROBE."""
+    return media_probe.ffprobe(path, ffprobe_bin=FFPROBE, ffmpeg_bin=FFMPEG)
+
+
+def _ffprobe_via_ffmpeg(path):
+    return media_probe._ffprobe_via_ffmpeg(path, ffmpeg_bin=FFMPEG)
+
+
+def _probe_stream_types(path):
+    """[(codec_type, codec_name)] for each stream; None when ffprobe fails."""
+    return media_probe._probe_stream_types(path, ffprobe_bin=FFPROBE)
+
+
+def _native_copy_eligible(input_path, output_path, *, ctx=None):
+    """Eligibility wrapper so a stubbed ``_probe_stream_types`` still applies."""
+    probe = _probe_stream_types if ctx is None else lambda path: media_probe._probe_stream_types(
+        path, ffprobe_bin=ctx.ffprobe_path
+    )
+    return media_probe._native_copy_eligible(input_path, output_path, probe_fn=probe)
+
+
+def job_video_info(job, input_path, *, ctx=None):
+    """Job-metadata-first probe; ``processor.ffprobe`` patches still apply."""
+    probe = ffprobe if ctx is None else lambda path: media_probe.ffprobe(
+        path, ffprobe_bin=ctx.ffprobe_path, ffmpeg_bin=ctx.ffmpeg_path
+    )
+    return media_probe.job_video_info(job, input_path, probe_fn=probe)
+
+
+def _init_ffmpeg_globals():
+    """Configure module-level FFMPEG/FFPROBE paths. Returns False if ffmpeg is missing."""
+    global FFMPEG, FFPROBE
+
+    ffmpeg_bin = find_ffmpeg()
+    ffprobe_bin = find_ffprobe(ffmpeg_bin)
+    if not (os.path.isfile(ffmpeg_bin) or shutil.which(ffmpeg_bin)):
+        logger.error("ffmpeg not found at %s", ffmpeg_bin)
         return False
 
-    def release(self):
-        with self.condition:
-            self.active = max(0, self.active - 1)
-            self.condition.notify_all()
+    FFMPEG = media_probe.FFMPEG = ffmpeg_bin
+    FFPROBE = media_probe.FFPROBE = ffprobe_bin
+    logger.info("Using ffmpeg: %s", FFMPEG)
+    logger.info("Using ffprobe: %s", FFPROBE)
+    return True
+
+
+def build_drawtext(op):
+    """Compatibility wrapper: keeps filters' ffmpeg probe on the current binary."""
+    _sync_probe_binaries()
+    return filters.build_drawtext(op)
+
+
+def _build_watermark_filter(watermark, video_w, video_h):
+    _sync_probe_binaries()
+    return filters._build_watermark_filter(watermark, video_w, video_h)
+
+
+def build_filter_complex(operations, video_w, video_h, watermark=None, _ffmpeg_path=None):
+    """Compatibility wrapper: keeps filters' ffmpeg probe on the active binary."""
+    if _ffmpeg_path is None:
+        _sync_probe_binaries()
+    return filters.build_filter_complex(
+        operations, video_w, video_h, watermark=watermark, ffmpeg_path=_ffmpeg_path
+    )
 
 
 def build_filter_thread_args(active_workers=None):
@@ -609,24 +271,8 @@ def resolve_x264_threads(active_workers=None):
     return max(1, min(8, cpus // max(1, int(workers))))
 
 
-def build_audio_args(output_path, src_audio_codec, src_audio_channels=0):
-    """Copy audio when the container supports the source codec; else AAC.
-
-    When re-encoding to AAC, preserve the source channel layout (mono → mono,
-    5.1 → 5.1) so surround sources don't silently downmix to stereo.
-    """
-    ext = os.path.splitext(output_path)[1].lower()
-    codec = (src_audio_codec or "").lower()
-    if codec and codec in _AUDIO_COPY_CODECS.get(ext, frozenset()):
-        return ["-map", "0:a?", "-c:a", "copy"]
-    args = ["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"]
-    channels = int(src_audio_channels or 0)
-    if 1 <= channels <= 16:
-        args += ["-ac", str(channels)]
-    return args
-
-
-def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_encoder=None):
+def build_encode_args(ffmpeg_path, profile_name, job, force_software=False,
+                      hw_encoder=None, active_workers=None):
     """Return ffmpeg video encode argument list for the given profile.
 
     If hw_encoder is provided (from batch pre-flight), it is used directly
@@ -665,16 +311,8 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_e
         )
         return ["-c:v", "h264_amf", "-quality", quality]
 
-    if hw == "h264_videotoolbox":
-        q = max(1, min(100, 100 - (profile.get("hw_cq") or 23) * 2))
-        return ["-c:v", "h264_videotoolbox", "-q:v", str(q)]
-
-    if hw == "h264_vaapi":
-        qp = profile.get("hw_cq", 23)
-        return ["-c:v", "h264_vaapi", "-qp", str(qp)]
-
     preset = job.get("speed_preset") or profile["preset"]
-    threads = resolve_x264_threads()
+    threads = resolve_x264_threads(active_workers)
     return [
         "-c:v", "libx264",
         "-crf", str(profile["crf"]),
@@ -683,1297 +321,30 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False, hw_e
     ]
 
 
-def _get_available_ram_mb():
-    """Return available physical RAM in MB, or 0 if detection fails."""
-    try:
-        import psutil
-        return int(psutil.virtual_memory().available / (1024 * 1024))
-    except Exception:
-        pass
-    try:
-        if platform.system() == "Windows":
-            import ctypes
-            kernel32 = ctypes.windll.kernel32
-            class MEMORYSTATUSEX(ctypes.Structure):
-                _fields_ = [
-                    ("dwLength", ctypes.c_uint32),
-                    ("dwMemoryLoad", ctypes.c_uint32),
-                    ("ullTotalPhys", ctypes.c_ulonglong),
-                    ("ullAvailPhys", ctypes.c_ulonglong),
-                    ("ullTotalPageFile", ctypes.c_ulonglong),
-                    ("ullAvailPageFile", ctypes.c_ulonglong),
-                    ("ullTotalVirtual", ctypes.c_ulonglong),
-                    ("ullAvailVirtual", ctypes.c_ulonglong),
-                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-                ]
-            mem = MEMORYSTATUSEX()
-            mem.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-            if kernel32.GlobalMemoryStatusEx(ctypes.byref(mem)):
-                return int(mem.ullAvailPhys / (1024 * 1024))
-    except Exception:
-        pass
-    return 0
-
-
-_RAM_PER_JOB_MB = {
-    "software": 512,   # libx264
-    "nvenc": 256,    # h264_nvenc
-    "qsv": 128,      # h264_qsv
-    "amf": 128,      # h264_amf
-    "mf": 64,        # h264_mf
-    "vaapi": 128,    # h264_vaapi
-    "videotoolbox": 128,
-}
-
-
-_X264_PRESET_RAM_MULT = {
-    "ultrafast": 0.6,
-    "superfast": 0.7,
-    "veryfast": 0.8,
-    "faster": 0.9,
-    "fast": 1.0,
-    "medium": 1.3,
-    "slow": 1.6,
-    "slower": 1.9,
-    "veryslow": 2.2,
-}
-
-_HEAVY_DECODE_CODECS = frozenset({"hevc", "h265", "av1", "vp9", "prores", "wmv3"})
-
-_HIGH_BIT_DEPTH_PIX_TOKENS = ("p10", "p12", "p16", "10le", "10be", "12le", "12be", "16le", "16be")
-
-
-def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, source_pixels=0):
-    """Estimate peak RAM (MB) for one job, using job metadata when available."""
-    profile = (encode_profile or "balanced").strip().lower()
-    key = "software" if (has_video_filters and not profile_allows_hardware(profile)) else \
-          "nvenc" if hw_encoder == "h264_nvenc" else \
-          "qsv" if hw_encoder == "h264_qsv" else \
-          "amf" if hw_encoder == "h264_amf" else \
-          "mf" if hw_encoder == "h264_mf" else \
-          "vaapi" if hw_encoder == "h264_vaapi" else \
-          "videotoolbox" if hw_encoder == "h264_videotoolbox" else "software"
-    per_job = _RAM_PER_JOB_MB.get(key, 512)
-    job = job if isinstance(job, dict) else None
-    if key == "software":
-        preset = str(
-            (job or {}).get("speed_preset")
-            or (ENCODE_PROFILES.get(profile) or {}).get("preset")
-            or "fast"
-        ).strip().lower()
-        per_job = int(per_job * _X264_PRESET_RAM_MULT.get(preset, 1.0))
-    codec = str((job or {}).get("video_codec") or "").lower()
-    if codec in _HEAVY_DECODE_CODECS:
-        per_job = int(per_job * 1.25)
-    pix_fmt = str((job or {}).get("pix_fmt") or "").lower()
-    if any(token in pix_fmt for token in _HIGH_BIT_DEPTH_PIX_TOKENS):
-        per_job = int(per_job * 1.5)
-    if has_video_filters:
-        per_job = int(per_job * 1.5)
-    if not profile_allows_hardware(profile) or (
-        profile == "quality" and not hw_encoder
-    ):
-        per_job = int(per_job * 1.35)
-    pixels = source_pixels
-    if job:
-        w = int(job.get("source_width") or job.get("width") or 0)
-        h = int(job.get("source_height") or job.get("height") or 0)
-        if w > 0 and h > 0:
-            pixels = w * h
-    if pixels >= 3840 * 2160:
-        per_job = int(per_job * 2.5)
-    elif pixels >= 1920 * 1080:
-        per_job = int(per_job * 1.5)
-    return max(64, per_job)
-
-
-def _memory_cap_workers(
-    hw_encoder,
-    job_count,
-    max_source_pixels,
-    desired_workers,
-    has_video_filters=False,
-    encode_profile="balanced",
-    jobs=None,
-):
-    """Clamp worker count based on available RAM."""
-    avail_mb = _get_available_ram_mb()
-    if avail_mb <= 0:
-        return desired_workers
-    estimates = (
-        [
-            _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile)
-            for job in jobs
-            if isinstance(job, dict)
-        ]
-        if jobs
-        else []
-    )
-    per_job = (
-        max(estimates)
-        if estimates
-        else _estimate_job_ram_mb(
-            None,
-            hw_encoder,
-            has_video_filters,
-            encode_profile,
-            source_pixels=max_source_pixels,
-        )
-    )
-    cap = max(1, int((avail_mb * 0.8) / per_job))
-    return max(1, min(cap, desired_workers, MAX_WORKERS_CAP))
-
-
-def resolve_max_workers(
-    hw_encoder,
-    job_count,
-    max_source_pixels=0,
-    *,
-    consider_memory=True,
-    has_video_filters=False,
-    encode_profile=None,
-    jobs=None,
-):
-    """Pick parallel job count: env override, then GPU/CPU-aware caps (balanced | conservative)."""
-    env_raw = os.environ.get("BERU_WORKERS", "0") or "0"
-    try:
-        env_workers = int(env_raw)
-    except ValueError:
-        env_workers = 0
-    if env_workers > 0:
-        return max(1, min(env_workers, job_count, MAX_WORKERS_CAP))
-
-    mode = (os.environ.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
-    if mode not in _ENCODER_CAPS:
-        mode = "balanced"
-
-    caps = _ENCODER_CAPS[mode]
-    cpus = os.cpu_count() or 4
-    profile = (
-        encode_profile or os.environ.get("BERU_ENCODE_PROFILE") or "balanced"
-    ).strip().lower()
-    effective_hw_encoder = resolve_effective_hw_encoder(profile, hw_encoder)
-
-    if effective_hw_encoder:
-        cap = caps.get(effective_hw_encoder, caps.get("h264_nvenc", 2))
-        workers = max(1, min(cap, job_count))
-    else:
-        if mode == "conservative":
-            workers = max(1, min(max(2, cpus - 1), 6, job_count))
-        else:
-            cpu_cap = min(max(2, cpus - 2), 8)
-            workers = max(1, min(cpu_cap, job_count))
-
-    if max_source_pixels >= 3840 * 2160:
-        workers = min(workers, 2)
-
-    quality_software_filters = profile == "quality" and not effective_hw_encoder
-    if has_video_filters and (not profile_allows_hardware(profile) or quality_software_filters):
-        workers = min(workers, 2)
-    elif has_video_filters and max_source_pixels >= 1920 * 1080:
-        workers = min(workers, 3)
-
-    if consider_memory:
-        workers = _memory_cap_workers(
-            effective_hw_encoder,
-            job_count,
-            max_source_pixels,
-            workers,
-            has_video_filters=has_video_filters,
-            encode_profile=profile,
-            jobs=jobs,
-        )
-
-    return workers
-
-
-def job_video_info(job, input_path):
-    """Use metadata from the job when Electron already probed the file."""
-    jw = int(job.get("source_width") or job.get("width") or 0)
-    jh = int(job.get("source_height") or job.get("height") or 0)
-    duration = float(job.get("video_duration") or 0)
-    frame_rate = float(job.get("frame_rate") or 0)
-    if jw > 0 and jh > 0 and duration > 0:
-        return {
-            "width": jw,
-            "height": jh,
-            "duration": duration,
-            "pix_fmt": job.get("pix_fmt") or "yuv420p",
-            "frame_rate": frame_rate,
-            "audio_codec": job.get("audio_codec") or "",
-            "audio_channels": int(job.get("audio_channels") or 0),
-            "video_codec": job.get("video_codec") or "",
-        }
-    probed = ffprobe(input_path)
-    if jw > 0 and jh > 0:
-        probed["width"] = jw
-        probed["height"] = jh
-    return probed
-
-
-def find_ffmpeg():
-    """Locate ffmpeg binary - bundled, env var, or system PATH."""
-    env_ffmpeg = os.environ.get("BERU_FFMPEG")
-    if env_ffmpeg and os.path.isfile(env_ffmpeg):
-        return env_ffmpeg
-
-    script_dir = Path(__file__).resolve().parent  # python/ (dev) or resources/python/ (packaged)
-    project_root = script_dir.parent               # beru/ (dev) or resources/ (packaged)
-
-    _exe = ".exe" if platform.system() == "Windows" else ""
-
-    candidates = [
-        project_root / "bin" / f"ffmpeg{_exe}",                  # dev: beru/bin/  OR  packaged: resources/bin/
-    ]
-    for c in candidates:
-        if c.exists():
-            return str(c)
-
-    found = shutil.which("ffmpeg") or shutil.which(f"ffmpeg{_exe}")
-    if found:
-        return found
-    return "ffmpeg"
-
-
-def find_ffprobe(ffmpeg_bin):
-    """Locate ffprobe alongside ffmpeg, bundled resources, or system PATH."""
-    env_ffprobe = os.environ.get("BERU_FFPROBE")
-    if env_ffprobe and os.path.isfile(env_ffprobe):
-        return env_ffprobe
-
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
-    _exe = ".exe" if platform.system() == "Windows" else ""
-
-    candidates = [
-        Path(ffmpeg_bin).with_name(f"ffprobe{_exe}"),
-        Path(ffmpeg_bin).parent / f"ffprobe{_exe}",
-        project_root / "bin" / f"ffprobe{_exe}",
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-
-    found = shutil.which("ffprobe") or shutil.which(f"ffprobe{_exe}")
-    if found:
-        return found
-    return ffmpeg_bin.replace(f"ffmpeg{_exe}", f"ffprobe{_exe}")
-
-
-def _safe_float(value, default=0.0):
-    """Coerce an ffprobe field to float.
-
-    ffprobe emits the string 'N/A' (and sometimes empty strings) for fields it
-    cannot measure (bit_rate, duration on some streams). A bare float() would
-    raise ValueError and, because ffprobe() wraps the whole parse in a single
-    try/except, discard an otherwise-valid probe and fall back to the slow
-    regex parse — or report zero dimensions for a readable file.
-    """
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _safe_int(value, default=0):
-    """Coerce an ffprobe field to int, tolerating 'N/A' / None / float strings."""
-    try:
-        return int(float(value))
-    except (TypeError, ValueError):
-        return default
-
-
-def _parse_frame_rate(rate_str):
-    """Parse ffprobe frame rate string (e.g. '30000/1001' or '30') to float."""
-    if not rate_str:
-        return 0.0
-    try:
-        if "/" in rate_str:
-            num, den = rate_str.split("/", 1)
-            return float(num) / float(den) if float(den) != 0 else 0.0
-        return float(rate_str)
-    except (ValueError, ZeroDivisionError):
-        return 0.0
-
-
-def _empty_probe_result():
-    return {"width": 0, "height": 0, "duration": 0,
-            "video_codec": "", "pix_fmt": "yuv420p",
-            "frame_rate": 0.0, "audio_codec": "", "audio_channels": 0}
-
-
-_CHANNEL_LAYOUT_TO_COUNT = {
-    "mono": 1, "1.0": 1,
-    "stereo": 2, "2.0": 2,
-    "2.1": 3, "3.0": 3,
-    "4.0": 4, "3.1": 4, "quad": 4,
-    "5.0": 5, "4.1": 5,
-    "5.1": 6, "hexagonal": 6,
-    "6.1": 7, "7.0": 7,
-    "7.1": 8, "octagonal": 8,
-    "16.0": 16,
-}
-
-
-def _parse_channel_layout(audio_line):
-    """Extract channel count from an ffmpeg 'Audio: ...' line.
-
-    Line shape: 'Audio: aac, 44100 Hz, stereo, fltp, 192 kb/s'.
-    The layout token is the third comma-separated field after 'Audio:'.
-    """
-    if not audio_line:
-        return 0
-    m = re.search(r"Audio:\s*[^,]+,\s*[^,]+,\s*([a-z0-9.]+)\s*,", audio_line, re.I)
-    if not m:
-        return 0
-    key = m.group(1).lower()
-    if key in _CHANNEL_LAYOUT_TO_COUNT:
-        return _CHANNEL_LAYOUT_TO_COUNT[key]
-    parts = key.split(".")
-    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-        return int(parts[0]) + int(parts[1])
-    return 0
-
-
-def _ffprobe_via_ffmpeg(path):
-    """Fallback when ffprobe returns no JSON (common on some Windows builds)."""
-    empty = _empty_probe_result()
-    ffmpeg_bin = FFMPEG if FFMPEG and os.path.isfile(FFMPEG) else find_ffmpeg()
-    if not ffmpeg_bin or not os.path.isfile(ffmpeg_bin):
-        return empty
-    try:
-        result = subprocess.run(
-            [ffmpeg_bin, "-hide_banner", "-i", path],
-            capture_output=True, text=True, timeout=30,
-        )
-        text = (result.stdout or "") + (result.stderr or "")
-        dur_match = re.search(
-            r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)", text,
-        )
-        duration = 0.0
-        if dur_match:
-            duration = (
-                int(dur_match.group(1)) * 3600
-                + int(dur_match.group(2)) * 60
-                + float(dur_match.group(3))
-            )
-        video_line = ""
-        audio_line = ""
-        for line in text.splitlines():
-            if not video_line and re.search(r"\bVideo:\s*", line, re.I):
-                video_line = line
-            elif not audio_line and re.search(r"\bAudio:\s*", line, re.I):
-                audio_line = line
-            if video_line and audio_line:
-                break
-        res_matches = list(re.finditer(r"(\d{2,6})x(\d{2,6})", video_line or text))
-        width = height = 0
-        for match in res_matches:
-            w, h = int(match.group(1)), int(match.group(2))
-            if w > 0 and h > 0:
-                width, height = w, h
-                break
-        if width <= 0 or height <= 0:
-            return empty
-        codec_match = re.search(r"Video:\s*([^,\s(]+)", video_line or text, re.I)
-        audio_match = re.search(r"Audio:\s*([^,\s(]+)", audio_line, re.I)
-        fps_match = re.search(r",\s*([0-9]+(?:\.[0-9]+)?)\s*fps\b", video_line or text, re.I)
-        return {
-            "width": width,
-            "height": height,
-            "duration": duration,
-            "video_codec": codec_match.group(1) if codec_match else "",
-            "pix_fmt": "yuv420p",
-            "frame_rate": _safe_float(fps_match.group(1)) if fps_match else 0.0,
-            "audio_codec": audio_match.group(1) if audio_match else "",
-            "audio_channels": _parse_channel_layout(audio_line),
-        }
-    except Exception as e:
-        logger.warning("ffmpeg probe fallback failed for %s: %s", os.path.basename(path), e)
-        return empty
-
-
-def ffprobe(path):
-    """Get comprehensive video metadata for quality-preserving export."""
-    empty = _empty_probe_result()
-    if not path or not os.path.exists(path):
-        return empty
-    if not FFPROBE or not os.path.isfile(FFPROBE):
-        logger.warning("ffprobe binary not found: %s", FFPROBE)
-        return _ffprobe_via_ffmpeg(path)
-    try:
-        result = subprocess.run(
-            [FFPROBE, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path],
-            capture_output=True, text=True, timeout=30
-        )
-        raw = (result.stdout or "").strip()
-        if not raw:
-            err_snip = (result.stderr or "").strip()[:300]
-            logger.warning(
-                "ffprobe empty output for %s (exit %s): %s",
-                os.path.basename(path), result.returncode, err_snip,
-            )
-            return _ffprobe_via_ffmpeg(path)
-        info = json.loads(raw)
-        fmt = info.get("format", {})
-        video_stream = None
-        audio_stream = None
-        for stream in info.get("streams", []):
-            if stream.get("codec_type") == "video" and video_stream is None:
-                video_stream = stream
-            elif stream.get("codec_type") == "audio" and audio_stream is None:
-                audio_stream = stream
-
-        if not video_stream:
-            return _ffprobe_via_ffmpeg(path)
-
-        return {
-            "width": _safe_int(video_stream.get("width", 0)),
-            "height": _safe_int(video_stream.get("height", 0)),
-            "duration": _safe_float(fmt.get("duration", 0)),
-            "video_codec": video_stream.get("codec_name", ""),
-            "pix_fmt": video_stream.get("pix_fmt", "yuv420p"),
-            "bit_rate": _safe_int(fmt.get("bit_rate", 0)) or _safe_int(video_stream.get("bit_rate", 0)),
-            "frame_rate": _parse_frame_rate(video_stream.get("r_frame_rate") or video_stream.get("avg_frame_rate", "")),
-            "audio_codec": audio_stream.get("codec_name", "") if audio_stream else "",
-            "audio_channels": _safe_int(audio_stream.get("channels", 0)) if audio_stream else 0,
-        }
-    except Exception as e:
-        logger.warning("ffprobe failed for %s: %s", os.path.basename(path), e)
-    return _ffprobe_via_ffmpeg(path)
-
-
-_DRAWTEXT_CACHE = {}
-_DRAWTEXT_CACHE_LOCK = threading.Lock()
-_DRAWTEXT_CACHE_ENABLED = None
-_DRAWTEXT_CACHE_MAX = 512
-
-_DRAWTEXT_FORBIDDEN_CHARS = frozenset("[]")  # filtergraph pad tokens, not neutralized by escaping
-
-
-def _validate_drawtext_text(value):
-    """Reject control characters and filtergraph pad tokens.
-
-    `_escape_drawtext_text` neutralizes \\ : ' = ; , % { } and newlines, so
-    emoji, CJK, arrows and combining marks render safely (subject to font
-    glyph coverage) instead of failing the whole job. `[` and `]` stay
-    forbidden because escaping does not neutralize the pad-reference syntax.
-    """
-    for char in value:
-        if char in _DRAWTEXT_FORBIDDEN_CHARS:
-            raise ValueError("Drawtext contains forbidden characters")
-        code = ord(char)
-        if char != "\n" and (code < 0x20 or code == 0x7F):
-            raise ValueError("Drawtext contains forbidden characters")
-    return value
-
-
-def _escape_drawtext_text(value):
-    return (
-        value.replace("\\", "\\\\")
-        .replace(":", "\\:")
-        .replace("'", "\\'")
-        .replace("=", "\\=")
-        .replace(";", "\\;")
-        .replace(",", "\\,")
-        .replace("%", "\\%")
-        .replace("{", "\\{")
-        .replace("}", "\\}")
-        .replace("\n", "\\n")
-        .replace("\r", "")
-    )
-
-
-def _drawtext_cache_enabled():
-    """Lazily read the env flag once (default off = legacy per-call rebuild)."""
-    global _DRAWTEXT_CACHE_ENABLED
-    if _DRAWTEXT_CACHE_ENABLED is None:
-        _DRAWTEXT_CACHE_ENABLED = (
-            os.environ.get("BERU_DRAWTEXT_CACHE") or "0"
-        ).strip().lower() in ("1", "true", "yes", "on")
-    return _DRAWTEXT_CACHE_ENABLED
-
-
-def _drawtext_cache_store(cache_key, filter_str):
-    """Insert into the memo cache with FIFO eviction once the cap is reached."""
-    with _DRAWTEXT_CACHE_LOCK:
-        if len(_DRAWTEXT_CACHE) >= _DRAWTEXT_CACHE_MAX:
-            _DRAWTEXT_CACHE.pop(next(iter(_DRAWTEXT_CACHE)), None)
-        _DRAWTEXT_CACHE[cache_key] = filter_str
-
-
-def build_drawtext(op):
-    """Build ffmpeg drawtext filter string from operation."""
-    text = (op.get("text") or "").strip()
-    if not text:
-        return None
-    _validate_drawtext_text(text)
-
-    cache_key = None
-    if _drawtext_cache_enabled():
-        try:
-            cache_key = json.dumps(op, sort_keys=True, separators=(",", ":"))
-        except (TypeError, ValueError):
-            cache_key = None
-        if cache_key is not None:
-            cached = _DRAWTEXT_CACHE.get(cache_key)
-            if cached is not None:
-                return cached
-
-    region = op.get("region", {}) or {}
-    try:
-        safe_margin = int(op.get("safe_margin", 0) or 0)
-    except (TypeError, ValueError):
-        safe_margin = 0
-    safe_margin = max(0, safe_margin)
-
-    layout = _text_layout_bounds(region, safe_margin, _text_box_pad(op))
-    x = layout["x"]
-    y = layout["y"]
-    region_w = layout["w"]
-    region_h = layout["h"]
-
-    try:
-        line_height = float(op.get("line_height", 1.2))
-    except (TypeError, ValueError):
-        line_height = 1.2
-    laid = _layout_export_text(
-        text,
-        region_w,
-        region_h,
-        font_size=op.get("font_size", 32),
-        line_height=line_height,
-        text_wrap=op.get("text_wrap", True),
-        auto_fit=op.get("auto_fit"),
-        truncate=op.get("truncate"),
-    )
-    font_size = laid["font_size"]
-    text = laid["display_text"]
-
-    letter_spacing = op.get("letter_spacing", 0)
-    try:
-        spacing_px = int(round(float(letter_spacing)))
-    except (TypeError, ValueError):
-        spacing_px = 0
-    spacing_px = max(-20, min(80, spacing_px))
-    native_letter_spacing = spacing_px != 0 and _drawtext_supports("spacing")
-    # Positive fallback: insert thin spaces. Negative needs per-glyph drawtext.
-    tight_glyph_layout = False
-    if spacing_px > 0 and not native_letter_spacing:
-        text = _apply_letter_spacing_fallback(text, spacing_px, font_size)
-    elif spacing_px < 0 and not native_letter_spacing:
-        tight_glyph_layout = True
-
-    font_color = _validate_drawtext_color(op.get("font_color", "white"), "font_color")
-    font_family = str(op.get("font_family", "Arial") or "Arial").strip()
-    if not re.fullmatch(r"[\w .-]{1,100}", font_family, re.UNICODE):
-        raise ValueError("font_family contains forbidden characters")
-    bold = 1 if op.get("bold") else 0
-    italic = 1 if op.get("italic") else 0
-    font_weight = op.get("font_weight")
-    if font_weight is None and bold:
-        font_weight = 700
-
-    text_align = op.get("text_align", "left")
-    vertical_align = str(op.get("vertical_align") or "top").lower()
-
-    if text_align == "center" and region_w > 0:
-        x_expr = f"{x} + ({region_w} - text_w) / 2"
-    elif text_align == "right" and region_w > 0:
-        x_expr = f"{x} + {region_w} - text_w"
-    else:
-        x_expr = str(x)
-
-    if vertical_align == "center" and region_h > 0:
-        y_expr = f"{y} + ({region_h} - text_h) / 2"
-    elif vertical_align == "bottom" and region_h > 0:
-        y_expr = f"{y} + {region_h} - text_h"
-    else:
-        y_expr = str(y)
-
-    font_key, font_val, is_fontfile = _resolve_font(
-        font_family,
-        font_weight=font_weight,
-        italic=bool(italic),
-        bold=bool(bold),
-    )
-    if is_fontfile:
-        font_val = f"'{font_val}'"
-
-    # drawtext opacity is fontcolor@alpha.
-    text_opacity = op.get("text_opacity", 1)
-    try:
-        text_opacity = float(text_opacity)
-    except (TypeError, ValueError):
-        text_opacity = 1.0
-    text_opacity = max(0.0, min(1.0, text_opacity))
-    if text_opacity < 1.0:
-        font_color = f"{font_color}@{text_opacity:.3f}"
-
-    def _style_parts(x_val, y_val, include_line_spacing=True, include_native_spacing=False):
-        parts = [
-            f"fontsize={font_size}",
-            f"fontcolor={font_color}",
-            f"{font_key}={font_val}",
-            f"x={x_val}",
-            f"y={y_val}",
-        ]
-        # y is the top of the first line (CSS content-box top), not baseline.
-        if _drawtext_supports("y_align"):
-            parts.append("y_align=text")
-        if font_weight is not None and _drawtext_supports("fontweight"):
-            try:
-                fw = int(font_weight)
-                if 100 <= fw <= 1000:
-                    parts.append(f"fontweight={fw}")
-            except (TypeError, ValueError):
-                pass
-        if italic and _drawtext_supports("fontstyle"):
-            parts.append("fontstyle=italic")
-        if include_native_spacing and native_letter_spacing:
-            parts.append(f"spacing={spacing_px}")
-        if include_line_spacing:
-            line_spacing_px = int(round(float(font_size) * max(0.0, line_height - 1.0)))
-            if line_spacing_px > 0 and _drawtext_supports("line_spacing"):
-                parts.append(f"line_spacing={line_spacing_px}")
-        border_w = op.get("border_width", 0)
-        if border_w > 0:
-            border_color = _validate_drawtext_color(op.get("border_color", "black"), "border_color")
-            parts.append(f"bordercolor={border_color}:borderw={border_w}")
-        if op.get("text_shadow_enabled"):
-            shadow_color = _validate_drawtext_color(
-                op.get("text_shadow_color", "black"), "text_shadow_color"
-            )
-            try:
-                shadow_x = int(round(float(op.get("text_shadow_offset_x", 2))))
-            except (TypeError, ValueError):
-                shadow_x = 2
-            try:
-                shadow_y = int(round(float(op.get("text_shadow_offset_y", 2))))
-            except (TypeError, ValueError):
-                shadow_y = 2
-            shadow_x = max(-64, min(64, shadow_x))
-            shadow_y = max(-64, min(64, shadow_y))
-            if shadow_x or shadow_y:
-                parts.append(
-                    f"shadowcolor={shadow_color}:shadowx={shadow_x}:shadowy={shadow_y}"
-                )
-        enable_clause = _build_enable_clause(op)
-        if enable_clause:
-            parts.append(enable_clause)
-        return parts
-
-    if tight_glyph_layout:
-        glyphs = _text_glyph_positions(
-            text,
-            spacing_px,
-            font_size,
-            line_height=line_height,
-            region_w=region_w,
-            region_h=region_h,
-            text_align=text_align,
-            vertical_align=vertical_align,
-        )
-        if len(glyphs) >= 2:
-            filters = []
-            for cluster, dx, dy in glyphs:
-                escaped = _escape_drawtext_text(cluster)
-                gx = int(round(x + dx))
-                gy = int(round(y + dy))
-                parts = [f"text='{escaped}'"] + _style_parts(
-                    gx, gy, include_line_spacing=False, include_native_spacing=False
-                )
-                filters.append("drawtext=" + ":".join(parts))
-            filter_str = ",".join(filters)
-            logger.debug("drawtext tight spacing filter: %s", filter_str[:300])
-            if cache_key is not None:
-                _drawtext_cache_store(cache_key, filter_str)
-            return filter_str
-
-    text = _escape_drawtext_text(text)
-    parts = [f"text='{text}'"] + _style_parts(
-        x_expr, y_expr, include_line_spacing=True, include_native_spacing=True
-    )
-    filter_str = "drawtext=" + ":".join(parts)
-    logger.debug("drawtext filter: %s", filter_str[:300])
-    if cache_key is not None:
-        _drawtext_cache_store(cache_key, filter_str)
-    return filter_str
-
-
-def _build_watermark_filter(watermark, video_w, video_h):
-    """Build FFmpeg filter for a global watermark (text or image overlay).
-
-    Returns (filter_snippet, needs_image_input, image_path) or (None, False, None).
-    """
-    if not watermark or not watermark.get("enabled"):
-        return None, False, None
-
-    wm_type = watermark.get("type", "text")
-    opacity = _coerce_float(watermark.get("opacity", 0.5), 0.5, 0.0, 1.0)
-    position = watermark.get("position", "bottom-right")
-
-    margin = 10
-    pos_map = {
-        "top-left": f"{margin}:{margin}",
-        "top-center": f"(W-w)/2:{margin}",
-        "top-right": f"W-w-{margin}:{margin}",
-        "center-left": f"{margin}:(H-h)/2",
-        "center": "(W-w)/2:(H-h)/2",
-        "center-right": f"W-w-{margin}:(H-h)/2",
-        "bottom-left": f"{margin}:H-h-{margin}",
-        "bottom-center": f"(W-w)/2:H-h-{margin}",
-        "bottom-right": f"W-w-{margin}:H-h-{margin}",
-    }
-    xy = pos_map.get(position, pos_map["bottom-right"])
-
-    if wm_type == "text":
-        text = watermark.get("text", "")
-        if not text.strip():
-            return None, False, None
-        _validate_drawtext_text(text)
-        font_size = _coerce_int(watermark.get("fontSize", 18), 18, 1, 500)
-        font_color = _validate_drawtext_color(watermark.get("fontColor", "white"), "fontColor")
-        font_family = str(watermark.get("fontFamily", "Arial") or "Arial").strip()
-        if not re.fullmatch(r"[\w .-]{1,100}", font_family, re.UNICODE):
-            raise ValueError("fontFamily contains forbidden characters")
-        font_key, font_val, is_fontfile = _resolve_font(font_family)
-        if is_fontfile:
-            font_val = f"'{font_val}'"
-        escaped_text = _escape_drawtext_text(text)
-        alpha = f"{opacity:.2f}"
-        x_expr, y_expr = xy.split(":")
-        dt_parts = [
-            f"{font_key}={font_val}",
-            f"text='{escaped_text}'",
-            f"fontsize={font_size}",
-            f"fontcolor={font_color}@{alpha}",
-            f"x={x_expr}",
-            f"y={y_expr}",
-            "shadowx=1",
-            "shadowy=1",
-            "shadowcolor=black@0.5",
-        ]
-        return f"drawtext={':'.join(dt_parts)}", False, None
-
-    elif wm_type == "image":
-        img_path = watermark.get("imagePath", "")
-        if not img_path or not os.path.exists(img_path):
-            return None, False, None
-        scale_factor = _coerce_float(watermark.get("scale", 1), 1.0, 0.05, 20.0)
-        target_h = max(16, int(80 * scale_factor))
-        x_expr, y_expr = xy.split(":")
-        return (
-            f"scale=-1:{target_h},format=rgba,"
-            f"colorchannelmixer=aa={opacity:.3f}",
-            f"{x_expr}:{y_expr}",
-            img_path,
-        )
-
-    return None, False, None
-
-
-def build_filter_complex(operations, video_w, video_h, watermark=None):
-    """Build ffmpeg -filter_complex argument for all operations.
-
-    Returns (filter_str, output_label, extra_image_paths) where extra_image_paths
-    is the list of image file paths to pass as additional `-loop 1 -i <path>` inputs.
-    """
-    filters = []
-    n = 0
-    image_index = {}  # path -> ffmpeg input index (1-based, 0 is the video)
-    image_paths = []   # ordered list, index = ffmpeg input index - 1
-
-    def img_input_index(path):
-        if path not in image_index:
-            image_index[path] = len(image_paths) + 1
-            image_paths.append(path)
-        return image_index[path]
-
-    for raw_op in operations:
-        op = _normalize_operation(raw_op)
-        mode = op.get("mode")
-        if _is_op_time_disabled(op):
-            continue
-        region = _region_to_pixels(op.get("region", {}), video_w, video_h)
-        if not region:
-            continue
-
-        x = region["x"]
-        y = region["y"]
-        w = region["w"]
-        h = region["h"]
-
-        if mode == "text":
-            if not (op.get("text") or "").strip():
-                continue
-            enable_clause = _build_enable_clause(op)
-            segments = []
-            if _text_bg_enabled(op):
-                bg_color = op.get("bg_color", "black")
-                bg_opacity = op.get("bg_opacity", 0.65)
-                segments.append(
-                    _build_region_bg_drawbox(region, bg_color, bg_opacity, enable_clause)
-                )
-            dt = build_drawtext({**op, "region": region})
-            if dt:
-                segments.append(dt)
-            if not segments:
-                continue
-            chain = ",".join(segments)
-            prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
-            filters.append(f"{prev}{chain}[tmp{n}]")
-        elif mode == "blur":
-            strength = _coerce_int(op.get("blur_strength"), 20, 1, 100)
-            luma = max(1, min(100, strength // 3))
-            enable_clause = _build_enable_clause(op)
-            overlay_opts = _overlay_opts(x, y, enable_clause)
-            blur_filter = _build_boxblur_filter(luma)
-            if enable_clause:
-                blur_filter += f":{enable_clause}"
-            prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
-            filters.append(
-                f"{prev}split[bg{n}][fg{n}];"
-                f"[bg{n}]crop={w}:{h}:{x}:{y},{blur_filter}[blur{n}];"
-                f"[fg{n}][blur{n}]overlay={overlay_opts}[tmp{n}]"
-            )
-        elif mode == "crop":
-            enable_clause = _build_enable_clause(op)
-            prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
-            if enable_clause:
-                overlay_opts = _overlay_opts(0, 0, enable_clause)
-                filters.append(
-                    f"{prev}split[full{n}][crop_in{n}];"
-                    f"[crop_in{n}]crop={w}:{h}:{x}:{y},scale={video_w}:{video_h}:flags=fast_bilinear[cropped{n}];"
-                    f"[full{n}][cropped{n}]overlay={overlay_opts}[tmp{n}]"
-                )
-            else:
-                # Full-duration crop changes output size. yuv420p/H.264 reject odd frames.
-                cw, ch = int(w), int(h)
-                if cw % 2:
-                    cw = max(2, cw - 1)
-                if ch % 2:
-                    ch = max(2, ch - 1)
-                filters.append(f"{prev}crop={cw}:{ch}:{x}:{y}[tmp{n}]")
-                video_w, video_h = cw, ch
-        elif mode == "delogo":
-            prev = f"tmp{n-1}" if n > 0 else None
-            chain = _build_delogo_chain(
-                {**op, "region": region}, prev, n, video_w, video_h, img_input_index
-            )
-            if chain:
-                filters.append(chain)
-            else:
-                continue  # skip degenerate delogo op
-        elif mode == "image":
-            img_path = op.get("image_path")
-            if not img_path or not os.path.exists(img_path):
-                logger.warning("Image op skipped: file not found: %s", img_path)
-                continue
-            idx = img_input_index(img_path)
-            opacity = _coerce_float(op.get("image_opacity"), 1.0, 0.0, 1.0)
-            overlay_opts = _overlay_opts(x, y, _build_enable_clause(op))
-            prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
-            filters.append(
-                f"[{idx}:v]scale={w}:{h},"
-                f"format=rgba,"
-                f"colorchannelmixer=aa={opacity:.3f}[ov{n}];"
-                f"{prev}[ov{n}]overlay={overlay_opts}[tmp{n}]"
-            )
-        n += 1
-
-    if watermark and watermark.get("enabled"):
-        wm_type = watermark.get("type", "text")
-        if wm_type in ("text", "image"):
-            wm_result = _build_watermark_filter(watermark, video_w, video_h)
-            prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
-            if wm_type == "text":
-                if wm_result and wm_result[0]:
-                    filters.append(f"{prev}{wm_result[0]}[tmp{n}]")
-                    n += 1
-            elif wm_result and len(wm_result) == 3 and wm_result[2]:
-                scale_filter, overlay_pos, img_path = wm_result
-                idx = img_input_index(img_path)
-                filters.append(
-                    f"[{idx}:v]{scale_filter}[wm{n}];"
-                    f"{prev}[wm{n}]overlay={overlay_pos}[tmp{n}]"
-                )
-                n += 1
-
-    if n == 0:
-        return None, None, []
-
-    return ";".join(filters), f"[tmp{n - 1}]", image_paths
-
-
-MAX_RETRIES = 2
-RETRY_DELAYS = [2, 5]
-MAX_STDERR_LINES = 256
-MAX_STDERR_CHARS = 48_000
-_tr_print_lock = threading.Lock()
-_last_job_progress_emit = {}
-_job_progress_lock = threading.Lock()
-_cancel_event = threading.Event()
-_jobs_file = None
-_FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+\.?\d*)")
-_FFMPEG_SPEED_RE = re.compile(r"speed=\s*([0-9.]+)x")
-
-
-def _safe_print(msg):
-    """Thread-safe JSON print to stdout."""
-    with _tr_print_lock:
-        print(msg, flush=True)
-
-
-def _check_cancelled():
-    """Check if cancellation was requested via sentinel file or event."""
-    if _cancel_event.is_set():
-        return True
-    if _jobs_file:
-        cancel_file = os.path.splitext(_jobs_file)[0] + ".cancel"
-        if os.path.exists(cancel_file):
-            _cancel_event.set()
-            return True
-    return False
-
-
-def _is_transient_error(stderr_text):
-    """Heuristic: detect transient FFmpeg errors that warrant a retry."""
-    markers = [
-        "i/o error",
-        "temporary failure", "resource temporarily unavailable",
-        "connection reset", "broken pipe",
-    ]
-    lower = stderr_text.lower()
-    return any(m in lower for m in markers)
-
-
-def _is_hardware_encode_error(stderr_text):
-    return is_hardware_encode_error(stderr_text)
-
-
-def _is_resource_pressure_error(stderr_text):
-    return is_resource_pressure_error(stderr_text)
-
-
-class StderrBuffer:
-    """Bounded stderr accumulator.
-
-    Replaces the previous list+pop(0)+"".join() approach, which was O(n) per
-    appended line (list shift and full-buffer join inside the stderr lock).
-    Uses a deque(maxlen=...) for O(1) append/eviction and a running char count
-    so the char-cap check is O(1) per line instead of O(total buffered chars).
-    """
-
-    __slots__ = ("_buf", "_chars", "_max_chars", "_total")
-
-    def __init__(self, max_lines=MAX_STDERR_LINES, max_chars=MAX_STDERR_CHARS):
-        self._buf = deque(maxlen=max_lines)
-        self._chars = 0
-        self._max_chars = max_chars
-        self._total = 0
-
-    def append(self, line):
-        self._buf.append(line)
-        self._chars += len(line)
-        self._total += 1
-        while self._chars > self._max_chars and len(self._buf) > 1:
-            evicted = self._buf.popleft()
-            self._chars -= len(evicted)
-
-    def __len__(self):
-        return len(self._buf)
-
-    def total_appended(self):
-        """Total lines ever appended (unbounded). Use this — not len() — to
-        detect ongoing stderr activity, since len() is capped at max_lines."""
-        return self._total
-
-    def join(self):
-        return "".join(self._buf)
-
-
-def _retry_failed_enabled():
-    flag = (os.environ.get("BERU_RETRY_FAILED") or "1").strip().lower()
-    return flag not in ("0", "false", "no", "off")
-
-
-def _should_retry_failed_job(result, max_workers):
-    if result.get("status") != "failed":
-        return False
-    err = result.get("raw_error") or result.get("error") or ""
-    if _is_hardware_encode_error(err):
-        return True
-    if max_workers > 1 and _is_resource_pressure_error(err):
-        return True
-    if max_workers >= 3 and "timeout" in err.lower():
-        return True
-    return False
-
-
-def _extract_error_line(stderr_text):
-    """Extract the most relevant error line from FFmpeg stderr."""
-    if len(stderr_text) > MAX_STDERR_CHARS:
-        stderr_text = stderr_text[-MAX_STDERR_CHARS:]
-    lines = stderr_text.split("\n")
-    priority = ("invalid", "no such", "unable to parse")
-    best_error = None
-    best_any = None
-    for line in reversed(lines):
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if best_any is None:
-            best_any = stripped
-        low = stripped.lower()
-        if any(p in low for p in priority):
-            return stripped[-400:]
-        if best_error is None and "error" in low:
-            best_error = stripped
-    chosen = best_error or best_any or stderr_text.strip()
-    return chosen[-400:] if chosen else ""
-
-
-def _remove_partial_output(output_path, input_path=None):
-    return remove_partial_output(output_path, input_path, logger=logger)
-
-
-def _output_path_from_ffmpeg_cmd(cmd):
-    """Last non-flag argv token is typically the output file."""
-    if not cmd:
-        return None
-    for token in reversed(cmd):
-        s = str(token)
-        if s and not s.startswith("-"):
-            return s
-    return None
-
-
-def _input_path_from_ffmpeg_cmd(cmd):
-    """First path argument after -i."""
-    if not cmd:
-        return None
-    args = [str(x) for x in cmd]
-    for i, token in enumerate(args):
-        if token == "-i" and i + 1 < len(args):
-            candidate = args[i + 1]
-            if candidate and not candidate.startswith("-"):
-                return candidate
-    return None
-
-
-def _cleanup_ffmpeg_partial(cmd):
-    output_path = _output_path_from_ffmpeg_cmd(cmd)
-    if output_path:
-        _remove_partial_output(output_path, _input_path_from_ffmpeg_cmd(cmd))
-
-
-def _should_retry_ffmpeg(stderr, attempt):
-    if attempt >= MAX_RETRIES:
-        return False
-    text = str(stderr or "")
-    if _is_transient_error(text):
-        return True
-    return "timeout" in text.lower()
-
-
-def _format_processing_error(raw_error, *, max_workers=None):
-    return format_processing_error(raw_error, max_workers=max_workers)
-
-
-def _job_failed_result(job_id, raw_error, *, max_workers=None):
-    user_error = _format_processing_error(raw_error, max_workers=max_workers)
-    payload = {"type": "error", "index": job_id, "error": user_error}
-    if raw_error and raw_error != user_error:
-        payload["raw_error"] = str(raw_error)[-1000:]
-    _safe_print(json.dumps(payload))
-    result = {"index": job_id, "status": "failed", "error": user_error}
-    if raw_error and raw_error != user_error:
-        result["raw_error"] = str(raw_error)
-    return result
-
-
-def _job_cancelled_result(job_id):
-    _safe_print(json.dumps({"type": "cancelled", "index": job_id}))
-    return {"index": job_id, "status": "cancelled"}
-
-
-def _emit_job_progress(job_id, percent, speed):
-    """Per-video encode progress (0-100) for the renderer (throttled ~1 Hz per job)."""
-    if job_id is None:
-        return
-    pct = round(max(0.0, min(100.0, percent)), 1)
-    now = time.monotonic()
-    with _job_progress_lock:
-        last_t = _last_job_progress_emit.get(job_id, 0.0)
-        if pct < 99.0 and (now - last_t) < 1.0:
-            return
-        _last_job_progress_emit[job_id] = now
-    _safe_print(json.dumps({
-        "type": "job_progress",
-        "index": job_id,
-        "percent": pct,
-        "speed": speed,
-    }))
-
-
-def _kill_ffmpeg_process(proc):
-    if proc.poll() is not None:
-        return
-    try:
-        proc.kill()
-    except Exception:
-        pass
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        try:
-            proc.terminate()
-            proc.wait(timeout=2)
-        except Exception:
-            pass
-
-
-def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0):
-    """Run FFmpeg with bounded stderr capture, optional progress parsing, and cancel polling."""
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        bufsize=1,
-    )
-    stderr_lines = StderrBuffer()
-    stderr_lock = threading.Lock()
-    reader_done = threading.Event()
-    progress_state = {"last_pct": -1.0}
-
-    def read_stderr():
-        try:
-            if proc.stderr is None:
-                return
-            for line in proc.stderr:
-                with stderr_lock:
-                    stderr_lines.append(line)
-                if job_id is None or duration_sec <= 0:
-                    continue
-                m = _FFMPEG_TIME_RE.search(line)
-                if not m:
-                    continue
-                h, mi, sec = int(m.group(1)), int(m.group(2)), float(m.group(3))
-                cur = h * 3600 + mi * 60 + sec
-                pct = (cur / duration_sec) * 100.0 if duration_sec > 0 else 0.0
-                sm = _FFMPEG_SPEED_RE.search(line)
-                speed = float(sm.group(1)) if sm else None
-                if pct - progress_state["last_pct"] >= 1.0 or pct >= 99.0:
-                    _emit_job_progress(job_id, pct, speed)
-                    progress_state["last_pct"] = pct
-        finally:
-            reader_done.set()
-
-    threading.Thread(target=read_stderr, daemon=True).start()
-    deadline = time.monotonic() + timeout_sec
-
-    STALL_TIMEOUT_SEC = 120
-    last_output_time = time.monotonic()
-    prev_total = 0
-    stall_enabled = job_id is not None and duration_sec > 0
-
-    while True:
-        returncode = proc.poll()
-        if returncode is not None:
-            break
-        if _check_cancelled():
-            _kill_ffmpeg_process(proc)
-            reader_done.wait(timeout=1)
-            _cleanup_ffmpeg_partial(cmd)
-            return False, "Cancelled"
-        now = time.monotonic()
-        if now >= deadline:
-            _kill_ffmpeg_process(proc)
-            reader_done.wait(timeout=1)
-            _cleanup_ffmpeg_partial(cmd)
-            return False, f"Timeout after {timeout_sec}s"
-        if stall_enabled:
-            with stderr_lock:
-                current_total = stderr_lines.total_appended()
-            if current_total > prev_total:
-                last_output_time = now
-                prev_total = current_total
-            elif now - last_output_time > STALL_TIMEOUT_SEC:
-                _kill_ffmpeg_process(proc)
-                reader_done.wait(timeout=1)
-                _cleanup_ffmpeg_partial(cmd)
-                return False, f"FFmpeg stalled (no output for {STALL_TIMEOUT_SEC}s)"
-        time.sleep(0.2)
-
-    reader_done.wait(timeout=2)
-    with stderr_lock:
-        stderr = stderr_lines.join()
-
-    if returncode == 0:
-        if job_id is not None and duration_sec > 0:
-            _emit_job_progress(job_id, 100.0, None)
-        return True, None
-    return False, _extract_error_line(stderr)
-
-
-def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
-    """Run ffmpeg with retry for transient failures.
-
-    The timeout scales with video duration when duration_sec is provided:
-    at least 600s (10 min) or 3x the video duration, whichever is larger.
-    This prevents false timeouts on long videos (4K, 1hr+) while keeping
-    a reasonable bound for short clips.
-    """
-    if duration_sec > 0:
-        timeout_sec = max(timeout_sec, int(duration_sec * 3))
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            logger.debug("FFmpeg cmd: %s", " ".join(str(x) for x in cmd)[:500])
-            t0 = time.perf_counter()
-            ok, err = _run_ffmpeg_stream(cmd, timeout_sec, job_id, duration_sec)
-            elapsed = time.perf_counter() - t0
-            if ok:
-                logger.info("FFmpeg finished in %.1fs (job=%s)", elapsed, job_id)
-                return True, None
-            stderr = err or ""
-            if _should_retry_ffmpeg(stderr, attempt):
-                _cleanup_ffmpeg_partial(cmd)
-                logger.warning("Transient error, retry %d/%d: %s",
-                               attempt + 1, MAX_RETRIES, (stderr or "")[:150])
-                time.sleep(RETRY_DELAYS[attempt])
-                continue
-            _cleanup_ffmpeg_partial(cmd)
-            return False, stderr if stderr else "Unknown error"
-        except Exception as e:
-            _cleanup_ffmpeg_partial(cmd)
-            if attempt < MAX_RETRIES:
-                logger.warning("Exception, retry %d/%d: %s", attempt + 1, MAX_RETRIES, e)
-                time.sleep(RETRY_DELAYS[attempt])
-                continue
-            return False, str(e)
-
-
-def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
+def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None):
     """Process a single job. Thread-safe.
 
     If hw_encoder is provided (from the batch pre-flight), it is used
     directly instead of re-detecting. This avoids per-job detection overhead
     and lets the batch-level pre-flight skip a broken GPU encoder for all jobs.
+
+    ``ctx`` is the batch-scoped ``BatchContext``; when absent (direct calls,
+    older tests) the module-level fallbacks are used.
     """
+    active_workers = ctx.max_workers if ctx is not None else _BATCH_ACTIVE_WORKERS
+    if ctx is not None:
+        ffmpeg_path = ctx.ffmpeg_path
     if not isinstance(job, dict):
         logger.error("Job %d: invalid payload (expected object, got %s)", idx, type(job).__name__)
-        return _job_failed_result(idx, "Invalid job payload", max_workers=_BATCH_ACTIVE_WORKERS)
+        return _job_failed_result(idx, "Invalid job payload", max_workers=active_workers)
 
+    raw_job = job
     try:
         job = _validated_job_media(job, require_output=True)
     except ValueError as exc:
         logger.error("Job %d: rejected unsafe media path: %s", idx, exc)
         return _job_failed_result(
-            job.get("id", idx), str(exc), max_workers=_BATCH_ACTIVE_WORKERS
+            job.get("id", idx), str(exc), max_workers=active_workers
         )
 
     input_path = job.get("input_path")
@@ -1981,36 +352,56 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     fname = os.path.basename(input_path) if input_path else "unknown"
     job_id = job.get("id", idx)
 
-    if _check_cancelled():
+    if _check_cancelled(ctx):
         return {"index": job_id, "status": "cancelled"}
 
     if not input_path or not os.path.exists(input_path):
         raw_err = f"Input not found: {input_path}"
         logger.error("Job %d: %s", idx, raw_err)
-        return _job_failed_result(job_id, raw_err, max_workers=_BATCH_ACTIVE_WORKERS)
+        return _job_failed_result(job_id, raw_err, max_workers=active_workers)
 
     if os.path.abspath(input_path) == os.path.abspath(output_path):
         raw_err = "Output would overwrite input file"
         logger.error("Job %d: output path equals input, skipping: %s", idx, input_path)
-        return _job_failed_result(job_id, raw_err, max_workers=_BATCH_ACTIVE_WORKERS)
+        return _job_failed_result(job_id, raw_err, max_workers=active_workers)
 
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     raw_operations = job.get("operations", []) or []
     watermark = job.get("watermark")
     wm_enabled = isinstance(watermark, dict) and bool(watermark.get("enabled"))
 
-    if not raw_operations and not wm_enabled:
-        logger.debug("Job %d: no operations, copying stream", idx)
-        copy_args = [ffmpeg_path, "-y", "-loglevel", "error", "-i", input_path]
+    try:
+        trim_start, trim_end = _parse_trim_window(job)
+        if not math.isfinite(trim_start) or trim_start < 0:
+            raise ValueError("invalid start")
+        if trim_end is not None and (not math.isfinite(trim_end) or trim_end <= trim_start):
+            raise ValueError("invalid end")
+    except (TypeError, ValueError) as exc:
+        return _job_failed_result(job_id, f"Invalid trim range: {exc}", max_workers=active_workers)
+    trimmed = trim_start > 0 or trim_end is not None
+
+    if _job_takes_copy_path(job):
         out_ext = os.path.splitext(output_path)[1].lower()
         src_audio_codec = (job.get("audio_codec") or "").lower()
+        if _native_copy_eligible(input_path, output_path, ctx=ctx):
+            ok, err = _native_stream_copy(input_path, output_path, ctx=ctx)
+            if ok:
+                logger.info("Job %d: native copy -> %s", idx, os.path.basename(output_path))
+                _emit_job_complete(job_id, output_path)
+                return {"index": job_id, "status": "succeeded"}
+            remove_partial_output(output_path, input_path, logger=logger)
+            if err == "Cancelled":
+                return _job_cancelled_result(job_id)
+            logger.warning("Job %d: native copy failed, remuxing instead: %s", idx, err)
+        logger.debug("Job %d: no operations, copying stream", idx)
+        copy_args = [ffmpeg_path, "-y", "-loglevel", "error", "-i", input_path]
         if src_audio_codec and src_audio_codec not in _AUDIO_COPY_CODECS.get(out_ext, frozenset()):
             # Container cannot hold the source audio: re-encode audio, keep video copy.
-            copy_args += ["-c:v", "copy"]
+            copy_args += ["-map", "0:v:0?", "-c:v", "copy"]
             copy_args += build_audio_args(output_path, src_audio_codec, job.get("audio_channels"))
         else:
             copy_args += ["-c", "copy"]
-        if out_ext in (".mp4", ".mov", ".m4v"):
+        if out_ext in _FASTSTART_EXTS:
             copy_args += ["-movflags", "+faststart"]
         copy_args += ["-max_muxing_queue_size", "1024"]
         copy_args.append(output_path)
@@ -2018,37 +409,40 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
             input_bytes = os.path.getsize(input_path)
         except OSError:
             input_bytes = 0
-        # ~25 MB/s conservative estimate: a 10 GB copy needs ~7 min, not the old fixed 5.
         copy_timeout = max(300, min(7200, int(input_bytes / (25 * 1024 * 1024))))
-        ok, err = _run_ffmpeg(copy_args, timeout_sec=copy_timeout)
+        ok, err = _run_ffmpeg(copy_args, timeout_sec=copy_timeout, ctx=ctx)
         if ok:
             logger.info("Job %d: copied -> %s", idx, os.path.basename(output_path))
-            _safe_print(json.dumps({"type": "complete", "index": job_id, "output": output_path}))
+            _emit_job_complete(job_id, output_path)
             return {"index": job_id, "status": "succeeded"}
-        else:
-            logger.error("Job %d: copy failed: %s", idx, err)
-            _remove_partial_output(output_path, input_path)
-            return _job_failed_result(job_id, err, max_workers=_BATCH_ACTIVE_WORKERS)
+        logger.error("Job %d: copy failed: %s", idx, err)
+        remove_partial_output(output_path, input_path, logger=logger)
+        if err == "Cancelled":
+            return _job_cancelled_result(job_id)
+        return _job_failed_result(job_id, err, max_workers=active_workers)
 
-    info = job_video_info(job, input_path)
-    vw = int(job.get("source_width") or job.get("width") or info.get("width") or 0)
-    vh = int(job.get("source_height") or job.get("height") or info.get("height") or 0)
+    info = job_video_info(job, input_path, ctx=ctx)
+    vw, vh = _job_dimensions(job, info)
     duration = float(info.get("duration") or 0)
+    output_duration = duration
     if vw <= 0 or vh <= 0:
-        ffprobe_status = f"ffprobe={FFPROBE}" if FFPROBE else "ffprobe no configurado"
+        probe_path = ctx.ffprobe_path if ctx is not None else FFPROBE
+        ffprobe_status = f"ffprobe={probe_path}" if probe_path else "ffprobe no configurado"
         err = (
             "No se pudo leer la resolución del video: ffprobe no encontró dimensiones válidas "
             f"para '{fname}' ({ffprobe_status})."
         )
         logger.error("Job %d: invalid dimensions %dx%d for %s", idx, vw, vh, fname)
-        return _job_failed_result(job_id, err, max_workers=_BATCH_ACTIVE_WORKERS)
+        return _job_failed_result(job_id, err, max_workers=active_workers)
 
     operations = [
         _optimize_delogo_for_speed(_normalize_operation(op), vw, vh)
         for op in raw_operations
     ]
 
-    filter_complex, output_label, image_paths = build_filter_complex(operations, vw, vh, watermark=watermark)
+    filter_complex, output_label, image_paths = build_filter_complex(
+        operations, vw, vh, watermark=watermark, _ffmpeg_path=ffmpeg_path
+    )
 
     if not filter_complex and (operations or wm_enabled):
         err = (
@@ -2056,13 +450,28 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
             "Comprueba que cada región tenga tamaño suficiente y esté dentro del video."
         )
         logger.error("Job %d: empty filter graph with %d ops", idx, len(operations))
-        return _job_failed_result(job_id, err, max_workers=_BATCH_ACTIVE_WORKERS)
+        return _job_failed_result(job_id, err, max_workers=active_workers)
+
+    if trimmed:
+        trim_window = f"start={trim_start:.6f}"
+        if trim_end is not None:
+            trim_window += f":end={trim_end:.6f}"
+        trim_filter = f"trim={trim_window},setpts=PTS-STARTPTS[trimmed]"
+        filter_complex = (
+            f"{filter_complex};{output_label}{trim_filter}"
+            if filter_complex else f"[0:v]{trim_filter}"
+        )
+        output_label = "[trimmed]"
+        output_duration = (trim_end if trim_end is not None else duration) - trim_start
 
     src_pix_fmt = job.get("pix_fmt") or info.get("pix_fmt", "yuv420p")
     src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
-    if not profile_allows_hardware(encode_profile):
+    hw_failed = bool(raw_job.get("_hw_failed"))
+    if hw_failed or not profile_allows_hardware(encode_profile):
         local_hw_encoder = None
+    elif ctx is not None:
+        local_hw_encoder = ctx.hw_encoder
     elif hw_encoder is not None:
         local_hw_encoder = hw_encoder
     else:
@@ -2073,22 +482,28 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
         cmd = [ffmpeg_path, "-y", "-loglevel", loglevel]
         cmd += ["-i", input_path]
         for img_path in image_paths:
+            ext = os.path.splitext(img_path)[1].lower()
+            fr = [] if ext in _ANIMATED_IMAGE_EXTS else ["-framerate", "1"]
             if duration > 0:
-                cmd += ["-loop", "1", "-t", f"{duration:.3f}", "-i", img_path]
+                cmd += ["-loop", "1", "-t", f"{duration:.3f}", *fr, "-i", img_path]
             else:
-                cmd += ["-loop", "1", "-i", img_path]
-        cmd += build_filter_thread_args()
+                cmd += ["-loop", "1", *fr, "-i", img_path]
+        cmd += build_filter_thread_args(active_workers)
         cmd += ["-filter_complex", filter_complex, "-map", output_label]
         if image_paths:
             cmd += ["-shortest"]
-        cmd += build_encode_args(ffmpeg_path, encode_profile, job, force_software=force_software, hw_encoder=local_hw_encoder)
-        if src_pix_fmt:
-            cmd += ["-pix_fmt", src_pix_fmt]
-        else:
-            cmd += ["-pix_fmt", "yuv420p"]
-        cmd += build_audio_args(output_path, src_audio_codec, job.get("audio_channels"))
+        cmd += build_encode_args(
+            ffmpeg_path, encode_profile, job, force_software=force_software,
+            hw_encoder=local_hw_encoder, active_workers=active_workers,
+        )
+        cmd += ["-pix_fmt", src_pix_fmt or "yuv420p"]
+        if trimmed:
+            cmd += ["-af", f"atrim={trim_window},asetpts=PTS-STARTPTS"]
+        cmd += build_audio_args(
+            output_path, src_audio_codec, job.get("audio_channels"), force_encode=trimmed,
+        )
         out_ext = os.path.splitext(output_path)[1].lower()
-        if out_ext in (".mp4", ".mov", ".m4v"):
+        if out_ext in _FASTSTART_EXTS:
             cmd += ["-movflags", "+faststart"]
         cmd += ["-max_muxing_queue_size", "1024"]
         cmd.append(output_path)
@@ -2103,12 +518,19 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
     estimated_timeout = max(600, min(7200, int(duration * 2 + 300)))
 
     ok, err = _run_ffmpeg(
-        _build_cmd(), timeout_sec=estimated_timeout, job_id=job_id, duration_sec=duration,
+        _build_cmd(force_software=local_hw_encoder is None),
+        timeout_sec=estimated_timeout,
+        job_id=job_id,
+        duration_sec=output_duration,
+        ctx=ctx,
     )
 
-    if not ok and local_hw_encoder is not None and _is_hardware_encode_error(err):
+    if not ok and local_hw_encoder is not None and is_hardware_encode_error(err):
         logger.warning("Job %d: hardware path failed, retrying with libx264", idx)
-        admission = _SOFTWARE_FALLBACK_ADMISSION
+        raw_job["_hw_failed"] = True
+        admission = (
+            ctx.sw_fallback_admission if ctx is not None else _SOFTWARE_FALLBACK_ADMISSION
+        )
         if admission is not None and not admission.acquire():
             return _job_cancelled_result(job_id)
         try:
@@ -2116,7 +538,8 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
                 _build_cmd(force_software=True),
                 timeout_sec=estimated_timeout,
                 job_id=job_id,
-                duration_sec=duration,
+                duration_sec=output_duration,
+                ctx=ctx,
             )
         finally:
             if admission is not None:
@@ -2124,34 +547,66 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None):
 
     if ok:
         logger.info("Job %d: completed -> %s", idx, os.path.basename(output_path))
-        _safe_print(json.dumps({"type": "complete", "index": job_id, "output": output_path}))
+        _emit_job_complete(job_id, output_path)
         return {"index": job_id, "status": "succeeded"}
-    else:
-        logger.error("Job %d: ffmpeg failed: %s", idx, err[:200] if err else "")
-        _remove_partial_output(output_path, input_path)
-        if err == "Cancelled":
-            return _job_cancelled_result(job_id)
-        return _job_failed_result(job_id, err or "Unknown error", max_workers=_BATCH_ACTIVE_WORKERS)
+    logger.error("Job %d: ffmpeg failed: %s", idx, err[:200] if err else "")
+    remove_partial_output(output_path, input_path, logger=logger)
+    if err == "Cancelled":
+        return _job_cancelled_result(job_id)
+    return _job_failed_result(job_id, err or "Unknown error", max_workers=active_workers)
 
 
 def _execute_batch(
     jobs,
-    ffmpeg_path,
-    max_workers,
+    ctx,
     *,
     emit_batch_progress=True,
-    hw_encoder=None,
-    per_job_ram_mb=0,
+    copy_workers=None,
 ):
-    """Run one concurrent pass; returns per-job results and failure list."""
+    """Run one concurrent pass; returns per-job results and failure list.
+
+    Stream-copy jobs (no operations, watermark, or trim) run on a separate
+    bounded pool: a remux is pure disk I/O, so it neither deserves an encode
+    slot nor benefits from sharing the encode concurrency cap.
+    """
+    ffmpeg_path = ctx.ffmpeg_path
+    max_workers = ctx.max_workers
+    hw_encoder = ctx.hw_encoder
     total = len(jobs)
     results = {}
     state = {"succeeded": 0, "failed": 0, "cancelled": 0, "completed": 0}
     state_lock = threading.Lock()
-    admission = {"outstanding": 0}
     admission_cond = threading.Condition()
 
-    def _memory_allows_another():
+    pending = {"encode": deque(), "copy": deque()}
+    for i, job in enumerate(jobs):
+        key = "copy" if _job_takes_copy_path(job) else "encode"
+        pending[key].append((i, job))
+
+    if pending["copy"]:
+        if copy_workers is None:
+            copy_workers = resolve_copy_workers(
+                len(pending["copy"]), env=ctx.env
+            )
+        copy_workers = max(1, min(copy_workers, len(pending["copy"])))
+    else:
+        copy_workers = 0
+
+    pools = {
+        "encode": {"cap": max(1, max_workers), "outstanding": 0},
+        "copy": {"cap": copy_workers, "outstanding": 0},
+    }
+
+    def _job_ram_estimate_mb(job, pool):
+        """Peak-RAM estimate for the job about to be dispatched."""
+        if pool == "copy":
+            return _REMUX_JOB_RAM_MB
+        profile = job.get("encode_profile", "balanced") if isinstance(job, dict) else "balanced"
+        hw_failed = isinstance(job, dict) and bool(job.get("_hw_failed"))
+        job_hw = hw_encoder if profile_allows_hardware(profile) and not hw_failed else None
+        return _estimate_job_ram_mb(job, job_hw, _job_requires_encode(job), profile)
+
+    def _memory_allows_another(job_ram_mb):
         """RAM gate for dispatching the next job.
 
         Always admits when no job is running (progress guarantee: even on a
@@ -2159,31 +614,31 @@ def _execute_batch(
         RAM cannot be measured. Worker sizing happens once at batch start via
         _memory_cap_workers; this gate handles RAM drifting DURING the batch.
         """
-        if per_job_ram_mb <= 0 or admission["outstanding"] <= 0:
+        if pools["encode"]["outstanding"] + pools["copy"]["outstanding"] <= 0:
             return True
         avail_mb = _get_available_ram_mb()
         if avail_mb <= 0:
             return True
-        return avail_mb >= per_job_ram_mb
+        return avail_mb >= job_ram_mb
 
-    def _await_admission():
-        """Block until a worker slot and RAM headroom free up, or cancel fires."""
-        while True:
-            if _check_cancelled():
-                return False
-            with admission_cond:
-                if admission["outstanding"] < max_workers and _memory_allows_another():
-                    admission["outstanding"] += 1
-                    return True
-                admission_cond.wait(timeout=1.0)
-
-    def _release_admission():
+    def _try_acquire(pool_name, job):
+        """Grab a pool slot when concurrency and RAM headroom allow."""
         with admission_cond:
-            admission["outstanding"] -= 1
+            pool = pools[pool_name]
+            if pool["outstanding"] >= pool["cap"]:
+                return False
+            if not _memory_allows_another(_job_ram_estimate_mb(job, pool_name)):
+                return False
+            pool["outstanding"] += 1
+            return True
+
+    def _release_admission(pool_name):
+        with admission_cond:
+            pools[pool_name]["outstanding"] -= 1
             admission_cond.notify_all()
 
     def _on_done(fut):
-        _release_admission()
+        _release_admission(getattr(fut, "_beru_pool", "encode"))
         try:
             result = fut.result()
         except Exception as e:
@@ -2209,15 +664,7 @@ def _execute_batch(
                     fname = os.path.basename(jobs[job_pos].get("input_path", "")) or "?"
                 else:
                     fname = "?"
-                progress_msg = {
-                    "type": "progress",
-                    "current": state["completed"],
-                    "total": total,
-                    "file": fname,
-                    "succeeded": state["succeeded"],
-                    "failed": state["failed"],
-                }
-                _safe_print(json.dumps(progress_msg))
+                _emit_batch_progress(state, total, fname)
 
     def _mark_cancelled(job, i):
         job_id = job.get("id", i) if isinstance(job, dict) else i
@@ -2228,35 +675,46 @@ def _execute_batch(
                 state["completed"] += 1
                 if emit_batch_progress:
                     fname = os.path.basename(job.get("input_path", "")) if isinstance(job, dict) else "?"
-                    _safe_print(json.dumps({
-                        "type": "progress",
-                        "current": state["completed"],
-                        "total": total,
-                        "file": fname,
-                        "succeeded": state["succeeded"],
-                        "failed": state["failed"],
-                    }))
+                    _emit_batch_progress(state, total, fname)
         _safe_print(json.dumps({
             "type": "cancelled", "index": job_id,
         }))
 
-    global _BATCH_ACTIVE_WORKERS
-    _BATCH_ACTIVE_WORKERS = max(1, max_workers)
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=max(1, max_workers) + copy_workers
+    ) as executor:
         futures = []
-        for i, job in enumerate(jobs):
-            if _check_cancelled() or not _await_admission():
+        while pending["encode"] or pending["copy"]:
+            if _check_cancelled(ctx):
+                break
+            progressed = False
+            for name in ("encode", "copy"):
+                queue = pending[name]
+                if not queue or not _try_acquire(name, queue[0][1]):
+                    continue
+                i, job = queue.popleft()
+                try:
+                    fut = executor.submit(
+                        _process_one, i, job, ffmpeg_path,
+                        ctx=ctx,
+                    )
+                except Exception:
+                    _release_admission(name)
+                    raise
+                fut._beru_job_pos = i
+                fut._beru_pool = name
+                fut.add_done_callback(_on_done)
+                futures.append(fut)
+                progressed = True
+            if not progressed:
+                with admission_cond:
+                    admission_cond.wait(timeout=1.0)
+
+        for name in ("encode", "copy"):
+            while pending[name]:
+                i, job = pending[name].popleft()
                 _mark_cancelled(job, i)
-                continue
-            try:
-                fut = executor.submit(_process_one, i, job, ffmpeg_path, hw_encoder=hw_encoder)
-            except Exception:
-                _release_admission()
-                raise
-            fut._beru_job_pos = i
-            fut.add_done_callback(_on_done)
-            futures.append(fut)
+
         concurrent.futures.wait(futures)
 
     failed_jobs = []
@@ -2278,61 +736,20 @@ def _execute_batch(
 _HW_ENCODER_UNSET = object()
 
 
-def _job_requires_encode(job):
-    if not isinstance(job, dict):
-        return False
-    watermark = job.get("watermark")
-    return bool(job.get("operations")) or (
-        isinstance(watermark, dict) and bool(watermark.get("enabled"))
-    )
-
-
-def _jobs_require_fonts(jobs):
-    for job in jobs:
-        if not isinstance(job, dict):
-            continue
-        operations = job.get("operations", [])
-        if any(op.get("mode") == "text" for op in operations if isinstance(op, dict)):
-            return True
-        watermark = job.get("watermark")
-        if (
-            isinstance(watermark, dict)
-            and watermark.get("enabled")
-            and watermark.get("type", "text") == "text"
-        ):
-            return True
-    return False
-
-
-def _jobs_allow_hardware(jobs):
-    return any(
-        _job_requires_encode(job)
-        and profile_allows_hardware(job.get("encode_profile", "balanced"))
-        for job in jobs
-        if isinstance(job, dict)
-    )
-
-
-def _max_estimated_job_ram_mb(jobs, hw_encoder, has_video_filters, encode_profile):
-    return max(
-        (
-            _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile)
-            for job in jobs
-            if isinstance(job, dict)
-        ),
-        default=0,
-    )
-
-
-def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_UNSET):
+def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_UNSET, ctx=None):
     """Process jobs concurrently. Report progress to stdout.
 
     Args:
         hw_encoder: If provided (from batch pre-flight), it is used directly
             for profiles that allow hardware encoding.
+        ctx: State of this run, shared by every Job and retry pass. When
+            omitted, a fresh context captures the process defaults.
     """
-    _cancel_event.clear()
-    _last_job_progress_emit.clear()
+    if ctx is not None and hw_encoder is _HW_ENCODER_UNSET:
+        hw_encoder = ctx.hw_encoder
+    if ctx is None:
+        ctx = BatchContext(ffmpeg_path=ffmpeg_path, ffprobe_path=FFPROBE)
+    ffmpeg_path = ctx.ffmpeg_path
 
     if _jobs_require_fonts(jobs):
         get_system_fonts()
@@ -2340,7 +757,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
     if not _jobs_allow_hardware(jobs):
         hw = None
     elif hw_encoder is _HW_ENCODER_UNSET:
-        hw = detect_hw_encoder(ffmpeg_path)
+        hw = detect_hw_encoder(ffmpeg_path, env=ctx.env)
     else:
         hw = hw_encoder
     max_pixels = 0
@@ -2364,7 +781,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
         "quality" if "quality" in encode_profiles else
         "balanced" if "balanced" in encode_profiles else
         "fast" if "fast" in encode_profiles else
-        (os.environ.get("BERU_ENCODE_PROFILE") or "balanced")
+        (ctx.env.get("BERU_ENCODE_PROFILE") or "balanced")
     )
     effective_hw = resolve_effective_hw_encoder(encode_profile, hw)
 
@@ -2376,14 +793,16 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
             has_video_filters=has_video_filters,
             encode_profile=encode_profile,
             jobs=jobs,
+            env=ctx.env,
         )
 
     per_job_ram_mb = _max_estimated_job_ram_mb(
         jobs, effective_hw, has_video_filters, encode_profile
     )
 
-    global _SOFTWARE_FALLBACK_ADMISSION
-    if effective_hw:
+    ctx.hw_encoder = hw
+    ctx.max_workers = max(1, max_workers)
+    if hw:
         software_workers = resolve_max_workers(
             None,
             len(jobs),
@@ -2391,49 +810,53 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
             has_video_filters=has_video_filters,
             encode_profile=encode_profile,
             jobs=jobs,
+            env=ctx.env,
         )
         software_ram_mb = _max_estimated_job_ram_mb(
             jobs, None, has_video_filters, encode_profile
         )
-        _SOFTWARE_FALLBACK_ADMISSION = _ResourceAdmission(
-            min(max_workers, software_workers), software_ram_mb
+        ctx.sw_fallback_admission = _ResourceAdmission(
+            min(max_workers, software_workers), software_ram_mb, ctx=ctx
         )
     else:
-        _SOFTWARE_FALLBACK_ADMISSION = None
+        ctx.sw_fallback_admission = None
 
     total = len(jobs)
-    mode = (os.environ.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
+    copy_workers = resolve_copy_workers(
+        sum(1 for job in jobs if _job_takes_copy_path(job)), env=ctx.env
+    )
+    mode = (ctx.env.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
     logger.info(
-        "Starting batch: %d jobs, %d workers (mode=%s, encoder=%s, max_px=%d, "
+        "Starting batch: %d jobs, %d encode workers + %d copy workers "
+        "(mode=%s, encoder=%s, max_px=%d, "
         "est_ram_per_job=%dMB, avail_ram=%dMB), ffmpeg=%s",
-        total, max_workers, mode, effective_hw or "libx264", max_pixels,
+        total, max_workers, copy_workers, mode, effective_hw or "libx264", max_pixels,
         per_job_ram_mb, _get_available_ram_mb(), ffmpeg_path,
     )
 
     pass1 = _execute_batch(
         jobs,
-        ffmpeg_path,
-        max_workers,
+        ctx,
         emit_batch_progress=True,
-        hw_encoder=effective_hw,
-        per_job_ram_mb=per_job_ram_mb,
+        copy_workers=copy_workers,
     )
     succeeded = pass1["succeeded"]
     failed = pass1["failed"]
     cancelled = pass1["cancelled"]
 
-    retry_candidates = [
-        job for job, result in pass1["failed_jobs"]
+    retry_pairs = [
+        (job, result) for job, result in pass1["failed_jobs"]
         if _should_retry_failed_job(result, max_workers)
     ]
+    retry_candidates = [job for job, _result in retry_pairs]
     if (
-        _retry_failed_enabled()
+        _retry_failed_enabled(env=ctx.env)
         and max_workers > 1
         and retry_candidates
-        and not _check_cancelled()
+        and not _check_cancelled(ctx)
     ):
         resource_retry = any(
-            _is_resource_pressure_error((result.get("raw_error") or result.get("error") or ""))
+            is_resource_pressure_error((result.get("raw_error") or result.get("error") or ""))
             for _job, result in pass1["failed_jobs"]
             if _should_retry_failed_job(result, max_workers)
         )
@@ -2442,20 +865,20 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
             "Retry pass: %d failed jobs at %d workers (was %d)",
             len(retry_candidates), reduced_workers, max_workers,
         )
+        retry_ctx = replace(ctx, max_workers=max(1, reduced_workers))
         pass2 = _execute_batch(
             retry_candidates,
-            ffmpeg_path,
-            reduced_workers,
+            retry_ctx,
             emit_batch_progress=False,
-            hw_encoder=effective_hw,
-            per_job_ram_mb=per_job_ram_mb,
+            copy_workers=resolve_copy_workers(
+                sum(1 for job in retry_candidates if _job_takes_copy_path(job)), env=ctx.env
+            ),
         )
-        for job in retry_candidates:
-            job_id = job.get("id")
-            if job_id is None:
-                continue
-            prev = pass1["results"].get(job_id)
-            new = pass2["results"].get(job_id)
+        # pass2 result keys are job.get("id", position-within-retry-list), so
+        # look up by retry index — jobs without an id must still be recounted.
+        for pos, (_job, prev) in enumerate(retry_pairs):
+            job_key = _job.get("id", pos)
+            new = pass2["results"].get(job_key)
             if not prev or prev.get("status") != "failed":
                 continue
             failed -= 1
@@ -2474,24 +897,8 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
         "failed": failed,
         "cancelled": cancelled,
         "workers": max_workers,
+        "copy_workers": copy_workers,
     }
-
-
-def _init_ffmpeg_globals():
-    """Configure module-level FFMPEG/FFPROBE paths. Returns False if ffmpeg is missing."""
-    global FFMPEG, FFPROBE
-
-    ffmpeg_bin = find_ffmpeg()
-    ffprobe_bin = find_ffprobe(ffmpeg_bin)
-    if not (os.path.isfile(ffmpeg_bin) or shutil.which(ffmpeg_bin)):
-        logger.error("ffmpeg not found at %s", ffmpeg_bin)
-        return False
-
-    FFMPEG = ffmpeg_bin
-    FFPROBE = ffprobe_bin
-    logger.info("Using ffmpeg: %s", FFMPEG)
-    logger.info("Using ffprobe: %s", FFPROBE)
-    return True
 
 
 def render_preview_frame(payload):
@@ -2499,88 +906,18 @@ def render_preview_frame(payload):
 
     Returns a dict: {ok, data_url?, error?, width?, height?, timestamp?}
     """
-    try:
-        payload = _validated_job_media(payload, require_output=False)
-    except ValueError as exc:
-        return {"ok": False, "error": str(exc)}
-
-    input_path = payload.get("input_path")
-    if not input_path or not os.path.exists(input_path):
-        return {"ok": False, "error": f"Input not found: {input_path}"}
-
-    try:
-        timestamp = max(0.0, float(payload.get("timestamp", 0)))
-    except (TypeError, ValueError):
-        timestamp = 0.0
-
-    info = job_video_info(payload, input_path)
-    vw = int(payload.get("source_width") or payload.get("width") or info.get("width") or 0)
-    vh = int(payload.get("source_height") or payload.get("height") or info.get("height") or 0)
-    if vw <= 0 or vh <= 0:
-        return {"ok": False, "error": "No se pudo leer la resolución del video"}
-
-    raw_operations = payload.get("operations") or []
-    operations = [
-        _optimize_delogo_for_speed(_normalize_operation(op), vw, vh)
-        for op in raw_operations
-    ]
-    watermark = payload.get("watermark")
-    filter_complex, output_label, image_paths = build_filter_complex(
-        operations, vw, vh, watermark=watermark,
+    return preview.render_frame(
+        payload, source_only=False, ffmpeg_path=FFMPEG, probe_fn=ffprobe,
+        info_fn=job_video_info, filter_fn=build_filter_complex,
     )
 
-    # `-ss` before `-i` (input seek). After `-i` is an output seek that resets
-    # filter `t` to 0, so enable=between(t,start,end) never matches the real time.
-    cmd = [
-        FFMPEG, "-hide_banner", "-loglevel", "error", "-y",
-        "-ss", f"{timestamp:.3f}",
-        "-i", input_path,
-    ]
-    for img_path in image_paths:
-        cmd += ["-loop", "1", "-i", img_path]
-    if filter_complex:
-        cmd += ["-filter_complex", filter_complex, "-map", output_label]
-    else:
-        cmd += ["-map", "0:v:0"]
-    cmd += ["-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
 
-    try:
-        result = subprocess.run(cmd, capture_output=True, timeout=45)
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "Timeout al renderizar el frame"}
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
-
-    if result.returncode != 0:
-        err = (result.stderr or b"").decode("utf-8", errors="replace").strip()
-        return {"ok": False, "error": err or f"FFmpeg exited with code {result.returncode}"}
-
-    buf = result.stdout or b""
-    if len(buf) < 64:
-        return {"ok": False, "error": "FFmpeg no produjo imagen"}
-
-    data_url = "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
-    return {
-        "ok": True,
-        "data_url": data_url,
-        "width": vw,
-        "height": vh,
-        "timestamp": timestamp,
-    }
-
-
-def preview_frame_main(json_path):
-    if not _init_ffmpeg_globals():
-        print(json.dumps({"ok": False, "error": "ffmpeg not found"}))
-        sys.exit(1)
-
-    with open(json_path, "r", encoding="utf-8") as f:
-        payload = json.load(f)
-
-    get_system_fonts()
-    result = render_preview_frame(payload)
-    print(json.dumps(result))
-    sys.exit(0 if result.get("ok") else 1)
+def render_source_frame(payload):
+    """Decode one frame straight from a rendered artifact (no filter graph)."""
+    return preview.render_frame(
+        payload, source_only=True, ffmpeg_path=FFMPEG, probe_fn=ffprobe,
+        info_fn=job_video_info, filter_fn=build_filter_complex,
+    )
 
 
 def preview_frame_worker_main():
@@ -2592,7 +929,9 @@ def preview_frame_worker_main():
     get_system_fonts()
     print(json.dumps({"type": "ready", "ok": True}), flush=True)
 
-    for line in sys.stdin:
+    while line := sys.stdin.buffer.readline(PREVIEW_MAX_REQUEST_BYTES + 1):
+        if len(line) > PREVIEW_MAX_REQUEST_BYTES:
+            return
         request_id = None
         try:
             request = json.loads(line)
@@ -2600,22 +939,116 @@ def preview_frame_worker_main():
             payload = request.get("payload")
             if not isinstance(request_id, int) or not isinstance(payload, dict):
                 raise ValueError("Invalid preview request")
-            result = render_preview_frame(payload)
+            if payload.get("source_only"):
+                result = render_source_frame(payload)
+            else:
+                result = render_preview_frame(payload)
         except Exception as exc:
             result = {"ok": False, "error": str(exc)}
 
         print(json.dumps({"id": request_id, **result}), flush=True)
 
 
+def _load_jobs_manifest(jobs_path):
+    """Read and validate a jobs manifest file. Returns the jobs list."""
+    with open(jobs_path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        logger.error("Invalid jobs file: expected array or {jobs:[]}")
+        raise ValueError("Invalid jobs manifest")
+
+    manifest_type = payload.get("type")
+    manifest_version = payload.get("version")
+    if manifest_type != JOB_MANIFEST_TYPE:
+        logger.error("Invalid jobs manifest type: %s", manifest_type)
+        raise ValueError("Invalid jobs manifest type")
+    if manifest_version != JOB_MANIFEST_VERSION:
+        logger.error("Unsupported jobs manifest version: %s", manifest_version)
+        raise ValueError("Unsupported jobs manifest version")
+    if not isinstance(payload.get("jobs"), list):
+        logger.error("Invalid jobs manifest: jobs must be an array")
+        raise ValueError("Invalid jobs manifest")
+    return payload["jobs"]
+
+
+def _preflight_hw_encoder(jobs, *, verified, ctx=None):
+    """Real-encode probe runs once per process; later calls reuse the cache."""
+    if not _jobs_allow_hardware(jobs):
+        return None, verified
+    hw = detect_hw_encoder(
+        ctx.ffmpeg_path if ctx is not None else FFMPEG,
+        force_test=not verified, env=ctx.env if ctx is not None else None,
+    )
+    if hw is None:
+        logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
+    return hw, True
+
+
+def job_worker_main():
+    """Serve processing runs as newline-delimited JSON over stdin/stdout.
+
+    Each request is {"id": int, "jobs_file": path, "env": {str: str}}. Run
+    events keep the single-shot NDJSON contract verbatim; every request ends
+    with {"type": "run_end", "id": ..., "ok": bool} so the caller can tell a
+    finished run from a dead worker.
+    """
+    if not _init_ffmpeg_globals():
+        print(json.dumps({"type": "ready", "ok": False, "error": "ffmpeg not found"}), flush=True)
+        return
+    print(json.dumps({"type": "ready", "ok": True}), flush=True)
+
+    hw_verified = False
+    base_env = dict(os.environ)
+    while line := sys.stdin.buffer.readline(JOB_WORKER_MAX_REQUEST_BYTES + 1):
+        if len(line) > JOB_WORKER_MAX_REQUEST_BYTES:
+            return
+        request_id = None
+        try:
+            request = json.loads(line)
+            request_id = request.get("id")
+            jobs_file = request.get("jobs_file")
+            env = request.get("env") or {}
+            if (
+                not isinstance(request_id, int)
+                or not isinstance(jobs_file, str)
+                or not isinstance(env, dict)
+            ):
+                raise ValueError("Invalid job request")
+            ctx = BatchContext(
+                ffmpeg_path=FFMPEG, ffprobe_path=FFPROBE, jobs_file=jobs_file,
+                env={**base_env, **{
+                    key: value for key, value in env.items()
+                    if isinstance(key, str) and isinstance(value, str)
+                }},
+            )
+            jobs = _load_jobs_manifest(jobs_file)
+            preflight_hw, hw_verified = _preflight_hw_encoder(
+                jobs, verified=hw_verified, ctx=ctx
+            )
+            result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
+            _safe_print(json.dumps({"type": "summary", **result}))
+            _safe_print(json.dumps({"type": "run_end", "id": request_id, "ok": True}))
+        except Exception as exc:
+            logger.exception("Job worker request failed")
+            _safe_print(json.dumps({"type": "error", "error": str(exc)}))
+            _safe_print(json.dumps(
+                {"type": "run_end", "id": request_id, "ok": False, "error": str(exc)}
+            ))
+
+
 def main():
-    global _jobs_file
+    if sys.platform != "win32":
+        raise RuntimeError("Beru solo admite Windows.")
 
     if len(sys.argv) >= 2 and sys.argv[1] == "--preview-frame-worker":
         preview_frame_worker_main()
         return
 
-    if len(sys.argv) >= 3 and sys.argv[1] == "--preview-frame":
-        preview_frame_main(sys.argv[2])
+    if len(sys.argv) >= 2 and sys.argv[1] == "--job-worker":
+        job_worker_main()
         return
 
     if len(sys.argv) < 2:
@@ -2623,46 +1056,20 @@ def main():
         print(json.dumps({"type": "error", "error": "Usage: processor.py <jobs.json>"}))
         sys.exit(1)
 
-    _jobs_file = sys.argv[1]
-
     if not _init_ffmpeg_globals():
         print(json.dumps({"type": "error", "error": f"ffmpeg not found at {find_ffmpeg()}"}))
         sys.exit(1)
 
-    with open(sys.argv[1], "r", encoding="utf-8") as f:
-        payload = json.load(f)
-
-    if isinstance(payload, list):
-        jobs = payload
-    elif isinstance(payload, dict):
-        manifest_type = payload.get("type")
-        manifest_version = payload.get("version")
-        if manifest_type != JOB_MANIFEST_TYPE:
-            logger.error("Invalid jobs manifest type: %s", manifest_type)
-            print(json.dumps({"type": "error", "error": "Invalid jobs manifest type"}))
-            sys.exit(1)
-        if manifest_version != JOB_MANIFEST_VERSION:
-            logger.error("Unsupported jobs manifest version: %s", manifest_version)
-            print(json.dumps({"type": "error", "error": "Unsupported jobs manifest version"}))
-            sys.exit(1)
-        if not isinstance(payload.get("jobs"), list):
-            logger.error("Invalid jobs manifest: jobs must be an array")
-            print(json.dumps({"type": "error", "error": "Invalid jobs manifest"}))
-            sys.exit(1)
-        jobs = payload["jobs"]
-    else:
-        logger.error("Invalid jobs file: expected array or {jobs:[]}")
-        print(json.dumps({"type": "error", "error": "Invalid jobs manifest"}))
+    try:
+        jobs = _load_jobs_manifest(sys.argv[1])
+    except Exception as exc:
+        logger.error("Invalid jobs file: %s", exc)
+        print(json.dumps({"type": "error", "error": str(exc)}))
         sys.exit(1)
 
-    if _jobs_allow_hardware(jobs):
-        preflight_hw = detect_hw_encoder(FFMPEG, force_test=True)
-        if preflight_hw is None:
-            logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
-    else:
-        preflight_hw = None
-
-    result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw)
+    ctx = BatchContext(ffmpeg_path=FFMPEG, ffprobe_path=FFPROBE, jobs_file=sys.argv[1])
+    preflight_hw, _ = _preflight_hw_encoder(jobs, verified=False, ctx=ctx)
+    result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
     print(json.dumps({"type": "summary", **result}))
 
 

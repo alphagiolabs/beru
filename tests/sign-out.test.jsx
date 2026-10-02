@@ -9,20 +9,35 @@ vi.mock("../src/lib/supabaseClient.js", () => ({
 
 import BeruRoot from "../src/BeruRoot.jsx";
 import ConfirmDialog from "../src/components/ConfirmDialog.jsx";
-import StatusFooter from "../src/components/StatusFooter.jsx";
+import AppRail from "../src/components/AppRail.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
-import { seedAuthenticatedAuthSync } from "./helpers/authTestState.js";
+import { seedAuthenticatedAuth } from "./helpers/authTestState.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let root = null;
 
+async function clickSignOut() {
+  const avatar = document.querySelector('button[aria-label="Cuenta"]');
+  expect(avatar).toBeTruthy();
+  await act(async () => {
+    avatar.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  const item = Array.from(document.querySelectorAll('[role="menuitem"]')).find((el) =>
+    el.textContent.includes("Salir"),
+  );
+  expect(item).toBeTruthy();
+  await act(async () => {
+    item.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+}
+
 describe("Sign out", () => {
   beforeEach(async () => {
     document.body.innerHTML = '<div id="root"></div>';
     root = createRoot(document.getElementById("root"));
-    await seedAuthenticatedAuthSync({
+    await seedAuthenticatedAuth({
       initAuth: vi.fn(async () => ({ ok: true })),
       signOut: vi.fn(async () => {
         useEditorStore.setState({
@@ -46,22 +61,17 @@ describe("Sign out", () => {
     vi.clearAllMocks();
   });
 
-  it("asks for confirmation and calls signOut from the footer button", async () => {
+  it("asks for confirmation and calls signOut from the rail account menu", async () => {
     await act(async () => {
       root.render(
         <>
-          <StatusFooter />
+          <AppRail />
           <ConfirmDialog />
         </>,
       );
     });
 
-    const signOutBtn = document.querySelector('button[aria-label="Salir"]');
-    expect(signOutBtn).toBeTruthy();
-
-    await act(async () => {
-      signOutBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    await clickSignOut();
 
     expect(document.querySelector('[role="alertdialog"]')).toBeTruthy();
     expect(document.body.textContent).toMatch(/Cerrar sesión/i);
@@ -85,10 +95,7 @@ describe("Sign out", () => {
 
     expect(document.body.textContent).toMatch(/Importar videos/i);
 
-    const signOutBtn = document.querySelector('button[aria-label="Salir"]');
-    await act(async () => {
-      signOutBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
+    await clickSignOut();
 
     const confirmBtn = Array.from(document.querySelectorAll("button")).find((button) =>
       button.textContent.includes("Continuar"),

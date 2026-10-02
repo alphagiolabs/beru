@@ -1,10 +1,10 @@
 import { BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getMainWindow, isDev } from "../shared-state.js";
+import { getMainWindow, isDev, DEV_URL } from "../shared-state.js";
+import { IPC_EVENTS } from "../../shared/ipc-channels.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DEV_URL = process.env.BERU_DEV_URL || `http://localhost:${process.env.BERU_DEV_PORT || 5173}`;
 const BUILD_OVERLAY = path.join(__dirname, "..", "..", "build", "pet-overlay.html");
 
 let overlayWindow = null;
@@ -17,14 +17,14 @@ export function getLastPetOverlayPayload() {
 export function syncPetOverlay(payload) {
   lastSyncPayload = payload;
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    overlayWindow.webContents.send("petOverlay:state", payload);
+    overlayWindow.webContents.send(IPC_EVENTS.onPetOverlayState, payload);
   }
 }
 
 function notifyMainWindow(event, data) {
   const main = getMainWindow();
   if (main && !main.isDestroyed()) {
-    main.webContents.send("petOverlay:event", { event, ...data });
+    main.webContents.send(IPC_EVENTS.onPetOverlayEvent, { event, ...data });
   }
 }
 

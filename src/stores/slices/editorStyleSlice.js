@@ -3,6 +3,7 @@ import {
   patchToGlobalState,
   pickTextStyle,
 } from "../../utils/text-style";
+import { DELOGO_FIELD_BOUNDS } from "../../utils/delogo-ops";
 
 export function createEditorStyleSlice(set, get) {
   return {
@@ -10,15 +11,15 @@ export function createEditorStyleSlice(set, get) {
     sidebarMode: "logo",
 
     ...GLOBAL_TEXT_STYLE_DEFAULTS,
-    blurStrength: 20,
+    blurStrength: DELOGO_FIELD_BOUNDS.blurStrength.default,
     delogoMethod: "blur",
     delogoFillColor: "black",
     delogoFillOpacity: 1,
     delogoImagePath: "",
-    temporalRadius: 3,
-    mosaicSize: 12,
+    temporalRadius: DELOGO_FIELD_BOUNDS.temporalRadius.default,
+    mosaicSize: DELOGO_FIELD_BOUNDS.mosaicSize.default,
     mirrorSide: "right",
-    edgeFeather: 6,
+    edgeFeather: DELOGO_FIELD_BOUNDS.edgeFeather.default,
 
     tempStart: null,
     tempEnd: null,
@@ -26,7 +27,6 @@ export function createEditorStyleSlice(set, get) {
     tempImagePath: "",
     tempImageDataUrl: "",
     tempImageOpacity: 1,
-    tempImageScale: 1,
 
     outputDir: null,
 
@@ -54,7 +54,6 @@ export function createEditorStyleSlice(set, get) {
     setTempImagePath: (val) => set({ tempImagePath: val || "" }),
     setTempImageDataUrl: (val) => set({ tempImageDataUrl: val || "" }),
     setTempImageOpacity: (val) => set({ tempImageOpacity: Number(val) }),
-    setTempImageScale: (val) => set({ tempImageScale: Number(val) }),
     setActiveTool: (val) =>
       set({
         activeTool: val,

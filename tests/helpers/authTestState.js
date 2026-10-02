@@ -23,6 +23,3 @@ export async function seedAuthenticatedAuth(overrides = {}) {
   });
   return useEditorStore;
 }
-
-/** @deprecated Use seedAuthenticatedAuth — kept for existing test imports. */
-export const seedAuthenticatedAuthSync = seedAuthenticatedAuth;

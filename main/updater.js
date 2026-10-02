@@ -1,19 +1,17 @@
 import { createRequire } from "module";
 import { getMainWindow, isDev, setAppIsQuitting } from "./shared-state.js";
-import { cancelActiveProcessing } from "./handlers/process.js";
+import { cancelRun } from "./processing-run.js";
+import { IPC_EVENTS } from "../shared/ipc-channels.js";
 const requireCJS = createRequire(import.meta.url);
 
 let autoUpdater = null;
 let initialized = false;
 let lastSnapshot = null;
 let pendingVersion = null;
-let checkInProgress = false;
-let downloadInProgress = false;
-// Stays true across retry backoff. downloadInProgress is false between attempts;
-// electron-updater downloadUpdate is not concurrency-safe.
-let downloadBusy = false;
-let quittingForUpdate = false;
-let updateDownloaded = false;
+
+let status = "idle";
+
+const isDownloadBusy = () => status === "downloading" || status === "retrying";
 
 const tryLoad = () => {
   if (autoUpdater) return autoUpdater;
@@ -33,7 +31,7 @@ const send = (payload) => {
   const win = getMainWindow();
   if (win && !win.isDestroyed()) {
     try {
-      win.webContents.send("updater:event", payload);
+      win.webContents.send(IPC_EVENTS.onUpdaterEvent, payload);
     } catch {}
   }
 };
@@ -43,7 +41,7 @@ const releaseUrlFor = (version) => {
   return `https://github.com/alphagiolabs/beru/releases/tag/v${String(version).replace(/^v/i, "")}`;
 };
 
-const init = (_win) => {
+const init = () => {
   if (initialized) return;
   initialized = true;
   if (isDev) {
@@ -57,7 +55,7 @@ const init = (_win) => {
   }
   au.autoDownload = false;
   au.autoInstallOnAppQuit = false;
-  // logger=null TypeErrors inside NsisUpdater/verifySignature and hides the real error.
+  // NsisUpdater.verifySignature needs a logger to report the original error.
   au.logger = {
     info: (...args) => console.log("[updater]", ...args),
     warn: (...args) => console.warn("[updater]", ...args),
@@ -71,11 +69,11 @@ const init = (_win) => {
   au.on("checking-for-update", () => send({ type: "checking" }));
   au.on("update-available", (info) => {
     const version = info?.version || null;
-    if (updateDownloaded && pendingVersion && version === pendingVersion) {
+    if (status === "ready" && pendingVersion && version === pendingVersion) {
       send({ type: "ready", version: pendingVersion });
       return;
     }
-    updateDownloaded = false;
+    if (!isDownloadBusy() && status !== "installing") status = "available";
     pendingVersion = version;
     send({
       type: "available",
@@ -86,8 +84,7 @@ const init = (_win) => {
     });
   });
   au.on("update-not-available", (info) => {
-    if (pendingVersion || updateDownloaded) return;
-    au.autoInstallOnAppQuit = false;
+    if (pendingVersion || status === "ready") return;
     send({ type: "not-available", version: info?.version });
   });
   au.on("download-progress", (p) =>
@@ -100,18 +97,13 @@ const init = (_win) => {
     }),
   );
   au.on("update-downloaded", (info) => {
-    downloadInProgress = false;
-    updateDownloaded = true;
     pendingVersion = info?.version || pendingVersion;
+    if (status !== "installing") status = "ready";
     send({ type: "ready", version: info?.version || pendingVersion });
-    au.autoInstallOnAppQuit = true;
-    // oneClick: false cannot silent-install. quitAndInstall(true, true) relaunches
-    // the old build. The renderer modal must start the install.
   });
   au.on("error", (err) => {
-    checkInProgress = false;
-    if (downloadInProgress) downloadInProgress = false;
-    au.autoInstallOnAppQuit = false;
+    if (status === "checking") status = pendingVersion ? "available" : "idle";
+    else if (status === "downloading") status = "retrying";
     send({ type: "error", message: err?.message || String(err) });
   });
 
@@ -120,9 +112,9 @@ const init = (_win) => {
 
 const checkForUpdates = async () => {
   if (isDev) return { ok: false, reason: "dev-build" };
-  if (updateDownloaded) return { ok: false, reason: "already-ready" };
-  if (downloadInProgress) return { ok: false, reason: "download-in-progress" };
-  if (pendingVersion && !downloadInProgress) {
+  if (status === "ready") return { ok: false, reason: "already-ready" };
+  if (status === "downloading") return { ok: false, reason: "download-in-progress" };
+  if (pendingVersion) {
     send({
       type: "available",
       version: pendingVersion,
@@ -132,10 +124,10 @@ const checkForUpdates = async () => {
     });
     return { ok: true, version: pendingVersion, reason: "pending-update" };
   }
-  if (checkInProgress) return { ok: false, reason: "check-in-progress" };
+  if (status === "checking") return { ok: false, reason: "check-in-progress" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
-  checkInProgress = true;
+  status = "checking";
   try {
     const result = await au.checkForUpdates();
     return { ok: true, version: result?.updateInfo?.version };
@@ -143,7 +135,7 @@ const checkForUpdates = async () => {
     send({ type: "error", message: e?.message || String(e) });
     return { ok: false, error: e?.message };
   } finally {
-    checkInProgress = false;
+    if (status === "checking") status = pendingVersion ? "available" : "idle";
   }
 };
 
@@ -159,7 +151,7 @@ const resolvePendingVersion = (hint) => {
 
 const startDownload = async (opts = {}) => {
   if (isDev) return { ok: false, reason: "dev-build" };
-  if (downloadBusy) return { ok: true, reason: "already-downloading" };
+  if (isDownloadBusy()) return { ok: true, reason: "already-downloading" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
 
@@ -181,13 +173,12 @@ const startDownload = async (opts = {}) => {
     }
   }
 
-  if (updateDownloaded) {
+  if (status === "ready") {
     send({ type: "ready", version: pendingVersion });
     return { ok: true, reason: "already-downloaded" };
   }
 
-  downloadInProgress = true;
-  downloadBusy = true;
+  status = "downloading";
   send({
     type: "downloading",
     version: pendingVersion,
@@ -201,26 +192,25 @@ const startDownload = async (opts = {}) => {
   for (let attempt = 0; attempt <= MAX_DOWNLOAD_RETRIES; attempt++) {
     try {
       await au.downloadUpdate();
-      downloadBusy = false;
       return { ok: true };
     } catch (e) {
-      downloadInProgress = false;
-      if (attempt < MAX_DOWNLOAD_RETRIES && pendingVersion && !updateDownloaded) {
+      if (status === "downloading") status = "retrying";
+      if (attempt < MAX_DOWNLOAD_RETRIES && pendingVersion && status !== "ready") {
         const delay = BASE_RETRY_DELAY_MS * (attempt + 1);
         send({
           type: "error",
           message: `Download failed (attempt ${attempt + 1}/${MAX_DOWNLOAD_RETRIES + 1}). Retrying in ${delay / 1000}s...`,
         });
         await new Promise((resolve) => setTimeout(resolve, delay));
-        if (!pendingVersion || updateDownloaded) {
-          downloadBusy = false;
+        if (!pendingVersion || status === "ready") {
+          if (status === "retrying") status = pendingVersion ? "available" : "idle";
           return { ok: false, reason: "aborted" };
         }
-        downloadInProgress = true;
+        status = "downloading";
         send({ type: "downloading", version: pendingVersion, percent: 0 });
         continue;
       }
-      downloadBusy = false;
+      if (status === "retrying") status = pendingVersion ? "available" : "idle";
       // electron-updater emits "error" for download failures; avoid duplicate IPC.
       return { ok: false, error: e?.message };
     }
@@ -232,12 +222,18 @@ const getSnapshot = () => lastSnapshot;
 const INSTALL_GRACE_MS = 10000;
 
 const scheduleInstall = (au) => {
-  if (isDev || !au || quittingForUpdate) return;
-  quittingForUpdate = true;
+  if (isDev || !au || status === "installing") return;
+  status = "installing";
   setAppIsQuitting(true);
-  // silent=false: NSIS oneClick:false must show the wizard. forceRunAfter relaunches after it.
+  const abortInstall = (e) => {
+    if (status !== "installing") return;
+    status = "ready";
+    setAppIsQuitting(false);
+    send({ type: "error", message: e?.message || String(e) });
+  };
+  // NSIS oneClick:false requires the wizard; silent install relaunches the old build.
   setImmediate(() => {
-    Promise.resolve(cancelActiveProcessing())
+    Promise.resolve(cancelRun())
       .catch((e) => {
         console.error("[updater] cancel before install failed:", e?.message || e);
       })
@@ -245,24 +241,17 @@ const scheduleInstall = (au) => {
         try {
           const result = au.quitAndInstall(false, true);
           if (result && typeof result.catch === "function") {
-            result.catch((e) => {
-              quittingForUpdate = false;
-              setAppIsQuitting(false);
-              send({ type: "error", message: e?.message || String(e) });
-            });
+            result.catch((e) => abortInstall(e));
           }
         } catch (e) {
-          quittingForUpdate = false;
-          setAppIsQuitting(false);
-          send({ type: "error", message: e?.message || String(e) });
+          abortInstall(e);
         }
       });
   });
-  // NSIS quitAndInstall does not reject on spawn failure. If we are still alive
-  // after the grace period, unlock so the user can retry.
+  // NSIS may fail to spawn without rejecting; unlock for retry if the app stays alive.
   setTimeout(() => {
-    if (quittingForUpdate) {
-      quittingForUpdate = false;
+    if (status === "installing") {
+      status = "ready";
       setAppIsQuitting(false);
       send({
         type: "error",
@@ -274,14 +263,14 @@ const scheduleInstall = (au) => {
 
 const install = () => {
   if (isDev) return { ok: false, reason: "dev-build" };
-  if (quittingForUpdate) return { ok: false, reason: "install-in-progress" };
-  if (!updateDownloaded) return { ok: false, error: "update-not-downloaded" };
+  if (status === "installing") return { ok: false, reason: "install-in-progress" };
+  if (status !== "ready") return { ok: false, error: "update-not-downloaded" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
   scheduleInstall(au);
   return { ok: true };
 };
 
-const isQuittingForUpdate = () => quittingForUpdate;
+const isQuittingForUpdate = () => status === "installing";
 
 export { init, checkForUpdates, startDownload, install, getSnapshot, isQuittingForUpdate };

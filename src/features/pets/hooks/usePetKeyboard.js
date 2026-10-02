@@ -1,6 +1,13 @@
 import { useEffect } from "react";
 import useEditorStore from "../../../stores/useEditorStore";
 import { isTypingTarget } from "../../../utils/is-typing-target";
+import { tStatic } from "../../../utils/format-message.js";
+import { PetPaletteModal } from "../../../components/modal-panels";
+
+const reportPetsLoadFailure = () => {
+  const { language, showToast } = useEditorStore.getState();
+  showToast?.({ kind: "err", text: tStatic("settings.petdex.loadFailed", {}, language) });
+};
 
 export default function usePetKeyboard() {
   useEffect(() => {
@@ -28,30 +35,37 @@ export default function usePetKeyboard() {
       }
 
       if (cmd && key.toLowerCase() === "k") {
+        PetPaletteModal.preload();
         e.preventDefault();
         e.stopImmediatePropagation();
-        void store.ensurePetsReady?.().then(() => {
-          useEditorStore.getState().setShowPetPalette(true);
-        });
+        void store
+          .ensurePetsReady?.()
+          .then(() => {
+            useEditorStore.getState().setShowPetPalette(true);
+          })
+          .catch(reportPetsLoadFailure);
         return;
       }
 
       if (cmd && shiftKey && key.toLowerCase() === "p") {
         e.preventDefault();
         e.stopImmediatePropagation();
-        void store.ensurePetsReady?.().then(() => {
-          const next = useEditorStore.getState();
-          if (!next.petEnabled) {
-            if (next.petActiveSlug) {
-              void next.setPetEnabled(true);
-            } else {
-              const first = next.petInstalled?.[0]?.slug;
-              if (first) void next.selectPet(first);
+        void store
+          .ensurePetsReady?.()
+          .then(() => {
+            const next = useEditorStore.getState();
+            if (!next.petEnabled) {
+              if (next.petActiveSlug) {
+                void next.setPetEnabled(true);
+              } else {
+                const first = next.petInstalled?.[0]?.slug;
+                if (first) void next.selectPet(first);
+              }
+              return;
             }
-            return;
-          }
-          void next.setPetEnabled(false);
-        });
+            void next.setPetEnabled(false);
+          })
+          .catch(reportPetsLoadFailure);
       }
     };
 

@@ -1,5 +1,6 @@
 import { AlignStartVertical, AlignCenterVertical, AlignEndVertical } from "lucide-react";
 import { VERTICAL_ALIGNS, TRUNCATE_MODES } from "../utils/text-layout";
+import { useT } from "../i18n/useT";
 import { ToggleSwitch, SegmentedToolbar } from "./inspector";
 
 export default function TextLayoutControls({
@@ -8,6 +9,7 @@ export default function TextLayoutControls({
   showTextAlign = false,
   textAlignOptions = null,
 }) {
+  const t = useT();
   const autoFit = !!values.autoFit;
   const lineHeight = values.lineHeight ?? 1.2;
   const verticalAlign = values.verticalAlign || "top";
@@ -25,9 +27,9 @@ export default function TextLayoutControls({
       <div className={`inspector-paragraph-aligns${showTextAlign ? " has-h" : ""}`}>
         {showTextAlign && textAlignOptions ? (
           <div className="inspector-paragraph-align-block">
-            <span className="inspector-paragraph-micro">H</span>
+            <span className="inspector-paragraph-micro">{t("props.horizontal")}</span>
             <SegmentedToolbar
-              ariaLabel="Alineación horizontal"
+              ariaLabel={t("props.horizontalAlign")}
               columns={3}
               value={textAlign}
               onChange={(value) => patch({ textAlign: value })}
@@ -37,15 +39,15 @@ export default function TextLayoutControls({
         ) : null}
 
         <div className="inspector-paragraph-align-block">
-          <span className="inspector-paragraph-micro">{showTextAlign ? "V" : "Vertical"}</span>
+          <span className="inspector-paragraph-micro">{t("props.vertical")}</span>
           <SegmentedToolbar
-            ariaLabel="Alineación vertical"
+            ariaLabel={t("props.verticalAlign")}
             columns={3}
             value={verticalAlign}
             onChange={(value) => patch({ verticalAlign: value })}
             options={VERTICAL_ALIGNS.map((a) => ({
               value: a.value,
-              title: a.value,
+              title: t(`position.${a.value}`),
               icon:
                 a.value === "top" ? (
                   <AlignStartVertical size={12} />
@@ -59,13 +61,17 @@ export default function TextLayoutControls({
         </div>
       </div>
 
-      <div className="inspector-paragraph-metrics" role="group" aria-label="Métricas de párrafo">
+      <div
+        className="inspector-paragraph-metrics"
+        role="group"
+        aria-label={t("props.paragraphMetrics")}
+      >
         <label className="inspector-paragraph-metric">
-          <span className="inspector-paragraph-metric-key">Línea</span>
+          <span className="inspector-paragraph-metric-key">{t("props.lineAbbr")}</span>
           <input
             type="number"
             inputMode="decimal"
-            aria-label="Alto de línea"
+            aria-label={t("props.lineHeight")}
             value={lineHeight}
             onChange={(e) => patch({ lineHeight: Number(e.target.value) })}
             className="inspector-paragraph-metric-input"
@@ -75,11 +81,11 @@ export default function TextLayoutControls({
           />
         </label>
         <label className="inspector-paragraph-metric">
-          <span className="inspector-paragraph-metric-key">Margen</span>
+          <span className="inspector-paragraph-metric-key">{t("props.marginAbbr")}</span>
           <input
             type="number"
             inputMode="numeric"
-            aria-label="Margen seguro"
+            aria-label={t("props.safeMargin")}
             value={safeMargin}
             onChange={(e) => patch({ safeMargin: Number(e.target.value) })}
             className="inspector-paragraph-metric-input"
@@ -91,38 +97,36 @@ export default function TextLayoutControls({
 
       <div className="inspector-paragraph-list">
         <ToggleSwitch
-          label="Auto-ajustar"
+          label={t("props.autoFit")}
           checked={autoFit}
           onChange={(next) => patch({ autoFit: next })}
         />
         <ToggleSwitch
-          label="Ajuste de línea"
+          label={t("props.lineWrap")}
           checked={textWrap}
           onChange={(next) => patch({ textWrap: next })}
         />
       </div>
 
       <div className={`inspector-paragraph-truncate${autoFit ? " is-disabled" : ""}`}>
-        <span className="inspector-paragraph-micro">Truncado</span>
+        <span className="inspector-paragraph-micro">{t("props.truncate")}</span>
         <SegmentedToolbar
-          ariaLabel="Truncado"
+          ariaLabel={t("props.truncate")}
           columns={3}
           value={truncate}
           disabled={autoFit}
           onChange={(value) => patch({ truncate: value })}
           options={TRUNCATE_MODES.map((m) => ({
             value: m.value,
-            label: m.label,
-            title: m.title || m.label,
-            ariaLabel: m.title || m.label,
+            label: t(m.labelKey),
+            title: t(m.titleKey),
+            ariaLabel: t(m.titleKey),
           }))}
         />
       </div>
 
       {autoFit ? (
-        <p className="inspector-helper inspector-paragraph-hint">
-          Reduce el tamaño para caber en la región.
-        </p>
+        <p className="inspector-helper inspector-paragraph-hint">{t("logo.blurDurationHint")}</p>
       ) : null}
     </div>
   );

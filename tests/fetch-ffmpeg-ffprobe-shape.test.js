@@ -2,16 +2,6 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
-/**
- * Regression: `scripts/fetch-ffmpeg.mjs` resolved the ffprobe binary path with
- * `ffprobeModule?.path || ffprobeModule`. If `ffprobe-static` ever changes its
- * export shape (or a misconfigured install returns an object without `.path`),
- * the fallback would be the object itself, `basename()` would return
- * "[object Object]", and `copyFileSync` would fail silently because the
- * postinstall hook swallows errors. The fix validates the resolved path is a
- * string before using it.
- */
-
 const scriptPath = path.join(process.cwd(), "scripts", "fetch-ffmpeg.mjs");
 const src = fs.readFileSync(scriptPath, "utf-8");
 

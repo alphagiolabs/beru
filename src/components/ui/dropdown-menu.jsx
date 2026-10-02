@@ -55,10 +55,32 @@ function DropdownMenuLabel({ className, ...props }) {
   );
 }
 
+function DropdownMenuItem({ className, ...props }) {
+  return (
+    <DropdownMenuPrimitive.Item
+      data-slot="dropdown-menu-item"
+      className={cn("ui-dropdown-item", className)}
+      {...props}
+    />
+  );
+}
+
+function DropdownMenuSeparator({ className, ...props }) {
+  return (
+    <DropdownMenuPrimitive.Separator
+      data-slot="dropdown-menu-separator"
+      className={cn("ui-dropdown-separator", className)}
+      {...props}
+    />
+  );
+}
+
 export {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,

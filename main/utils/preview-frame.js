@@ -1,14 +1,14 @@
 import { spawn } from "child_process";
 import { buildProcessorChildEnv, validateProcessorAvailableAsync } from "./processor-spawn.js";
 import { validateMediaBinaries } from "./paths.js";
-import { killProcessTree } from "./kill-process-tree.js";
+import { createLineWorker } from "./line-worker.js";
 
 const STARTUP_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 60_000;
+const MAX_RESPONSE_LINE_BYTES = 6 * 1024 * 1024;
+const MAX_REQUEST_BYTES = 1024 * 1024;
+const OUTPUT_LIMIT_ERROR = "La salida del preview supera el límite de tamaño";
 
-let worker = null;
-let workerStartPromise = null;
-let workerReady = false;
 let nextRequestId = 1;
 const pending = new Map();
 let activeRequestId = null;
@@ -39,159 +39,72 @@ function settleWorkerRequests(proc, result) {
   for (const [id, request] of [...pending]) {
     if (request.proc === proc) settleRequest(id, result, false);
   }
-  clearRequestQueue();
 }
 
-function killIfCurrentWorker(proc) {
-  if (worker !== proc) return;
-  void killProcessTree(proc).catch(() => {
-    try {
-      proc.kill();
-    } catch {}
-  });
-}
+const previewWorker = createLineWorker({
+  name: "Preview worker",
+  startupTimeoutMs: STARTUP_TIMEOUT_MS,
+  startupTimeoutMessage: "Timeout al iniciar el preview",
+  startupFailedMessage: "No se pudo iniciar el preview",
+  overflowError: OUTPUT_LIMIT_ERROR,
+  maxPendingLineBytes: MAX_RESPONSE_LINE_BYTES,
+  stderrTailChars: 4000,
+  spawnProc: (spawnSpec) => {
+    const media = validateMediaBinaries();
+    const mediaOpts = media.ok
+      ? { ffmpegPath: media.ffmpegPath, ffprobePath: media.ffprobePath }
+      : {};
+    return spawn(spawnSpec.command, spawnSpec.args, {
+      windowsHide: true,
+      env: buildProcessorChildEnv(process.env, mediaOpts),
+    });
+  },
+  onMessage: (msg) => {
+    if (msg && Number.isInteger(msg.id)) {
+      const { id, ...result } = msg;
+      settleRequest(id, result);
+    }
+  },
+  onStopped: (proc, outcome) => settleWorkerRequests(proc, outcome),
+  outcomeFor: (cause, { error }) =>
+    cause === "stdin" ? { ok: false, error: "Preview worker se cerró" } : { ok: false, error },
+});
 
 function dispatchQueuedRequest(proc) {
   if (activeRequestId !== null || queuedRequestId === null) return;
-  if (worker !== proc || !workerReady || proc.killed) return;
+  if (!previewWorker.isUsable(proc)) return;
   const id = queuedRequestId;
   queuedRequestId = null;
   const request = pending.get(id);
   if (!request) return;
   activeRequestId = id;
   request.timer = setTimeout(() => {
-    killIfCurrentWorker(proc);
-    settleRequest(id, { ok: false, error: "Timeout al renderizar el frame" }, false);
+    previewWorker.stop(proc, { ok: false, error: "Timeout al renderizar el frame" });
   }, REQUEST_TIMEOUT_MS);
   try {
-    proc.stdin.write(`${JSON.stringify({ id, payload: request.payload })}\n`, (err) => {
-      if (!err) return;
-      settleRequest(id, { ok: false, error: err.message }, false);
-      killIfCurrentWorker(proc);
-    });
-  } catch (err) {
-    settleRequest(id, { ok: false, error: err.message }, false);
-    killIfCurrentWorker(proc);
-  }
-}
-
-function parseWorkerLine(line) {
-  if (!line.trim()) return null;
-  try {
-    return JSON.parse(line);
-  } catch {
-    return null;
-  }
-}
-
-function startWorker(spawnSpec) {
-  if (worker && workerReady && !worker.killed) return Promise.resolve(worker);
-  if (workerStartPromise) return workerStartPromise;
-
-  workerStartPromise = new Promise((resolve, reject) => {
-    if (!spawnSpec) {
-      workerStartPromise = null;
-      reject(
-        new Error(
-          "No se pudo iniciar el procesador de preview. " +
-            "En desarrollo instale Python 3; en la app instalada, reinstale Beru.",
-        ),
-      );
+    const sent = previewWorker.send(
+      proc,
+      { id, payload: request.payload },
+      {
+        maxBytes: MAX_REQUEST_BYTES,
+        onWriteError: (err) =>
+          previewWorker.stop(proc, {
+            ok: false,
+            error: `Preview worker stdin error: ${err.message}`,
+          }),
+      },
+    );
+    if (!sent) {
+      settleRequest(id, { ok: false, error: "La solicitud de preview supera el límite de tamaño" });
       return;
     }
-    const media = validateMediaBinaries();
-    const mediaOpts = media.ok
-      ? { ffmpegPath: media.ffmpegPath, ffprobePath: media.ffprobePath }
-      : {};
-    const proc = spawn(spawnSpec.command, spawnSpec.args, {
-      windowsHide: true,
-      env: buildProcessorChildEnv(process.env, mediaOpts),
-    });
+  } catch (err) {
+    previewWorker.stop(proc, { ok: false, error: err.message });
+  }
+}
 
-    worker = proc;
-    workerReady = false;
-    let stdoutBuffer = "";
-    let stderrTail = "";
-    let startupSettled = false;
-
-    const startupTimer = setTimeout(() => {
-      if (startupSettled) return;
-      startupSettled = true;
-      workerStartPromise = null;
-      try {
-        proc.kill();
-      } catch {}
-      reject(new Error("Timeout al iniciar el preview"));
-    }, STARTUP_TIMEOUT_MS);
-
-    const failStartup = (message) => {
-      if (startupSettled) return;
-      startupSettled = true;
-      clearTimeout(startupTimer);
-      workerStartPromise = null;
-      reject(new Error(message));
-    };
-
-    proc.stdout.on("data", (chunk) => {
-      stdoutBuffer += chunk.toString();
-      const lines = stdoutBuffer.split(/\r?\n/);
-      stdoutBuffer = lines.pop() || "";
-
-      for (const line of lines) {
-        const message = parseWorkerLine(line);
-        if (!message) continue;
-
-        if (message.type === "ready") {
-          if (!message.ok) {
-            failStartup(message.error || "No se pudo iniciar el preview");
-            continue;
-          }
-          if (!startupSettled) {
-            startupSettled = true;
-            clearTimeout(startupTimer);
-            workerReady = true;
-            resolve(proc);
-          }
-          continue;
-        }
-
-        if (Number.isInteger(message.id)) {
-          const { id, ...result } = message;
-          settleRequest(id, result);
-        }
-      }
-    });
-
-    proc.stderr.on("data", (chunk) => {
-      stderrTail += chunk.toString();
-      if (stderrTail.length > 4000) stderrTail = stderrTail.slice(-4000);
-    });
-
-    proc.on("error", (err) => {
-      failStartup(err.message);
-      settleWorkerRequests(proc, { ok: false, error: err.message });
-    });
-
-    // proc.on("error") covers spawn, not stdin. A dead worker emits EPIPE on
-    // stdin; unhandled, that becomes an uncaughtException and kills Electron.
-    proc.stdin?.on("error", (err) => {
-      failStartup(`Preview worker stdin error: ${err.message}`);
-      settleWorkerRequests(proc, { ok: false, error: "Preview worker se cerró" });
-    });
-
-    proc.on("close", (code) => {
-      const message = stderrTail.trim() || `Preview worker finalizó (exit ${code ?? "?"})`;
-      failStartup(message);
-      if (worker === proc) {
-        worker = null;
-        workerReady = false;
-        workerStartPromise = null;
-      }
-      settleWorkerRequests(proc, { ok: false, error: message });
-    });
-  });
-
-  return workerStartPromise;
+export async function renderSourceFrame(payload) {
+  return renderPreviewFrame({ ...payload, source_only: true });
 }
 
 export async function renderPreviewFrame(payload) {
@@ -203,7 +116,7 @@ export async function renderPreviewFrame(payload) {
   let proc;
   try {
     const { command, args } = processorCheck;
-    proc = await startWorker({
+    proc = await previewWorker.ensure({
       command,
       args: [...args, "--preview-frame-worker"],
     });
@@ -232,15 +145,5 @@ export async function renderPreviewFrame(payload) {
 
 export function disposePreviewFrameWorker() {
   settleAll({ ok: false, cancelled: true, error: "Preview cancelado" });
-  const proc = worker;
-  if (proc && !proc.killed) {
-    void killProcessTree(proc).catch(() => {
-      try {
-        proc.kill();
-      } catch {}
-    });
-  }
-  worker = null;
-  workerReady = false;
-  workerStartPromise = null;
+  previewWorker.dispose({ ok: false, cancelled: true, error: "Preview cancelado" });
 }

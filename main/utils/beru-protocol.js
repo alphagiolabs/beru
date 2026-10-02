@@ -1,11 +1,13 @@
 import fs from "fs";
 import path from "path";
 import { Readable } from "stream";
+import { trimOldest } from "./cache-trim.js";
 
-const statCache = new Map(); // filePath -> { size, mtimeMs, ts }
+const statCache = new Map();
+const STAT_CACHE_MAX = 500;
 
 function statCacheEnabled() {
-  return process.env.BERU_PROTOCOL_STAT_CACHE === "1";
+  return process.env.BERU_PROTOCOL_STAT_CACHE !== "0";
 }
 
 function statCacheTtlMs() {
@@ -27,6 +29,7 @@ function statFile(filePath) {
   const stat = fs.statSync(filePath);
   if (statCacheEnabled()) {
     statCache.set(filePath, { size: stat.size, mtimeMs: stat.mtimeMs, ts: Date.now() });
+    trimOldest(statCache, STAT_CACHE_MAX);
   }
   return { size: stat.size, mtimeMs: stat.mtimeMs };
 }
@@ -82,7 +85,11 @@ export function validateBeruRequestPath(pathSecurity, requestUrl) {
 
 function contentTypeFor(filePath) {
   const ext = path.extname(filePath).toLowerCase();
-  return IMAGE_CONTENT_TYPES[ext] || VIDEO_CONTENT_TYPES[ext] || "application/octet-stream";
+  return IMAGE_CONTENT_TYPES[ext] || VIDEO_CONTENT_TYPES[ext] || null;
+}
+
+export function hasKnownBeruType(filePath) {
+  return contentTypeFor(filePath) !== null;
 }
 
 function parseRangeHeader(rangeHeader, size) {

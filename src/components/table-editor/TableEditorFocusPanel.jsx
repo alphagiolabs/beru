@@ -17,6 +17,7 @@ import { ToggleSwitch } from "../inspector";
 import { useT } from "../../i18n/useT";
 import useOverlayScroll from "./useOverlayScroll";
 import { Button } from "../ui/Button";
+import { Select } from "../ui/select";
 import { PositionIcon } from "../ui/PositionIcon";
 
 const COLOR_PRESETS = [
@@ -143,14 +144,14 @@ export default function TableEditorFocusPanel({
                 <ToolBtn
                   active={!!focusedOp.bold}
                   onClick={() => updateFocused({ bold: !focusedOp.bold })}
-                  title="Bold"
+                  title={t("table.bold")}
                 >
                   <Bold size={13} strokeWidth={2.25} />
                 </ToolBtn>
                 <ToolBtn
                   active={!!focusedOp.italic}
                   onClick={() => updateFocused({ italic: !focusedOp.italic })}
-                  title="Italic"
+                  title={t("table.italic")}
                 >
                   <Italic size={13} strokeWidth={2.25} />
                 </ToolBtn>
@@ -158,37 +159,29 @@ export default function TableEditorFocusPanel({
             </div>
 
             <div className="te-row">
-              <label className="te-field te-field--grow">
+              <div className="te-field te-field--grow">
                 <span className="te-label">{t("table.font")}</span>
-                <select
-                  className="te-select"
+                <Select
+                  size="sm"
                   value={focusedOp.fontFamily || "Arial"}
-                  onChange={(e) => updateFocused({ fontFamily: e.target.value })}
-                >
-                  {FONT_FAMILIES.map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="te-field te-field--weight">
+                  onValueChange={(v) => updateFocused({ fontFamily: v })}
+                  aria-label={t("table.font")}
+                  options={FONT_FAMILIES.map((f) => ({ value: f, label: f }))}
+                />
+              </div>
+              <div className="te-field te-field--weight">
                 <span className="te-label">{t("table.weight")}</span>
-                <select
-                  className="te-select"
+                <Select
+                  size="sm"
                   value={focusedOp.fontWeight ?? 400}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
+                  onValueChange={(v) => {
+                    const value = Number(v);
                     updateFocused({ fontWeight: value, bold: value >= 700 });
                   }}
-                >
-                  {FONT_WEIGHTS.map((w) => (
-                    <option key={w.value} value={w.value}>
-                      {w.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  aria-label={t("table.weight")}
+                  options={FONT_WEIGHTS}
+                />
+              </div>
             </div>
 
             <div className="te-slider">

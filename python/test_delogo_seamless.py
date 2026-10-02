@@ -3,8 +3,9 @@
 
 Quality bar for "invisible" logo removal:
 - inpaint / mirror / blur / fill / temporal with feather > 0 composite the
-  cleaned patch through a geq alpha ramp (opaque interior, fading seam) so
-  pixels outside the patch are never touched — no halo.
+  cleaned patch through a looped static alpha mask via alphamerge (opaque
+  interior, fading seam) so pixels outside the patch are never touched — no
+  halo.
 - inpaint additionally grain-matches the interpolated patch (noise=alls).
 - feather = 0 keeps the exact hard-overlay path (sharp, predictable).
 
@@ -24,16 +25,16 @@ from delogo_chains import (  # noqa: E402
     _fit_delogo_rect,
     _seamless_feather_widths,
 )
-from processor import build_filter_complex  # noqa: E402
+from processor import build_filter_complex, find_ffmpeg  # noqa: E402
 
-FFMPEG = HERE.parent / "bin" / "ffmpeg.exe"
-TMP = Path(tempfile.mkdtemp(prefix="beru_delogo_seamless_"))
+FFMPEG = Path(find_ffmpeg())
+_TMP = tempfile.TemporaryDirectory(prefix="beru_delogo_seamless_")
+TMP = Path(_TMP.name)
 VW, VH = 320, 180
 BOX = {"x": 220, "y": 15, "w": 80, "h": 35}
 FPS = 30
 DUR = 1
-# The builder fits the box (even size, 1px interpolation band); metrics and
-# the old baseline must use that effective box to compare apples to apples.
+# Metrics and the baseline must use the builder's effective box.
 _FX, _FY, _FW, _FH = _fit_delogo_rect(BOX["x"], BOX["y"], BOX["w"], BOX["h"], VW, VH)
 EFF = {"x": _FX, "y": _FY, "w": _FW, "h": _FH}
 
@@ -64,19 +65,15 @@ def test_feathered_methods_use_alpha_seam():
     for method in ("mirror", "fill", "temporal"):
         chain = _build_delogo_chain(_op(method, 6), None, 0, VW, VH, None)
         assert chain is not None, f"{method}: no chain"
-        assert "geq=" in chain, f"{method}: expected alpha seam (geq), got: {chain}"
+        assert "alphamerge" in chain, f"{method}: expected alpha seam (alphamerge), got: {chain}"
         assert "boxblur" not in chain, f"{method}: halo blur must be gone, got: {chain}"
-    # blur's cleanup IS a boxblur (blurring the region is the method); the
-    # feather halo around it must still be an alpha seam, not a second blur.
     chain = _build_delogo_chain(_op("blur", 6), None, 0, VW, VH, None)
     assert chain is not None
-    assert "geq=" in chain, f"blur: expected alpha seam (geq), got: {chain}"
+    assert "alphamerge" in chain, f"blur: expected alpha seam (alphamerge), got: {chain}"
     assert chain.count("boxblur") == 1, f"blur: only the cleanup blur may remain: {chain}"
-    # inpaint keeps its interior streak-smoothing blur plus grain match; the
-    # seam itself is alpha, not a halo blur over the surroundings.
     chain = _build_delogo_chain(_op("inpaint", 6), None, 0, VW, VH, None)
     assert chain is not None
-    assert "geq=" in chain, f"inpaint: expected alpha seam (geq), got: {chain}"
+    assert "alphamerge" in chain, f"inpaint: expected alpha seam (alphamerge), got: {chain}"
     assert "noise=alls=" in chain
     assert chain.count("boxblur") == 1, f"inpaint: only the interior blur may remain: {chain}"
 
@@ -86,13 +83,49 @@ def test_inpaint_adds_grain_match():
     assert "noise=alls=" in chain, f"inpaint should grain-match, got: {chain}"
 
 
+def test_inpaint_delogos_the_patch_not_the_frame():
+    """Composite inpaint paths should crop the padded patch first and run
+    ``delogo`` inside it (patch-local coords) — identical output at O(patch)
+    instead of O(frame) per frame. Only when the patch offset is even: odd
+    offsets realign subsampled chroma and must keep the full-frame delogo."""
+    op = _op("inpaint", 6)
+    op["region"] = {"x": 100, "y": 60, "w": 40, "h": 20}
+    chain = _build_delogo_chain(op, None, 0, 640, 360, None)
+    assert chain is not None
+    assert "delogo=x=6:y=6:w=40:h=20" in chain, f"expected patch-local delogo: {chain}"
+    assert "delogo=x=100:y=60" not in chain
+    chain = _build_delogo_chain(_op("inpaint", 6), None, 0, VW, VH, None)
+    assert chain is not None
+    assert f"delogo=x={EFF['x']}:y={EFF['y']}:w={EFF['w']}:h={EFF['h']}" in chain, chain
+
+
+def test_time_bounded_cleanup_carries_enable_when_stateless():
+    """Time-bounded ops gate the per-pixel cleanup work, not just the final
+    overlay — but only on stateless timeline-capable filters. tmedian's
+    temporal window and scale (no timeline support) stay ungated."""
+    chain = _build_delogo_chain(
+        _op("blur", 0, start_time=0.5, end_time=2.0), None, 0, VW, VH, None
+    )
+    assert "chroma_power=3:enable=between(t\\,0.500000\\,2.000000)" in chain, chain
+    chain = _build_delogo_chain(
+        _op("fill", 0, start_time=0.5, end_time=2.0), None, 0, VW, VH, None
+    )
+    assert "t=fill:enable=between(t\\,0.500000\\,2.000000)" in chain, chain
+    chain = _build_delogo_chain(
+        _op("temporal", 0, start_time=0.5, end_time=2.0), None, 0, VW, VH, None
+    )
+    assert "tmedian=radius=3:planes=0x7[" in chain, chain
+    chain = _build_delogo_chain(
+        _op("mosaic", 0, start_time=0.5, end_time=2.0), None, 0, VW, VH, None
+    )
+    assert "neighbor:enable" not in chain, chain
+
+
 def test_feather_zero_keeps_hard_overlay():
     for method in ("inpaint", "mirror", "blur", "fill", "temporal"):
         chain = _build_delogo_chain(_op(method, 0), None, 0, VW, VH, None)
         assert chain is not None, f"{method}: no chain"
-        assert "geq=" not in chain, f"{method}: feather=0 must stay a hard overlay"
-        # Either a hard overlay of the cleaned patch or (inpaint, full frame)
-        # the delogo filter applied directly.
+        assert "alphamerge" not in chain, f"{method}: feather=0 must stay a hard overlay"
         assert ("overlay=" in chain) or ("delogo=x=" in chain)
 
 
@@ -102,7 +135,7 @@ def test_frame_edge_feather_uses_the_available_sides():
     chain = _build_delogo_chain(op, None, 0, VW, VH, None)
     assert chain is not None
     assert "crop=86:41:0:0" in chain
-    assert "geq=" in chain, f"frame edge disabled feather on every side: {chain}"
+    assert "alphamerge" in chain, f"frame edge disabled feather on every side: {chain}"
 
 
 def _old_inpaint_chain(x, y, w, h, feather):
@@ -201,9 +234,7 @@ def _metrics(truth_frames, out_frames):
 
 
 def test_seamless_inpaint_beats_halo_baseline():
-    if not FFMPEG.exists():
-        print("  [skip] seamless metrics — no ffmpeg")
-        return
+    assert FFMPEG.exists(), f"ffmpeg not found at {FFMPEG}"
     truth, logo = _make_sources()
     truth_f = _raw_frames(truth)
     logo_f = _raw_frames(logo)
@@ -216,26 +247,20 @@ def test_seamless_inpaint_beats_halo_baseline():
     print(f"  floor(input) interior={floor[0]:.1f} halo={floor[1]:.1f} seam={floor[2]:.1f}")
     print(f"  old interior={old[0]:.1f} halo={old[1]:.1f} seam={old[2]:.1f}")
     print(f"  new interior={new[0]:.1f} halo={new[1]:.1f} seam={new[2]:.1f}")
-    # Outside the box the output must match the input (nothing added there).
     assert new[1] <= floor[1] * 1.5, f"halo above input floor: {floor[1]:.1f} -> {new[1]:.1f}"
     assert new[1] < old[1] * 0.5, f"halo not reduced: {old[1]:.1f} -> {new[1]:.1f}"
-    # Alpha compositing adds one color-conversion round trip. Keep its interior
-    # error within 1% while requiring the much larger halo reduction below.
+    # Allow 1% interior error for the alpha-compositing color conversion.
     assert new[0] <= old[0] * 1.01, f"interior regressed: {old[0]:.1f} -> {new[0]:.1f}"
-    # Grain budget: the grain match deliberately dithers every patch pixel
-    # (seam line included) by ~alls/2 luma steps, so the 1px seam may read
-    # marginally higher while looking less retouched. Bound it instead.
+    # Grain matching dithers seam pixels, so allow a small seam-error increase.
     assert new[2] <= old[2] * 1.15, f"seam regressed: {old[2]:.1f} -> {new[2]:.1f}"
 
 
 def test_seamless_blend_with_time_range_renders():
-    if not FFMPEG.exists():
-        print("  [skip] time-range render — no ffmpeg")
-        return
+    assert FFMPEG.exists(), f"ffmpeg not found at {FFMPEG}"
     truth, logo = _make_sources()
     op = _op("inpaint", 6, startTime=0.1, endTime=0.9)
     fc, label, _ = build_filter_complex([op], VW, VH)
-    assert "geq=" in fc and "enable=" in fc
+    assert "alphamerge" in fc and "enable=" in fc
     _render(logo, fc, label, "ranged.mp4")
 
 
@@ -246,6 +271,8 @@ def main():
         test_inpaint_adds_grain_match,
         test_feather_zero_keeps_hard_overlay,
         test_frame_edge_feather_uses_the_available_sides,
+        test_inpaint_delogos_the_patch_not_the_frame,
+        test_time_bounded_cleanup_carries_enable_when_stateless,
         test_seamless_inpaint_beats_halo_baseline,
         test_seamless_blend_with_time_range_renders,
     ]

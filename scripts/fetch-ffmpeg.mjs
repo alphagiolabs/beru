@@ -1,7 +1,10 @@
+import { requireWindows } from "../shared/platform.js";
 import { existsSync, mkdirSync, copyFileSync, statSync } from "node:fs";
 import { dirname, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+
+requireWindows();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "..");
@@ -12,11 +15,6 @@ const ffmpegStaticPkg = requireCJS("ffmpeg-static/package.json");
 const ffprobeStaticPkg = requireCJS("ffprobe-static/package.json");
 const ffmpegSource = requireCJS("ffmpeg-static");
 const ffprobeModule = requireCJS("ffprobe-static");
-// `ffprobe-static` exports `{ path: "..." }`. Guard against a future breaking
-// change in the export shape (or a misconfigured install) that returns an
-// object without `.path`: falling back to the object itself would make
-// `basename()` return "[object Object]" and `copyFileSync` would fail
-// silently (postinstall swallows errors).
 const ffprobeSource =
   typeof ffprobeModule === "string"
     ? ffprobeModule

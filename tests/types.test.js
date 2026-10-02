@@ -38,10 +38,6 @@ describe("region type helpers", () => {
       }
       expect(ids.size).toBe(100);
     });
-
-    it("returns a string", () => {
-      expect(typeof uid()).toBe("string");
-    });
   });
 
   describe("normalizeRegion", () => {

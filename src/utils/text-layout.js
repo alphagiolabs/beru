@@ -5,9 +5,21 @@ export const VERTICAL_ALIGNS = [
 ];
 
 export const TRUNCATE_MODES = [
-  { value: "none", label: "Ninguno", title: "Sin truncado" },
-  { value: "ellipsis", label: "···", title: "Puntos suspensivos" },
-  { value: "clip", label: "Clip", title: "Recortar" },
+  {
+    value: "none",
+    labelKey: "catalog.truncate.none.label",
+    titleKey: "catalog.truncate.none.title",
+  },
+  {
+    value: "ellipsis",
+    labelKey: "catalog.truncate.ellipsis.label",
+    titleKey: "catalog.truncate.ellipsis.title",
+  },
+  {
+    value: "clip",
+    labelKey: "catalog.truncate.clip.label",
+    titleKey: "catalog.truncate.clip.title",
+  },
 ];
 
 export function verticalAlignToFlex(verticalAlign) {
@@ -46,47 +58,6 @@ export function textLayoutBounds(region = {}, safeMargin = 0, boxPad = 0) {
     w: Math.max(0, rw - 2 * inset),
     h: Math.max(0, rh - 2 * inset),
   };
-}
-
-export function getTextLayoutCss(style = {}) {
-  const textWrap = style.textWrap !== false;
-  const truncate = style.truncate || "none";
-
-  const base = {
-    lineHeight: style.lineHeight ?? 1.2,
-    width: "100%",
-    maxWidth: "100%",
-    maxHeight: "100%",
-    margin: 0,
-    boxSizing: "border-box",
-  };
-
-  if (!textWrap) {
-    return {
-      ...base,
-      whiteSpace: "nowrap",
-      overflow: "hidden",
-      textOverflow: truncate === "ellipsis" ? "ellipsis" : "clip",
-    };
-  }
-
-  return {
-    ...base,
-    whiteSpace: "pre-wrap",
-    wordBreak: "break-word",
-    overflowWrap: "break-word",
-    overflow: truncate === "none" ? "visible" : "hidden",
-    textOverflow: truncate === "ellipsis" ? "ellipsis" : undefined,
-  };
-}
-
-export function elementOverflows(el, tolerance = 1, bounds = null) {
-  if (!el) return false;
-  const maxWidth =
-    bounds && Number.isFinite(bounds.width) ? Math.max(0, bounds.width) : el.clientWidth;
-  const maxHeight =
-    bounds && Number.isFinite(bounds.height) ? Math.max(0, bounds.height) : el.clientHeight;
-  return el.scrollHeight > maxHeight + tolerance || el.scrollWidth > maxWidth + tolerance;
 }
 
 export function binarySearchAutoFitFontSize(measureFits, { minPx, maxPx }) {
@@ -171,19 +142,7 @@ export function fitFontSize(text, regionW, regionH, baseSize, lineHeight, wrap, 
   };
 
   if (fits(size)) return size;
-  let lo = minSize;
-  let hi = size;
-  let best = minSize;
-  while (lo <= hi) {
-    const mid = Math.trunc((lo + hi) / 2);
-    if (fits(mid)) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  return best;
+  return binarySearchAutoFitFontSize(fits, { minPx: minSize, maxPx: size - 1 });
 }
 
 export function layoutExportText({

@@ -1,9 +1,9 @@
 import { app } from "electron";
 import path from "path";
 import fs from "fs";
-import { spawn } from "child_process";
 import { writeJsonAtomic } from "./atomic-json.js";
 import { getFfmpegPath } from "./paths.js";
+import { runCapturedProcess } from "./run-captured.js";
 import { pickHwEncoderFromEncodersText } from "../workerPolicy.js";
 
 export const ALLOWED_SETTINGS_KEYS = new Set([
@@ -45,69 +45,40 @@ const SETTINGS_DEFAULTS = {
   petPoppedOut: false,
   petScale: 0.33,
   petOpacity: 1.0,
-  petMovement: "fijo",
+  petMovement: "fixed",
 };
 
 let cachedHwEncoder = null;
 let hwEncoderPromise = null;
 
-let settingsCache = null;
-
-function settingsCacheEnabled() {
-  return process.env.BERU_SETTINGS_CACHE === "1";
-}
+const MAX_ENCODER_LIST_BYTES = 1024 * 1024;
 
 export function readSettings() {
-  if (settingsCacheEnabled() && settingsCache) return { ...settingsCache };
-  let parsed;
   try {
     const file = path.join(app.getPath("userData"), "settings.json");
-    if (!fs.existsSync(file)) {
-      parsed = { ...SETTINGS_DEFAULTS };
-    } else {
-      const raw = fs.readFileSync(file, "utf8");
-      parsed = { ...SETTINGS_DEFAULTS, ...JSON.parse(raw) };
-    }
+    if (!fs.existsSync(file)) return { ...SETTINGS_DEFAULTS };
+    const raw = fs.readFileSync(file, "utf8");
+    return { ...SETTINGS_DEFAULTS, ...JSON.parse(raw) };
   } catch {
-    parsed = { ...SETTINGS_DEFAULTS };
+    return { ...SETTINGS_DEFAULTS };
   }
-  if (settingsCacheEnabled()) settingsCache = parsed;
-  return parsed;
 }
 
 export function writeSettings(obj) {
   const file = path.join(app.getPath("userData"), "settings.json");
   writeJsonAtomic(file, obj);
-  if (settingsCacheEnabled()) settingsCache = { ...obj };
 }
 
-function readFfmpegEncoders(ffmpeg) {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(ffmpeg, ["-hide_banner", "-encoders"], { windowsHide: true });
-    let output = "";
-    let settled = false;
-    let timeout;
-    const finish = (error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeout);
-      if (error) reject(error);
-      else resolve(output);
-    };
-    const append = (chunk) => {
-      output += chunk.toString();
-    };
-    proc.stdout.on("data", append);
-    proc.stderr.on("data", append);
-    proc.once("error", finish);
-    proc.once("close", () => finish());
-    timeout = setTimeout(() => {
-      try {
-        proc.kill();
-      } catch {}
-      finish(new Error("FFmpeg encoder detection timed out"));
-    }, 15000);
+async function readFfmpegEncoders(ffmpeg) {
+  const result = await runCapturedProcess(ffmpeg, ["-hide_banner", "-encoders"], {
+    timeoutMs: 15000,
+    maxStdoutBytes: MAX_ENCODER_LIST_BYTES,
+    maxStderrBytes: MAX_ENCODER_LIST_BYTES,
+    truncateOnLimit: true,
   });
+  if (result.error) throw result.error;
+  if (result.timedOut) throw new Error("FFmpeg encoder detection timed out");
+  return `${result.stdout}${result.stderr}`;
 }
 
 async function detectHwEncoder() {

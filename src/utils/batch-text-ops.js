@@ -51,14 +51,6 @@ export function applyBatchTextOperations(
   return ops;
 }
 
-function resolvePreviewText(state, videoIdx, regionId) {
-  if (typeof state.getBatchPreviewText === "function") {
-    return String(state.getBatchPreviewText(videoIdx, regionId) ?? "");
-  }
-  const tr = state.templateRegions?.find((r) => r.id === regionId);
-  return tr?.label || "Texto de ejemplo";
-}
-
 export function buildBatchTextOperationsForPreview(state, videoIdx) {
   const { queue, templateRegions } = state;
   const item = queue[videoIdx];
@@ -68,7 +60,7 @@ export function buildBatchTextOperationsForPreview(state, videoIdx) {
     item,
     templateRegions,
     getGlobalTextStyleFromState(state),
-    (idx, regionId) => resolvePreviewText(state, idx, regionId),
+    (idx, regionId) => String(state.getCellTextForRegion?.(idx, regionId) ?? ""),
     videoIdx,
   );
 }

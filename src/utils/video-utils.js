@@ -117,18 +117,9 @@ export function drawRegionOnCanvas(canvas, videoEl, region, tool = "blur") {
   ctx.imageSmoothingQuality = "high";
   ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
   if (!region) return;
-  const c = contentRectLayout(videoEl);
-  if (!c || !videoEl.videoWidth || !videoEl.videoHeight) return;
-  const sx = c.dw / videoEl.videoWidth;
-  const sy = c.dh / videoEl.videoHeight;
-  const px = region.x * videoEl.videoWidth;
-  const py = region.y * videoEl.videoHeight;
-  const pw = region.w * videoEl.videoWidth;
-  const ph = region.h * videoEl.videoHeight;
-  const x = px * sx + c.ox;
-  const y = py * sy + c.oy;
-  const w = pw * sx;
-  const h = ph * sy;
+  const rect = regionToScreen(region, videoEl);
+  if (!rect) return;
+  const { x, y, w, h } = rect;
 
   if (tool === "crop") {
     ctx.fillStyle = "rgba(0,0,0,0.6)";

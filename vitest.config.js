@@ -17,6 +17,17 @@ export default defineConfig({
     setupFiles: ["tests/setup.js"],
     include: ["tests/**/*.test.{js,jsx}"],
     testTimeout: 20000,
+    fakeTimers: {
+      toFake: [
+        "setTimeout",
+        "clearTimeout",
+        "setInterval",
+        "clearInterval",
+        "setImmediate",
+        "clearImmediate",
+        "Date",
+      ],
+    },
     coverage: {
       provider: "v8",
       include: ["src/**/*.{js,jsx}"],

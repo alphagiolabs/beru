@@ -3,14 +3,10 @@ import { clampRegionToVideo } from "../utils/video-utils";
 import { TEXT_ALIGNS } from "../utils/types";
 import TextLayoutControls from "./TextLayoutControls";
 import { Button } from "./ui/Button";
+import { useT } from "../i18n/useT";
 
-export default function AppliedTextEditor({
-  op,
-  video,
-  onPatch,
-  title = "Texto aplicado",
-  showContent = true,
-}) {
+export default function AppliedTextEditor({ op, video, onPatch, title, showContent = true }) {
+  const t = useT();
   if (!op || op.mode !== "text") return null;
 
   const vw = video?.width || video?.sourceWidth || 1920;
@@ -31,11 +27,11 @@ export default function AppliedTextEditor({
 
   return (
     <div className="mb-3 space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-      <div className="cap-section-title">{title}</div>
+      <div className="cap-section-title">{title || t("props.appliedText")}</div>
 
       {showContent && (
         <label>
-          <span className="cap-input-label">Contenido</span>
+          <span className="cap-input-label">{t("props.content")}</span>
           <textarea
             value={op.text || ""}
             onChange={(e) => onPatch({ text: e.target.value })}
@@ -48,7 +44,7 @@ export default function AppliedTextEditor({
 
       <div className="grid grid-cols-2 gap-2">
         <label>
-          <span className="cap-input-label">Tamaño</span>
+          <span className="cap-input-label">{t("table.size")}</span>
           <input
             type="number"
             value={op.fontSize ?? 32}
@@ -59,7 +55,7 @@ export default function AppliedTextEditor({
           />
         </label>
         <label>
-          <span className="cap-input-label">Espaciado</span>
+          <span className="cap-input-label">{t("table.tracking")}</span>
           <input
             type="number"
             value={op.letterSpacing ?? 0}
@@ -73,7 +69,7 @@ export default function AppliedTextEditor({
       </div>
 
       <div>
-        <span className="cap-input-label">Alineación</span>
+        <span className="cap-input-label">{t("props.alignment")}</span>
         <div className="grid grid-cols-3 gap-1">
           {TEXT_ALIGNS.map((a) => {
             const active = (op.textAlign || "left") === a.value;
@@ -94,7 +90,7 @@ export default function AppliedTextEditor({
                       }
                     : {}
                 }
-                title={`Alinear ${a.value}`}
+                title={t("props.alignTo", { side: t(`position.${a.value}`) })}
               >
                 {a.value === "left" && <AlignLeft size={12} />}
                 {a.value === "center" && <AlignCenter size={12} />}
@@ -119,7 +115,7 @@ export default function AppliedTextEditor({
 
       <div className="border-t pt-2" style={{ borderColor: "var(--border)" }}>
         <div className="flex items-center justify-between mb-1.5">
-          <span className="cap-input-label !mb-0">Cuadro de texto</span>
+          <span className="cap-input-label !mb-0">{t("props.textBox")}</span>
           <span className="text-[9px] font-mono" style={{ color: "var(--text-dim)" }}>
             {Math.round(region.w * vw)}×{Math.round(region.h * vh)} px
           </span>

@@ -5,9 +5,17 @@ import { PET_SCALE_MAX, PET_SCALE_MIN } from "../../../stores/slices/petSlice";
 import { useT } from "../../../i18n/useT";
 import PetPreviewSprite from "../components/PetPreviewSprite.jsx";
 import { petStates } from "../utils/pet-states.js";
+import { PET_MOVEMENT_MODES } from "../../../utils/types.js";
+import { storeErrorText } from "../../../utils/store-errors.js";
+import { Select } from "../../../components/ui/select";
 
 const PAGE_SIZE = 36;
-const CATEGORIES = ["Todos", "Character", "Creature", "Object"];
+const CATEGORIES = [
+  { value: "all", labelKey: "settings.petdex.categoryAll" },
+  { value: "Character", labelKey: "settings.petdex.categoryCharacter" },
+  { value: "Creature", labelKey: "settings.petdex.categoryCreature" },
+  { value: "Object", labelKey: "settings.petdex.categoryObject" },
+];
 
 function PetCard({ pet, isInstalled, isActive, isProcessing, onSelect }) {
   return (
@@ -57,6 +65,7 @@ export default function PetdexPanel() {
   const petScale = useEditorStore((s) => s.petScale);
   const petOpacity = useEditorStore((s) => s.petOpacity);
   const petMovement = useEditorStore((s) => s.petMovement);
+  const petManifest = useEditorStore((s) => s.petManifest);
   const petManifestLoading = useEditorStore((s) => s.petManifestLoading);
   const petInstalled = useEditorStore((s) => s.petInstalled);
   const petInstalledLoading = useEditorStore((s) => s.petInstalledLoading);
@@ -71,14 +80,14 @@ export default function PetdexPanel() {
   const getGalleryPets = useEditorStore((s) => s.getGalleryPets);
 
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("Todos");
+  const [category, setCategory] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   const galleryLoading = petManifestLoading || petInstalledLoading;
 
   const galleryPets = useMemo(
     () => getGalleryPets(),
-    [getGalleryPets, petInstalled, petManifestLoading],
+    [getGalleryPets, petManifest, petInstalled, petManifestLoading],
   );
   const galleryTotal = galleryPets.length;
 
@@ -89,7 +98,7 @@ export default function PetdexPanel() {
 
   const filteredPets = useMemo(() => {
     let list = galleryPets;
-    if (category !== "Todos") {
+    if (category !== "all") {
       list = list.filter((p) => p.kind?.toLowerCase() === category.toLowerCase());
     }
     const needle = query.trim().toLowerCase();
@@ -129,14 +138,20 @@ export default function PetdexPanel() {
       if (!installedSlugs.has(pet.slug)) {
         const res = await installPetEntry(pet);
         if (!res.ok) {
-          showToast({ kind: "err", text: res.error || t("settings.petdex.installFailed") });
+          showToast({
+            kind: "err",
+            text: storeErrorText(t, res, "settings.petdex.installFailed"),
+          });
         }
         return;
       }
 
       const res = await selectPet(pet.slug);
       if (!res.ok) {
-        showToast({ kind: "err", text: res.error || t("settings.petdex.selectFailed") });
+        showToast({
+          kind: "err",
+          text: storeErrorText(t, res, "settings.petdex.selectFailed"),
+        });
       }
     },
     [installedSlugs, installPetEntry, selectPet, petInstallingSlug, showToast, t],
@@ -150,21 +165,25 @@ export default function PetdexPanel() {
       <div className="settings-petdex-header">
         <div className="settings-petdex-header-left">
           <label className="settings-petdex-toggle-label">
-            <span className="settings-petdex-label-text">Activa</span>
+            <span className="settings-petdex-label-text">{t("settings.petdex.enabled")}</span>
             <button
               type="button"
               className={`settings-petdex-switch ${petEnabled ? "is-active" : ""}`}
               onClick={() => setPetEnabled(!petEnabled)}
               disabled={!petActiveSlug}
+              role="switch"
+              aria-checked={petEnabled}
+              aria-label={t("settings.petdex.enabled")}
             >
               <div className="settings-petdex-switch-thumb" />
             </button>
           </label>
 
           <div className="settings-petdex-slider-group">
-            <span className="settings-petdex-label-text">ESCALA</span>
+            <span className="settings-petdex-label-text">{t("settings.petdex.scale")}</span>
             <input
               type="range"
+              aria-label={t("settings.petdex.scale")}
               min={PET_SCALE_MIN}
               max={PET_SCALE_MAX}
               step={0.05}
@@ -176,15 +195,16 @@ export default function PetdexPanel() {
           </div>
 
           <div className="settings-petdex-slider-group">
-            <span className="settings-petdex-label-text">OPACIDAD</span>
+            <span className="settings-petdex-label-text">{t("settings.petdex.opacity")}</span>
             <input
               type="range"
+              aria-label={t("settings.petdex.opacity")}
               min={0.1}
               max={1.0}
               step={0.05}
               value={petOpacity}
               onChange={(e) => setPetOpacity(Number(e.target.value))}
-              className="settings-petdex-slider opacity-slider"
+              className="settings-petdex-slider"
             />
             <span className="settings-petdex-val-text">{Math.round(petOpacity * 100)}%</span>
           </div>
@@ -192,26 +212,25 @@ export default function PetdexPanel() {
 
         <div className="settings-petdex-header-right">
           <div className="settings-petdex-mov-group">
-            <span className="settings-petdex-label-text">MOV.</span>
-            <select
-              className="settings-petdex-mov-select"
+            <span className="settings-petdex-label-text">{t("settings.petdex.movement")}</span>
+            <Select
+              size="sm"
               value={petMovement}
-              onChange={(e) => setPetMovement(e.target.value)}
-            >
-              <option value="fijo">Fijo</option>
-              <option value="caminar">Caminar</option>
-              {petStates
-                .filter((s) => !["idle", "running-left", "running-right", "running"].includes(s.id))
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-            </select>
+              onValueChange={setPetMovement}
+              aria-label={t("settings.petdex.movement")}
+              options={[
+                ...PET_MOVEMENT_MODES.map((m) => ({ value: m.id, label: t(m.labelKey) })),
+                ...petStates
+                  .filter(
+                    (s) => !["idle", "running-left", "running-right", "running"].includes(s.id),
+                  )
+                  .map((s) => ({ value: s.id, label: t(s.labelKey) })),
+              ]}
+            />
           </div>
 
           <div className="settings-petdex-sync-badge">
-            <Check size={14} className="sync-icon" /> Sincronizado
+            <Check size={14} className="sync-icon" /> {t("settings.petdex.synced")}
           </div>
         </div>
       </div>
@@ -221,7 +240,8 @@ export default function PetdexPanel() {
           <Search size={16} />
           <input
             type="text"
-            placeholder="Buscar mascota..."
+            placeholder={t("settings.petdex.searchGallery")}
+            aria-label={t("settings.petdex.searchGallery")}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
@@ -233,14 +253,15 @@ export default function PetdexPanel() {
         <div className="settings-petdex-filters">
           {CATEGORIES.map((cat) => (
             <button
-              key={cat}
-              className={`settings-petdex-filter-btn ${category === cat ? "is-active" : ""}`}
+              key={cat.value}
+              className={`settings-petdex-filter-btn ${category === cat.value ? "is-active" : ""}`}
+              aria-pressed={category === cat.value}
               onClick={() => {
-                setCategory(cat);
+                setCategory(cat.value);
                 setCurrentPage(1);
               }}
             >
-              {cat}
+              {t(cat.labelKey)}
             </button>
           ))}
         </div>
@@ -251,11 +272,12 @@ export default function PetdexPanel() {
             onClick={handleRefreshGallery}
             disabled={galleryLoading}
             title={t("settings.petdex.retryGallery")}
+            aria-label={t("settings.petdex.retryGallery")}
           >
             <RefreshCw size={14} className={galleryLoading ? "animate-spin" : ""} />
           </button>
           <span className="settings-petdex-total-text">
-            {galleryTotal}/{galleryTotal}
+            {filteredPets.length}/{galleryTotal}
           </span>
         </div>
       </div>
@@ -292,7 +314,7 @@ export default function PetdexPanel() {
                 remoteSrc={activePetObj.spritesheetUrl}
                 installed={installedSlugs.has(activePetObj.slug)}
                 label={activePetName}
-                scale={0.4}
+                scale={0.11}
               />
             </div>
           )}
@@ -307,6 +329,7 @@ export default function PetdexPanel() {
           <button
             className="settings-petdex-page-btn"
             disabled={safePage <= 1}
+            aria-label={t("settings.petdex.previousPage")}
             onClick={() => setCurrentPage(safePage - 1)}
           >
             <ChevronLeft size={16} />
@@ -317,6 +340,7 @@ export default function PetdexPanel() {
           <button
             className="settings-petdex-page-btn"
             disabled={safePage >= totalPages}
+            aria-label={t("settings.petdex.nextPage")}
             onClick={() => setCurrentPage(safePage + 1)}
           >
             <ChevronRight size={16} />

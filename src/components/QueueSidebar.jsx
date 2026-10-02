@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef, memo, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, memo, useCallback } from "react";
 import {
   Plus,
   Trash2,
   FileVideo,
   Edit3,
-  MoreVertical,
+  MoreHorizontal,
   Play,
   RotateCw,
   FolderOpen,
@@ -34,7 +34,7 @@ const Thumbnail = memo(function Thumbnail({ value }) {
   if (value) {
     return (
       <div
-        className="w-[44px] h-[25px] rounded-sm overflow-hidden flex-shrink-0"
+        className="w-[44px] h-[25px] rounded-[5px] overflow-hidden flex-shrink-0"
         style={{ background: "#000" }}
       >
         <img src={value} alt="" className="w-full h-full object-cover" draggable={false} />
@@ -43,7 +43,7 @@ const Thumbnail = memo(function Thumbnail({ value }) {
   }
   return (
     <div
-      className="w-[44px] h-[25px] rounded-sm flex items-center justify-center flex-shrink-0"
+      className="w-[44px] h-[25px] rounded-[5px] flex items-center justify-center flex-shrink-0"
       style={{ background: "var(--bg-app)", color: "var(--text-dim)" }}
     >
       <FileVideo size={12} />
@@ -51,18 +51,25 @@ const Thumbnail = memo(function Thumbnail({ value }) {
   );
 });
 
+const opCountsCache = new WeakMap();
+
 function deriveRow(item, idx, excelPath, excelMatchStatus) {
-  let textOps = 0;
-  let otherOps = 0;
-  const ops = item.operations;
-  if (ops?.length > 0) {
-    for (let i = 0; i < ops.length; i++) {
-      if (ops[i].mode === "text") textOps++;
-      else otherOps++;
+  let counts = opCountsCache.get(item);
+  if (!counts) {
+    let textOps = 0;
+    let otherOps = 0;
+    const ops = item.operations;
+    if (ops?.length > 0) {
+      for (let i = 0; i < ops.length; i++) {
+        if (ops[i].mode === "text") textOps++;
+        else otherOps++;
+      }
     }
+    counts = { textOps, otherOps };
+    opCountsCache.set(item, counts);
   }
   const matchStatus = excelPath ? excelMatchStatus[idx] || "unmatched" : "none";
-  return { textOps, otherOps, matchStatus };
+  return { ...counts, matchStatus };
 }
 
 const QueueRow = memo(
@@ -102,23 +109,19 @@ const QueueRow = memo(
         role="button"
         tabIndex={0}
         aria-pressed={isSelected}
-        className="flex items-center gap-2 px-3 py-2 border-b cursor-pointer transition-colors group relative"
-        style={{
-          borderColor: "var(--border)",
-          background: isSelected ? "var(--bg-elevated)" : "transparent",
-        }}
+        data-index={idx}
+        className={`queue-row group${isSelected ? " is-selected" : ""}`}
       >
-        <Thumbnail value={thumbnail} />
-        <div
-          className="w-2 h-2 rounded-full flex-shrink-0"
-          style={{ background: STATUS_COLORS[item.status] }}
-        />
+        <div className="relative flex-shrink-0">
+          <Thumbnail value={thumbnail} />
+          {item.status !== "idle" && (
+            <span className="queue-row-status" style={{ background: STATUS_COLORS[item.status] }} />
+          )}
+        </div>
         {showMatch && <MatchBadge status={matchStatus} size={9} />}
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-medium truncate" style={{ color: "var(--text-primary)" }}>
-            {item.filename}
-          </div>
-          <div className="text-[10px] flex gap-2" style={{ color: "var(--text-dim)" }}>
+          <div className="queue-row-name truncate">{item.filename}</div>
+          <div className="queue-row-meta">
             {item.width > 0 && (
               <span>
                 {item.width}×{item.height}
@@ -133,8 +136,8 @@ const QueueRow = memo(
               {textOps > 0 && (
                 <span
                   className="text-[9px] px-1 py-0.5 rounded font-mono"
-                  style={{ background: "#a855f722", color: "#a855f7" }}
-                  title="Texto del batch"
+                  style={{ background: "var(--bg-elevated)", color: "var(--text-purple)" }}
+                  title={t("queue.batchTextOps")}
                 >
                   T{textOps}
                 </span>
@@ -142,7 +145,7 @@ const QueueRow = memo(
               {otherOps > 0 && (
                 <span
                   className="text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-mono"
-                  style={{ background: "var(--bg-app)", color: "var(--accent)" }}
+                  style={{ background: "var(--bg-app)", color: "var(--text-accent)" }}
                 >
                   {otherOps}
                 </span>
@@ -150,7 +153,11 @@ const QueueRow = memo(
             </>
           )}
           {isTemplate && (
-            <Edit3 size={12} style={{ color: "#a855f7" }} title={t("queue.templateBadge")} />
+            <Edit3
+              size={12}
+              style={{ color: "var(--text-purple)" }}
+              title={t("queue.templateBadge")}
+            />
           )}
           <button
             type="button"
@@ -162,7 +169,7 @@ const QueueRow = memo(
             style={{ color: "var(--text-dim)" }}
             title={t("queue.contextMenu")}
           >
-            <MoreVertical size={12} />
+            <MoreHorizontal size={14} />
           </button>
         </div>
 
@@ -188,7 +195,7 @@ const QueueRow = memo(
                 onClick={() => onProcessThis(idx)}
                 disabled={isProcessing}
                 className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
-                style={{ color: "var(--accent)" }}
+                style={{ color: "var(--text-accent)" }}
               >
                 <RotateCw size={11} /> {t("queue.menu.retry")}
               </button>
@@ -226,7 +233,7 @@ const QueueRow = memo(
               onClick={() => onRemove(idx)}
               disabled={isProcessing}
               className="w-full text-left px-3 py-1.5 text-[11px] flex items-center gap-2 hover:opacity-80 disabled:opacity-40"
-              style={{ color: "#f43f5e" }}
+              style={{ color: "var(--text-rose)" }}
             >
               <Trash2 size={11} /> {t("queue.menu.removeVideo")}
             </button>
@@ -285,6 +292,25 @@ export default function QueueSidebar() {
     estimateSize: () => 49,
     overscan: 8,
   });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+
+  useEffect(() => {
+    const root = listParentRef.current;
+    if (!root || typeof IntersectionObserver !== "function") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const q = get().queue;
+        const paths = entries
+          .filter((entry) => entry.isIntersecting)
+          .map((entry) => q[Number(entry.target.dataset.index)]?.path)
+          .filter(Boolean);
+        void get().prioritizeThumbnails(paths);
+      },
+      { root, rootMargin: "98px 0px" },
+    );
+    root.querySelectorAll(".queue-row").forEach((row) => observer.observe(row));
+    return () => observer.disconnect();
+  }, [queue.length, virtualRows, get]);
 
   useEffect(() => {
     if (openMenuIdx < 0) return;
@@ -322,7 +348,10 @@ export default function QueueSidebar() {
         return;
       }
       const res = await get().processSingle(idx);
-      if (res.ok) {
+      if (res.cancelled || res.superseded || res.notified) return;
+      if (res.code === "already_processing") {
+        showToast({ kind: "warn", text: t("queue.processingBusy") });
+      } else if (res.ok) {
         showToast({ kind: "ok", text: t("queue.renderComplete") });
       } else {
         showToast({
@@ -338,9 +367,14 @@ export default function QueueSidebar() {
     (idx) => {
       setOpenMenuIdx(-1);
       const out = get().outputPathFor(get().queue[idx]);
-      if (out) api?.showItemInFolder(out);
+      if (!out) return;
+      void api?.showItemInFolder(out).then((res) => {
+        if (res && res.success === false) {
+          showToast({ kind: "err", text: res.error || t("queue.revealFailed") });
+        }
+      });
     },
-    [get],
+    [get, showToast, t],
   );
 
   const handleOpenOutputDir = useCallback(() => {
@@ -380,58 +414,49 @@ export default function QueueSidebar() {
     menuRef.current = el;
   }, []);
 
-  const rows = useMemo(() => {
-    const out = new Array(queue.length);
-    for (let i = 0; i < queue.length; i++) {
-      out[i] = deriveRow(queue[i], i, excelPath, excelMatchStatus);
-    }
-    return out;
-  }, [queue, excelPath, excelMatchStatus]);
-
   const hasOutputDir = Boolean(outputDir);
 
   return (
     <aside
       className="queue-sidebar w-[220px] flex-shrink-0 flex flex-col border-r relative"
       aria-labelledby="queue-title"
-      style={{ background: "var(--bg-surface)", borderColor: "var(--border)" }}
+      style={{
+        background: "var(--bg-surface)",
+        borderColor: "color-mix(in srgb, var(--border) 65%, transparent)",
+      }}
     >
-      <div
-        className="p-3 border-b flex items-center justify-between"
-        style={{ borderColor: "var(--border)" }}
-      >
-        <h2
-          id="queue-title"
-          className="text-[10px] font-semibold tracking-wider uppercase"
-          style={{ color: "var(--text-dim)" }}
-        >
-          {t("queue.title")} ({queue.length})
+      <div className="queue-header">
+        <h2 id="queue-title" className="queue-title">
+          {t("queue.title")}
+          <span className="queue-count">{queue.length}</span>
         </h2>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <Button
             type="button"
             onClick={handleClear}
             disabled={queue.length === 0 || isProcessing}
-            variant="secondary"
+            variant="tertiary"
             size="icon"
+            className="queue-header-btn"
             title={t("queue.clearQueue")}
           >
-            <Trash2 size={14} />
+            <Trash2 size={14} strokeWidth={1.5} />
           </Button>
           <Button
             type="button"
             onClick={handleAdd}
             disabled={isProcessing}
-            variant="secondary"
+            variant="tertiary"
             size="icon"
+            className="queue-header-btn"
             title={t("queue.addVideos")}
           >
-            <Plus size={14} />
+            <Plus size={15} strokeWidth={1.5} />
           </Button>
         </div>
       </div>
 
-      <div ref={listParentRef} className="flex flex-1 min-h-0 flex-col overflow-y-auto">
+      <div ref={listParentRef} className="queue-list flex flex-1 min-h-0 flex-col overflow-y-auto">
         {queue.length === 0 ? (
           <div className="queue-empty" role="status">
             <FileVideo size={18} aria-hidden="true" />
@@ -446,11 +471,11 @@ export default function QueueSidebar() {
               position: "relative",
             }}
           >
-            {rowVirtualizer.getVirtualItems().map((vRow) => {
+            {virtualRows.map((vRow) => {
               const idx = vRow.index;
               const item = queue[idx];
-              const derived = rows[idx];
-              if (!item || !derived) return null;
+              if (!item) return null;
+              const derived = deriveRow(item, idx, excelPath, excelMatchStatus);
               return (
                 <div
                   key={item.path}
@@ -493,7 +518,7 @@ export default function QueueSidebar() {
           </div>
         ) : (
           queue.map((item, idx) => {
-            const derived = rows[idx];
+            const derived = deriveRow(item, idx, excelPath, excelMatchStatus);
             return (
               <QueueRow
                 key={item.path}

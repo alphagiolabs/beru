@@ -18,7 +18,7 @@ function readJson(path) {
 
 function run(cmd, opts = {}) {
   const label = cmd.length > 120 ? cmd.slice(0, 120) + "…" : cmd;
-  console.log(`\n❯ ${label}`);
+  console.log(`\n> ${label}`);
   try {
     const out = execSync(cmd, {
       cwd: ROOT,
@@ -46,17 +46,17 @@ function section(title) {
 }
 
 function ok(label) {
-  console.log(`  ✅ ${label}`);
+  console.log(`  [OK] ${label}`);
 }
 
 function fail(label, detail) {
-  console.log(`  ❌ ${label}`);
+  console.log(`  [FAIL] ${label}`);
   if (detail) console.log(`     ${detail}`);
   process.exit(1);
 }
 
 function skip(label) {
-  console.log(`  ⏭️  ${label}`);
+  console.log(`  [SKIP] ${label}`);
 }
 
 function getToday() {
@@ -87,7 +87,7 @@ function validateEnvironment() {
   section("1/8  Entorno");
 
   try {
-    const whoami = runCapture("gh auth status --show-token");
+    const whoami = runCapture("gh auth status");
     if (!whoami.includes("alphagiolabs")) {
       fail("gh auth", `Debe estar autenticado como alphagiolabs. Actual: ${whoami.slice(0, 80)}`);
     }
@@ -138,7 +138,7 @@ function detectVersion() {
 
   const pkg = readJson(resolve(ROOT, "package.json"));
   const version = pkg.version;
-  console.log(`  📦 package.json → v${version}`);
+  console.log(`  package.json → v${version}`);
 
   if (!/^\d+\.\d+\.\d+$/.test(version)) {
     fail("semver", `Formato inválido: ${version}`);
@@ -179,7 +179,7 @@ function validateChangelog(version) {
     );
   }
 
-  const hasDate = entry.includes("- 20"); // YYYY-MM-DD
+  const hasDate = entry.includes("- 20");
   const hasSection = /###\s+(Added|Changed|Fixed|Removed|Deprecated|Security)/.test(entry);
 
   if (!hasDate) {
@@ -192,7 +192,7 @@ function validateChangelog(version) {
     );
   }
 
-  console.log(`  📝 Entrada encontrada:\n`);
+  console.log(`  Entrada encontrada:\n`);
   console.log(`  ${entry.split("\n").slice(0, 6).join("\n  ")}`);
   if (entry.split("\n").length > 6) console.log(`  … (${entry.split("\n").length - 6} líneas más)`);
   console.log();
@@ -202,17 +202,21 @@ function validateChangelog(version) {
 function runQualityGate() {
   section("4/8  Quality Gate");
 
-  console.log("  ▶️  npm run lint…");
+  console.log("  > npm run lint…");
   run("npm run lint", { timeout: 120_000 });
   ok("lint");
 
-  console.log("  ▶️  npm run format:check…");
+  console.log("  > npm run format:check…");
   run("npm run format:check", { timeout: 60_000 });
   ok("format");
 
-  console.log("  ▶️  npm test…");
+  console.log("  > npm test…");
   run("npm test", { timeout: 300_000 });
   ok("tests");
+
+  console.log("  > npm run test:python…");
+  run("npm run test:python", { timeout: 300_000 });
+  ok("python tests");
 }
 
 function runBuild() {
@@ -223,11 +227,11 @@ function runBuild() {
     return;
   }
 
-  console.log("  ▶️  npm run build:processor…");
+  console.log("  > npm run build:processor…");
   run("npm run build:processor", { timeout: 300_000 });
   ok("processor build");
 
-  console.log("  ▶️  npm run build…");
+  console.log("  > npm run build…");
   run("npm run build", { timeout: 600_000 });
   ok("build completo");
 
@@ -241,7 +245,7 @@ function runBuild() {
     fail("Instalador .exe", `No se encontró .exe en ${distDir}`);
   }
 
-  console.log(`  📦 Instaladores encontrados:`);
+  console.log(`  Instaladores encontrados:`);
   for (const inst of installers) {
     const name = inst.replace(/\\/g, "/").split("/").pop();
     console.log(`     - ${name}`);
@@ -262,8 +266,8 @@ function createGitTag(version) {
   const lastCommit = runCapture("git log -1 --pretty=%B");
   const isShipCommit = /^(fix|feat|chore):\s*ship\s+v/i.test(lastCommit);
   if (!isShipCommit) {
-    console.log(`  ⚠️  El último commit no es un ship commit directo (es un merge PR).`);
-    console.log(`  ℹ️  Taggeando igual: el merge PR trajo el cambio de versión.`);
+    console.log(`  [!] El último commit no es un ship commit directo (es un merge PR).`);
+    console.log(`  [i] Taggeando igual: el merge PR trajo el cambio de versión.`);
   }
 
   run(`git tag ${tag}`, { timeout: 10_000 });
@@ -282,7 +286,7 @@ function pushTag(tag) {
   run(`git push origin ${tag}`, { timeout: 60_000 });
   ok(`Tag ${tag} pusheado — CI Release Pipeline activado`);
 
-  console.log(`\n  🔗 https://github.com/${REPO}/actions/workflows/ci-release.yml`);
+  console.log(`\n  https://github.com/${REPO}/actions/workflows/ci-release.yml`);
 }
 
 function createGitHubRelease(version) {
@@ -325,14 +329,14 @@ function createGitHubRelease(version) {
   run(cmd, { timeout: 120_000 });
   ok(`Release ${tag} creado en GitHub`);
 
-  console.log(`  🔗 https://github.com/${REPO}/releases/tag/${tag}`);
+  console.log(`  https://github.com/${REPO}/releases/tag/${tag}`);
 }
 
 function main() {
   console.log(`
 ╔══════════════════════════════════════════════╗
 ║        Beru Release Pipeline Loop            ║
-║        ${DRY_RUN ? "⚡ DRY RUN — no se taggea ni pushea" : "🚀 SHIP MODE — taggeando y publicando"}
+║        ${DRY_RUN ? "DRY RUN — no se taggea ni pushea" : "SHIP MODE — taggeando y publicando"}
 ╚══════════════════════════════════════════════╝
 `);
 
@@ -353,7 +357,7 @@ function main() {
     if (DRY_RUN) {
       console.log(`
 ╔══════════════════════════════════════════════╗
-║   ✅ DRY RUN COMPLETADO — todo validado     ║
+║   DRY RUN COMPLETADO — todo validado        ║
 ║   Para ejecutar el release real:             ║
 ║     node scripts/release-loop.mjs --ship     ║
 ╚══════════════════════════════════════════════╝
@@ -361,14 +365,14 @@ function main() {
     } else {
       console.log(`
 ╔══════════════════════════════════════════════╗
-║        ✅ RELEASE v${version} COMPLETADO      ║
-║        ⏱️  ${elapsed}s                         ║
-║        🔗 https://github.com/${REPO}/releases/tag/v${version}
+║        RELEASE v${version} COMPLETADO         ║
+║        Duración: ${elapsed}s                  ║
+║        https://github.com/${REPO}/releases/tag/v${version}
 ╚══════════════════════════════════════════════╝
 `);
     }
   } catch (e) {
-    console.error(`\n  💥 Error: ${e.message}`);
+    console.error(`\n  Error: ${e.message}`);
     if (e.stdout) console.error(e.stdout);
     if (e.stderr) console.error(e.stderr);
     process.exit(1);

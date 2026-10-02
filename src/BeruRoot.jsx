@@ -1,18 +1,18 @@
-import { useEffect, Suspense, lazy } from "react";
+import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import App from "./App";
 import LoginScreen from "./components/LoginScreen";
 import ErrorBoundary from "./components/ErrorBoundary";
 import ConfirmDialog from "./components/ConfirmDialog";
 import AppToast from "./components/AppToast";
+import DeferredPanel from "./components/DeferredPanel";
 import UpdatePrompt from "./components/UpdatePrompt";
 import useUpdater from "./hooks/useUpdater";
 import useEditorStore from "./stores/useEditorStore";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import { useT } from "./i18n/useT";
 import { DesktopPet, PetPaletteModal, usePetKeyboard } from "./features/pets";
-
-const SettingsModal = lazy(() => import("./components/SettingsModal"));
+import { SettingsModal } from "./components/modal-panels";
 
 const api = window.api;
 
@@ -42,6 +42,7 @@ function AuthGate() {
 }
 
 export default function BeruRoot() {
+  const t = useT();
   const initAuth = useEditorStore((s) => s.initAuth);
   const appToast = useEditorStore((s) => s.appToast);
   const clearAppToast = useEditorStore((s) => s.clearAppToast);
@@ -67,11 +68,23 @@ export default function BeruRoot() {
       <UpdatePrompt />
       <AppToast />
       <ConfirmDialog />
-      <Suspense fallback={null}>
+      <DeferredPanel
+        when={(s) => s.showSettings}
+        label={t("settings.title")}
+        onClose={() => useEditorStore.getState().setShowSettings(false)}
+      >
         <SettingsModal />
+      </DeferredPanel>
+      <DeferredPanel when={(s) => s.petEnabled || s.petPoppedOut}>
         <DesktopPet />
+      </DeferredPanel>
+      <DeferredPanel
+        when={(s) => s.showPetPalette}
+        label={t("settings.petdex.paletteTitle")}
+        onClose={() => useEditorStore.getState().setShowPetPalette(false)}
+      >
         <PetPaletteModal />
-      </Suspense>
+      </DeferredPanel>
     </ErrorBoundary>
   );
 }

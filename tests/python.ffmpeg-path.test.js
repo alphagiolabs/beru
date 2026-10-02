@@ -4,7 +4,7 @@ import { writeFileSync, unlinkSync } from "fs";
 import path from "path";
 import os from "os";
 
-const PY = process.platform === "win32" ? "python" : "python3";
+const PY = "python";
 
 const hasPython = (() => {
   try {
@@ -20,6 +20,50 @@ const describeIfPython = hasPython ? describe : describe.skip;
 describeIfPython("python/processor.py ffmpeg path resolution", () => {
   const PY_CODE_PREFIX =
     "import sys; sys.stdout.reconfigure(encoding='utf-8'); sys.path.insert(0, 'python'); ";
+
+  it.each(["test_delogo", "test_delogo_robust", "test_delogo_seamless"])(
+    "%s uses the discovered FFmpeg binary instead of assuming a Windows filename",
+    (moduleName) => {
+      const probe = path.join(os.tmpdir(), `beru-ci-ffmpeg-${Date.now()}.bin`);
+      writeFileSync(probe, "");
+      try {
+        const result = spawnSync(
+          PY,
+          ["-c", `${PY_CODE_PREFIX}import ${moduleName}; print(${moduleName}.FFMPEG)`],
+          { env: { ...process.env, BERU_FFMPEG: probe }, encoding: "utf8" },
+        );
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.stdout.trim()).toBe(probe);
+      } finally {
+        unlinkSync(probe);
+      }
+    },
+  );
+
+  it("applies the measured QSV admission budget in the actual batch policy", () => {
+    const result = spawnSync(
+      PY,
+      [
+        "-c",
+        PY_CODE_PREFIX +
+          `
+import json, processor, capacity
+job = {"source_width": 3840, "source_height": 2160, "video_codec": "hevc", "pix_fmt": "yuv420p10le"}
+caps = []
+for available in (2600, 4000):
+    capacity._get_available_ram_mb = lambda: available
+    caps.append(processor.resolve_max_workers("h264_qsv", 2, 3840 * 2160, has_video_filters=True, encode_profile="balanced", jobs=[job]))
+print(json.dumps(caps))
+`,
+      ],
+      {
+        env: { ...process.env, BERU_WORKERS: "0", BERU_WORKERS_MODE: "balanced" },
+        encoding: "utf8",
+      },
+    );
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([1, 2]);
+  });
 
   it("respects BERU_FFMPEG env var (overrides the 'ffmpeg' default)", () => {
     const probe = path.join(os.tmpdir(), `beru-test-ffmpeg-${Date.now()}.bin`);
@@ -130,9 +174,7 @@ print(json.dumps({"ok": ok, "cmd": captured[0]}))
     const code = `
 import processor
 processor.get_system_fonts = lambda: {"arial": (r"C:\\Windows\\Fonts\\arial.ttf", "arial")}
-# The fontfile existence check (os.path.isfile) is platform-dependent: the
-# mocked Windows font paths do not exist on the Ubuntu CI runner, so stub it
-# out to test the drawtext formatting logic independently of the filesystem.
+# Synthetic font paths need no installed font files.
 processor.os.path.isfile = lambda p: True
 print(processor.build_drawtext({
     "mode": "text",
@@ -415,8 +457,7 @@ processor.get_system_fonts = lambda: {
     "arial italic": (r"C:\\Windows\\Fonts\\ariali.ttf", "ariali"),
     "arial bold italic": (r"C:\\Windows\\Fonts\\arialbi.ttf", "arialbi"),
 }
-# Stub the existence check so the mocked Windows font paths resolve on any
-# platform (the CI runner is Ubuntu and has no C:\\Windows\\Fonts).
+# Keep synthetic font paths independent of installed Windows fonts.
 processor.os.path.isfile = lambda p: True
 processor._DRAWTEXT_OPTIONS_CACHE = set()
 processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
@@ -582,7 +623,7 @@ print(json.dumps({
     });
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout.trim())).toEqual({
-      filtered_quality: 3,
+      filtered_quality: 5,
       no_filters: 5,
       software_filtered_quality: 2,
       filtered_uquality: 2,
@@ -625,7 +666,7 @@ print(json.dumps({
     }
   });
 
-  it("falls back to 'ffmpeg' / 'ffprobe' string when env vars are absent", () => {
+  it("uses Windows executable names when env vars are absent", () => {
     const env = { ...process.env };
     delete env.BERU_FFMPEG;
     delete env.BERU_FFPROBE;
@@ -639,7 +680,7 @@ print(json.dumps({
       console.error("STDERR:", r.stderr);
     }
     expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toBe("ffmpeg ffprobe");
+    expect(r.stdout.trim()).toBe("ffmpeg.exe ffprobe.exe");
   });
 
   it("retries failed GPU jobs with fewer workers when BERU_RETRY_FAILED=1", () => {
@@ -657,7 +698,7 @@ def fake_process(idx, job, ffmpeg_path, **kwargs):
         return {"index": job_id, "status": "failed", "error": "nvenc init failed"}
     return {"index": job_id, "status": "succeeded"}
 
-processor.detect_hw_encoder = lambda _ffmpeg: "h264_nvenc"
+processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: "h264_nvenc"
 processor.get_system_fonts = lambda: {}
 processor._process_one = fake_process
 os.environ["BERU_RETRY_FAILED"] = "1"
@@ -680,27 +721,33 @@ print(json.dumps({"calls": calls["n"], "result": result}))
     const code = `
 import json
 import os
+import tempfile
+from pathlib import Path
 import processor
 
 calls = []
 
-def fake_process(idx, job, ffmpeg_path, **kwargs):
-    workers = processor._BATCH_ACTIVE_WORKERS
-    calls.append(workers)
-    job_id = job.get("id", idx)
-    if workers > 1:
-        return {"index": job_id, "status": "failed", "error": "x264 [error]: malloc of size 11619264 failed"}
-    return {"index": job_id, "status": "succeeded"}
+def fake_run(cmd, **kwargs):
+    threads = int(cmd[cmd.index("-threads") + 1])
+    calls.append(threads)
+    if threads == 2:
+        return False, "x264 [error]: malloc of size 11619264 failed"
+    return True, None
 
-processor.detect_hw_encoder = lambda _ffmpeg: "h264_nvenc"
-processor.get_system_fonts = lambda: {}
-processor._process_one = fake_process
+processor.os.cpu_count = lambda: 8
+processor._run_ffmpeg = fake_run
 os.environ["BERU_RETRY_FAILED"] = "1"
-jobs = [
-    {"id": i, "input_path": f"C:/tmp/{i}.mp4", "output_path": f"C:/tmp/out-{i}.mp4"}
-    for i in range(4)
-]
-result = processor.process_jobs(jobs, "ffmpeg", max_workers=4)
+with tempfile.TemporaryDirectory() as temp:
+    source = Path(temp) / "in.mp4"
+    source.write_bytes(b"video fixture")
+    jobs = [{
+        "id": i, "input_path": str(source),
+        "output_path": str(Path(temp) / f"out-{i}.mp4"),
+        "source_width": 64, "source_height": 64, "video_duration": 1,
+        "encode_profile": "uquality",
+        "operations": [{"mode": "blur", "region": {"x": 8, "y": 8, "w": 32, "h": 32}}],
+    } for i in range(4)]
+    result = processor.process_jobs(jobs, "ffmpeg", max_workers=4, hw_encoder=None)
 print(json.dumps({"calls": calls, "result": result}))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
@@ -709,8 +756,8 @@ print(json.dumps({"calls": calls, "result": result}))
     });
     expect(r.status).toBe(0);
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
-    expect(parsed.calls.slice(0, 4)).toEqual([4, 4, 4, 4]);
-    expect(parsed.calls.slice(4)).toEqual([1, 1, 1, 1]);
+    expect(parsed.calls.slice(0, 4)).toEqual([2, 2, 2, 2]);
+    expect(parsed.calls.slice(4)).toEqual([8, 8, 8, 8]);
     expect(parsed.result.succeeded).toBe(4);
     expect(parsed.result.failed).toBe(0);
   });
@@ -734,7 +781,7 @@ def fake_process(idx, job, ffmpeg_path, **kwargs):
         active["n"] -= 1
     return {"index": job.get("id", idx), "status": "succeeded"}
 
-processor.detect_hw_encoder = lambda _ffmpeg: None
+processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: None
 processor.get_system_fonts = lambda: {}
 processor._process_one = fake_process
 jobs = [{"id": i, "input_path": f"C:/tmp/{i}.mp4"} for i in range(8)]
@@ -799,7 +846,7 @@ inp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
 inp.close()
 out = inp.name + ".out.mp4"
 
-def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
+def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
     with open(out, "wb") as f:
         f.write(b"partial")
     return False, "x264 [error]: malloc of size 11619264 failed"
@@ -972,12 +1019,12 @@ tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
 tmp.close()
 calls = []
 
-def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
+def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
     calls.append(cmd)
     return True, None
 
 processor._run_ffmpeg = fake_run
-processor.job_video_info = lambda job, input_path: {
+processor.job_video_info = lambda job, input_path, **kwargs: {
     "width": 1920,
     "height": 1080,
     "duration": 1.0,
@@ -1125,6 +1172,44 @@ print(json.dumps({"calls": calls["n"], "info": info}, sort_keys=True))
     expect(parsed.info.audio_codec).toBe("aac");
   });
 
+  it("trusts manifest metadata marked as probed even when duration is zero", () => {
+    const code = `
+import json
+import processor
+
+def fail_probe(_path):
+    raise AssertionError("ffprobe should not be called")
+
+processor.ffprobe = fail_probe
+info = processor.job_video_info({
+    "source_width": 1280,
+    "source_height": 720,
+    "video_duration": 0,
+    "video_info_probed": True,
+    "pix_fmt": "yuv420p",
+    "frame_rate": 25,
+    "audio_codec": "aac",
+    "audio_channels": 2,
+    "video_codec": "h264",
+}, "C:/tmp/in.mp4")
+print(json.dumps(info, sort_keys=True))
+`;
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
+      encoding: "utf8",
+      timeout: 10000,
+    });
+    if (r.status !== 0) {
+      console.error("STDOUT:", r.stdout);
+      console.error("STDERR:", r.stderr);
+    }
+    expect(r.status).toBe(0);
+    const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
+    expect(parsed.width).toBe(1280);
+    expect(parsed.height).toBe(720);
+    expect(parsed.duration).toBe(0);
+    expect(parsed.video_codec).toBe("h264");
+  });
+
   it("retries generic hardware filter failures with libx264", () => {
     const code = `
 import json
@@ -1136,16 +1221,15 @@ tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
 tmp.close()
 calls = []
 
-def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0):
+def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
     calls.append(cmd)
     if "libx264" in cmd:
         return True, None
-    # "operation not permitted" is a permission error, not GPU. See batch_errors.py.
     return False, "Error while filtering: h264_nvenc: encoder init failed"
 
-processor.detect_hw_encoder = lambda _ffmpeg: "h264_nvenc"
+processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: "h264_nvenc"
 processor.get_system_fonts = lambda: {}
-processor.job_video_info = lambda job, input_path: {
+processor.job_video_info = lambda job, input_path, **kwargs: {
     "width": 320,
     "height": 180,
     "duration": 1.0,
@@ -1214,7 +1298,7 @@ ffprobe.close()
 
 seen = {}
 
-def fake_process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None):
+def fake_process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None, ctx=None):
     seen["jobs"] = jobs
     seen["ffmpeg_path"] = ffmpeg_path
     seen["hw_encoder"] = hw_encoder
@@ -1229,8 +1313,8 @@ try:
             "operations": [{"mode": "blur"}],
         }], f)
     processor.find_ffmpeg = lambda: ffmpeg.name
-    processor.find_ffprobe = lambda _ffmpeg: ffprobe.name
-    processor.detect_hw_encoder = lambda _ffmpeg, force_test=False: "h264_nvenc" if force_test else None
+    processor.find_ffprobe = lambda _ffmpeg, **kwargs: ffprobe.name
+    processor.detect_hw_encoder = lambda _ffmpeg, force_test=False, **kwargs: "h264_nvenc" if force_test else None
     processor.get_system_fonts = lambda: {}
     processor.process_jobs = fake_process_jobs
     sys.argv = ["processor.py", jobs_path]
@@ -1275,7 +1359,7 @@ print(len(buf), len(buf.join()))
     const code = `
 import json
 import processor
-processor.detect_hw_encoder = lambda _ffmpeg: None
+processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: None
 processor.get_system_fonts = lambda: {}
 processor._process_one = lambda idx, job, ffmpeg_path, **kwargs: {"index": job.get("id", idx), "status": "succeeded"}
 result = processor.process_jobs([{"id": 7, "input_path": "C:/tmp/a.mp4"}], "ffmpeg", max_workers=1)
@@ -1293,7 +1377,7 @@ print("RESULT", json.dumps(result, sort_keys=True))
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('"file": "a.mp4"');
     expect(r.stdout).toContain(
-      'RESULT {"cancelled": 0, "failed": 0, "succeeded": 1, "total": 1, "workers": 1}',
+      'RESULT {"cancelled": 0, "copy_workers": 1, "failed": 0, "succeeded": 1, "total": 1, "workers": 1}',
     );
   });
 });

@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   SESSION_PERSIST_KEY,
+  SESSION_PERSIST_KEYS,
   buildSessionSnapshot,
+  hasPersistedFieldChanged,
   parseSessionSnapshot,
   writeSessionSnapshotToStorage,
   resetSessionWriteCache,
@@ -159,5 +161,15 @@ describe("session-persist", () => {
       imagePath: "C:\\wm\\logo.png",
       imageDataUrl: "",
     });
+  });
+
+  it("watches every field the snapshot writes (trigger covers snapshot)", () => {
+    const snapshot = buildSessionSnapshot({ queue: [{ path: "C:\\v\\a.mp4" }] });
+    for (const key of Object.keys(snapshot)) {
+      if (key === "version") continue;
+      expect(SESSION_PERSIST_KEYS).toContain(key);
+      expect(hasPersistedFieldChanged({ [key]: {} }, {})).toBe(true);
+    }
+    expect(hasPersistedFieldChanged({ sidebarMode: "a" }, { sidebarMode: "b" })).toBe(false);
   });
 });

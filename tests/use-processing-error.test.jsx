@@ -22,18 +22,6 @@ describe("useProcessing fatal process:error", () => {
     root = createRoot(document.getElementById("root"));
     useEditorStore.setState({
       isProcessing: true,
-      activeExecutionId: "run-1",
-      executionHistory: [
-        {
-          id: "run-1",
-          kind: "batch",
-          startedAt: Date.now(),
-          endedAt: null,
-          jobCount: 1,
-          lines: [],
-          summary: null,
-        },
-      ],
       queue: [
         {
           path: "C:\\videos\\a.mp4",
@@ -61,7 +49,7 @@ describe("useProcessing fatal process:error", () => {
     }
   });
 
-  it("aborts in-flight rows and finalizes the active execution", () => {
+  it("aborts in-flight rows and surfaces the error", () => {
     const api = {
       onError: (cb) => {
         onErrorHandler = cb;
@@ -79,7 +67,6 @@ describe("useProcessing fatal process:error", () => {
 
     const state = useEditorStore.getState();
     expect(state.isProcessing).toBe(false);
-    expect(state.activeExecutionId).toBeNull();
     expect(state.queue[0].status).toBe("idle");
     expect(state.jobProgress).toEqual({});
   });

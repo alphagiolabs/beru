@@ -1,10 +1,7 @@
-// ffprobe emits the string "N/A" for fields it cannot measure. float()/int() on
-// that value raises and used to discard an otherwise valid probe.
-
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "child_process";
 
-const PY = process.platform === "win32" ? "python" : "python3";
+const PY = "python";
 const hasPython = (() => {
   try {
     const r = spawnSync(PY, ["--version"], { encoding: "utf8" });

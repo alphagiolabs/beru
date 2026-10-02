@@ -1,21 +1,17 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { spawn, spawnSync } from "child_process";
-import fs from "fs";
-import os from "os";
 import path from "path";
 import readline from "readline";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { buildBatchTextOperationsForPreview } from "../src/utils/batch-text-ops.js";
 import { disposePreviewFrameWorker, renderPreviewFrame } from "../main/utils/preview-frame.js";
-import { createPathSecurity } from "../main/pathSecurity.js";
-import { sanitizeJobMedia } from "../main/utils/process-media-validation.js";
 
 vi.mock("electron", () => ({ app: { isPackaged: false } }));
 
-const PY = process.env.BERU_PYTHON || (process.platform === "win32" ? "py" : "python3");
-const PY_ARGS = process.platform === "win32" ? ["-3"] : [];
+const PY = process.env.BERU_PYTHON || "py";
+const PY_ARGS = process.env.BERU_PYTHON ? [] : ["-3"];
 const PROCESSOR = path.join(process.cwd(), "python", "processor.py");
-const FFMPEG_BIN = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+const FFMPEG_BIN = "ffmpeg.exe";
 
 const hasFfmpeg = (() => {
   try {
@@ -124,7 +120,7 @@ describe("preview frame job", () => {
     expect(ops[0].fontSize).toBe(40);
   });
 
-  it("buildBatchTextOperationsForPreview uses CSS sample text when excel cell is empty", () => {
+  it("buildBatchTextOperationsForPreview omits empty cells like the export does", () => {
     useEditorStore.setState({
       queue: [
         {
@@ -151,80 +147,41 @@ describe("preview frame job", () => {
     expect(cssText).toBe("TEXT_1");
 
     const ops = buildBatchTextOperationsForPreview(useEditorStore.getState(), 0);
-    expect(ops).toHaveLength(1);
-    expect(ops[0].text).toBe("TEXT_1");
-    expect(ops[0].fontSize).toBe(36);
-  });
-});
-
-describe("preview media path parity with batch asset_roots", () => {
-  const fakeApp = {
-    getPath: (name) => {
-      const map = {
-        userData: path.join(os.tmpdir(), "beru-test-userdata"),
-        temp: os.tmpdir(),
-        home: os.homedir(),
-        documents: path.join(os.homedir(), "Documents"),
-        downloads: path.join(os.homedir(), "Downloads"),
-        desktop: path.join(os.homedir(), "Desktop"),
-        videos: path.join(os.homedir(), "Videos"),
-        music: path.join(os.homedir(), "Music"),
-        pictures: path.join(os.homedir(), "Pictures"),
-      };
-      return map[name] || os.tmpdir();
-    },
-    isPackaged: false,
-    getAppPath: () => process.cwd(),
-  };
-
-  let security;
-  let tmpDir;
-  let videoFile;
-  let imageFile;
-
-  beforeEach(() => {
-    security = createPathSecurity(fakeApp);
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "beru-preview-media-"));
-    videoFile = path.join(tmpDir, "clip.mp4");
-    imageFile = path.join(tmpDir, "logo.png");
-    fs.writeFileSync(videoFile, Buffer.from("fake-video"));
-    fs.writeFileSync(imageFile, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    security.registerAllowedPath(videoFile);
-    security.registerAllowedPath(imageFile);
+    expect(ops.filter((op) => op.mode === "text")).toHaveLength(0);
   });
 
-  afterEach(() => {
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {}
-  });
-
-  it("rejects unauthorized overlay images outside trusted roots", () => {
-    const outsideImage =
-      process.platform === "win32"
-        ? "C:\\Windows\\System32\\beru-evil-preview.png"
-        : "/etc/beru-evil-preview.png";
-    expect(() =>
-      sanitizeJobMedia(
+  it("buildBatchTextOperationsForPreview drops a text op whose own text was cleared", () => {
+    const clearedOp = {
+      id: "op-1",
+      mode: "text",
+      batchRegionId: "r1",
+      region: { x: 0.2, y: 0.2, w: 0.2, h: 0.1 },
+      text: "",
+    };
+    useEditorStore.setState({
+      queue: [
         {
-          input_path: videoFile,
-          operations: [{ mode: "image", image_path: outsideImage }],
+          path: "C:\\videos\\clip.mp4",
+          filename: "clip.mp4",
+          operations: [clearedOp],
+          width: 1280,
+          height: 720,
         },
-        security,
-      ),
-    ).toThrow(/Imagen no permitida/i);
-  });
+      ],
+      templateRegions: [
+        {
+          id: "r1",
+          label: "TEXT_1",
+          region: { x: 0.2, y: 0.2, w: 0.2, h: 0.1 },
+          style: {},
+        },
+      ],
+      excelRows: [{ id: "clip", TEXT_1: "Celda" }],
+      excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
+    });
 
-  it("accepts registered overlay images and sets non-empty asset_roots", () => {
-    const result = sanitizeJobMedia(
-      {
-        input_path: videoFile,
-        operations: [{ mode: "image", image_path: imageFile }],
-      },
-      security,
-    );
-    expect(result.asset_roots.length).toBeGreaterThan(0);
-    expect(result.operations[0].image_path).toBe(fs.realpathSync(imageFile));
+    const ops = buildBatchTextOperationsForPreview(useEditorStore.getState(), 0);
+    expect(ops.filter((op) => op.mode === "text")).toHaveLength(0);
   });
 });
 

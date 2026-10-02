@@ -2,21 +2,6 @@ import { describe, it, expect } from "vitest";
 import fs from "fs";
 import path from "path";
 
-/**
- * Regression: the release workflow must run a post-build Authenticode
- * signature check on the installer and log the result. Originally the step
- * hard-failed when the signature was not "Valid"; that blocked releases when
- * the WINDOWS_CERTIFICATE_BASE64 secret was not provisioned. The current
- * contract is:
- *
- *   - The "Verify installer signature" step must exist and run AFTER packaging.
- *   - It must use Get-AuthenticodeSignature to inspect the .exe.
- *   - It must report the signature status (Valid / NotSigned / etc.).
- *   - It must NOT hard-fail the build when the installer is unsigned — that
- *     permits shipping while the cert is being provisioned. Add the cert
- *     secret to enable strict signing enforcement.
- */
-
 const workflowPath = path.join(process.cwd(), ".github", "workflows", "ci-release.yml");
 const src = fs.readFileSync(workflowPath, "utf-8");
 

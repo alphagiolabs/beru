@@ -12,11 +12,11 @@ export default function ShortcutsModal() {
     {
       titleKey: "modal.shortcuts.playback",
       items: [
-        ["Espacio", t("modal.shortcuts.playPause")],
+        [t("modal.shortcuts.keySpace"), t("modal.shortcuts.playPause")],
         ["←  →", t("modal.shortcuts.seek5")],
         ["Shift + ←  →", t("modal.shortcuts.seek1")],
         [
-          "Inicio / Fin",
+          t("modal.shortcuts.keyHomeEnd"),
           `${t("modal.shortcuts.jumpStart")} / ${t("modal.shortcuts.jumpEnd").toLowerCase()}`,
         ],
       ],
@@ -48,7 +48,7 @@ export default function ShortcutsModal() {
       titleKey: "modal.shortcuts.region",
       items: [
         ["N", t("modal.shortcuts.newRegion")],
-        ["Supr / Backspace", t("modal.shortcuts.cancelRegion")],
+        [t("modal.shortcuts.keyDelete"), t("modal.shortcuts.cancelRegion")],
         ["Esc", t("modal.shortcuts.cancelRegion")],
       ],
     },
@@ -67,7 +67,7 @@ export default function ShortcutsModal() {
       items: [
         ["Ctrl + K", t("modal.shortcuts.petPalette")],
         ["Ctrl + Shift + P", t("settings.petdex.toggleShortcut")],
-        ["Mayús + clic", t("modal.shortcuts.petPopout")],
+        [t("modal.shortcuts.keyShiftClick"), t("modal.shortcuts.petPopout")],
         [t("modal.shortcuts.rightClick"), t("settings.petdex.hidePetHint")],
       ],
     },
@@ -113,7 +113,7 @@ export default function ShortcutsModal() {
                       style={{
                         background: "var(--bg-app)",
                         border: "1px solid var(--border)",
-                        color: "var(--accent)",
+                        color: "var(--text-accent)",
                       }}
                     >
                       {key}

@@ -4,19 +4,27 @@
   "description": "Beru",
   "main": "main/main.js",
   "type": "module",
+  "os": [
+    "win32"
+  ],
   "author": "Beru",
   "homepage": "https://beru.app",
   "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "vite build && electron-builder",
+    "build": "vite build && electron-builder --win",
     "build:processor": "node scripts/build-processor.mjs",
     "preview": "vite preview",
     "start": "electron .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:python": "python python/test_delogo.py && python python/test_delogo_robust.py && python python/test_delogo_feather0.py && python python/test_delogo_seamless.py && python python/test_text_layout_fixtures.py && python python/test_crop_pipeline.py && python python/test_timed_crop_zoom.py && python python/test_region_to_pixels.py && python python/test_op_shared.py && python python/test_op_time_disabled.py && python python/test_extract_error_line.py && python python/test_batch_errors_perms.py && python python/test_batch_errors_messages.py && python python/test_watermark_empty_ops.py && python python/test_batch_summary_cancelled.py && python python/test_media_roots.py && python python/test_letter_spacing.py",
+    "test:python": "node scripts/test-python.mjs",
     "test:coverage": "vitest run --coverage",
+    "perf:measure": "node scripts/performance/run.mjs",
+    "verify": "node scripts/verify.mjs",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -34,15 +42,16 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwind-merge": "^3.6.0",
-    "xlsx": "^0.18.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
-    "@vitejs/plugin-react": "^4.2.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "4.1.11",
     "autoprefixer": "^10.4.16",
-    "electron": "^35.7.5",
-    "electron-builder": "^25.1.8",
+    "electron": "^42.11.10",
+    "electron-builder": "^26.15.3",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.37.3",
@@ -56,8 +65,8 @@
     "prettier": "^3.4.2",
     "shadcn": "^4.13.0",
     "tailwindcss": "^3.4.0",
-    "vite": "^5.0.0",
-    "vitest": "^1.6.0"
+    "vite": "^7.3.6",
+    "vitest": "4.1.11"
   },
   "build": {
     "appId": "app.beru.desktop",
@@ -81,6 +90,15 @@
       "node_modules/sax/**/*",
       "node_modules/argparse/**/*",
       "node_modules/graceful-fs/**/*",
+      "node_modules/xlsx/**/*",
+      "node_modules/adler-32/**/*",
+      "node_modules/cfb/**/*",
+      "node_modules/crc-32/**/*",
+      "node_modules/codepage/**/*",
+      "node_modules/ssf/**/*",
+      "node_modules/frac/**/*",
+      "node_modules/wmf/**/*",
+      "node_modules/word/**/*",
       "resources/**/*",
       "!python/build/**",
       "!python/dist/**",
@@ -90,10 +108,6 @@
       {
         "from": "bin",
         "to": "bin"
-      },
-      {
-        "from": "resources/presets",
-        "to": "presets"
       },
       {
         "from": "resources/encode-profiles.json",

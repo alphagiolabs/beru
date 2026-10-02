@@ -6,9 +6,7 @@ const mockApi = {
   deletePreset: vi.fn(async (filename) => ({ success: true, fileName: filename })),
   listPresets: vi.fn(async () => ({
     success: true,
-    presets: [
-      { name: "Otro", filename: "otro.beru.json", source: "user", data: { type: "beru-preset" } },
-    ],
+    presets: [{ name: "Otro", filename: "otro.beru.json", data: { type: "beru-preset" } }],
     userDir: "/tmp/presets",
   })),
 };
@@ -23,15 +21,7 @@ describe("useEditorStore.deletePreset", () => {
     mockApi.deletePreset.mockClear();
     mockApi.listPresets.mockClear();
     useEditorStore.setState({
-      presets: [
-        { name: "Mío", filename: "mio.beru.json", source: "user", data: { type: "beru-preset" } },
-        {
-          name: "Subtítulo",
-          filename: "subtitle.beru.json",
-          source: "bundled",
-          data: { type: "beru-preset" },
-        },
-      ],
+      presets: [{ name: "Mío", filename: "mio.beru.json", data: { type: "beru-preset" } }],
     });
   });
 
@@ -39,7 +29,6 @@ describe("useEditorStore.deletePreset", () => {
     const result = useEditorStore.getState().deletePreset({
       name: "Mío",
       filename: "mio.beru.json",
-      source: "user",
     });
     expect(result).toBeDefined();
     expect(typeof result.then).toBe("function");
@@ -54,25 +43,14 @@ describe("useEditorStore.deletePreset", () => {
     await useEditorStore.getState().deletePreset({
       name: "Mío",
       filename: "mio.beru.json",
-      source: "user",
     });
     expect(mockApi.listPresets).toHaveBeenCalledTimes(1);
     expect(useEditorStore.getState().presets).toHaveLength(1);
     expect(useEditorStore.getState().presets[0].filename).toBe("otro.beru.json");
   });
 
-  it("refuses to delete bundled presets without calling the API", async () => {
-    const res = await useEditorStore.getState().deletePreset({
-      name: "Subtítulo",
-      filename: "subtitle.beru.json",
-      source: "bundled",
-    });
-    expect(res.ok).toBe(false);
-    expect(mockApi.deletePreset).not.toHaveBeenCalled();
-  });
-
   it("rejects presets missing a filename", async () => {
-    const res = await useEditorStore.getState().deletePreset({ name: "X", source: "user" });
+    const res = await useEditorStore.getState().deletePreset({ name: "X" });
     expect(res.ok).toBe(false);
     expect(mockApi.deletePreset).not.toHaveBeenCalled();
   });
@@ -81,7 +59,6 @@ describe("useEditorStore.deletePreset", () => {
     await useEditorStore.getState().deletePreset({
       name: "Mío",
       filename: "mio.beru.json",
-      source: "user",
     });
     expect(setItemSpy).not.toHaveBeenCalled();
   });
@@ -91,7 +68,6 @@ describe("useEditorStore.deletePreset", () => {
     const res = await useEditorStore.getState().deletePreset({
       name: "Mío",
       filename: "mio.beru.json",
-      source: "user",
     });
     expect(res).toEqual({ ok: false, error: "boom" });
   });

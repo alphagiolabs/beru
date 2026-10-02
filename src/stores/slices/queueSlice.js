@@ -1,10 +1,14 @@
+import { fetchVideoInfos } from "../../utils/video-info.js";
 import { createQueueItem, uid, ensureNormalized } from "../../utils/types";
 import { createOperation } from "../../utils/operation";
-import { clampRegionToVideo, isRegionUsable, stripExt } from "../../utils/video-utils";
+import { clampRegionToVideo, isRegionUsable } from "../../utils/video-utils";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { sanitizeOperation } from "../../utils/delogo-ops";
-import { buildIdTextOutputName } from "../../utils/batch-process";
+import { resolveDetachedOutputPath, resolveOutputPaths } from "../../utils/output-naming";
+import { namingInputs } from "../../utils/export-pipeline.js";
+import { reconcileBatchExport } from "../../utils/batch-export.js";
 import {
+  findTextOpForRegion,
   getGlobalTextStyleFromState,
   mergeTextStyles,
   pickTextStyle,
@@ -14,6 +18,7 @@ import { swallow } from "../../utils/swallow.js";
 
 const MAX_UNDO_STACK = 50;
 const IMAGE_DATA_CACHE_MAX = 50;
+const THUMBNAILS_BY_PATH_MAX = 2000;
 
 function pruneImageDataCache(cache, queue) {
   const used = new Set();
@@ -33,31 +38,80 @@ function pruneImageDataCache(cache, queue) {
   return next;
 }
 
-function desiredOutputNameFor(item, get) {
-  if (!item) return null;
-  const { exportFormat, templateRegions } = get();
-  const filename = item.path.split(/[\\/]/).pop();
-  const stem = stripExt(filename);
-  let outputName = item.customOutputName;
-  if (!outputName && templateRegions.length > 0) {
-    const videoIdx = get().queue.findIndex((q) => q === item || q.path === item.path);
-    const textFor = (region) =>
-      videoIdx >= 0 ? String(get().getCellTextForRegion(videoIdx, region.id) ?? "") : "";
-    const firstTextRegion =
-      templateRegions.find(
-        (r) => String(r.label || "").toUpperCase() === "TEXT_1" && textFor(r).trim(),
-      ) ||
-      templateRegions.find((r) => textFor(r).trim()) ||
-      templateRegions.find((r) => String(r.label || "").toUpperCase() === "TEXT_1") ||
-      templateRegions[0];
-    const id = videoIdx >= 0 ? stripExt(get().getExcelDisplayId(videoIdx)) : stem;
-    const text = textFor(firstTextRegion);
-    outputName = buildIdTextOutputName(id, text, exportFormat);
-  }
-  return outputName || `${stem}_beru.${exportFormat}`;
+let outputPathsCache = { key: null, paths: null };
+
+const namingContext = (s) => ({
+  templateRegions: s.templateRegions,
+  exportFormat: s.exportFormat,
+  cellText: (videoIdx, regionId) => s.getCellTextForRegion(videoIdx, regionId),
+  displayId: (videoIdx) => s.getExcelDisplayId(videoIdx),
+});
+
+function resolveOutputPathsForState(s) {
+  const key = namingInputs(s);
+  const cached = outputPathsCache;
+  if (cached.paths && cached.key.every((v, i) => v === key[i])) return cached.paths;
+  const paths = resolveOutputPaths(s.queue, s.outputDir, namingContext(s));
+  outputPathsCache = { key, paths };
+  return paths;
 }
 
 export function createQueueSlice(set, get) {
+  const priorityThumbnailLoads = new Map();
+  const pendingThumbnails = new Map();
+  let thumbnailFlushQueued = false;
+
+  const flushPendingThumbnails = () => {
+    thumbnailFlushQueued = false;
+    if (pendingThumbnails.size === 0) return;
+    const batch = [...pendingThumbnails];
+    pendingThumbnails.clear();
+    set((s) => {
+      let changed = false;
+      const nextMap = { ...s.thumbnailsByPath };
+      const currentPaths = new Set(s.queue.map((item) => item.path));
+      for (const [path, dataUrl] of batch) {
+        if (!currentPaths.has(path) || nextMap[path] === dataUrl) continue;
+        nextMap[path] = dataUrl;
+        changed = true;
+      }
+      if (!changed) return s;
+      const keys = Object.keys(nextMap);
+      for (let i = 0; i < keys.length - THUMBNAILS_BY_PATH_MAX; i++) {
+        delete nextMap[keys[i]];
+      }
+      return { thumbnailsByPath: nextMap };
+    });
+  };
+
+  const queueThumbnail = (path, dataUrl) => {
+    if (!path || !dataUrl) return;
+    pendingThumbnails.set(path, dataUrl);
+    if (!thumbnailFlushQueued) {
+      thumbnailFlushQueued = true;
+      queueMicrotask(flushPendingThumbnails);
+    }
+  };
+
+  const restoreHistory = (sourceStack, targetStack) => {
+    const { [sourceStack]: history, queue, selectedIdx } = get();
+    if (history.length === 0 || selectedIdx < 0) return;
+    const operations = history[history.length - 1];
+    const current = get()._cloneOps(queue[selectedIdx].operations);
+    set((s) => {
+      const updated = [...s.queue];
+      updated[selectedIdx] = {
+        ...updated[selectedIdx],
+        operations: get()._cloneOps(operations),
+      };
+      return {
+        queue: updated,
+        [sourceStack]: s[sourceStack].slice(0, -1),
+        [targetStack]: [...s[targetStack], current],
+      };
+    });
+  };
+
   return {
     queue: [],
     selectedIdx: -1,
@@ -79,25 +133,13 @@ export function createQueueSlice(set, get) {
 
     outputPathFor: (item) => {
       if (!item) return null;
-      const { outputDir, queue } = get();
-      let outputName = desiredOutputNameFor(item, get);
-      let count = 0;
-      let rank = -1;
-      for (const q of queue) {
-        if (desiredOutputNameFor(q, get) !== outputName) continue;
-        if (q === item || q.path === item.path) rank = count;
-        count++;
-      }
-      if (count > 1 && rank > 0) {
-        const stem = stripExt(outputName);
-        const ext = outputName.slice(stem.length);
-        outputName = `${stem}__${rank + 1}${ext}`;
-      }
-      const outDir = outputDir || item.path.replace(/[\\/][^\\/]*$/, "");
-      const base = outDir.replace(/[\\/]+$/, "");
-      const sep = base.includes("\\") ? "\\" : "/";
-      return `${base}${sep}${outputName}`;
+      const s = get();
+      const idx = s.queue.indexOf(item);
+      if (idx >= 0) return resolveOutputPathsForState(s)[idx];
+      return resolveDetachedOutputPath(item, s.queue, s.outputDir, namingContext(s));
     },
+
+    outputPathsForAll: () => resolveOutputPathsForState(get()),
 
     _patchQueueVideoInfo: (startIdx, pathList, infos) => {
       if (!Array.isArray(infos) || infos.length === 0) return;
@@ -116,10 +158,42 @@ export function createQueueSlice(set, get) {
     _thumbnailAbortControllers: new Set(),
     thumbnailsByPath: {},
 
-    _scheduleThumbnailLoads: (api, toAdd, startIdx) => {
+    prioritizeThumbnails: (paths, { interactive = false } = {}, api = window.api) => {
+      if (!api?.getThumbnail || !Array.isArray(paths)) return Promise.resolve([]);
+      const currentPaths = new Set(get().queue.map((item) => item.path));
+      return Promise.all(
+        paths
+          .filter((path) => currentPaths.has(path))
+          .map((path) => {
+            if (get().thumbnailsByPath[path] || pendingThumbnails.has(path))
+              return Promise.resolve();
+            const pending = priorityThumbnailLoads.get(path);
+            if (pending && (!interactive || pending.interactive)) return pending.promise;
+            const controller = new AbortController();
+            const registry = get()._thumbnailAbortControllers;
+            registry.add(controller);
+            const entry = { interactive };
+            entry.promise = api
+              .getThumbnail(path, { visible: !interactive })
+              .then((result) => {
+                if (controller.signal.aborted || !result?.dataUrl) return;
+                queueThumbnail(path, result.dataUrl);
+              })
+              .catch(() => {})
+              .finally(() => {
+                registry.delete(controller);
+                if (priorityThumbnailLoads.get(path) === entry) priorityThumbnailLoads.delete(path);
+              });
+            priorityThumbnailLoads.set(path, entry);
+            return entry.promise;
+          }),
+      );
+    },
+
+    _scheduleThumbnailLoads: (api, toAdd) => {
       if (!api?.getThumbnailBatch || toAdd.length === 0) return;
 
-      const THUMB_CHUNK = 12;
+      const THUMB_CHUNK = 4;
       const MAX_THUMB_BATCHES_IN_FLIGHT = 2;
 
       const abortController = new AbortController();
@@ -127,36 +201,28 @@ export function createQueueSlice(set, get) {
       registry?.add(abortController);
       const unregister = () => registry?.delete(abortController);
 
-      const applyThumbResults = (paths, results, offset) => {
-        if (abortController.signal.aborted) return;
-        if (!Array.isArray(results) || results.length === 0) return;
-        set((s) => {
-          let changed = false;
-          const nextMap = { ...s.thumbnailsByPath };
-          for (let i = 0; i < results.length; i++) {
-            const r = results[i];
-            const target = offset + i;
-            const path = paths[i];
-            if (!r?.dataUrl || !path) continue;
-            if (!s.queue[target] || s.queue[target].path !== path) continue;
-            if (nextMap[path] === r.dataUrl) continue;
-            nextMap[path] = r.dataUrl;
-            changed = true;
-          }
-          return changed ? { thumbnailsByPath: nextMap } : s;
-        });
+      const applyThumbResults = (paths, results) => {
+        if (abortController.signal.aborted || !Array.isArray(results)) return;
+        for (let i = 0; i < results.length; i++) {
+          queueThumbnail(paths[i], results[i]?.dataUrl);
+        }
       };
 
-      const loadChunk = (paths, offset) => {
+      const loadChunk = (paths) => {
         if (abortController.signal.aborted) return Promise.resolve();
         return api
           .getThumbnailBatch(paths)
-          .then((results) => applyThumbResults(paths, results, offset))
+          .then((results) => applyThumbResults(paths, results))
           .catch(() => {});
       };
 
       const firstCount = Math.min(4, toAdd.length);
-      const firstPromise = loadChunk(toAdd.slice(0, firstCount), startIdx);
+      void get().prioritizeThumbnails(
+        [get().queue[get().selectedIdx]?.path],
+        { interactive: true },
+        api,
+      );
+      const firstPromise = loadChunk(toAdd.slice(0, firstCount));
 
       const rest = toAdd.slice(firstCount);
       if (rest.length === 0) {
@@ -175,17 +241,12 @@ export function createQueueSlice(set, get) {
               const off = nextOff;
               nextOff += THUMB_CHUNK;
               const slice = rest.slice(off, off + THUMB_CHUNK);
-              const offset = startIdx + firstCount + off;
               inFlight++;
-              api
-                .getThumbnailBatch(slice)
-                .then((results) => applyThumbResults(slice, results, offset))
-                .catch(() => {})
-                .finally(() => {
-                  inFlight--;
-                  if (nextOff >= rest.length && inFlight === 0) return resolve();
-                  pump();
-                });
+              loadChunk(slice).finally(() => {
+                inFlight--;
+                if (nextOff >= rest.length && inFlight === 0) return resolve();
+                pump();
+              });
             }
             if (nextOff >= rest.length && inFlight === 0) resolve();
           };
@@ -223,25 +284,17 @@ export function createQueueSlice(set, get) {
         });
       });
       const startIdx = queue.length;
-      set((s) => ({
-        queue: [...s.queue, ...newItems],
-        selectedIdx: s.selectedIdx < 0 && newItems.length > 0 ? startIdx : s.selectedIdx,
-      }));
+      set(
+        (s) =>
+          reconcileBatchExport(s, {
+            queue: [...s.queue, ...newItems],
+            selectedIdx: s.selectedIdx < 0 && newItems.length > 0 ? startIdx : s.selectedIdx,
+          }).patch,
+      );
 
-      get()._scheduleThumbnailLoads(api, toAdd, startIdx);
+      get()._scheduleThumbnailLoads(api, toAdd);
 
-      const fetchInfos = api?.getVideoInfoBatch
-        ? () => api.getVideoInfoBatch(toAdd)
-        : () =>
-            Promise.all(
-              toAdd.map((p) =>
-                api?.getVideoInfo
-                  ? api.getVideoInfo(p)
-                  : Promise.resolve({ width: 0, height: 0, duration: 0 }),
-              ),
-            );
-
-      return fetchInfos()
+      return fetchVideoInfos(api, toAdd)
         .then((infos) => get()._patchQueueVideoInfo(startIdx, toAdd, infos))
         .catch((err) => {
           swallow("getVideoInfoBatch", err);
@@ -268,29 +321,22 @@ export function createQueueSlice(set, get) {
         if (sel >= next.length) sel = next.length - 1;
         else if (sel === idx) sel = Math.min(idx, next.length - 1);
         else if (sel > idx) sel = sel - 1;
-        const newStatus = {};
-        Object.entries(s.excelMatchStatus).forEach(([k, v]) => {
-          const ki = Number(k);
-          if (ki < idx) newStatus[ki] = v;
-          else if (ki > idx) newStatus[ki - 1] = v;
-        });
         let thumbnailsByPath = s.thumbnailsByPath;
         if (removed?.path && thumbnailsByPath?.[removed.path]) {
           thumbnailsByPath = { ...thumbnailsByPath };
           delete thumbnailsByPath[removed.path];
         }
-        return {
+        return reconcileBatchExport(s, {
           queue: next,
           selectedIdx: sel,
           selectedOperationIdx: null,
           currentRegion: null,
           undoStack: [],
           redoStack: [],
-          excelMatchStatus: newStatus,
           imageDataCache: pruneImageDataCache(s.imageDataCache, next),
           thumbnailsByPath,
           batchSummary: null,
-        };
+        }).patch;
       });
     },
 
@@ -302,6 +348,8 @@ export function createQueueSlice(set, get) {
           controller.abort();
         } catch {}
       }
+      priorityThumbnailLoads.clear();
+      pendingThumbnails.clear();
       set((s) => ({
         queue: [],
         selectedIdx: -1,
@@ -327,25 +375,26 @@ export function createQueueSlice(set, get) {
         undoStack: [],
         redoStack: [],
       });
-      const api = window.api;
       const item = get().queue[idx];
-      if (api?.getThumbnail && item?.path && !get().thumbnailsByPath?.[item.path]) {
-        api
-          .getThumbnail(item.path)
-          .then((r) => {
-            if (!r?.dataUrl) return;
-            set((s) => {
-              if (s.selectedIdx !== idx || !s.queue[idx] || s.queue[idx].path !== item.path) {
-                return s;
-              }
-              if (s.thumbnailsByPath?.[item.path] === r.dataUrl) return s;
-              return {
-                thumbnailsByPath: { ...s.thumbnailsByPath, [item.path]: r.dataUrl },
-              };
-            });
-          })
-          .catch(() => {});
-      }
+      if (item?.path) void get().prioritizeThumbnails([item.path], { interactive: true });
+    },
+
+    setVideoTrim: (videoIdx, start, end, mediaDuration) => {
+      set((s) => {
+        const item = s.queue[videoIdx];
+        if (!item || s.isProcessing) return s;
+        const duration = Number(mediaDuration) > 0 ? Number(mediaDuration) : Number(item.duration);
+        if (!(duration > 0) || !Number.isFinite(start) || !Number.isFinite(end)) return s;
+        const nextStart = Math.max(0, Math.min(start, duration));
+        const nextEnd = Math.max(0, Math.min(end, duration));
+        if (nextEnd <= nextStart) return s;
+        const trimStart = nextStart > 0 ? nextStart : null;
+        const trimEnd = nextEnd < duration ? nextEnd : null;
+        if (item.trimStart === trimStart && item.trimEnd === trimEnd) return s;
+        const queue = [...s.queue];
+        queue[videoIdx] = { ...item, duration, trimStart, trimEnd };
+        return { queue };
+      });
     },
 
     setCurrentRegion: (region) => {
@@ -498,14 +547,14 @@ export function createQueueSlice(set, get) {
             : selectedOperationIdx > opIdx
               ? selectedOperationIdx - 1
               : selectedOperationIdx;
-      set({
+      const changes = {
         queue: updated,
         selectedOperationIdx: nextSelectedOperationIdx,
         imageDataCache: pruneImageDataCache(get().imageDataCache, updated),
-      });
+      };
       if (regionId != null && op?.mode === "text") {
-        get().syncTextToExcel(videoIdx, regionId, "");
-      }
+        get().syncTextToExcel(videoIdx, regionId, "", changes);
+      } else set(changes);
     },
 
     moveOperation: (fromIdx, toIdx) => {
@@ -576,18 +625,21 @@ export function createQueueSlice(set, get) {
       const nextOp = { ...ops[opIdx], ...patch };
       ops[opIdx] = nextOp;
       updated[videoIdx] = { ...updated[videoIdx], operations: ops };
-      set({ queue: updated });
       if (Object.prototype.hasOwnProperty.call(patch, "text")) {
         const regionId = get().findTemplateRegionIdForOp(nextOp);
-        if (regionId != null) get().syncTextToExcel(videoIdx, regionId, patch.text ?? "");
+        if (regionId != null) {
+          get().syncTextToExcel(videoIdx, regionId, patch.text ?? "", { queue: updated });
+          return;
+        }
       }
+      set({ queue: updated });
     },
 
     updateOperationText: (videoIdx, opIdx, text) => {
       get().updateOperation(videoIdx, opIdx, { text });
     },
 
-    createTextOpForRegion: (videoIdx, regionId) => {
+    createTextOpForRegion: (videoIdx, regionId, text = "") => {
       const { queue, templateRegions } = get();
       if (videoIdx < 0 || videoIdx >= queue.length) return -1;
       const tr = templateRegions.find((r) => r.id === regionId);
@@ -597,7 +649,7 @@ export function createQueueSlice(set, get) {
         mode: "text",
         batchRegionId: tr.id,
         region: { ...tr.region },
-        text: "",
+        text,
         ...pickTextStyle(style),
       });
       if (videoIdx === get().selectedIdx) get()._saveUndo();
@@ -606,46 +658,34 @@ export function createQueueSlice(set, get) {
         ...updated[videoIdx],
         operations: [...updated[videoIdx].operations, op],
       };
-      set({ queue: updated });
+      get().syncTextToExcel(videoIdx, regionId, text, { queue: updated });
       return updated[videoIdx].operations.length - 1;
     },
 
-    undo: () => {
-      const { undoStack, queue, selectedIdx } = get();
-      if (undoStack.length === 0 || selectedIdx < 0) return;
-      const prev = undoStack[undoStack.length - 1];
-      const current = get()._cloneOps(queue[selectedIdx].operations);
-      set((s) => {
-        const updated = [...s.queue];
-        updated[selectedIdx] = {
-          ...updated[selectedIdx],
-          operations: get()._cloneOps(prev),
-        };
-        return {
-          queue: updated,
-          undoStack: s.undoStack.slice(0, -1),
-          redoStack: [...s.redoStack, current],
-        };
-      });
+    setTextForRegion: (videoIdx, regionId, text) => {
+      const { queue, templateRegions } = get();
+      if (videoIdx < 0 || videoIdx >= queue.length) return -1;
+      const tr = templateRegions.find((r) => r.id === regionId);
+      if (!tr) return -1;
+      const { op, opIdx } = findTextOpForRegion(queue[videoIdx].operations, tr.region, tr.id);
+      const materialize = text === undefined;
+      const nextText = materialize
+        ? String(get().getCellTextForRegion(videoIdx, regionId) ?? "")
+        : String(text ?? "");
+      if (op) {
+        if (!materialize && String(op.text ?? "") !== nextText) {
+          get().updateOperationText(videoIdx, opIdx, nextText);
+        }
+        return opIdx;
+      }
+      if (!materialize && nextText === "") {
+        get().syncTextToExcel(videoIdx, regionId, "");
+        return -1;
+      }
+      return get().createTextOpForRegion(videoIdx, regionId, nextText);
     },
 
-    redo: () => {
-      const { redoStack, queue, selectedIdx } = get();
-      if (redoStack.length === 0 || selectedIdx < 0) return;
-      const next = redoStack[redoStack.length - 1];
-      const current = get()._cloneOps(queue[selectedIdx].operations);
-      set((s) => {
-        const updated = [...s.queue];
-        updated[selectedIdx] = {
-          ...updated[selectedIdx],
-          operations: get()._cloneOps(next),
-        };
-        return {
-          queue: updated,
-          redoStack: s.redoStack.slice(0, -1),
-          undoStack: [...s.undoStack, current],
-        };
-      });
-    },
+    undo: () => restoreHistory("undoStack", "redoStack"),
+    redo: () => restoreHistory("redoStack", "undoStack"),
   };
 }

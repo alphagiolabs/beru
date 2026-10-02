@@ -23,6 +23,26 @@ export function createOperation(overrides = {}) {
   };
 }
 
+const DECIMAL_BOUND = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+
+function timeBound(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  return DECIMAL_BOUND.test(s) ? Number(s) : null;
+}
+
+export function isOpActive(op, t) {
+  const s = timeBound(op.startTime);
+  const e = timeBound(op.endTime);
+  if (s === null && e === null) return true;
+  if (s !== null && e !== null && e <= s) return false;
+  if (s !== null && t < s) return false;
+  if (e !== null && t > e) return false;
+  return true;
+}
+
 export function filterOperationsForExport(operations) {
   if (!Array.isArray(operations)) return [];
   return operations.filter((op) => {

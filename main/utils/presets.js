@@ -2,7 +2,7 @@ import path from "path";
 import fs from "fs";
 import { isProjectOrPreset } from "../../shared/project-document.js";
 
-export function readPresetsFromDir(dir, source) {
+export function readPresetsFromDir(dir) {
   const out = [];
   let entries = [];
   try {
@@ -11,8 +11,7 @@ export function readPresetsFromDir(dir, source) {
     return out;
   }
   for (const name of entries) {
-    if (!name.toLowerCase().endsWith(".beru.json") && !name.toLowerCase().endsWith(".json"))
-      continue;
+    if (!name.toLowerCase().endsWith(".json")) continue;
     const full = path.join(dir, name);
     try {
       const raw = fs.readFileSync(full, "utf8");
@@ -22,7 +21,6 @@ export function readPresetsFromDir(dir, source) {
           name: data.name || name.replace(/\.beru\.json$|\.json$/i, ""),
           description: data.description || "",
           filename: name,
-          source,
           data,
         });
       }

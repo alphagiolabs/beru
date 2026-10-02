@@ -1,40 +1,63 @@
-import { spawn } from "child_process";
 import fs from "fs";
-import { getFfmpegPath } from "./paths.js";
+import { getFfmpegPath, getThumbnailCacheDirectory } from "./paths.js";
+import { trimOldest } from "./cache-trim.js";
+import { runMediaTask } from "./media-task-pool.js";
+import { runCapturedProcess } from "./run-captured.js";
+import { createThumbnailDiskCache } from "./thumbnail-disk-cache.js";
 
 const THUMBNAIL_CACHE_MAX = 300;
+const FILMSTRIP_CACHE_MAX = 12;
 const MAX_THUMBNAIL_BYTES = 4 * 1024 * 1024;
 
 const thumbnailCache = new Map();
-const pendingThumbnails = new Map();
+const filmstripCache = new Map();
+let diskCache;
 
-function getMtimeMs(filePath) {
+function thumbnailKey(filePath, width) {
   try {
-    return fs.statSync(filePath).mtimeMs;
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return null;
+    const { dev, ino, size, mtimeMs, ctimeMs } = stat;
+    return JSON.stringify(["thumbnail-v1", filePath, dev, ino, size, mtimeMs, ctimeMs, width]);
   } catch {
-    return -1;
+    return null;
   }
 }
 
-function trimThumbnailCache() {
-  if (thumbnailCache.size <= THUMBNAIL_CACHE_MAX) return;
-  const keys = thumbnailCache.keys();
-  const excess = thumbnailCache.size - THUMBNAIL_CACHE_MAX;
-  for (let i = 0; i < excess; i++) {
-    thumbnailCache.delete(keys.next().value);
-  }
+function getDiskCache() {
+  diskCache ||= createThumbnailDiskCache({ directory: getThumbnailCacheDirectory() });
+  return diskCache;
 }
 
-function runThumbnailFfmpeg(ffmpeg, filePath, width, seekSeconds = 1) {
-  return new Promise((resolve) => {
-    const chunks = [];
-    let totalBytes = 0;
-    let settled = false;
-    let killTimer = null;
-    const proc = spawn(ffmpeg, [
+function jpegDimensions(buf) {
+  let offset = 2;
+  while (offset + 8 < buf.length) {
+    if (buf[offset] !== 0xff || buf[offset + 1] === 0x00 || buf[offset + 1] === 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = buf[offset + 1];
+    if (marker === 0xd9 || marker === 0xda) return null;
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return { height: buf.readUInt16BE(offset + 5), width: buf.readUInt16BE(offset + 7) };
+    }
+    offset +=
+      marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8) ? 2 : 2 + buf.readUInt16BE(offset + 2);
+  }
+  return null;
+}
+
+async function runThumbnailFfmpeg(ffmpeg, filePath, filter, seekSeconds = 1, signal) {
+  const result = await runCapturedProcess(
+    ffmpeg,
+    [
       "-hide_banner",
       "-loglevel",
       "error",
+      "-threads",
+      "2",
+      "-filter_threads",
+      "1",
       "-ss",
       String(seekSeconds),
       "-i",
@@ -45,7 +68,7 @@ function runThumbnailFfmpeg(ffmpeg, filePath, width, seekSeconds = 1) {
       "-vframes",
       "1",
       "-vf",
-      `scale=${width}:-2`,
+      filter,
       "-q:v",
       "10",
       "-f",
@@ -53,69 +76,116 @@ function runThumbnailFfmpeg(ffmpeg, filePath, width, seekSeconds = 1) {
       "-vcodec",
       "mjpeg",
       "-",
-    ]);
-    const finish = (data) => {
-      if (settled) return;
-      settled = true;
-      if (killTimer) clearTimeout(killTimer);
-      try {
-        proc.kill();
-      } catch {}
-      resolve(data);
-    };
-    proc.stdout.on("data", (d) => {
-      totalBytes += d.length;
-      if (totalBytes > MAX_THUMBNAIL_BYTES) return finish(null);
-      chunks.push(d);
-    });
-    proc.stderr.on("data", () => {}); // ignore
-    proc.on("error", () => finish(null));
-    proc.on("close", (code) => {
-      if (code !== 0) return finish(null);
-      const buf = Buffer.concat(chunks);
-      if (buf.length < 64) return finish(null);
-      const dataUrl = `data:image/jpeg;base64,${buf.toString("base64")}`;
-      finish({ dataUrl, size: buf.length });
-    });
-    killTimer = setTimeout(() => finish(null), 5000);
-  });
+    ],
+    {
+      timeoutMs: 5000,
+      maxStdoutBytes: MAX_THUMBNAIL_BYTES,
+      stdoutMode: "buffer",
+      stderrMode: "drain",
+      spawnOptions: { signal },
+    },
+  );
+  if (result.code !== 0 || result.error || result.timedOut || result.outputExceeded) return null;
+  const buf = result.stdout;
+  if (buf.length < 64) return null;
+  const dataUrl = `data:image/jpeg;base64,${buf.toString("base64")}`;
+  const dims = jpegDimensions(buf);
+  return { dataUrl, size: buf.length, width: dims?.width || 0, height: dims?.height || 0 };
 }
 
-export function extractThumbnail(filePath, width = 80) {
-  const ffmpeg = getFfmpegPath();
-  if (!fs.existsSync(ffmpeg) || !fs.existsSync(filePath)) return Promise.resolve(null);
-  const mtime = getMtimeMs(filePath);
-  const cacheKey = `${filePath}:${mtime}:${width}`;
-  if (mtime >= 0) {
-    const hit = thumbnailCache.get(cacheKey);
-    if (hit) return Promise.resolve(hit);
+export async function extractThumbnail(filePath, width = 80, priority = {}) {
+  const cacheKey = thumbnailKey(filePath, width);
+  if (!cacheKey) return null;
+  const hit = thumbnailCache.get(cacheKey);
+  if (hit) return hit;
+  const stored = await getDiskCache().get(cacheKey);
+  if (cacheKey !== thumbnailKey(filePath, width)) return null;
+  if (stored) {
+    thumbnailCache.set(cacheKey, stored);
+    trimOldest(thumbnailCache, THUMBNAIL_CACHE_MAX);
+    return stored;
   }
-  const pending = pendingThumbnails.get(cacheKey);
-  if (pending) return pending;
-
-  const task = (async () => {
-    const first = await runThumbnailFfmpeg(ffmpeg, filePath, width, 1);
-    if (first) return first;
-    // Short videos (< 1 s) have no frame at t=1; retry from 0.
-    try {
-      if (fs.statSync(filePath).size >= 50 * 1024 * 1024) return null;
-    } catch {
-      return null;
-    }
-    return runThumbnailFfmpeg(ffmpeg, filePath, width, 0);
-  })()
-    .then((result) => {
-      pendingThumbnails.delete(cacheKey);
-      if (result && mtime >= 0) {
+  const ready = thumbnailCache.get(cacheKey);
+  if (ready) return ready;
+  const ffmpeg = getFfmpegPath();
+  if (!ffmpeg || !fs.existsSync(ffmpeg)) return null;
+  return runMediaTask(
+    async () => {
+      const first = await runThumbnailFfmpeg(ffmpeg, filePath, `scale=${width}:-2`, 1);
+      if (first) return first;
+      try {
+        if (fs.statSync(filePath).size >= 50 * 1024 * 1024) return null;
+      } catch {
+        return null;
+      }
+      return runThumbnailFfmpeg(ffmpeg, filePath, `scale=${width}:-2`, 0);
+    },
+    { ...priority, key: `thumbnail:${cacheKey}` },
+  )
+    .then(async (result) => {
+      if (result && cacheKey === thumbnailKey(filePath, width)) {
         thumbnailCache.set(cacheKey, result);
-        trimThumbnailCache();
+        trimOldest(thumbnailCache, THUMBNAIL_CACHE_MAX);
+        await getDiskCache().set(cacheKey, result);
       }
       return result;
     })
-    .catch(() => {
-      pendingThumbnails.delete(cacheKey);
-      return null;
-    });
-  pendingThumbnails.set(cacheKey, task);
-  return task;
+    .catch(() => null);
+}
+
+function filmstripKey(filePath, count, height, duration) {
+  try {
+    const { dev, ino, size, mtimeMs, ctimeMs } = fs.statSync(filePath);
+    return JSON.stringify([filePath, dev, ino, size, mtimeMs, ctimeMs, count, height, duration]);
+  } catch {
+    return null;
+  }
+}
+
+export async function extractFilmstrip(
+  filePath,
+  { count = 20, height = 64, duration = 0, signal, onFrame } = {},
+  priority = {},
+) {
+  const ffmpeg = getFfmpegPath();
+  if (!fs.existsSync(ffmpeg) || !Number.isFinite(duration) || !(duration > 0) || signal?.aborted) {
+    return null;
+  }
+  const cacheKey = filmstripKey(filePath, count, height, duration);
+  if (!cacheKey) return null;
+  const hit = filmstripCache.get(cacheKey);
+  if (hit) {
+    filmstripCache.delete(cacheKey);
+    filmstripCache.set(cacheKey, hit);
+    return hit;
+  }
+  const times = Array.from({ length: count }, (_, i) =>
+    Math.max(0, Math.min(duration - 0.05, ((i + 0.5) * duration) / count)),
+  );
+  const order = [...new Set([0, Math.floor(count / 2), count - 1, ...times.map((_, i) => i)])];
+  const frames = new Array(count).fill(null);
+  let next = 0;
+  let aspect = 16 / 9;
+  async function extractNext() {
+    while (next < order.length && !signal?.aborted) {
+      const index = order[next++];
+      const result = await runMediaTask(
+        () => runThumbnailFfmpeg(ffmpeg, filePath, `scale=-2:${height}`, times[index], signal),
+        { ...priority, signal },
+      ).catch(() => null);
+      if (signal?.aborted) return;
+      if (!result?.dataUrl) continue;
+      frames[index] = result.dataUrl;
+      if (result.width > 0 && result.height > 0) aspect = result.width / result.height;
+      onFrame?.({ index, frame: result.dataUrl, aspect, count });
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, count) }, extractNext));
+  if (signal?.aborted || !frames.some(Boolean)) return null;
+  const result = { frames, aspect };
+  if (frames.every(Boolean) && cacheKey === filmstripKey(filePath, count, height, duration)) {
+    filmstripCache.set(cacheKey, result);
+    trimOldest(filmstripCache, FILMSTRIP_CACHE_MAX);
+  }
+  return result;
 }

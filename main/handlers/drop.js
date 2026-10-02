@@ -1,9 +1,11 @@
 import { ipcMain } from "electron";
 import fs from "fs";
-import { collectVideoFiles, VIDEO_EXT } from "../utils/drop-resolver.js";
+import { collectVideoFiles } from "../utils/drop-resolver.js";
+import { VIDEO_EXT } from "../../shared/video-extensions.js";
+import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 
 export function registerDropHandlers(pathSecurity) {
-  ipcMain.handle("fs:resolveDroppedPaths", async (_event, inputPaths) => {
+  ipcMain.handle(IPC_INVOKE.resolveDroppedPaths, async (_event, inputPaths) => {
     if (!Array.isArray(inputPaths) || inputPaths.length === 0) {
       return { videoPaths: [], ignoredCount: 0 };
     }
