@@ -5,10 +5,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from processor import find_ffmpeg, render_preview_frame, render_source_frame
+import processor
+from processor import render_preview_frame, render_source_frame
 
 
-FFMPEG = find_ffmpeg()
+FFMPEG = processor.find_ffmpeg()
+processor.FFMPEG = FFMPEG
+processor.FFPROBE = processor.find_ffprobe(FFMPEG)
 
 
 def run(*args, data=None):
