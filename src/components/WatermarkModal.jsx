@@ -17,6 +17,8 @@ export default function WatermarkModal() {
   if (!show) return null;
 
   const isText = wm.type === "text";
+  const imageSrc =
+    wm.imageDataUrl || (wm.imagePath ? `beru://local/${encodeURIComponent(wm.imagePath)}` : "");
 
   return (
     <div className="cap-modal-overlay" onClick={close}>
@@ -204,13 +206,13 @@ export default function WatermarkModal() {
                     </Button>
                   )}
                 </div>
-                {wm.imageDataUrl && (
+                {imageSrc && (
                   <div
                     className="rounded overflow-hidden border mt-2"
                     style={{ borderColor: "var(--border)" }}
                   >
                     <img
-                      src={wm.imageDataUrl}
+                      src={imageSrc}
                       alt={t("watermark.previewAlt")}
                       className="block w-full max-h-24 object-contain"
                       style={{ background: "var(--bg-app)" }}

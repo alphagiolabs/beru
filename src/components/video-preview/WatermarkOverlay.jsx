@@ -54,14 +54,17 @@ export default function WatermarkOverlay({ watermark, videoRef }) {
       </div>
     );
   }
-  if (watermark.type === "image" && watermark.imageDataUrl) {
+  const imageSrc =
+    watermark.imageDataUrl ||
+    (watermark.imagePath ? `beru://local/${encodeURIComponent(watermark.imagePath)}` : "");
+  if (watermark.type === "image" && imageSrc) {
     const baseSize = 80 * sy;
     const scaledSize = baseSize * (watermark.scale || 1);
     return (
       <div className="absolute pointer-events-none z-[35]" style={boxStyle}>
         <div className="absolute" style={{ ...posStyle, opacity: watermark.opacity ?? 0.5 }}>
           <img
-            src={watermark.imageDataUrl}
+            src={imageSrc}
             alt=""
             style={{
               height: `${scaledSize}px`,
