@@ -34,6 +34,20 @@ afterEach(() => {
 });
 
 describe("preview worker protocol limits", () => {
+  it("delivers a high-depth PNG response larger than the former JPEG budget", async () => {
+    const proc = fakeWorker();
+    spawn.mockReturnValueOnce(proc);
+    const request = renderPreviewFrame({ timestamp: 0 });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+    proc.stdout.write('{"type":"ready","ok":true}\n');
+    await vi.waitFor(() => expect(proc.stdin.write).toHaveBeenCalled());
+    const id = JSON.parse(proc.stdin.write.mock.calls[0][0]).id;
+    const data_url = `data:image/png;base64,${"A".repeat(14 * 1024 * 1024)}`;
+    proc.stdout.write(`${JSON.stringify({ id, ok: true, data_url })}\n`);
+    expect((await request).data_url).toBe(data_url);
+    expect(proc.kill).not.toHaveBeenCalled();
+  });
+
   it("settles active and queued previews when a response line exceeds its budget", async () => {
     const proc = fakeWorker();
     spawn.mockReturnValueOnce(proc);
@@ -44,7 +58,7 @@ describe("preview worker protocol limits", () => {
     await vi.waitFor(() => expect(proc.stdin.write).toHaveBeenCalled());
     const second = renderPreviewFrame({ timestamp: 2 });
     await new Promise((resolve) => setImmediate(resolve));
-    proc.stdout.write("X".repeat(7 * 1024 * 1024));
+    proc.stdout.write("X".repeat(18 * 1024 * 1024));
     expect(await firstResult).toMatchObject({ ok: false });
     expect(await second).toMatchObject({ ok: false });
     expect(proc.kill).toHaveBeenCalled();

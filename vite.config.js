@@ -6,8 +6,6 @@ import pkg from "./package.json" with { type: "json" };
 
 const require = createRequire(import.meta.url);
 
-// Bundle analysis: set VITE_BERU_ANALYZE=1 and install rollup-plugin-visualizer
-// to generate a stats report at dist/stats.html
 let visualizer = null;
 if (process.env.VITE_BERU_ANALYZE === "1") {
   try {

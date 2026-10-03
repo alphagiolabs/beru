@@ -5,7 +5,8 @@ import { createLineWorker } from "./line-worker.js";
 
 const STARTUP_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 60_000;
-const MAX_RESPONSE_LINE_BYTES = 6 * 1024 * 1024;
+// A 12 MiB PNG uses 16 MiB of base64; reserve room for the JSON envelope.
+const MAX_RESPONSE_LINE_BYTES = 17 * 1024 * 1024;
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const OUTPUT_LIMIT_ERROR = "La salida del preview supera el límite de tamaño";
 

@@ -2,9 +2,13 @@ build
 dist-installer
 dist-electron
 node_modules
+.venv-processor
 terminals
 agent-tools
 coverage
 .pytest_cache
 package-lock.json
 /.audit-tmp/
+/.runtime/
+/.tmp-job-audit-*/
+/beru_*/

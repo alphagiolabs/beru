@@ -16,11 +16,8 @@ export function drawBlurredVideoRegion(ctx, video, region, screen, blurStrength)
     Math.min(videoHeight - sourceY, Math.round(region.h * videoHeight)),
   );
   const requestedRadius = Math.max(1, Math.floor((Number(blurStrength) || 20) / 3));
-  const radiusVideo = Math.max(
-    1,
-    Math.min(requestedRadius, Math.floor(Math.min(sourceWidth, sourceHeight) / 2)),
-  );
-  const padding = radiusVideo * 2;
+  const radiusVideo = Math.min(33, requestedRadius);
+  const padding = radiusVideo * 3;
   const paddedX = Math.max(0, sourceX - padding);
   const paddedY = Math.max(0, sourceY - padding);
   const paddedRight = Math.min(videoWidth, sourceX + sourceWidth + padding);

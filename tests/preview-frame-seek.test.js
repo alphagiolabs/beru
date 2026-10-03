@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const PY = process.env.BERU_PYTHON || "py";
+const PY_ARGS = process.env.BERU_PYTHON ? [] : ["-3"];
 
 const W = 160;
 const H = 120;
@@ -50,7 +51,7 @@ function makeVideo() {
 }
 
 function runPy(code) {
-  const r = spawnSync(PY, ["-3", "-c", code], {
+  const r = spawnSync(PY, [...PY_ARGS, "-c", code], {
     cwd: ROOT,
     encoding: "utf-8",
     timeout: 60000,

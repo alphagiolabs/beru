@@ -20,6 +20,13 @@ function collectValidVideoFiles(filePaths, pathSecurity) {
 
 export function registerVideoHandlers(pathSecurity) {
   const filmstripRequests = new Map();
+  ipcMain.handle(IPC_INVOKE.releaseVideoPaths, (_event, filePaths) => {
+    if (!Array.isArray(filePaths)) return false;
+    if (filePaths.length > MAX_BATCH_PATHS)
+      throw new Error("Demasiados videos en una sola solicitud");
+    pathSecurity.releaseVideoPaths(filePaths);
+    return true;
+  });
   ipcMain.handle(IPC_INVOKE.getVideoInfo, async (_event, filePath) => {
     const check = pathSecurity.validateReadableFile(filePath, "video");
     if (!check.ok) return { exists: false, width: 0, height: 0, duration: 0, error: check.error };

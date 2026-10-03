@@ -201,6 +201,7 @@ describe("StatusFooter", () => {
   });
 
   it("opens a centered confirmation when the current version is up to date", async () => {
+    useEditorStore.getState().applyUpdaterEvent({ type: "not-available", version: "1.6.47" });
     await act(async () => {
       root.render(<StatusFooter />);
     });

@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { EventEmitter } from "node:events";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { IPC_EVENTS, RUN_SCOPED_CHANNELS } from "../shared/ipc-channels.js";
+import { IPC_EVENTS } from "../shared/ipc-channels.js";
 import { createQueueItem } from "../src/utils/types.js";
 
 const events = new EventEmitter();
@@ -21,7 +21,7 @@ const api = {
   cancelProcessing: vi.fn(async () => ({ success: true })),
 };
 for (const [name, channel] of Object.entries(IPC_EVENTS)) {
-  if (!RUN_SCOPED_CHANNELS.has(channel)) continue;
+  if (!channel.startsWith("process:")) continue;
   api[name] = (listener) => {
     events.on(name, listener);
     return () => events.off(name, listener);

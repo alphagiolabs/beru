@@ -47,9 +47,9 @@ def test_inpaint_feather6_with_time_applies_seamless_blend():
     op = _op("inpaint", 6, 5, 10)
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     assert chain is not None
-    assert "luma_radius=min(6" in chain
+    assert "luma_radius=min(2" in chain
     assert "alphamerge" in chain
-    assert "noise=alls=" in chain
+    assert "noise=alls=" not in chain
     assert "overlay=" in chain and "enable=" in chain
 
 

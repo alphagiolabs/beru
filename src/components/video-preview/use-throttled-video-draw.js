@@ -8,6 +8,7 @@ export function useThrottledVideoDraw({
   canvasRef,
   getRegion,
   paint,
+  syncFrames = false,
   afterDraw = null,
   resumeEvents = ["play", "seeked", "loadeddata"],
   deps = [],
@@ -19,18 +20,22 @@ export function useThrottledVideoDraw({
 
     let rafId = 0;
     let timerId = 0;
+    let videoFrameId = 0;
     let lastDrawTs = 0;
-    let pauseController = null;
     const throttleFps = PERF_FLAGS.delogoThrottleFps;
     const throttleInterval = throttleFps > 0 ? 1000 / throttleFps : 0;
 
     const scheduleNext = () => {
-      if (rafId) return;
-      rafId = requestAnimationFrame(draw);
+      if (rafId || videoFrameId) return;
+      const video = videoRef.current;
+      if (!video?.paused && typeof video?.requestVideoFrameCallback === "function") {
+        videoFrameId = video.requestVideoFrameCallback((now, frame) => draw(frame));
+      } else rafId = requestAnimationFrame(() => draw());
     };
 
-    const draw = () => {
+    const draw = (frame = null) => {
       rafId = 0;
+      videoFrameId = 0;
       timerId = 0;
       const video = videoRef.current;
       const region = getRegion();
@@ -38,7 +43,7 @@ export function useThrottledVideoDraw({
         timerId = setTimeout(draw, 1000);
         return;
       }
-      if (!video || !region || video.readyState < 2) {
+      if (!video || !region || video.readyState < 2 || video.seeking) {
         timerId = setTimeout(draw, 100);
         return;
       }
@@ -46,10 +51,12 @@ export function useThrottledVideoDraw({
         const now = performance.now();
         const remaining = throttleInterval - (now - lastDrawTs);
         if (remaining > 0) {
-          timerId = setTimeout(draw, remaining);
-          return;
-        }
-        lastDrawTs = now;
+          if (syncFrames && frame) frame = { ...frame, skipWorker: true };
+          else {
+            timerId = setTimeout(scheduleNext, remaining);
+            return;
+          }
+        } else lastDrawTs = now;
       }
 
       const screen = regionToScreen(region, video);
@@ -58,64 +65,62 @@ export function useThrottledVideoDraw({
         return;
       }
 
-      const width = Math.max(1, Math.round(screen.w));
-      const height = Math.max(1, Math.round(screen.h));
       const dpr = Math.max(1, window.devicePixelRatio || 1);
-      const backingWidth = Math.max(1, Math.round(width * dpr));
-      const backingHeight = Math.max(1, Math.round(height * dpr));
+      const left = Math.floor(screen.x * dpr),
+        top = Math.floor(screen.y * dpr);
+      const backingWidth = Math.max(1, Math.ceil((screen.x + screen.w) * dpr) - left);
+      const backingHeight = Math.max(1, Math.ceil((screen.y + screen.h) * dpr) - top);
       if (canvas.width !== backingWidth) canvas.width = backingWidth;
       if (canvas.height !== backingHeight) canvas.height = backingHeight;
-      canvas.style.left = `${screen.x}px`;
-      canvas.style.top = `${screen.y}px`;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
+      canvas.style.left = `${left / dpr}px`;
+      canvas.style.top = `${top / dpr}px`;
+      canvas.style.width = `${backingWidth / dpr}px`;
+      canvas.style.height = `${backingHeight / dpr}px`;
 
       const ctx = canvas.getContext("2d");
       if (typeof ctx.setTransform === "function") {
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, backingWidth, backingHeight);
+        ctx.setTransform(dpr, 0, 0, dpr, screen.x * dpr - left, screen.y * dpr - top);
       }
-      paint(ctx, video, region, screen);
+      paint(ctx, video, region, screen, frame);
       afterDraw?.(screen, video);
 
-      if (video.paused) {
-        if (!pauseController) {
-          pauseController = new AbortController();
-          const resume = () => {
-            pauseController?.abort();
-            pauseController = null;
-            scheduleNext();
-          };
-          for (const eventName of resumeEvents) {
-            video.addEventListener(eventName, resume, {
-              once: true,
-              signal: pauseController.signal,
-            });
-          }
-        }
-        return;
-      }
-      scheduleNext();
+      if (!video.paused) scheduleNext();
     };
 
-    scheduleNext();
     const video = videoRef.current;
+    const cancelDraw = () => {
+      cancelAnimationFrame(rafId);
+      video?.cancelVideoFrameCallback?.(videoFrameId);
+      clearTimeout(timerId);
+      rafId = 0;
+      videoFrameId = 0;
+      timerId = 0;
+    };
+    const refresh = () => {
+      cancelDraw();
+      lastDrawTs = 0;
+      rafId = requestAnimationFrame(() => draw());
+    };
+    const events = new Set([...resumeEvents, "pause"]);
+    for (const eventName of events) video?.addEventListener(eventName, refresh);
+    video?.addEventListener("seeking", cancelDraw);
+    scheduleNext();
     const resizeObserver =
       video && typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
             if (video.paused) {
-              clearTimeout(timerId);
-              cancelAnimationFrame(rafId);
-              rafId = 0;
-              scheduleNext();
+              refresh();
             }
           })
         : null;
     resizeObserver?.observe(video);
     return () => {
-      cancelAnimationFrame(rafId);
-      clearTimeout(timerId);
-      pauseController?.abort();
+      cancelDraw();
+      for (const eventName of events) video?.removeEventListener(eventName, refresh);
+      video?.removeEventListener("seeking", cancelDraw);
       resizeObserver?.disconnect();
     };
-  }, [enabled, videoRef, canvasRef, ...deps]);
+  }, [enabled, videoRef, canvasRef, syncFrames, ...deps]);
 }

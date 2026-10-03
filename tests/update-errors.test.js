@@ -8,6 +8,7 @@ describe("formatUpdateError", () => {
     expect(formatUpdateError(t, "no-update-available")).toBe("updater.errors.noUpdateAvailable");
     expect(formatUpdateError(t, "no-api")).toBe("updater.errors.noApi");
     expect(formatUpdateError(t, "dev-build")).toBe("updater.errors.devBuild");
+    expect(formatUpdateError(t, "ERR_CHECKSUM_MISMATCH")).toBe("updater.errors.checksumMismatch");
   });
 
   it("falls back to generic message for unknown errors", () => {

@@ -1,6 +1,6 @@
 import { pickTextStyle } from "../../utils/text-style";
 
-export function samePresetValue(a, b) {
+function samePresetValue(a, b) {
   if (typeof a === "string" || typeof b === "string") {
     return String(a ?? "").toLowerCase() === String(b ?? "").toLowerCase();
   }

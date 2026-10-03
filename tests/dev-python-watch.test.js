@@ -32,7 +32,7 @@ describe("shouldRestartElectronForPythonChange", () => {
   });
 
   it("ignores scratch/build scripts and non-py names", () => {
-    expect(shouldRestartElectronForPythonChange("build_excel_template.py")).toBe(false);
+    expect(shouldRestartElectronForPythonChange("scratch.py")).toBe(false);
     expect(shouldRestartElectronForPythonChange("__pycache__")).toBe(false);
     expect(shouldRestartElectronForPythonChange(null)).toBe(false);
     expect(shouldRestartElectronForPythonChange("")).toBe(false);

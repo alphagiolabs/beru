@@ -169,4 +169,29 @@ describe("pathSecurity", () => {
       fs.rmSync(trustedRoot, { recursive: true, force: true });
     }
   });
+
+  it("releases only removed video grants without authorizing neighboring files", () => {
+    const trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-trusted-"));
+    const outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-selected-"));
+    const narrow = createPathSecurity(makeNarrowApp(trustedRoot));
+    const files = [path.join(outsideRoot, "a.mp4"), path.join(outsideRoot, "b.mp4")];
+    try {
+      for (const file of [...files, path.join(outsideRoot, "unselected.mp4")])
+        fs.writeFileSync(file, "video");
+      expect(narrow.registerSelectedPaths(files, "video")).toHaveLength(2);
+      expect(narrow.validateReadableFile(files[0], "video").ok).toBe(true);
+      expect(narrow.validateReadableFile(files.at(-1), "video").ok).toBe(true);
+      expect(
+        narrow.validateReadableFile(path.join(outsideRoot, "unselected.mp4"), "video").ok,
+      ).toBe(false);
+      narrow.releaseVideoPaths([files[0]]);
+      expect(narrow.validateReadableFile(files[0], "video").ok).toBe(false);
+      expect(narrow.validateReadableFile(files[1], "video").ok).toBe(true);
+      expect(narrow.registerSelectedPath(files[0], "video").ok).toBe(true);
+      expect(narrow.validateReadableFile(files[0], "video").ok).toBe(true);
+    } finally {
+      fs.rmSync(trustedRoot, { recursive: true, force: true });
+      fs.rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
 });

@@ -41,6 +41,7 @@ bin/beru-processor.exe
 bin/beru-processor
 
 # PyInstaller build artifacts
+.venv-processor/
 build/pyinstaller/
 python/build/
 python/dist/
@@ -85,12 +86,17 @@ nul
 !/scripts/benchmark-render.ps1
 !/scripts/build-processor.hook.cjs
 !/scripts/build-processor.mjs
+!/scripts/processor-build-state.mjs
+!/scripts/electron-builder.config.cjs
+!/scripts/verify-installer-signature.ps1
 !/scripts/dev-python-watch.mjs
 !/scripts/dev.mjs
 !/scripts/fetch-ffmpeg.mjs
 !/scripts/regression-guard.mjs
 !/scripts/regression-guard.sh
 !/scripts/release-loop.mjs
+!/scripts/release-metadata.mjs
+!/scripts/verify-update-download.cjs
 !/scripts/test-python.mjs
 !/scripts/verify.mjs
 !/scripts/benchmark-memory.mjs
@@ -98,3 +104,6 @@ nul
 
 .worktrees/
 /.audit-tmp/
+/.runtime/
+/.tmp-job-audit-*/
+/beru_*/

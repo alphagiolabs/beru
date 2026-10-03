@@ -5,7 +5,6 @@ import {
   recommendBatchWorkers,
   estimateJobRamMb,
   memoryCapWorkers,
-  AUTO_TARGET_WORKERS,
 } from "../main/workerPolicy.js";
 
 const PLENTY_OF_RAM_MB = 64 * 1024;
@@ -30,7 +29,7 @@ describe("workerPolicy", () => {
         mode: "balanced",
         availableRamMb: PLENTY_OF_RAM_MB,
       }),
-    ).toBe(AUTO_TARGET_WORKERS);
+    ).toBe(5);
   });
 
   it("conservative NVENC stays at 2", () => {
@@ -95,7 +94,7 @@ describe("workerPolicy", () => {
 
     expect(r.encoder).toBe("h264_nvenc");
     expect(r.reason).toBe("gpu_balanced");
-    expect(r.recommended).toBe(AUTO_TARGET_WORKERS);
+    expect(r.recommended).toBe(5);
   });
 
   it("quality profile keeps the CPU filter cap when no hardware encoder exists", () => {

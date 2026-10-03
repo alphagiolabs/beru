@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import useEditorStore from "../stores/useEditorStore";
 import { regionToScreen } from "../utils/video-utils";
 import { createDelogoRenderBridge } from "../utils/delogo-render-bridge.js";
-import { temporalSampleSize } from "../utils/delogo-render-core.js";
-import { drawBlurredVideoRegion } from "./video-preview/draw-blurred-video-region.js";
+import { spatialLogoFallback, temporalSampleSize } from "../utils/delogo-render-core.js";
+import {
+  logoSourceRect as sourceRect,
+  logoPreviewGeometry,
+  paddedLogoRect,
+} from "../utils/delogo-preview-geometry.js";
 import { useThrottledVideoDraw } from "./video-preview/use-throttled-video-draw.js";
 import { isOpActive } from "../utils/operation.js";
 import { useT } from "../i18n/useT";
@@ -54,20 +58,7 @@ function getTinyCanvas(w, h, ws) {
   return getWorkspaceCanvas(ws, "tiny", w, h, false);
 }
 
-function sourceRect(region, video) {
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
-  const sx = Math.max(0, Math.min(vw - 1, Math.round(region.x * vw)));
-  const sy = Math.max(0, Math.min(vh - 1, Math.round(region.y * vh)));
-  return {
-    sx,
-    sy,
-    sw: Math.max(1, Math.min(vw - sx, Math.round(region.w * vw))),
-    sh: Math.max(1, Math.min(vh - sy, Math.round(region.h * vh))),
-  };
-}
-
-function paintResult(ws, ctx, screen, result, target, smooth) {
+function paintResult(ws, ctx, screen, result, target, smooth, crop = null) {
   const { canvas, ctx: targetCtx } =
     target === "tiny"
       ? getTinyCanvas(result.width, result.height, ws)
@@ -78,7 +69,17 @@ function paintResult(ws, ctx, screen, result, target, smooth) {
   ctx.save();
   ctx.imageSmoothingEnabled = smooth;
   ctx.clearRect(0, 0, screen.w, screen.h);
-  ctx.drawImage(canvas, 0, 0, result.width, result.height, 0, 0, screen.w, screen.h);
+  ctx.drawImage(
+    canvas,
+    crop ? crop.x - (result.x ?? 0) : 0,
+    crop ? crop.y - (result.y ?? 0) : 0,
+    crop?.w ?? result.width,
+    crop?.h ?? result.height,
+    0,
+    0,
+    screen.w,
+    screen.h,
+  );
   ctx.restore();
 }
 
@@ -89,7 +90,38 @@ function captureSourceFrame(ws, video, rect, outW, outH) {
   return sctx.getImageData(0, 0, outW, outH);
 }
 
-function submitMosaic(bridge, ws, video, region, screen, blockSize, ctx) {
+function captureLogoPatch(ws, video, rect, geometry, screen, feather) {
+  const selection = geometry.repair;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const { sampleW, sampleH } = temporalSampleSize(
+    rect.sw,
+    rect.sh,
+    Math.max(320, Math.ceil((screen.w * dpr * rect.sw) / geometry.effect.sw)),
+    Math.max(180, Math.ceil((screen.h * dpr * rect.sh) / geometry.effect.sh)),
+  );
+  const scaleX = sampleW / rect.sw;
+  const scaleY = sampleH / rect.sh;
+  const x = Math.floor((selection.sx - rect.sx) * scaleX);
+  const y = Math.floor((selection.sy - rect.sy) * scaleY);
+  const right = Math.ceil((selection.sx + selection.sw - rect.sx) * scaleX);
+  const bottom = Math.ceil((selection.sy + selection.sh - rect.sy) * scaleY);
+  return {
+    frame: captureSourceFrame(ws, video, rect, sampleW, sampleH),
+    width: sampleW,
+    height: sampleH,
+    box: { x, y, w: Math.max(1, right - x), h: Math.max(1, bottom - y) },
+    scale: Math.min(scaleX, scaleY),
+    feather: feather * Math.min(scaleX, scaleY),
+    crop: {
+      x: (geometry.effect.sx - rect.sx) * scaleX,
+      y: (geometry.effect.sy - rect.sy) * scaleY,
+      w: geometry.effect.sw * scaleX,
+      h: geometry.effect.sh * scaleY,
+    },
+  };
+}
+
+function submitMosaic(bridge, ws, video, region, screen, blockSize, ctx, isCurrent) {
   const rect = sourceRect(region, video);
   const frame = captureSourceFrame(ws, video, rect, rect.sw, rect.sh);
   bridge.compute(
@@ -101,7 +133,9 @@ function submitMosaic(bridge, ws, video, region, screen, blockSize, ctx) {
       height: rect.sh,
       context: { screen },
     },
-    (context, result) => paintResult(ws, ctx, context.screen, result, "tiny", false),
+    (context, result) => {
+      if (isCurrent()) paintResult(ws, ctx, context.screen, result, "tiny", false);
+    },
   );
 }
 
@@ -165,42 +199,211 @@ function renderMirror(ctx, video, region, screen, side) {
   ctx.restore();
 }
 
-function submitInpaint(bridge, ws, video, region, screen, ctx) {
-  const rect = sourceRect(region, video);
-  const frame = captureSourceFrame(ws, video, rect, rect.sw, rect.sh);
+function submitBlur(
+  bridge,
+  ws,
+  video,
+  geometry,
+  screen,
+  ctx,
+  strength,
+  feather,
+  isCurrent,
+  runWorker,
+) {
+  const radius = Math.max(1, Math.floor(Math.max(1, Math.min(100, Number(strength) || 20)) / 3));
+  const rect = paddedLogoRect(geometry.effect, video, 3 * radius);
+  const patch = captureLogoPatch(ws, video, rect, geometry, screen, feather);
+  const { crop } = patch;
+  const params = {
+    radius: Math.max(1, Math.round(radius * patch.scale)),
+    box: patch.box,
+    feather: patch.feather,
+  };
+  paintResult(
+    ws,
+    ctx,
+    screen,
+    spatialLogoFallback(patch.frame.data, patch.width, patch.height, params, "blur"),
+    "source",
+    true,
+    crop,
+  );
+  if (!runWorker) return;
   bridge.compute(
     {
-      method: "inpaint",
-      params: null,
-      frame,
-      width: rect.sw,
-      height: rect.sh,
-      context: { screen },
+      method: "blur",
+      params,
+      frame: patch.frame,
+      width: patch.width,
+      height: patch.height,
+      context: { screen, crop },
     },
-    (context, result) => paintResult(ws, ctx, context.screen, result, "source", true),
+    (context, result) => {
+      if (isCurrent()) paintResult(ws, ctx, context.screen, result, "source", true, context.crop);
+    },
   );
 }
 
-function submitTemporal(bridge, ws, video, region, screen, radius, ctx) {
-  const rect = sourceRect(region, video);
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const { sampleW, sampleH } = temporalSampleSize(
-    rect.sw,
-    rect.sh,
-    Math.max(1, Math.round(screen.w * dpr)),
-    Math.max(1, Math.round(screen.h * dpr)),
+function submitInpaint(
+  bridge,
+  ws,
+  video,
+  geometry,
+  screen,
+  ctx,
+  blurStrength,
+  feather,
+  isCurrent,
+  timestamp,
+  runWorker,
+) {
+  const rect = geometry.selection;
+  if (
+    rect.sx === 0 ||
+    rect.sy === 0 ||
+    rect.sx + rect.sw === video.videoWidth ||
+    rect.sy + rect.sh === video.videoHeight
+  ) {
+    submitBlur(
+      bridge,
+      ws,
+      video,
+      geometry,
+      screen,
+      ctx,
+      blurStrength,
+      feather,
+      isCurrent,
+      runWorker,
+    );
+    return;
+  }
+  const rectWithContext = paddedLogoRect(geometry.effect, video, 96);
+  const patch = captureLogoPatch(ws, video, rectWithContext, geometry, screen, feather);
+  const { crop } = patch;
+  if (
+    patch.box.x < 1 ||
+    patch.box.y < 1 ||
+    patch.box.x + patch.box.w >= patch.width ||
+    patch.box.y + patch.box.h >= patch.height
+  ) {
+    submitBlur(
+      bridge,
+      ws,
+      video,
+      geometry,
+      screen,
+      ctx,
+      blurStrength,
+      feather,
+      isCurrent,
+      runWorker,
+    );
+    return;
+  }
+  const params = {
+    box: patch.box,
+    feather: patch.feather,
+    smoothRadius: Math.round(2 * patch.scale),
+    guard: Math.max(1, Math.round(2 * patch.scale)),
+    referenceGuard: Math.max(1, Math.ceil(patch.scale)),
+    search: Math.max(4, Math.round(96 * patch.scale)),
+    radius: 3,
+    timestamp,
+  };
+  paintResult(
+    ws,
+    ctx,
+    screen,
+    spatialLogoFallback(patch.frame.data, patch.width, patch.height, params),
+    "source",
+    true,
+    crop,
   );
-  const frame = captureSourceFrame(ws, video, rect, sampleW, sampleH);
+  if (!runWorker) return;
+  bridge.compute(
+    {
+      method: "inpaint",
+      params,
+      frame: patch.frame,
+      width: patch.width,
+      height: patch.height,
+      context: { screen, crop },
+    },
+    (context, result) => {
+      if (isCurrent()) paintResult(ws, ctx, context.screen, result, "source", true, context.crop);
+    },
+  );
+}
+
+function submitTemporal(
+  bridge,
+  ws,
+  video,
+  geometry,
+  screen,
+  radius,
+  ctx,
+  strength,
+  feather,
+  isCurrent,
+  timestamp,
+  runWorker,
+) {
+  const selection = geometry.selection;
+  if (
+    selection.sx === 0 ||
+    selection.sy === 0 ||
+    selection.sx + selection.sw === video.videoWidth ||
+    selection.sy + selection.sh === video.videoHeight
+  ) {
+    submitBlur(bridge, ws, video, geometry, screen, ctx, strength, feather, isCurrent, runWorker);
+    return;
+  }
+  const rect = paddedLogoRect(geometry.effect, video, 32);
+  const patch = captureLogoPatch(ws, video, rect, geometry, screen, feather);
+  if (
+    patch.box.x < 1 ||
+    patch.box.y < 1 ||
+    patch.box.x + patch.box.w >= patch.width ||
+    patch.box.y + patch.box.h >= patch.height
+  ) {
+    submitBlur(bridge, ws, video, geometry, screen, ctx, strength, feather, isCurrent, runWorker);
+    return;
+  }
+  const { crop } = patch;
+  const params = {
+    radius,
+    box: patch.box,
+    feather: patch.feather,
+    smoothRadius: Math.round(2 * patch.scale),
+    guard: Math.max(1, Math.round(2 * patch.scale)),
+    referenceGuard: Math.max(1, Math.ceil(patch.scale)),
+    timestamp,
+  };
+  paintResult(
+    ws,
+    ctx,
+    screen,
+    spatialLogoFallback(patch.frame.data, patch.width, patch.height, params),
+    "source",
+    true,
+    crop,
+  );
+  if (!runWorker) return;
   bridge.compute(
     {
       method: "temporal",
-      params: { radius },
-      frame,
-      width: sampleW,
-      height: sampleH,
-      context: { screen },
+      params,
+      frame: patch.frame,
+      width: patch.width,
+      height: patch.height,
+      context: { screen, crop },
     },
-    (context, result) => paintResult(ws, ctx, context.screen, result, "source", true),
+    (context, result) => {
+      if (isCurrent()) paintResult(ws, ctx, context.screen, result, "source", true, context.crop);
+    },
   );
 }
 
@@ -213,6 +416,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   const sidebarMode = useEditorStore((s) => s.sidebarMode);
   const draftMethod = useEditorStore((s) => s.delogoMethod);
   const draftBlurStrength = useEditorStore((s) => s.blurStrength);
+  const draftFeather = useEditorStore((s) => s.edgeFeather);
   const draftFillColor = useEditorStore((s) => s.delogoFillColor);
   const draftFillOpacity = useEditorStore((s) => s.delogoFillOpacity);
   const draftImagePath = useEditorStore((s) => s.delogoImagePath);
@@ -224,6 +428,10 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   const currentRegion = operation?.region ?? draftRegion;
   const delogoMethod = operation?.delogoMethod ?? draftMethod;
   const blurStrength = operation?.blurStrength ?? draftBlurStrength;
+  const feather = Math.max(
+    0,
+    Math.min(40, Math.floor(Number(operation?.edgeFeather ?? draftFeather) || 0)),
+  );
   const delogoFillColor = operation?.delogoFillColor ?? draftFillColor;
   const delogoFillOpacity = operation?.delogoFillOpacity ?? draftFillOpacity;
   const delogoImagePath = operation?.delogoImagePath ?? draftImagePath;
@@ -236,9 +444,14 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   const labelRef = useRef(null);
   const cssRef = useRef(null);
   const [coverImgData, setCoverImgData] = useState(null);
+  const [drawRevision, setDrawRevision] = useState(0);
   const bridgeRef = useRef(null);
+  const drawTokenRef = useRef(0);
   const getBridge = () => {
-    if (!bridgeRef.current) bridgeRef.current = createDelogoRenderBridge();
+    if (!bridgeRef.current)
+      bridgeRef.current = createDelogoRenderBridge({
+        onUnavailable: () => setDrawRevision((value) => value + 1),
+      });
     return bridgeRef.current;
   };
 
@@ -265,41 +478,123 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   const videoSrc = videoRef?.current?.currentSrc || videoRef?.current?.src || "";
   useEffect(() => {
     bridgeRef.current?.reset();
-  }, [currentRegion, delogoMethod, videoSrc]);
+  }, [
+    currentRegion,
+    delogoMethod,
+    videoSrc,
+    feather,
+    blurStrength,
+    mosaicSize,
+    mirrorSide,
+    temporalRadius,
+    startTime,
+    endTime,
+  ]);
 
   useEffect(() => {
     if (!isCanvas) return;
     const video = videoRef.current;
     if (!video) return;
     const clearFrames = () => {
+      drawTokenRef.current++;
       bridgeRef.current?.reset();
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.style.visibility = "hidden";
+        canvas
+          .getContext("2d")
+          ?.clearRect(-canvas.width, -canvas.height, 2 * canvas.width, 2 * canvas.height);
+      }
     };
+    video.addEventListener("seeking", clearFrames);
     video.addEventListener("seeked", clearFrames);
-    return () => video.removeEventListener("seeked", clearFrames);
+    video.addEventListener("emptied", clearFrames);
+    return () => {
+      drawTokenRef.current++;
+      video.removeEventListener("seeking", clearFrames);
+      video.removeEventListener("seeked", clearFrames);
+      video.removeEventListener("emptied", clearFrames);
+    };
   }, [isCanvas, videoRef, videoSrc]);
 
   useThrottledVideoDraw({
     enabled: isCanvas,
+    syncFrames: ["inpaint", "temporal", "blur"].includes(delogoMethod),
     videoRef,
     canvasRef,
-    getRegion: () => operation?.region ?? useEditorStore.getState().currentRegion,
-    paint: (ctx, video, region, screen) => {
+    getRegion: () => {
+      const region = operation?.region ?? useEditorStore.getState().currentRegion;
+      const video = videoRef.current;
+      return region && video && ["inpaint", "blur", "temporal"].includes(delogoMethod)
+        ? logoPreviewGeometry(region, video, feather, delogoMethod).region
+        : region;
+    },
+    paint: (ctx, video, region, screen, frame) => {
+      const token = ++drawTokenRef.current;
+      const clock = video.currentTime;
+      const source = video.currentSrc || video.src;
+      const isCurrent = () =>
+        drawTokenRef.current === token &&
+        !video.seeking &&
+        (video.currentSrc || video.src) === source &&
+        (!video.paused || video.currentTime === clock);
+      const timestamp = frame?.mediaTime ?? clock;
       const active = isOpActive({ startTime, endTime }, video.currentTime);
       canvasRef.current.style.visibility = active ? "visible" : "hidden";
       if (!active) {
+        bridgeRef.current?.reset();
         ctx.clearRect(0, 0, screen.w, screen.h);
         return;
       }
       const ws = getPreviewWorkspace(video);
       const bridge = getBridge();
+      const selectedRegion = operation?.region ?? useEditorStore.getState().currentRegion;
+      const geometry = logoPreviewGeometry(selectedRegion, video, feather, delogoMethod);
       if (delogoMethod === "mosaic")
-        submitMosaic(bridge, ws, video, region, screen, mosaicSize, ctx);
+        submitMosaic(bridge, ws, video, region, screen, mosaicSize, ctx, isCurrent);
       else if (delogoMethod === "mirror") renderMirror(ctx, video, region, screen, mirrorSide);
-      else if (delogoMethod === "inpaint") submitInpaint(bridge, ws, video, region, screen, ctx);
+      else if (delogoMethod === "inpaint")
+        submitInpaint(
+          bridge,
+          ws,
+          video,
+          geometry,
+          screen,
+          ctx,
+          blurStrength,
+          feather,
+          isCurrent,
+          timestamp,
+          !frame?.skipWorker,
+        );
       else if (delogoMethod === "blur")
-        drawBlurredVideoRegion(ctx, video, region, screen, blurStrength);
+        submitBlur(
+          bridge,
+          ws,
+          video,
+          geometry,
+          screen,
+          ctx,
+          blurStrength,
+          feather,
+          isCurrent,
+          !frame?.skipWorker,
+        );
       else if (delogoMethod === "temporal")
-        submitTemporal(bridge, ws, video, region, screen, temporalRadius, ctx);
+        submitTemporal(
+          bridge,
+          ws,
+          video,
+          geometry,
+          screen,
+          temporalRadius,
+          ctx,
+          blurStrength,
+          feather,
+          isCurrent,
+          timestamp,
+          !frame?.skipWorker,
+        );
     },
     afterDraw: (screen) => {
       const label = labelRef.current;
@@ -309,12 +604,14 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
       }
     },
     deps: [
+      drawRevision,
       currentRegion,
       delogoMethod,
       mosaicSize,
       mirrorSide,
       temporalRadius,
       blurStrength,
+      feather,
       startTime,
       endTime,
     ],

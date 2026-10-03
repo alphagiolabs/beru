@@ -62,6 +62,22 @@ describe("letterboxContent", () => {
 describe("text region interaction — coordinate contract", () => {
   const region = { x: 0.25, y: 0.25, w: 0.5, h: 0.25 };
 
+  it("preserves fractional CSS dimensions without applying the shared zoom twice", () => {
+    const video = document.createElement("video");
+    video.style.width = "253.375px";
+    video.style.height = "142.5234375px";
+    Object.defineProperties(video, {
+      offsetWidth: { value: 253 },
+      offsetHeight: { value: 143 },
+      videoWidth: { value: 320 },
+      videoHeight: { value: 180 },
+    });
+    video.getBoundingClientRect = () => ({ width: 506.75, height: 285.046875 });
+    const screen = regionToScreen(region, video);
+    expect(screen.x).toBeCloseTo(63.34375, 5);
+    expect(screen.w).toBeCloseTo(126.6875, 5);
+  });
+
   it("at zoom=1, layout and visual content rects agree", () => {
     const video = mockVideo({ layoutW: 640, layoutH: 360, zoom: 1 });
     const layout = contentRectLayout(video);

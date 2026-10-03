@@ -31,4 +31,22 @@ describe("updaterSlice", () => {
     expect(res).toEqual({ ok: true, reason: "already-in-progress" });
     expect(window.api.downloadUpdate).not.toHaveBeenCalled();
   });
+  it("restores a retryable update after an IPC rejection following real progress", async () => {
+    let rejectDownload;
+    window.api = {
+      downloadUpdate: () =>
+        new Promise((_resolve, reject) => {
+          rejectDownload = reject;
+        }),
+    };
+    useEditorStore.getState().applyUpdaterEvent({ type: "available", version: "1.6.99" });
+    const download = useEditorStore.getState().downloadUpdate();
+    useEditorStore.getState().applyUpdaterEvent({ type: "downloading", percent: 65 });
+    rejectDownload(new Error("IPC disconnected"));
+    expect(await download).toMatchObject({ ok: false, error: "IPC disconnected" });
+    expect(useEditorStore.getState().update).toMatchObject({
+      status: "available",
+      error: "IPC disconnected",
+    });
+  });
 });

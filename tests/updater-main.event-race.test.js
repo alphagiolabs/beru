@@ -69,26 +69,41 @@ describe("main/updater.js event race guard", () => {
     await downloadPromise;
   });
 
-  it("starts download using renderer version hint when pendingVersion was lost", async () => {
+  it("rechecks the provider rather than trusting a renderer version hint", async () => {
     harness.init();
+    harness.resolveCheck({ updateInfo: { version: "1.6.36" } });
+    await new Promise((resolve) => setImmediate(resolve));
 
     const downloadPromise = harness.updater.startDownload({ version: "1.6.99" });
-
-    expect(harness.events.at(-1).type).toBe("downloading");
-    expect(harness.events.at(-1).version).toBe("1.6.99");
-
-    harness.resolveDownload();
-    await downloadPromise;
-
-    harness.emit("update-downloaded", { version: "1.6.99" });
-    expect(harness.events.at(-1).type).toBe("ready");
+    harness.emit("update-not-available", { version: "1.6.36" });
+    harness.resolveCheck({ updateInfo: { version: "1.6.36" } });
+    expect(harness.events.some((event) => event.type === "downloading")).toBe(false);
+    expect(await downloadPromise).toMatchObject({ ok: false, error: "no-update-available" });
+    expect(harness.events.some((event) => event.type === "downloading")).toBe(false);
   });
 
-  it("disables Authenticode verification for unsigned NSIS builds", () => {
+  it("retains release notes in a ready snapshot after renderer recreation", async () => {
+    harness.init();
+    harness.emit("update-available", {
+      version: "1.6.99",
+      releaseNotes: "Fixed\n- Preserve notes",
+    });
+    const downloading = harness.updater.startDownload();
+    harness.emit("download-progress", { percent: 45, transferred: 450, total: 1000 });
+    harness.emit("update-downloaded", { version: "1.6.99" });
+    harness.resolveDownload();
+    await downloading;
+    expect(harness.updater.getSnapshot()).toMatchObject({
+      type: "ready",
+      releaseNotes: "Fixed\n- Preserve notes",
+    });
+  });
+
+  it("preserves Authenticode rejection from electron-updater", () => {
     harness.init();
     expect(harness.autoUpdater.verifyUpdateCodeSignature).toBeTypeOf("function");
-    return expect(
-      harness.autoUpdater.verifyUpdateCodeSignature([], "fake.exe"),
-    ).resolves.toBeNull();
+    return expect(harness.autoUpdater.verifyUpdateCodeSignature([], "fake.exe")).resolves.toBe(
+      "invalid signature",
+    );
   });
 });

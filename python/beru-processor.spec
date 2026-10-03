@@ -17,10 +17,8 @@ a = Analysis(
     pathex=[str(script_dir)],
     binaries=[],
     datas=datas,
-    # Safety net: PyInstaller's static analysis detects these automatically,
-    # but listing them explicitly guards against future refactors that switch
-    # to dynamic imports (which the static analyzer can't follow).
     hiddenimports=[
+        "numpy",
         "encode_profiles",
         "batch_errors",
         "batch_context",
@@ -35,6 +33,9 @@ a = Analysis(
         "media_probe",
         "op_shared",
         "preview",
+        "temporal_motion",
+        "temporal_pipeline",
+        "spatial_inpaint",
         "color_validation",
         "delogo_chains",
         "text_layout_helpers",

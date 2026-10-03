@@ -7,6 +7,7 @@ export const IDLE_UPDATE = {
   total: 0,
   releaseNotes: "",
   releaseUrl: null,
+  verified: false,
 };
 
 function clampPercent(value) {
@@ -42,7 +43,7 @@ export function reduceUpdaterEvent(current, payload) {
 
   if (type === "not-available") {
     if (PENDING_UPDATE_STATUSES.has(current?.status)) return current;
-    return { ...IDLE_UPDATE };
+    return { ...IDLE_UPDATE, verified: true };
   }
 
   if (type === "downloading") {
@@ -53,7 +54,7 @@ export function reduceUpdaterEvent(current, payload) {
       error: null,
       transferred: payload.transferred || 0,
       total: payload.total || 0,
-      releaseNotes: current?.releaseNotes || "",
+      releaseNotes: payload.releaseNotes || current?.releaseNotes || "",
       releaseUrl: payload.releaseUrl || current?.releaseUrl || null,
     };
   }
@@ -66,13 +67,22 @@ export function reduceUpdaterEvent(current, payload) {
       error: null,
       transferred: current?.total || current?.transferred || 0,
       total: current?.total || 0,
-      releaseNotes: current?.releaseNotes || "",
+      releaseNotes: payload.releaseNotes || current?.releaseNotes || "",
       releaseUrl: payload.releaseUrl || current?.releaseUrl || null,
     };
   }
 
   if (type === "error") {
-    if (current?.status === "ready") return current;
+    const status = payload.recoverTo || current?.status;
+    if (status === "ready") {
+      return {
+        ...current,
+        ...payload,
+        status: "ready",
+        percent: 100,
+        error: payload.message || null,
+      };
+    }
     if (current?.status === "downloading") {
       return {
         ...current,
@@ -83,8 +93,10 @@ export function reduceUpdaterEvent(current, payload) {
         error: payload.message || null,
       };
     }
-    if (current?.status === "available") return current;
-    return { ...IDLE_UPDATE };
+    if (status === "available") {
+      return { ...current, ...payload, status: "available", error: payload.message || null };
+    }
+    return { ...IDLE_UPDATE, error: payload.message || null };
   }
 
   if (type === "disabled") {

@@ -1,11 +1,7 @@
 """Pure operation normalization, geometry and timing helpers."""
 
-import logging
 import math
 import os
-
-logger = logging.getLogger("beru")
-
 
 def _env_flag(name, default, *, env=None):
     """Boolean env flag: unset -> default; '0/false/no/off' -> False."""
@@ -80,73 +76,6 @@ def _normalize_operation(op):
             out[snake] = out[camel]
 
     return out
-
-
-def _optimize_delogo_for_speed(op, video_w, video_h):
-    """Use inpaint instead of tmedian for full-duration static logos (much faster)."""
-    if (op.get("mode") or "").lower() != "delogo":
-        return op
-    method = (op.get("delogo_method") or "temporal").lower()
-    if method != "temporal":
-        return op
-
-    start = op.get("start_time", op.get("startTime"))
-    end = op.get("end_time", op.get("endTime"))
-    if start is not None or end is not None:
-        return op
-
-    radius = op.get("temporal_radius")
-    try:
-        if int(radius) != 3:
-            return op
-    except (TypeError, ValueError):
-        pass
-
-    region = op.get("region") or {}
-    rw = float(region.get("w", 0))
-    rh = float(region.get("h", 0))
-    if rw <= 0 or rh <= 0:
-        return op
-
-    if _region_looks_normalized(region, video_w, video_h):
-        px = float(region.get("x", 0))
-        py = float(region.get("y", 0))
-        area_ratio = rw * rh
-        edge_x0 = px * video_w
-        edge_y0 = py * video_h
-        edge_x1 = (px + rw) * video_w
-        edge_y1 = (py + rh) * video_h
-    elif video_w > 0 and video_h > 0:
-        area_ratio = (rw * rh) / (video_w * video_h)
-        edge_x0 = float(region.get("x", 0))
-        edge_y0 = float(region.get("y", 0))
-        edge_x1 = edge_x0 + rw
-        edge_y1 = edge_y0 + rh
-    else:
-        area_ratio = 0.1
-        edge_x0 = edge_y0 = 0
-        edge_x1 = edge_y1 = 1
-
-    if area_ratio > 0.25:
-        return op
-
-    # FFmpeg delogo fails flush to the frame edge. Keep temporal there.
-    band = 1.0
-    if video_w > 0 and video_h > 0:
-        if (
-            edge_x0 <= band
-            or edge_y0 <= band
-            or edge_x1 >= video_w - band
-            or edge_y1 >= video_h - band
-        ):
-            return op
-
-    optimized = dict(op)
-    optimized["delogo_method"] = "inpaint"
-    logger.debug(
-        "delogo: temporal -> inpaint (%.1f%% frame, faster static path)", area_ratio * 100
-    )
-    return optimized
 
 
 def _region_looks_normalized(region, video_w, video_h):

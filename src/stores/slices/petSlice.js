@@ -6,7 +6,7 @@ const FEATURED_SLUGS = ["boba", "doraemon", "wangcai", "eve", "mallow", "noir-we
 const EMPTY_MANIFEST = { total: 0, pets: [] };
 export const PET_SCALE_MIN = 0.1;
 export const PET_SCALE_MAX = 3;
-export const PET_SCALE_DEFAULT = 0.33;
+const PET_SCALE_DEFAULT = 0.33;
 
 let petsInitPromise = null;
 

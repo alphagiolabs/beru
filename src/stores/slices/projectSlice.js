@@ -22,9 +22,9 @@ import {
 } from "../../../shared/project-document.js";
 import { swallow } from "../../utils/swallow.js";
 
-function templateState(data, state) {
+function templateState(data) {
   const templateRegions = sanitizeTemplateRegions(data.templateRegions);
-  const watermark = restoreWatermark(data.watermark);
+  const watermark = restoreWatermark(data.watermark) || restoreWatermark({});
   return {
     templateRegions,
     selectedTemplateRegionId: templateRegions[0]?.id ?? null,
@@ -33,7 +33,7 @@ function templateState(data, state) {
     imageDataCache: {},
     ...sanitizeTextStyle(data.textStyle || {}),
     ...sanitizeDefaults(data.defaults || {}),
-    ...(watermark ? { watermark: { ...state.watermark, ...watermark } } : {}),
+    watermark,
   };
 }
 
@@ -172,7 +172,7 @@ export function createProjectSlice(set, get) {
           reconcileBatchExport(
             state,
             {
-              ...templateState(data, state),
+              ...templateState(data),
               excelPath: excel?.path || null,
               excelHeaders: Array.isArray(excel?.headers)
                 ? excel.headers.map((h) => String(h))
@@ -207,7 +207,7 @@ export function createProjectSlice(set, get) {
       }
       set((state) => {
         const oldColumns = state.excelMapping?.columns || {};
-        const changes = templateState(data, state);
+        const changes = templateState(data);
         const templateRegions = changes.templateRegions;
         let columns = oldColumns;
         if (

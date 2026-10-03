@@ -124,7 +124,7 @@ def test_edge_blur_preserves_the_full_selection():
         "edge_feather": 0,
     }
     fc, _, _ = build_filter_complex([op], 320, 180)
-    assert "crop=101:61:0:0" in fc, f"edge selection was silently inset: {fc}"
+    assert "crop=102:62:0:0" in fc, f"edge selection lost its chroma-aligned context: {fc}"
     assert "overlay=0:0" in fc
     assert_graph([op], 320, 180, "edge blur preserves selection")
 
@@ -237,7 +237,7 @@ def test_delogo_color_injection_rejected():
     raise AssertionError("injected fill color was not rejected")
 
 
-def test_temporal_removes_static_logo():
+def test_temporal_spatial_fallback_removes_an_opaque_static_logo():
     assert FFMPEG.exists(), f"ffmpeg not found at {FFMPEG}"
     tmp_holder = tempfile.TemporaryDirectory(prefix="beru_delogo_robust_")
     tmp = Path(tmp_holder.name)
@@ -285,7 +285,8 @@ def test_temporal_removes_static_logo():
     assert t and l and o, "sampling failed"
     d_in = sum((a - b) ** 2 for a, b in zip(t, l)) ** 0.5
     d_out = sum((a - b) ** 2 for a, b in zip(t, o)) ** 0.5
-    assert d_out < d_in, f"temporal did not improve: in={d_in:.1f} out={d_out:.1f} truth={t} logo={l} out={o}"
+    assert d_in > 300, f"fixture did not contain an opaque contrasting logo: {d_in:.1f}"
+    assert d_out < 12, f"Temporal fallback did not remove the logo: {t}, {l} -> {o}"
 
 
 def main():
@@ -306,7 +307,7 @@ def main():
         test_image_opacity_zero_preserved,
         test_cover_keeps_contain_letterbox_transparent,
         test_delogo_color_injection_rejected,
-        test_temporal_removes_static_logo,
+        test_temporal_spatial_fallback_removes_an_opaque_static_logo,
     ]
     failed = 0
     for t in tests:

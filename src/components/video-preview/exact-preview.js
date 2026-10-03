@@ -201,9 +201,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
       if (!(item.width > 0 && item.height > 0) && api.getVideoInfo) {
         try {
           await editor.refreshMissingVideoInfo?.(api);
-        } catch {
-          /* Use the metadata available after a failed probe. */
-        }
+        } catch {}
         if (!current()) return;
       }
       const live = useEditorStore.getState();

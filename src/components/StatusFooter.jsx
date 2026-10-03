@@ -92,7 +92,8 @@ export default function StatusFooter() {
 
   const handleManualCheck = async () => {
     setUpToDateOpen(false);
-    await get().checkForUpdates();
+    const result = await get().checkForUpdates();
+    if (result?.ok === false) setUpToDateOpen(true);
   };
 
   const versionLabel = `v${APP_VERSION}`;
@@ -194,7 +195,12 @@ export default function StatusFooter() {
       </div>
 
       {upToDateOpen && (
-        <UpToDateDialog onClose={closeUpToDate} onCheckForUpdates={handleManualCheck} t={t} />
+        <UpToDateDialog
+          update={update}
+          onClose={closeUpToDate}
+          onCheckForUpdates={handleManualCheck}
+          t={t}
+        />
       )}
     </footer>
   );

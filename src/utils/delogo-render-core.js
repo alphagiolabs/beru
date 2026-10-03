@@ -1,3 +1,6 @@
+import { compensateTemporal, estimateMotion, motionDescriptor } from "./delogo-motion.js";
+import { continueTexture } from "./delogo-inpaint.js";
+
 const TEMPORAL_MAX_SAMPLE_W = 1280;
 const TEMPORAL_MAX_SAMPLE_H = 720;
 
@@ -25,37 +28,6 @@ function insertionMedian(work, values, n) {
   const k = n >> 1;
   if (n % 2) return work[k];
   return Math.round((work[k - 1] + work[k]) / 2);
-}
-
-export function temporalMedianInto(frames, out, pixelCount) {
-  const n = frames.length;
-  if (n === 0) {
-    for (let i = 0; i < pixelCount; i++) {
-      const o = i * 4;
-      out[o] = 0;
-      out[o + 1] = 0;
-      out[o + 2] = 0;
-      out[o + 3] = 255;
-    }
-    return;
-  }
-  const rs = new Uint8ClampedArray(n);
-  const gs = new Uint8ClampedArray(n);
-  const bs = new Uint8ClampedArray(n);
-  const work = new Uint8ClampedArray(n);
-  for (let i = 0; i < pixelCount; i++) {
-    const o = i * 4;
-    for (let f = 0; f < n; f++) {
-      const fd = frames[f];
-      rs[f] = fd[o];
-      gs[f] = fd[o + 1];
-      bs[f] = fd[o + 2];
-    }
-    out[o] = insertionMedian(work, rs, n);
-    out[o + 1] = insertionMedian(work, gs, n);
-    out[o + 2] = insertionMedian(work, bs, n);
-    out[o + 3] = 255;
-  }
 }
 
 export function mosaicOutputSize(sw, sh, blockSize) {
@@ -95,67 +67,232 @@ export function mosaicInto(data, sw, sh, blockSize, out) {
   }
 }
 
-export function inpaintInto(sData, dData, sw, sh) {
-  const lastRow = (sh - 1) * sw;
-  const lastCol = sw - 1;
-
-  for (let y = 0; y < sh; y++) {
-    const rowOff = y * sw;
-    for (let x = 0; x < sw; x++) {
-      const ti = x * 4;
-      const bi = (lastRow + x) * 4;
-      const li = rowOff * 4;
-      const ri = (rowOff + lastCol) * 4;
-      const wt = 1 / (y + 1);
-      const wb = 1 / (sh - y);
-      const wl = 1 / (x + 1);
-      const wr = 1 / (sw - x);
-      const total = wt + wb + wl + wr;
-      const di = (rowOff + x) * 4;
-      dData[di] = (sData[ti] * wt + sData[bi] * wb + sData[li] * wl + sData[ri] * wr) / total;
-      dData[di + 1] =
-        (sData[ti + 1] * wt + sData[bi + 1] * wb + sData[li + 1] * wl + sData[ri + 1] * wr) / total;
-      dData[di + 2] =
-        (sData[ti + 2] * wt + sData[bi + 2] * wb + sData[li + 2] * wl + sData[ri + 2] * wr) / total;
-      dData[di + 3] = 255;
+export function inpaintInto(sData, dData, sw, sh, box) {
+  dData.set(sData);
+  if (!box || box.w < 1 || box.h < 1) return;
+  const left = box.x - 1;
+  const right = box.x + box.w;
+  const top = box.y - 1;
+  const bottom = box.y + box.h;
+  if (left < 0 || top < 0 || right >= sw || bottom >= sh) return;
+  for (let y = box.y; y < bottom; y++) {
+    for (let x = box.x; x < right; x++) {
+      const wl = 1 / (x - left);
+      const wr = 1 / (right - x);
+      const wt = 1 / (y - top);
+      const wb = 1 / (bottom - y);
+      const total = 3 * (wl + wr + wt + wb);
+      const index = (y * sw + x) * 4;
+      const li = (y * sw + left) * 4;
+      const ri = (y * sw + right) * 4;
+      const ti = (top * sw + x) * 4;
+      const bi = (bottom * sw + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        dData[index + c] = Math.round(
+          ((sData[li - sw * 4 + c] + sData[li + c] + sData[li + sw * 4 + c]) * wl +
+            (sData[ri - sw * 4 + c] + sData[ri + c] + sData[ri + sw * 4 + c]) * wr +
+            (sData[ti - 4 + c] + sData[ti + c] + sData[ti + 4 + c]) * wt +
+            (sData[bi - 4 + c] + sData[bi + c] + sData[bi + 4 + c]) * wb) /
+            total,
+        );
+      }
+      dData[index + 3] = 255;
     }
   }
 }
 
-function temporalMaxFrames(radius) {
-  return Math.max(3, Math.min(15, radius * 2 + 1));
+function boxBlurRGBA(data, width, height, radius, passes) {
+  const r = Math.max(
+    0,
+    Math.min(Math.floor(radius), Math.floor((Math.min(width, height) - 1) / 2)),
+  );
+  if (!r) return data;
+  const horizontal = new Uint8ClampedArray(data.length);
+  const output = new Uint8ClampedArray(data.length);
+  const divisor = 2 * r + 1;
+  const reflect = (index, size) =>
+    index < 0 ? -index - 1 : index >= size ? 2 * size - index - 1 : index;
+  for (let pass = 0; pass < passes; pass++) {
+    for (let y = 0; y < height; y++)
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let x = -r; x <= r; x++) sum += data[(y * width + reflect(x, width)) * 4 + c];
+        for (let x = 0; x < width; x++) {
+          horizontal[(y * width + x) * 4 + c] = Math.round(sum / divisor);
+          sum +=
+            data[(y * width + reflect(x + r + 1, width)) * 4 + c] -
+            data[(y * width + reflect(x - r, width)) * 4 + c];
+        }
+      }
+    for (let x = 0; x < width; x++)
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let y = -r; y <= r; y++) sum += horizontal[(reflect(y, height) * width + x) * 4 + c];
+        for (let y = 0; y < height; y++) {
+          output[(y * width + x) * 4 + c] = Math.round(sum / divisor);
+          sum +=
+            horizontal[(reflect(y + r + 1, height) * width + x) * 4 + c] -
+            horizontal[(reflect(y - r, height) * width + x) * 4 + c];
+        }
+      }
+    data = output;
+  }
+  for (let i = 3; i < output.length; i += 4) output[i] = 255;
+  return output;
+}
+
+function applyLogoMask(data, width, height, box, feather = 0) {
+  if (!box) return;
+  const right = box.x + box.w - 1;
+  const bottom = box.y + box.h - 1;
+  const leftF = Math.min(feather, box.x);
+  const topF = Math.min(feather, box.y);
+  const rightF = Math.min(feather, width - box.x - box.w);
+  const bottomF = Math.min(feather, height - box.y - box.h);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      const opacity = Math.max(
+        0,
+        Math.min(
+          1,
+          leftF ? (x - box.x + leftF) / leftF : Number(x >= box.x),
+          topF ? (y - box.y + topF) / topF : Number(y >= box.y),
+          rightF ? (right + rightF - x) / rightF : Number(x <= right),
+          bottomF ? (bottom + bottomF - y) / bottomF : Number(y <= bottom),
+        ),
+      );
+      data[(y * width + x) * 4 + 3] = Math.floor(255 * opacity * opacity * (3 - 2 * opacity));
+    }
+}
+
+function reconstructSpatialLogo(frame, width, height, params) {
+  const box = params.box;
+  const guard = params.referenceGuard ?? 0;
+  const left = Math.max(1, box.x - guard),
+    top = Math.max(1, box.y - guard);
+  const right = Math.min(width - 1, box.x + box.w + guard);
+  const bottom = Math.min(height - 1, box.y + box.h + guard);
+  let data = new Uint8ClampedArray(frame.length);
+  inpaintInto(frame, data, width, height, { x: left, y: top, w: right - left, h: bottom - top });
+  if (params.feather > 0) data = boxBlurRGBA(data, width, height, params.smoothRadius ?? 2, 1);
+  return data;
+}
+
+export function spatialLogoFallback(frame, width, height, params, method = "inpaint") {
+  const box = params.box;
+  const blurRadius = Math.max(
+    0,
+    Math.min(Math.floor(params.radius || 0), Math.floor((Math.min(width, height) - 1) / 2)),
+  );
+  const pad = Math.ceil(
+    method === "blur"
+      ? (params.feather || 0) + 3 * blurRadius
+      : Math.max(params.feather || 0, (params.referenceGuard || 0) + 2) +
+          (params.smoothRadius ?? 2),
+  );
+  const x = Math.max(0, box.x - pad),
+    y = Math.max(0, box.y - pad);
+  const patchW = Math.min(width, box.x + box.w + pad) - x;
+  const patchH = Math.min(height, box.y + box.h + pad) - y;
+  const patch = new Uint8ClampedArray(patchW * patchH * 4);
+  for (let row = 0; row < patchH; row++) {
+    const from = ((y + row) * width + x) * 4;
+    patch.set(frame.subarray(from, from + patchW * 4), row * patchW * 4);
+  }
+  const localBox = { ...box, x: box.x - x, y: box.y - y };
+  const data =
+    method === "blur"
+      ? boxBlurRGBA(patch, patchW, patchH, blurRadius, 3)
+      : reconstructSpatialLogo(patch, patchW, patchH, { ...params, box: localBox });
+  applyLogoMask(data, patchW, patchH, localBox, params.feather);
+  return { data, width: patchW, height: patchH, x, y };
 }
 
 export function createDelogoRenderSession() {
   let history = [];
   let frameW = 0;
   let frameH = 0;
+  let lastTime = null;
+  let lastResult = null;
+  let settings = "";
 
   return {
     reset() {
       history = [];
       frameW = 0;
       frameH = 0;
+      lastTime = null;
+      lastResult = null;
+      settings = "";
     },
     compute(method, params, frame, width, height) {
-      if (method === "temporal") {
-        if (history.length && (frameW !== width || frameH !== height)) {
+      if (method === "temporal" || method === "inpaint") {
+        const box = params?.box;
+        if (!box) return { data: frame.slice(), width, height };
+        const key = JSON.stringify([
+          method,
+          box,
+          params.radius,
+          params.feather,
+          params.guard,
+          params.smoothRadius,
+          params.search,
+          params.referenceGuard,
+        ]);
+        const timestamp = params.timestamp;
+        if (
+          history.length &&
+          (frameW !== width ||
+            frameH !== height ||
+            settings !== key ||
+            (Number.isFinite(timestamp) &&
+              lastTime !== null &&
+              (timestamp < lastTime || timestamp - lastTime > 0.5)))
+        ) {
           history = [];
+          lastResult = null;
         }
-        history.push(frame);
+        if (lastResult && Number.isFinite(timestamp) && timestamp === lastTime)
+          return { ...lastResult, data: lastResult.data.slice() };
+        const descriptor = motionDescriptor(frame, width, height);
+        if (
+          history.length &&
+          !estimateMotion(history.at(-1).descriptor, descriptor, width, height, box)
+        )
+          history = [];
+        let out = new Uint8ClampedArray(frame.length);
+        const guard = params.guard ?? 2;
+        const texture =
+          method === "inpaint" &&
+          continueTexture(frame, out, width, height, box, guard, params.search ?? 96);
+        if (!texture) {
+          out = reconstructSpatialLogo(frame, width, height, {
+            ...params,
+            referenceGuard: params.referenceGuard ?? (method === "inpaint" ? 0 : guard),
+          });
+          compensateTemporal(descriptor, history, width, height, box, out, insertionMedian, guard);
+        }
+        applyLogoMask(out, width, height, box, params.feather);
+        history.push({ frame, descriptor });
         frameW = width;
         frameH = height;
-        const maxFrames = temporalMaxFrames(params?.radius);
-        if (history.length > maxFrames) {
-          history.shift();
-        }
-        const out = new Uint8ClampedArray(width * height * 4);
-        temporalMedianInto(history, out, width * height);
+        const maxFrames = Math.max(
+          1,
+          Math.min(
+            15,
+            Number(params.radius) || 3,
+            Math.floor((32 * 1024 * 1024) / (width * height * 12)),
+          ),
+        );
+        history = history.slice(-maxFrames);
+        settings = key;
+        lastTime = Number.isFinite(timestamp) ? timestamp : null;
+        lastResult = Number.isFinite(timestamp) ? { data: out.slice(), width, height } : null;
         return { data: out, width, height };
       }
-      if (method === "inpaint") {
-        const out = new Uint8ClampedArray(width * height * 4);
-        inpaintInto(frame, out, width, height);
+      if (method === "blur") {
+        const out = boxBlurRGBA(frame, width, height, params?.radius, 3);
+        applyLogoMask(out, width, height, params?.box, params?.feather);
         return { data: out, width, height };
       }
       if (method === "mosaic") {

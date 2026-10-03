@@ -2,8 +2,9 @@ import { useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, X } from "lucide-react";
 import { Button } from "../ui/Button";
+import { formatUpdateError } from "../../utils/updateErrors";
 
-export default function UpToDateDialog({ onClose, onCheckForUpdates, t }) {
+export default function UpToDateDialog({ update, onClose, onCheckForUpdates, t }) {
   const closeBtnRef = useRef(null);
 
   useEffect(() => {
@@ -43,13 +44,16 @@ export default function UpToDateDialog({ onClose, onCheckForUpdates, t }) {
         >
           <X size={16} />
         </Button>
-        <CheckCircle2 className="status-footer-up-to-date-icon" size={25} strokeWidth={2.25} />
+        {update?.verified && (
+          <CheckCircle2 className="status-footer-up-to-date-icon" size={25} strokeWidth={2.25} />
+        )}
         <h2 id="up-to-date-title" className="status-footer-up-to-date-title">
-          {t("footer.upToDateTitle")}
+          {t(update?.verified ? "footer.upToDateTitle" : "footer.checkForUpdates")}
         </h2>
         <p id="up-to-date-description" className="status-footer-up-to-date-description">
-          {t("footer.upToDateBody")}
+          {t(update?.verified ? "footer.upToDateBody" : "footer.updateNotChecked")}
         </p>
+        {update?.error && <p role="alert">{formatUpdateError(t, update.error)}</p>}
         {onCheckForUpdates && (
           <Button
             type="button"

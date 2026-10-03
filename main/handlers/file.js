@@ -1,4 +1,5 @@
-import { ipcMain, shell, dialog } from "electron";
+import { ipcMain, shell } from "electron";
+import { showOpenDialog } from "../utils/dialog-history.js";
 import fs from "fs";
 import path from "path";
 import { getMainWindow } from "../shared-state.js";
@@ -59,7 +60,7 @@ export function registerFileHandlers(pathSecurity) {
 
   handleIpc(IPC_INVOKE.pickImage, async () => {
     const win = getMainWindow();
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    const { canceled, filePaths } = await showOpenDialog(win, {
       title: "Elegir imagen",
       properties: ["openFile"],
       filters: [{ name: "Imágenes", extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],

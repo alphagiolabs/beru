@@ -40,7 +40,6 @@ class FakeResult:
 def fake_run(cmd, **kw):
     if "-show_streams" in cmd or "-show_format" in cmd:
         return FakeResult()
-    # Any other subprocess.run call (e.g. ffmpeg fallback probe) fails.
     class Fallback:
         stdout = ""
         stderr = ""

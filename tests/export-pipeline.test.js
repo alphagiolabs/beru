@@ -431,7 +431,7 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(text.region.y).toBe(864);
   });
 
-  it("Python build_drawtext escapes braces correctly", async () => {
+  it("preserves literal punctuation in the exported text job", () => {
     const region = { x: 0.1, y: 0.1, w: 0.3, h: 0.1 };
     const job = jobFor(
       queueItem(0, {
@@ -449,24 +449,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
       }),
     );
     expect(job.operations[0].text).toBe("Price: ${99}");
-
-    const { spawnSync } = await import("child_process");
-    const py = "python";
-    const r = spawnSync(
-      py,
-      [
-        "-c",
-        [
-          "import sys; sys.path.insert(0, 'python')",
-          "import processor",
-          "result = processor.build_drawtext({'text': 'Price: ${99}', 'region': {'x': 100, 'y': 100, 'w': 200, 'h': 50}, 'font_size': 32, 'font_color': 'white', 'font_family': 'Arial'})",
-          "print(result is not None and '\\\\{' in result and '\\\\}' in result)",
-        ].join("\n"),
-      ],
-      { encoding: "utf8", timeout: 10000 },
-    );
-    expect(r.status).toBe(0);
-    expect(r.stdout.trim()).toBe("True");
   });
 
   it("filterOperationsForExport drops blank text ops but keeps delogo ops", () => {

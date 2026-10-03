@@ -187,4 +187,53 @@ describe("realistic update flow", () => {
     expect(useEditorStore.getState().update.status).toBe("available");
     expect(useEditorStore.getState().update.error).toBe("no-update-available");
   });
+  it("shows an installation error and keeps the restart button available", async () => {
+    window.api = {
+      installUpdate: vi.fn(async () => ({ ok: false, error: "Installer could not start" })),
+    };
+    useEditorStore.setState({
+      updateModalOpen: true,
+      update: { status: "ready", version: "9.9.9", percent: 100 },
+    });
+    await renderFooter();
+    await clickButton("Reiniciar e instalar");
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "Installer could not start",
+    );
+    expect(document.body.textContent).toMatch(/Reiniciar e instalar/);
+    expect(useEditorStore.getState().update.status).toBe("ready");
+  });
+
+  it("does not claim the app is current before a check or after a failed manual check", async () => {
+    window.api = {
+      checkForUpdates: vi.fn(async () => {
+        throw new Error("Connection unavailable");
+      }),
+    };
+    await renderFooter();
+    await act(async () =>
+      document
+        .querySelector(".status-footer-version")
+        .dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(document.body.textContent).not.toMatch(/Todo está al día/);
+    await clickButton("Buscar actualizaciones");
+    expect(window.api.checkForUpdates).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).not.toMatch(/Todo está al día/);
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+      "Connection unavailable",
+    );
+    expect(document.querySelector(".status-footer-up-to-date-check")).toBeTruthy();
+  });
+
+  it("claims the app is current only after a provider not-available event", async () => {
+    useEditorStore.getState().applyUpdaterEvent({ type: "not-available", version: "1.6.47" });
+    await renderFooter();
+    await act(async () =>
+      document
+        .querySelector(".status-footer-version")
+        .dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(document.body.textContent).toMatch(/Todo está al día/);
+  });
 });

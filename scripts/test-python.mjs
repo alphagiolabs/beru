@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { requireWindows } from "../shared/platform.js";
 
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,9 @@ requireWindows();
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PYTHON_DIR = path.join(ROOT, "python");
 
-const PY = "python";
+const environmentPython = path.join(ROOT, ".venv-processor", "Scripts", "python.exe");
+const PY =
+  process.env.BERU_PYTHON || (existsSync(environmentPython) ? environmentPython : "python");
 
 const RED = "\x1b[31m";
 const GREEN = "\x1b[32m";

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import io
+import base64
 import ctypes
 import sys
 import tempfile
@@ -10,6 +11,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import processor
+
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
 
 
 class FakeProcess:
@@ -31,8 +34,7 @@ def test_preview_downscales_after_full_resolution_filters():
     with tempfile.TemporaryDirectory() as tmp:
         video = Path(tmp) / "source.mp4"
         video.write_bytes(b"fake")
-        image = b"\xff\xd8" + b"a" * 64
-        proc = FakeProcess(image)
+        proc = FakeProcess(PNG)
         payload = {"input_path": str(video), "source_width": 8000, "source_height": 4000,
                    "video_duration": 1, "operations": []}
         with patch.object(processor.subprocess, "Popen", return_value=proc) as popen:
@@ -41,14 +43,13 @@ def test_preview_downscales_after_full_resolution_filters():
         assert result["width"] <= 1280 and result["height"] <= 1280
         cmd = popen.call_args.args[0]
         assert any("scale=" in arg and "1280" in arg for arg in cmd)
-        assert "-vcodec" in cmd and cmd[cmd.index("-vcodec") + 1] == "mjpeg"
 
 
-def test_preview_rejects_excessive_jpeg_before_base64():
+def test_preview_rejects_excessive_image_before_base64():
     with tempfile.TemporaryDirectory() as tmp:
         video = Path(tmp) / "source.mp4"
         video.write_bytes(b"fake")
-        proc = FakeProcess(b"x" * (4 * 1024 * 1024))
+        proc = FakeProcess(b"x" * (13 * 1024 * 1024))
         payload = {"input_path": str(video), "source_width": 640, "source_height": 480,
                    "video_duration": 1, "operations": []}
         with patch.object(processor.subprocess, "Popen", return_value=proc):
@@ -66,7 +67,7 @@ def test_preview_scales_after_operation_filter_graph():
                    "video_duration": 1, "operations": [{"mode": "blur"}]}
         with patch.object(processor, "build_filter_complex", return_value=(
             "[0:v]null[tmp0]", "[tmp0]", []
-        )), patch.object(processor.subprocess, "Popen", return_value=FakeProcess(b"x" * 128)) as popen:
+        )), patch.object(processor.subprocess, "Popen", return_value=FakeProcess(PNG)) as popen:
             result = processor.render_preview_frame(payload)
         assert result["ok"] is True, result
         cmd = popen.call_args.args[0]
@@ -103,7 +104,7 @@ def test_worker_rejects_oversized_stdin_before_parsing():
 
 if __name__ == "__main__":
     test_preview_downscales_after_full_resolution_filters()
-    test_preview_rejects_excessive_jpeg_before_base64()
+    test_preview_rejects_excessive_image_before_base64()
     test_preview_scales_after_operation_filter_graph()
     test_windows_commit_budget_caps_automatic_workers_but_not_override()
     test_worker_rejects_oversized_stdin_before_parsing()
