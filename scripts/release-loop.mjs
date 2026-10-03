@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, mkdtempSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve, dirname, join } from "node:path";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import {
+  validateReleaseSource,
+  validateReleaseArtifacts,
+  validatePackagedUpdateConfig,
+} from "./release-metadata.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 const DRY_RUN = !process.argv.includes("--ship");
 const SHOULD_BUILD = process.argv.includes("--build");
+const LOCAL_ONLY = process.argv.includes("--local");
 const REPO = "alphagiolabs/beru";
 
 function readJson(path) {
@@ -19,20 +24,15 @@ function readJson(path) {
 function run(cmd, opts = {}) {
   const label = cmd.length > 120 ? cmd.slice(0, 120) + "…" : cmd;
   console.log(`\n> ${label}`);
-  try {
-    const out = execSync(cmd, {
-      cwd: ROOT,
-      encoding: "utf-8",
-      stdio: opts.silent ? "pipe" : "inherit",
-      timeout: opts.timeout || 300_000,
-      ...opts,
-    });
-    if (opts.silent) return out.trim();
-    return out;
-  } catch (e) {
-    if (opts.silent) return e.stderr?.trim() || e.message;
-    throw e;
-  }
+  const out = execSync(cmd, {
+    cwd: ROOT,
+    encoding: "utf-8",
+    stdio: opts.silent ? "pipe" : "inherit",
+    timeout: opts.timeout || 300_000,
+    ...opts,
+  });
+  if (opts.silent) return out.trim();
+  return out;
 }
 
 function runCapture(cmd) {
@@ -59,36 +59,17 @@ function skip(label) {
   console.log(`  [SKIP] ${label}`);
 }
 
-function getToday() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function findFiles(dir, pattern) {
-  if (!existsSync(dir)) return [];
-  const files = readdirSync(dir);
-  const regex = new RegExp(pattern);
-  return files.filter((f) => regex.test(f)).map((f) => join(dir, f));
-}
-
-function getChangelogEntry(version) {
-  const changelog = readFileSync(resolve(ROOT, "CHANGELOG.md"), "utf-8");
-  const header = `## [${version}]`;
-  const idx = changelog.indexOf(header);
-  if (idx === -1) return null;
-
-  const rest = changelog.slice(idx + header.length);
-  const nextMatch = rest.match(/\n##\s\[/);
-  const endIdx = nextMatch ? idx + header.length + nextMatch.index : changelog.length;
-
-  return changelog.slice(idx, endIdx).trim();
-}
-
 function validateEnvironment() {
   section("1/8  Entorno");
 
+  if (LOCAL_ONLY) {
+    skip("Validación local: no verifica auth, branch, tree, origin ni estado remoto");
+    return;
+  }
+
   try {
-    const whoami = runCapture("gh auth status");
-    if (!whoami.includes("alphagiolabs")) {
+    const whoami = runCapture("gh api user --jq .login");
+    if (whoami !== "alphagiolabs") {
       fail("gh auth", `Debe estar autenticado como alphagiolabs. Actual: ${whoami.slice(0, 80)}`);
     }
     ok("gh autenticado como alphagiolabs");
@@ -97,7 +78,11 @@ function validateEnvironment() {
   }
 
   const remote = runCapture("git remote get-url origin");
-  if (!remote.includes("alphagiolabs/beru")) {
+  if (
+    !/^https:\/\/github\.com\/alphagiolabs\/beru(?:\.git)?$|^git@github\.com:alphagiolabs\/beru(?:\.git)?$/.test(
+      remote,
+    )
+  ) {
     fail("git remote", `Esperado alphagiolabs/beru, obtenido: ${remote}`);
   }
   ok(`remote: ${remote}`);
@@ -117,20 +102,10 @@ function validateEnvironment() {
   }
   ok("working tree limpio");
 
-  let behind;
-  try {
-    behind = execFileSync("git", ["rev-list", "--count", "HEAD..origin/main"], {
-      cwd: ROOT,
-      encoding: "utf-8",
-      timeout: 30_000,
-    }).trim();
-  } catch (error) {
-    fail("git ancestry", error?.message || "No se pudo comparar HEAD con origin/main");
-  }
-  if (Number(behind) > 0) {
-    fail("git pull", `main está ${behind} commits detrás de origin/main. Haz git pull primero.`);
-  }
-  ok("main está al día con origin");
+  const remoteHead = runCapture("git ls-remote origin refs/heads/main").split(/\s/)[0];
+  if (!remoteHead || remoteHead !== runCapture("git rev-parse HEAD"))
+    fail("main remoto", "HEAD debe coincidir exactamente con origin/main remoto antes de ship");
+  ok("HEAD coincide con main remoto");
 }
 
 function detectVersion() {
@@ -145,21 +120,21 @@ function detectVersion() {
   }
   ok(`v${version}`);
 
+  if (LOCAL_ONLY) {
+    skip("Conflictos de tags y releases pendientes de verificar antes de ship");
+    return version;
+  }
+
   const existing = runCapture(`git tag -l "v${version}"`);
   if (existing) {
     fail("tag duplicado", `El tag v${version} ya existe localmente.`);
   }
 
-  try {
-    execSync(`gh release view "v${version}"`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-      stdio: "pipe",
-      timeout: 30_000,
-    });
+  if (runCapture(`git ls-remote origin refs/tags/v${version}`).trim())
+    fail("tag remoto duplicado", `v${version} ya existe en origin`);
+  const pages = JSON.parse(runCapture(`gh api repos/${REPO}/releases --paginate --slurp`));
+  if (pages.flat().some((release) => release.tag_name === `v${version}`)) {
     fail("release duplicada", `v${version} ya existe en GitHub Releases.`);
-  } catch {
-    // gh release view fails if the release does not exist
   }
 
   return version;
@@ -168,35 +143,8 @@ function detectVersion() {
 function validateChangelog(version) {
   section("3/8  CHANGELOG.md (HARD RULE)");
 
-  const entry = getChangelogEntry(version);
-  if (!entry) {
-    fail(
-      "Entrada faltante",
-      `CHANGELOG.md no tiene entrada para [${version}].\n` +
-        `     Agrega un encabezado "## [${version}] - ${getToday()}" con ` +
-        `las secciones ### Added, ### Changed, ### Fixed según corresponda.\n` +
-        `     Esto es una HARD RULE — el release no puede continuar sin el changelog.`,
-    );
-  }
-
-  const hasDate = entry.includes("- 20");
-  const hasSection = /###\s+(Added|Changed|Fixed|Removed|Deprecated|Security)/.test(entry);
-
-  if (!hasDate) {
-    fail("changelog date", `La entrada [${version}] no tiene fecha (YYYY-MM-DD).`);
-  }
-  if (!hasSection) {
-    fail(
-      "changelog sections",
-      `La entrada debe tener al menos una sección ### Added / ### Changed / ### Fixed.`,
-    );
-  }
-
-  console.log(`  Entrada encontrada:\n`);
-  console.log(`  ${entry.split("\n").slice(0, 6).join("\n  ")}`);
-  if (entry.split("\n").length > 6) console.log(`  … (${entry.split("\n").length - 6} líneas más)`);
-  console.log();
-  ok(`CHANGELOG.md tiene entrada para v${version}`);
+  validateReleaseSource(ROOT, `v${version}`);
+  ok(`CHANGELOG y lockfile coinciden con v${version}`);
 }
 
 function runQualityGate() {
@@ -219,7 +167,7 @@ function runQualityGate() {
   ok("python tests");
 }
 
-function runBuild() {
+async function runBuild(version) {
   section("5/8  Build local");
 
   if (!SHOULD_BUILD) {
@@ -236,20 +184,25 @@ function runBuild() {
   ok("build completo");
 
   const distDir = resolve(ROOT, "dist-installer");
-  if (!existsSync(distDir)) {
-    fail("dist-installer/", "No existe el directorio dist-installer/ después del build");
-  }
-
-  const installers = findFiles(distDir, "\\.exe$");
-  if (installers.length === 0) {
-    fail("Instalador .exe", `No se encontró .exe en ${distDir}`);
-  }
-
-  console.log(`  Instaladores encontrados:`);
-  for (const inst of installers) {
-    const name = inst.replace(/\\/g, "/").split("/").pop();
-    console.log(`     - ${name}`);
-  }
+  await validateReleaseArtifacts(distDir, version);
+  validatePackagedUpdateConfig(distDir, version);
+  const signingMode =
+    process.env.BERU_SIGNING_MODE ||
+    (process.env.CSC_LINK || process.env.WIN_CSC_LINK ? "signed" : "unsigned");
+  execFileSync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      join(ROOT, "scripts", "verify-installer-signature.ps1"),
+      "-Mode",
+      signingMode,
+    ],
+    { cwd: ROOT, stdio: "inherit", windowsHide: true },
+  );
   ok("instalador verificado");
 }
 
@@ -289,50 +242,18 @@ function pushTag(tag) {
   console.log(`\n  https://github.com/${REPO}/actions/workflows/ci-release.yml`);
 }
 
-function createGitHubRelease(version) {
+function reportReleaseHandoff(version) {
   section("8/8  GitHub Release");
 
-  const tag = `v${version}`;
-
-  if (DRY_RUN) {
-    skip(`[dry-run] gh release create ${tag}`);
-    return;
-  }
-
-  const entry = getChangelogEntry(version);
-  if (!entry) {
-    fail("Changelog desapareció?", `La entrada para v${version} ya no está en CHANGELOG.md.`);
-  }
-
-  const lines = entry.split("\n");
-  const notes = lines.slice(1).join("\n").trim();
-
-  const tmpDir = mkdtempSync(join(tmpdir(), "beru-release-"));
-  const notesFile = join(tmpDir, "release-notes.md");
-  writeFileSync(notesFile, notes, "utf-8");
-
-  const title = `${tag}`;
-
-  const distDir = resolve(ROOT, "dist-installer");
-  let assets = "";
-  if (existsSync(distDir)) {
-    const exes = findFiles(distDir, "\\.exe$");
-    const blockmaps = findFiles(distDir, "\\.exe\\.blockmap$");
-    const yamls = findFiles(distDir, "latest\\.yml$");
-    const allAssets = [...exes, ...blockmaps, ...yamls];
-    if (allAssets.length > 0) {
-      assets = allAssets.map((p) => `"${String(p).replace(/"/g, '\\"')}"`).join(" ");
-    }
-  }
-
-  const cmd = `gh release create ${tag} --title "${title}" --notes-file "${notesFile}"${assets ? ` ${assets}` : ""}`;
-  run(cmd, { timeout: 120_000 });
-  ok(`Release ${tag} creado en GitHub`);
-
-  console.log(`  https://github.com/${REPO}/releases/tag/${tag}`);
+  console.log(
+    `  CI es el único publicador de v${version}: borrador, validación, subida y publicación.`,
+  );
+  console.log(
+    `  Pendiente: CI completada y recorrido de actualización desde una instalación anterior.`,
+  );
 }
 
-function main() {
+async function main() {
   console.log(`
 ╔══════════════════════════════════════════════╗
 ║        Beru Release Pipeline Loop            ║
@@ -343,21 +264,22 @@ function main() {
   const startTime = Date.now();
 
   try {
+    if (LOCAL_ONLY && !DRY_RUN) throw new Error("--local cannot be combined with --ship");
     validateEnvironment();
     const version = detectVersion();
     validateChangelog(version);
     runQualityGate();
-    runBuild();
+    await runBuild(version);
     const tag = createGitTag(version);
     pushTag(tag);
-    createGitHubRelease(version);
+    reportReleaseHandoff(version);
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
     if (DRY_RUN) {
       console.log(`
 ╔══════════════════════════════════════════════╗
-║   DRY RUN COMPLETADO — todo validado        ║
+║   VALIDACIÓN COMPLETADA — sin publicar     ║
 ║   Para ejecutar el release real:             ║
 ║     node scripts/release-loop.mjs --ship     ║
 ╚══════════════════════════════════════════════╝
@@ -365,7 +287,7 @@ function main() {
     } else {
       console.log(`
 ╔══════════════════════════════════════════════╗
-║        RELEASE v${version} COMPLETADO         ║
+║        TAG v${version} ENVIADO A CI           ║
 ║        Duración: ${elapsed}s                  ║
 ║        https://github.com/${REPO}/releases/tag/v${version}
 ╚══════════════════════════════════════════════╝

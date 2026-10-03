@@ -1,21 +1,24 @@
 """Single-frame previews with injectable binary paths, probes and filter builders."""
 
 import base64
+import math
 import os
 import subprocess
+import tempfile
+import time
 import threading
 
 import media_probe
 from filters import build_filter_complex
 from media_paths import _validated_job_media
+from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 from op_shared import (
     _coerce_int,
     _normalize_operation,
-    _optimize_delogo_for_speed,
 )
 
 PREVIEW_MAX_DIMENSION = 1280
-PREVIEW_MAX_JPEG_BYTES = 3 * 1024 * 1024
+PREVIEW_MAX_IMAGE_BYTES = 12 * 1024 * 1024
 PREVIEW_MAX_STDERR_BYTES = 64 * 1024
 PREVIEW_MAX_REQUEST_BYTES = 1024 * 1024
 
@@ -31,16 +34,18 @@ def _preview_scale_filter():
 
 
 def _preview_temporal_radius(operations):
-    """Max tmedian radius still scheduled — temporal filters need that context."""
+    """Context needed across sequential temporal operations."""
     radius = 0
     for op in operations or []:
         if not isinstance(op, dict):
             continue
         if (op.get("mode") or "").lower() != "delogo":
             continue
-        if (op.get("delogo_method") or "").lower() != "temporal":
-            continue
-        radius = max(radius, _coerce_int(op.get("temporal_radius"), 3, 1, 15))
+        method = (op.get("delogo_method") or "").lower()
+        if method == "temporal":
+            radius += _coerce_int(op.get("temporal_radius"), 3, 1, 15)
+        elif method == "inpaint":
+            radius += 3
     return radius
 
 
@@ -81,7 +86,7 @@ def _shift_op_time_bounds(op, offset):
 
 
 def _run_preview_image_cmd(cmd, vw, vh, timestamp):
-    """Run a single-frame mjpeg command with bounded pipes; return the payload dict."""
+    """Run a single-frame PNG command with bounded pipes; return the payload dict."""
     proc = None
     output = {}
 
@@ -100,7 +105,7 @@ def _run_preview_image_cmd(cmd, vw, vh, timestamp):
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         readers = [
             threading.Thread(
-                target=read_limited, args=(proc.stdout, "stdout", PREVIEW_MAX_JPEG_BYTES), daemon=True,
+                target=read_limited, args=(proc.stdout, "stdout", PREVIEW_MAX_IMAGE_BYTES), daemon=True,
             ),
             threading.Thread(
                 target=read_limited, args=(proc.stderr, "stderr", PREVIEW_MAX_STDERR_BYTES), daemon=True,
@@ -133,7 +138,7 @@ def _run_preview_image_cmd(cmd, vw, vh, timestamp):
             proc.stdout.close()
             proc.stderr.close()
 
-    if len(output.get("stdout", b"")) > PREVIEW_MAX_JPEG_BYTES:
+    if len(output.get("stdout", b"")) > PREVIEW_MAX_IMAGE_BYTES:
         return {"ok": False, "error": "El frame de preview supera el límite de tamaño"}
     if len(output.get("stderr", b"")) > PREVIEW_MAX_STDERR_BYTES:
         return {"ok": False, "error": "La salida de FFmpeg supera el límite de tamaño"}
@@ -147,16 +152,14 @@ def _run_preview_image_cmd(cmd, vw, vh, timestamp):
     if len(buf) < 64:
         return {"ok": False, "error": "FFmpeg no produjo imagen"}
 
-    preview_ratio = min(1, PREVIEW_MAX_DIMENSION / max(vw, vh))
-    output_w = round(vw * preview_ratio)
-    output_h = round(vh * preview_ratio)
-    for offset in range(2, len(buf) - 9):
-        if buf[offset] == 0xFF and buf[offset + 1] in (0xC0, 0xC1, 0xC2):
-            output_h = int.from_bytes(buf[offset + 5:offset + 7], "big")
-            output_w = int.from_bytes(buf[offset + 7:offset + 9], "big")
-            break
+    if not buf.startswith(b"\x89PNG\r\n\x1a\n") or buf[12:16] != b"IHDR":
+        return {"ok": False, "error": "FFmpeg no produjo un PNG válido"}
+    output_w = int.from_bytes(buf[16:20], "big")
+    output_h = int.from_bytes(buf[20:24], "big")
+    if not (0 < output_w <= PREVIEW_MAX_DIMENSION and 0 < output_h <= PREVIEW_MAX_DIMENSION):
+        return {"ok": False, "error": "El frame de preview tiene dimensiones inválidas"}
 
-    data_url = "data:image/jpeg;base64," + base64.b64encode(buf).decode("ascii")
+    data_url = "data:image/png;base64," + base64.b64encode(buf).decode("ascii")
     return {
         "ok": True,
         "data_url": data_url,
@@ -199,6 +202,19 @@ def _run_preview_with_end_fallback(make_command, info, input_path, vw, vh, times
 
 def render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
                  info_fn=None, filter_fn=None):
+    try:
+        with tempfile.TemporaryDirectory(prefix="beru-preview-") as directory:
+            return _render_frame(
+                payload, source_only=source_only, ffmpeg_path=ffmpeg_path,
+                probe_fn=probe_fn, info_fn=info_fn, filter_fn=filter_fn,
+                temporal_directory=directory,
+            )
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def _render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
+                  info_fn=None, filter_fn=None, temporal_directory=None):
     """Render one frame: filtered preview or raw source decode.
 
     Returns a dict: {ok, data_url?, error?, width?, height?, timestamp?}
@@ -235,7 +251,8 @@ def render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
                 "-i", input_path,
                 "-map", "0:v:0",
                 "-vf", _preview_scale_filter(),
-                "-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-",
+                "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png",
+                "-pix_fmt", "rgb48be", "-compression_level", "3", "-",
             ]
 
         return _run_preview_with_end_fallback(
@@ -244,20 +261,32 @@ def render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
         )
 
     raw_operations = payload.get("operations") or []
-    operations = [
-        _optimize_delogo_for_speed(_normalize_operation(op), vw, vh)
-        for op in raw_operations
-    ]
+    operations = [_normalize_operation(op) for op in raw_operations]
     watermark = payload.get("watermark")
 
     frame_rate = float(info.get("frame_rate") or 0)
+    if frame_rate <= 0 and _preview_temporal_radius(operations):
+        frame_rate = float(probe_fn(input_path).get("frame_rate") or 0)
+    preparation_deadline = time.monotonic() + 25
 
     def make_command(sample_timestamp):
         seek = _preview_seek_seconds(sample_timestamp, operations, frame_rate)
+        radius = _preview_temporal_radius(operations)
+        if radius and frame_rate > 0:
+            seek = math.floor(seek * frame_rate + 1e-6) / frame_rate
         target_rel = sample_timestamp - seek
         graph_ops = [_shift_op_time_bounds(op, seek) for op in operations]
+        temporal_kwargs = {}
+        if radius:
+            temporal_kwargs["temporal_resolver"] = TemporalPatchResolver(
+                input_path, temporal_directory, ffmpeg_path, frame_rate,
+                source_format=info.get("pix_fmt"), seek=seek,
+                frame_limit=math.ceil(target_rel * (frame_rate or 25)) + radius + 3,
+                timeout=max(0.1, preparation_deadline - time.monotonic()),
+            )
         filter_complex, output_label, image_paths = filter_fn(
             graph_ops, vw, vh, watermark=watermark,
+            source_pix_fmt=info.get("pix_fmt"), **temporal_kwargs,
         )
 
         cmd = [
@@ -266,7 +295,7 @@ def render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
             "-i", input_path,
         ]
         for img_path in image_paths:
-            cmd += ["-loop", "1", "-i", img_path]
+            cmd += extra_media_input_args(img_path)
         preview_scale = _preview_scale_filter()
         pick_target = f"select='gte(t\\,{target_rel:.6f})'"
         if filter_complex:
@@ -277,7 +306,8 @@ def render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
             ]
         else:
             cmd += ["-map", "0:v:0", "-vf", f"{pick_target},{preview_scale}"]
-        cmd += ["-frames:v", "1", "-f", "image2pipe", "-vcodec", "mjpeg", "-"]
+        cmd += ["-frames:v", "1", "-f", "image2pipe", "-vcodec", "png",
+                "-pix_fmt", "rgb48be", "-compression_level", "3", "-"]
         return cmd
 
     return _run_preview_with_end_fallback(

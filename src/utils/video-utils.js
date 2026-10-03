@@ -60,9 +60,10 @@ export function contentRect(videoEl) {
 
 export function contentRectLayout(videoEl) {
   if (!videoEl) return null;
-  const w = videoEl.offsetWidth;
-  const h = videoEl.offsetHeight;
-  if (w === 0 || h === 0) return null;
+  if (videoEl.offsetWidth === 0 || videoEl.offsetHeight === 0) return null;
+  const style = videoEl instanceof Element ? getComputedStyle(videoEl) : null;
+  const w = Number.parseFloat(style?.width) || videoEl.offsetWidth;
+  const h = Number.parseFloat(style?.height) || videoEl.offsetHeight;
   return {
     ...letterboxContent(w, h, videoEl.videoWidth, videoEl.videoHeight),
     width: w,

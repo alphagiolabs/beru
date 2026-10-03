@@ -15,6 +15,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 from collections import deque
 from dataclasses import replace
@@ -24,6 +25,7 @@ import filters
 import fonts
 import media_probe
 import preview
+from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 
 from encode_profiles import (
     ENCODE_PROFILES,
@@ -41,7 +43,6 @@ from op_shared import (
     _build_enable_clause,
     _is_op_time_disabled,
     _normalize_operation,
-    _optimize_delogo_for_speed,
     _region_to_pixels,
 )
 from media_paths import (
@@ -128,7 +129,7 @@ FFPROBE = media_probe.FFPROBE
 JOB_MANIFEST_TYPE = "beru-job-manifest"
 JOB_MANIFEST_VERSION = 1
 PREVIEW_MAX_DIMENSION = preview.PREVIEW_MAX_DIMENSION
-PREVIEW_MAX_JPEG_BYTES = preview.PREVIEW_MAX_JPEG_BYTES
+PREVIEW_MAX_IMAGE_BYTES = preview.PREVIEW_MAX_IMAGE_BYTES
 PREVIEW_MAX_STDERR_BYTES = preview.PREVIEW_MAX_STDERR_BYTES
 PREVIEW_MAX_REQUEST_BYTES = preview.PREVIEW_MAX_REQUEST_BYTES
 JOB_WORKER_MAX_REQUEST_BYTES = 64 * 1024
@@ -247,12 +248,14 @@ def _build_watermark_filter(watermark, video_w, video_h):
     return filters._build_watermark_filter(watermark, video_w, video_h)
 
 
-def build_filter_complex(operations, video_w, video_h, watermark=None, _ffmpeg_path=None):
+def build_filter_complex(operations, video_w, video_h, watermark=None, _ffmpeg_path=None,
+                         source_pix_fmt=None, temporal_resolver=None):
     """Compatibility wrapper: keeps filters' ffmpeg probe on the active binary."""
     if _ffmpeg_path is None:
         _sync_probe_binaries()
     return filters.build_filter_complex(
-        operations, video_w, video_h, watermark=watermark, ffmpeg_path=_ffmpeg_path
+        operations, video_w, video_h, watermark=watermark, ffmpeg_path=_ffmpeg_path,
+        source_pix_fmt=source_pix_fmt, temporal_resolver=temporal_resolver,
     )
 
 
@@ -322,6 +325,30 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False,
 
 
 def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None):
+    temporal = isinstance(job, dict) and any(
+        isinstance(op, dict) and str(op.get("mode") or "").lower() == "delogo"
+        and str(op.get("delogo_method") or op.get("delogoMethod") or "").lower() in {"temporal", "inpaint"}
+        for op in job.get("operations", []) or []
+    )
+    if not temporal:
+        return _process_one_impl(idx, job, ffmpeg_path, hw_encoder=hw_encoder, ctx=ctx)
+    try:
+        with tempfile.TemporaryDirectory(prefix="beru-temporal-") as directory:
+            return _process_one_impl(
+                idx, job, ffmpeg_path, hw_encoder=hw_encoder, ctx=ctx,
+                temporal_directory=directory,
+            )
+    except Exception as exc:
+        job_id = job.get("id", idx)
+        if _check_cancelled(ctx):
+            return _job_cancelled_result(job_id)
+        return _job_failed_result(
+            job_id, str(exc), max_workers=ctx.max_workers if ctx else _BATCH_ACTIVE_WORKERS,
+        )
+
+
+def _process_one_impl(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
+                      temporal_directory=None):
     """Process a single job. Thread-safe.
 
     If hw_encoder is provided (from the batch pre-flight), it is used
@@ -435,13 +462,21 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None):
         logger.error("Job %d: invalid dimensions %dx%d for %s", idx, vw, vh, fname)
         return _job_failed_result(job_id, err, max_workers=active_workers)
 
-    operations = [
-        _optimize_delogo_for_speed(_normalize_operation(op), vw, vh)
-        for op in raw_operations
-    ]
+    operations = [_normalize_operation(op) for op in raw_operations]
+    temporal_fps = float(info.get("frame_rate") or 0)
+    if temporal_directory and temporal_fps <= 0:
+        temporal_fps = float(media_probe.ffprobe(
+            input_path, ffmpeg_bin=ffmpeg_path,
+            ffprobe_bin=ctx.ffprobe_path if ctx else find_ffprobe(ffmpeg_path),
+        ).get("frame_rate") or 0)
+    temporal_resolver = TemporalPatchResolver(
+        input_path, temporal_directory, ffmpeg_path, temporal_fps,
+        source_format=info.get("pix_fmt"), ctx=ctx,
+    ) if temporal_directory else None
 
     filter_complex, output_label, image_paths = build_filter_complex(
-        operations, vw, vh, watermark=watermark, _ffmpeg_path=ffmpeg_path
+        operations, vw, vh, watermark=watermark, _ffmpeg_path=ffmpeg_path,
+        source_pix_fmt=info.get("pix_fmt"), temporal_resolver=temporal_resolver,
     )
 
     if not filter_complex and (operations or wm_enabled):
@@ -482,12 +517,7 @@ def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None):
         cmd = [ffmpeg_path, "-y", "-loglevel", loglevel]
         cmd += ["-i", input_path]
         for img_path in image_paths:
-            ext = os.path.splitext(img_path)[1].lower()
-            fr = [] if ext in _ANIMATED_IMAGE_EXTS else ["-framerate", "1"]
-            if duration > 0:
-                cmd += ["-loop", "1", "-t", f"{duration:.3f}", *fr, "-i", img_path]
-            else:
-                cmd += ["-loop", "1", *fr, "-i", img_path]
+            cmd += extra_media_input_args(img_path, duration=duration, image_fps=1)
         cmd += build_filter_thread_args(active_workers)
         cmd += ["-filter_complex", filter_complex, "-map", output_label]
         if image_paths:

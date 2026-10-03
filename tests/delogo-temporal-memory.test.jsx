@@ -130,6 +130,36 @@ describe("temporal delogo preview memory", () => {
     expect(captures[0].getImageData).toHaveBeenCalledWith(0, 0, 480, 270);
   });
 
+  it.each(["inpaint", "blur"])("bounds %s captures for a large 4K selection", (method) => {
+    const video = {
+      videoWidth: 3840,
+      videoHeight: 2160,
+      readyState: 4,
+      paused: true,
+      currentSrc: "beru://4k",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    const operation = {
+      mode: "delogo",
+      delogoMethod: method,
+      blurStrength: 100,
+      edgeFeather: 40,
+      region: { x: 0.05, y: 0.05, w: 0.9, h: 0.9 },
+    };
+    act(() =>
+      root.render(createElement(DelogoLivePreview, { videoRef: { current: video }, operation })),
+    );
+    const [id, draw] = frames.entries().next().value;
+    frames.delete(id);
+    act(() => draw());
+    const captures = [...contexts.values()].flatMap((ctx) => ctx.getImageData.mock.calls);
+    expect(captures).toHaveLength(1);
+    expect(captures[0][2]).toBeLessThanOrEqual(1280);
+    expect(captures[0][3]).toBeLessThanOrEqual(720);
+    expect([...contexts.values()].some((ctx) => ctx.putImageData.mock.calls.length)).toBe(true);
+  });
+
   it("draws an applied blur from its own region and method when there is no draft", () => {
     useEditorStore.setState({
       currentRegion: null,

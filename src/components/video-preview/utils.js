@@ -5,13 +5,7 @@ export const MAX_ZOOM = 4;
 export const ZOOM_STEP = 0.1;
 
 export const REGION_EDIT_MODES = new Set(["blur", "delogo", "crop"]);
-export const FRAME_DRIVEN_DELOGO_METHODS = new Set([
-  "blur",
-  "temporal",
-  "mirror",
-  "mosaic",
-  "inpaint",
-]);
+const FRAME_DRIVEN_DELOGO_METHODS = new Set(["blur", "temporal", "mirror", "mosaic", "inpaint"]);
 
 export const REGION_EDIT_LABEL = {
   blur: "catalog.editLabel.blur",

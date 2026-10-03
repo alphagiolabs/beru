@@ -67,7 +67,7 @@ describe("delogo render bridge (worker path)", () => {
     computeTemporal(bridge, 20, (context, result) => results.push([context, result]));
 
     const worker = FakeWorker.instances[0];
-    expect(worker.sent).toHaveLength(2);
+    expect(worker.sent).toHaveLength(1);
     expect(worker.sent[0]).toMatchObject({ type: "compute", method: "temporal", width: 1 });
     expect(results).toHaveLength(0);
 
@@ -79,8 +79,43 @@ describe("delogo render bridge (worker path)", () => {
         result: { data: Uint8ClampedArray.of(value, 0, 0, 255), width: 1, height: 1 },
       });
     reply(worker.sent[0].seq, 10);
+    expect(worker.sent).toHaveLength(2);
     reply(worker.sent[1].seq, 20);
     expect(results.map(([context]) => context.value)).toEqual([10, 20]);
+  });
+
+  it("keeps only the most recent waiting frame while the worker is busy", async () => {
+    const { createDelogoRenderBridge } = await loadBridge();
+    const bridge = createDelogoRenderBridge();
+    const results = [];
+    const receive = (context) => results.push(context.value);
+    computeTemporal(bridge, 10, receive);
+    for (let value = 20; value <= 100; value += 10) computeTemporal(bridge, value, receive);
+    const worker = FakeWorker.instances[0];
+    expect(worker.sent).toHaveLength(1);
+    const reply = () => {
+      const msg = worker.sent.at(-1);
+      worker.emitMessage({
+        ...msg,
+        result: { data: Uint8ClampedArray.of(1, 1, 1, 255), width: 1, height: 1 },
+      });
+    };
+    reply();
+    expect(worker.sent).toHaveLength(2);
+    reply();
+    expect(results).toEqual([10, 100]);
+    expect(worker.sent).toHaveLength(2);
+    bridge.release();
+  });
+
+  it("requests a fresh paused frame when a transferred frame is lost on worker failure", async () => {
+    const { createDelogoRenderBridge } = await loadBridge();
+    const onUnavailable = vi.fn();
+    const bridge = createDelogoRenderBridge({ onUnavailable });
+    computeTemporal(bridge, 10, vi.fn());
+    FakeWorker.instances[0].emitError();
+    expect(onUnavailable).toHaveBeenCalledOnce();
+    bridge.release();
   });
 
   it("drops results computed before reset()", async () => {
@@ -166,7 +201,7 @@ describe("delogo render bridge (main-thread fallback)", () => {
     bridge.release();
   });
 
-  it("keeps temporal history across computes and clears it on reset()", async () => {
+  it("does not reuse pixels when no logo context is supplied", async () => {
     const { createDelogoRenderBridge } = await loadBridge();
     const bridge = createDelogoRenderBridge();
     const results = [];
@@ -175,7 +210,7 @@ describe("delogo render bridge (main-thread fallback)", () => {
     compute(10);
     compute(20);
     compute(30);
-    expect(results.map((r) => r.data[0])).toEqual([10, 15, 20]);
+    expect(results.map((r) => r.data[0])).toEqual([10, 20, 30]);
     bridge.reset();
     compute(0);
     expect(results[3].data[0]).toBe(0);

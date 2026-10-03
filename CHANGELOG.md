@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Electron, electron-builder, Vite y Vitest se actualizan para corregir las vulnerabilidades de dependencias. El desarrollo requiere Node.js 22.12 o posterior.
 - **`isOpActive` movido al módulo Operation** — La semántica "op activa en t" vive ahora en `src/utils/operation.js` (antes `video-preview/utils.js`) y se fija con `resources/op-active-fixtures.json`, un contrato compartido que consumen Vitest y `python/test_op_active_fixtures.py`. Los bounds no numéricos se ignoran igual que `float()` en Python.
 
+## [1.6.47] - 2026-10-02
+
+### Fixed
+
+- **Actualizaciones de Windows** — Descargar solo versiones confirmadas por el servidor, conservar las notas y el progreso al recuperar la ventana y permitir reintentos tras errores de red o instalación. La instalación espera a que termine la cancelación del procesamiento.
+- **Publicación coherente** — Validar versión, tag, CHANGELOG, lockfile, instalador y SHA512 de los metadatos. CI prepara la release como borrador y la publica después de verificar los archivos subidos; rechaza sobrescribir releases publicadas.
+
 ## [1.6.46] - 2026-07-13
 
 ### Added

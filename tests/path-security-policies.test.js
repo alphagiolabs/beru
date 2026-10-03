@@ -145,10 +145,10 @@ describe("consent store", () => {
     expect(make().getOutputDirectory()).toBeNull();
   });
 
-  it("evicts the oldest read grants past the cap", () => {
+  it("keeps read grants for the lifetime of a selection", () => {
     const consent = make();
     for (let i = 0; i < 2001; i++) consent.grantRead(`f${i}`);
-    expect(consent.hasReadConsent("f0")).toBe(false);
+    expect(consent.hasReadConsent("f0")).toBe(true);
     expect(consent.hasReadConsent("f2000")).toBe(true);
   });
 });

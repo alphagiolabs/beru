@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld("api", {
   restoreSessionPaths: invoke("session:restorePaths"),
   getVideoInfo: invoke("fs:getVideoInfo"),
   getVideoInfoBatch: invoke("fs:getVideoInfoBatch"),
+  releaseVideoPaths: invoke("video:releasePaths"),
   readExcel: invoke("fs:readExcel"),
   saveExcelDialog: invoke("dialog:saveExcel"),
   writeExcel: invoke("fs:writeExcel"),

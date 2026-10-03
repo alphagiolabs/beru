@@ -1,16 +1,17 @@
 import path from "path";
-import { trimOldest } from "../utils/cache-trim.js";
-
-const ALLOWED_FILES_MAX = 2000;
 
 export function createConsentStore({ normalizeKey }) {
-  const grantedReads = new Set();
+  const grantedReads = new Map();
   let outputDirectory = null;
   let outputKey = null;
 
-  function grantRead(resolvedPath) {
-    grantedReads.add(normalizeKey(resolvedPath));
-    trimOldest(grantedReads, ALLOWED_FILES_MAX);
+  function grantRead(resolvedPath, kind = "file") {
+    grantedReads.set(normalizeKey(resolvedPath), kind);
+  }
+
+  function revokeRead(resolvedPath, kind) {
+    const key = normalizeKey(resolvedPath);
+    if (grantedReads.get(key) === kind) grantedReads.delete(key);
   }
 
   function hasReadConsent(resolvedPath) {
@@ -29,5 +30,5 @@ export function createConsentStore({ normalizeKey }) {
     return outputDirectory;
   }
 
-  return { grantRead, hasReadConsent, selectOutputDirectory, getOutputDirectory };
+  return { grantRead, revokeRead, hasReadConsent, selectOutputDirectory, getOutputDirectory };
 }

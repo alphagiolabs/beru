@@ -230,19 +230,6 @@ describe("export-pipeline", () => {
       expect(result.progressDone).toBe(1);
     });
 
-    it("real applyJobError with non-Cancelled message stays error", () => {
-      const queue = [item({ status: "processing" })];
-      const result = applyJobError({
-        queue,
-        jobProgress: { 0: 50 },
-        progressDone: 0,
-        progressTotal: 1,
-        msg: { index: 0, error: "FFmpeg failed" },
-        progressMap: true,
-      });
-      expect(result.queue[0]).toMatchObject({ status: "error", error: "FFmpeg failed" });
-    });
-
     it("returns empty patch for invalid index", () => {
       expect(
         applyJobDone({

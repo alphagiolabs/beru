@@ -1,5 +1,4 @@
 import { uid, ID_COLUMN_ALIASES } from "../../utils/types";
-import { createOperation } from "../../utils/operation";
 import {
   reconcileBatchExport,
   batchExcelRowIndex,
@@ -351,11 +350,6 @@ export function createBatchSlice(set, get) {
 
     syncTextToExcel: (videoIdx, regionId, text, changes = {}) => {
       const patch = syncBatchTextToExcel(get(), videoIdx, regionId, text, changes);
-      if (Object.keys(patch).length > 0) set(patch);
-    },
-
-    syncAllOperationsToExcel: () => {
-      const patch = syncBatchOperationsToExcel(get());
       if (Object.keys(patch).length > 0) set(patch);
     },
 

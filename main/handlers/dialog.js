@@ -1,11 +1,12 @@
-import { ipcMain, dialog } from "electron";
+import { ipcMain } from "electron";
+import { showOpenDialog, showSaveDialog } from "../utils/dialog-history.js";
 import { getMainWindow } from "../shared-state.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 
 export function registerDialogHandlers(pathSecurity) {
   ipcMain.handle(IPC_INVOKE.openVideos, async () => {
     const win = getMainWindow();
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    const { canceled, filePaths } = await showOpenDialog(win, {
       title: "Seleccionar videos",
       filters: [{ name: "Videos", extensions: ["mp4", "mov", "avi", "mkv", "webm"] }],
       properties: ["openFile", "multiSelections"],
@@ -16,7 +17,7 @@ export function registerDialogHandlers(pathSecurity) {
 
   ipcMain.handle(IPC_INVOKE.openExcel, async () => {
     const win = getMainWindow();
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    const { canceled, filePaths } = await showOpenDialog(win, {
       title: "Seleccionar archivo Excel",
       filters: [{ name: "Excel", extensions: ["xlsx", "xls"] }],
       properties: ["openFile"],
@@ -29,7 +30,7 @@ export function registerDialogHandlers(pathSecurity) {
   ipcMain.handle(IPC_INVOKE.selectOutputDir, async () => {
     const win = getMainWindow();
     try {
-      const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+      const { canceled, filePaths } = await showOpenDialog(win, {
         title: "Seleccionar carpeta de salida",
         properties: ["openDirectory", "createDirectory"],
       });
@@ -52,7 +53,7 @@ export function registerDialogHandlers(pathSecurity) {
       typeof defaultName === "string" && defaultName.trim()
         ? defaultName.trim().replace(/[<>:"/\\|?*]/g, "_")
         : "beru-export.xlsx";
-    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    const { canceled, filePath } = await showSaveDialog(win, {
       title: "Exportar Excel",
       defaultPath: safeName.endsWith(".xlsx") ? safeName : `${safeName}.xlsx`,
       filters: [{ name: "Excel", extensions: ["xlsx"] }],

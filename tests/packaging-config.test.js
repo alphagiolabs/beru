@@ -10,14 +10,23 @@ describe("installer packaging config", () => {
   it("keeps electron-builder dependency handling enabled after the processor build", async () => {
     const hook = { exports: {} };
     const require = createRequire(import.meta.url);
+    const scripts = [];
     vm.runInNewContext(fs.readFileSync(pkg.build.beforeBuild, "utf8"), {
       module: hook,
       __dirname: path.resolve("scripts"),
       process: { execPath: process.execPath },
       require: (name) =>
-        name === "node:child_process" ? { spawnSync: () => ({ status: 0 }) } : require(name),
+        name === "node:child_process"
+          ? {
+              spawnSync: (_command, args) => {
+                scripts.push(path.basename(args[0]));
+                return { status: 0 };
+              },
+            }
+          : require(name),
     });
     await expect(hook.exports()).resolves.toBe(true);
+    expect(scripts).toEqual(["fetch-ffmpeg.mjs", "build-processor.mjs"]);
   });
   it("limits package installation and CI to Windows", () => {
     expect(pkg.os).toEqual(["win32"]);
@@ -25,12 +34,13 @@ describe("installer packaging config", () => {
     const runners = [...workflow.matchAll(/runs-on:\s*(\S+)/g)].map((match) => match[1]);
     expect(runners).toEqual(["windows-latest", "windows-latest"]);
   });
-  it("keeps static ffmpeg packages out of runtime dependencies", () => {
+  it("acquires pinned binaries without installing the obsolete static packages", () => {
     expect(pkg.dependencies).not.toHaveProperty("ffmpeg-static");
     expect(pkg.dependencies).not.toHaveProperty("ffprobe-static");
 
-    expect(pkg.devDependencies).toHaveProperty("ffmpeg-static");
-    expect(pkg.devDependencies).toHaveProperty("ffprobe-static");
+    expect(pkg.devDependencies).not.toHaveProperty("ffmpeg-static");
+    expect(pkg.devDependencies).not.toHaveProperty("ffprobe-static");
+    expect(pkg.scripts.postinstall).toBe("node scripts/fetch-ffmpeg.mjs");
   });
 
   it("excludes python sources and build artifacts from the asar files list", () => {

@@ -6,6 +6,7 @@ const ERROR_KEYS = {
   "not-available": "updater.errors.notAvailable",
   "download-failed": "header.updateDownloadFailed",
   aborted: "header.updateDownloadFailed",
+  ERR_CHECKSUM_MISMATCH: "updater.errors.checksumMismatch",
 };
 
 export function formatUpdateError(t, error) {

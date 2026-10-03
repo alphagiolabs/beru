@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPathSecurity } from "../main/pathSecurity.js";
 import { IPC_INVOKE } from "../shared/ipc-channels.js";
 
-const mocks = vi.hoisted(() => ({ handlers: new Map(), select: vi.fn() }));
+const mocks = vi.hoisted(() => ({ handlers: new Map(), select: vi.fn(), getPath: vi.fn() }));
 vi.mock("electron", () => ({
+  app: { getPath: mocks.getPath },
   ipcMain: { handle: (name, callback) => mocks.handlers.set(name, callback) },
   dialog: { showOpenDialog: mocks.select },
 }));
@@ -19,6 +20,7 @@ describe("native picker read consent", () => {
   let security;
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), "beru-picker-"));
+    mocks.getPath.mockReturnValue(root);
     security = createPathSecurity({
       isPackaged: false,
       getPath: () => path.join(root, "trusted"),

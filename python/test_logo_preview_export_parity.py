@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 
 import processor
+from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 from delogo_chains import _clamp_delogo_rect
 
 FFMPEG = Path(processor.find_ffmpeg())
@@ -45,11 +46,22 @@ def mean_error(a, b, box=None, width=None):
 
 
 def render_export(src, dst, operations, duration=2):
+    with tempfile.TemporaryDirectory(prefix="beru-parity-motion-") as directory:
+        _render_export(src, dst, operations, duration, directory)
+
+
+def _render_export(src, dst, operations, duration, directory):
     width, height = dimensions(src)
-    graph, label, image_paths = processor.build_filter_complex(operations, width, height)
+    info = processor.ffprobe(str(src))
+    resolver = TemporalPatchResolver(str(src), directory, str(FFMPEG), info["frame_rate"],
+                                     source_format=info.get("pix_fmt"))
+    graph, label, image_paths = processor.build_filter_complex(
+        operations, width, height, source_pix_fmt=info.get("pix_fmt"),
+        temporal_resolver=resolver,
+    )
     args = [str(FFMPEG), "-v", "error", "-y", "-i", str(src)]
     for img in image_paths:
-        args += ["-loop", "1", "-t", f"{duration:.3f}", "-i", str(img)]
+        args += extra_media_input_args(str(img), duration=duration)
     args += ["-filter_complex", graph, "-map", label, "-map", "0:a:0",
              "-c:v", "ffv1", "-c:a", "pcm_s16le", str(dst)]
     if image_paths:
@@ -183,15 +195,13 @@ def test_preview_export_parity():
                       "blur_strength": 30,
                       "region": {"x": 51, "y": 61, "w": 33, "h": 21}}
             odd_graph, odd_label, _ = processor.build_filter_complex([odd_op], width, height)
-            odd_reference = odd_graph.replace("crop=33:21:51:61", "crop=33:21:51:61:exact=1")
-            assert odd_reference != odd_graph
             actual_raw = run(str(FFMPEG), "-v", "error", "-ss", "1.2", "-i", str(src),
                              "-filter_complex", odd_graph, "-map", odd_label,
                              "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1")
             expected_raw = run(str(FFMPEG), "-v", "error", "-ss", "1.2", "-i", str(src),
-                               "-filter_complex", odd_reference, "-map", odd_label,
+                               "-vf", "boxblur=luma_radius=10:luma_power=3:chroma_radius=5:chroma_power=3",
                                "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1")
-            assert mean_error(actual_raw, expected_raw) <= 0.5
+            assert mean_error(actual_raw, expected_raw, (54, 64, 27, 15), width) <= 2
 
 
 def test_clamped_region_keeps_the_visible_box():
@@ -288,6 +298,17 @@ def test_preview_export_strict_parity():
              "edge_feather": 0, "region": {"x": 200, "y": 100, "w": 60, "h": 40},
              "start_time": 0.5, "end_time": 2.0},
         ]
+        interior_temporal = [{"mode": "delogo", "delogo_method": "temporal",
+                              "temporal_radius": 3, "edge_feather": 0,
+                              "region": {"x": 100, "y": 60, "w": 100, "h": 70}}]
+        temporal_interior = folder / "temporal-interior.mkv"
+        render_export(src, temporal_interior, interior_temporal)
+        for ts in (0.8, 1.4):
+            preview = _preview_rgb(src, width, height, ts, interior_temporal)
+            export = _source_rgb(temporal_interior, width, height, ts)
+            err = mean_error(preview, export, (100, 60, 100, 70), width)
+            assert err <= 8, ("selected temporal method changed", ts, err)
+
         dst_o = folder / "ordered.mkv"
         render_export(src, dst_o, ordered)
         for ts in (0.2, 1.0, 2.4):

@@ -91,6 +91,10 @@ const env = {
   BERU_DEV_PORT: String(port),
   BERU_DEV_URL: devUrl,
 };
+const processorPython = path.join(root, ".venv-processor", "Scripts", "python.exe");
+if (!env.BERU_PYTHON && fs.existsSync(processorPython)) {
+  env.BERU_PYTHON = processorPython;
+}
 
 if (port !== preferredPort) {
   console.warn(`[dev] Port ${preferredPort} is busy; using ${port}.`);

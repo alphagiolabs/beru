@@ -47,12 +47,16 @@ function allocateOutputNames(names) {
   const key = (name) => name.toLowerCase();
   const reserved = new Set(names.map(key));
   const used = new Set();
+  const nextRank = new Map();
   return names.map((name) => {
+    const baseKey = key(name);
     let rank = 0;
     let candidate = name;
     while (used.has(key(candidate)) || (rank > 0 && reserved.has(key(candidate)))) {
-      candidate = applyCollisionSuffix(name, ++rank);
+      rank = rank === 0 ? nextRank.get(baseKey) || 1 : rank + 1;
+      candidate = applyCollisionSuffix(name, rank);
     }
+    nextRank.set(baseKey, rank + 1);
     used.add(key(candidate));
     return candidate;
   });

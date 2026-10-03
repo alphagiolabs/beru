@@ -8,10 +8,16 @@ let autoUpdater = null;
 let initialized = false;
 let lastSnapshot = null;
 let pendingVersion = null;
+let releaseInfo = null;
+let installTimer = null;
+let installAttempt = 0;
 
 let status = "idle";
 
 const isDownloadBusy = () => status === "downloading" || status === "retrying";
+const INTEGRITY_ERRORS = new Set(["ERR_UPDATER_INVALID_SIGNATURE", "ERR_CHECKSUM_MISMATCH"]);
+const errorMessage = (error) =>
+  INTEGRITY_ERRORS.has(error?.code) ? error.code : error?.message || String(error);
 
 const tryLoad = () => {
   if (autoUpdater) return autoUpdater;
@@ -26,12 +32,12 @@ const tryLoad = () => {
 };
 
 const send = (payload) => {
-  lastSnapshot = payload;
+  lastSnapshot = { ...releaseInfo, ...payload };
   // Window can be recreated after a renderer crash; a captured ref would drop events.
   const win = getMainWindow();
   if (win && !win.isDestroyed()) {
     try {
-      win.webContents.send(IPC_EVENTS.onUpdaterEvent, payload);
+      win.webContents.send(IPC_EVENTS.onUpdaterEvent, lastSnapshot);
     } catch {}
   }
 };
@@ -55,6 +61,7 @@ const init = () => {
   }
   au.autoDownload = false;
   au.autoInstallOnAppQuit = false;
+  au.disableWebInstaller = true;
   // NsisUpdater.verifySignature needs a logger to report the original error.
   au.logger = {
     info: (...args) => console.log("[updater]", ...args),
@@ -62,26 +69,19 @@ const init = () => {
     error: (...args) => console.error("[updater]", ...args),
     debug: (...args) => console.debug("[updater]", ...args),
   };
-  // Builds ≤1.6.40 baked publisherName into app-update.yml, so unsigned NSIS
-  // installers fail Authenticode. Override at runtime for already-installed apps.
-  au.verifyUpdateCodeSignature = async () => null;
-
   au.on("checking-for-update", () => send({ type: "checking" }));
   au.on("update-available", (info) => {
     const version = info?.version || null;
-    if (status === "ready" && pendingVersion && version === pendingVersion) {
-      send({ type: "ready", version: pendingVersion });
-      return;
-    }
-    if (!isDownloadBusy() && status !== "installing") status = "available";
+    if (isDownloadBusy() || status === "installing" || status === "ready") return;
+    status = "available";
     pendingVersion = version;
-    send({
-      type: "available",
+    releaseInfo = {
       version,
       releaseDate: info?.releaseDate,
       releaseNotes: info?.releaseNotes || "",
       releaseUrl: releaseUrlFor(version),
-    });
+    };
+    send({ type: "available" });
   });
   au.on("update-not-available", (info) => {
     if (pendingVersion || status === "ready") return;
@@ -102,8 +102,12 @@ const init = () => {
     send({ type: "ready", version: info?.version || pendingVersion });
   });
   au.on("error", (err) => {
+    if (status === "installing") {
+      abortInstall(err);
+      return;
+    }
+    if (isDownloadBusy()) return;
     if (status === "checking") status = pendingVersion ? "available" : "idle";
-    else if (status === "downloading") status = "retrying";
     send({ type: "error", message: err?.message || String(err) });
   });
 
@@ -112,14 +116,13 @@ const init = () => {
 
 const checkForUpdates = async () => {
   if (isDev) return { ok: false, reason: "dev-build" };
+  if (status === "installing") return { ok: false, reason: "install-in-progress" };
   if (status === "ready") return { ok: false, reason: "already-ready" };
-  if (status === "downloading") return { ok: false, reason: "download-in-progress" };
+  if (isDownloadBusy()) return { ok: false, reason: "download-in-progress" };
   if (pendingVersion) {
     send({
       type: "available",
       version: pendingVersion,
-      releaseDate: lastSnapshot?.releaseDate,
-      releaseNotes: lastSnapshot?.releaseNotes || "",
       releaseUrl: releaseUrlFor(pendingVersion),
     });
     return { ok: true, version: pendingVersion, reason: "pending-update" };
@@ -139,39 +142,22 @@ const checkForUpdates = async () => {
   }
 };
 
-const resolvePendingVersion = (hint) => {
-  if (pendingVersion) return pendingVersion;
-  const fromHint = hint && String(hint).replace(/^v/i, "");
-  if (fromHint) return fromHint;
-  if (lastSnapshot?.type === "available" && lastSnapshot?.version) {
-    return lastSnapshot.version;
-  }
-  return null;
-};
-
 const startDownload = async (opts = {}) => {
   if (isDev) return { ok: false, reason: "dev-build" };
+  if (status === "installing") return { ok: false, reason: "install-in-progress" };
   if (isDownloadBusy()) return { ok: true, reason: "already-downloading" };
   const au = tryLoad();
   if (!au) return { ok: false, reason: "missing-module" };
 
-  const versionHint = opts?.version ?? null;
   if (!pendingVersion) {
-    pendingVersion = resolvePendingVersion(versionHint);
+    const result = await checkForUpdates();
+    if (!result.ok) return result;
+    if (!pendingVersion) return { ok: false, error: "no-update-available" };
   }
-
-  if (!pendingVersion) {
-    try {
-      const result = await au.checkForUpdates();
-      pendingVersion = result?.updateInfo?.version || null;
-      if (!pendingVersion) {
-        return { ok: false, error: "no-update-available" };
-      }
-    } catch (e) {
-      send({ type: "error", message: e?.message || String(e) });
-      return { ok: false, error: e?.message };
-    }
-  }
+  // Only the provider's update-available event authorizes a download.
+  if (opts?.version && String(opts.version).replace(/^v/i, "") !== pendingVersion)
+    return { ok: false, error: "no-update-available" };
+  if (isDownloadBusy()) return { ok: true, reason: "already-downloading" };
 
   if (status === "ready") {
     send({ type: "ready", version: pendingVersion });
@@ -195,12 +181,14 @@ const startDownload = async (opts = {}) => {
       return { ok: true };
     } catch (e) {
       if (status === "downloading") status = "retrying";
-      if (attempt < MAX_DOWNLOAD_RETRIES && pendingVersion && status !== "ready") {
+      if (
+        !INTEGRITY_ERRORS.has(e?.code) &&
+        attempt < MAX_DOWNLOAD_RETRIES &&
+        pendingVersion &&
+        status !== "ready"
+      ) {
         const delay = BASE_RETRY_DELAY_MS * (attempt + 1);
-        send({
-          type: "error",
-          message: `Download failed (attempt ${attempt + 1}/${MAX_DOWNLOAD_RETRIES + 1}). Retrying in ${delay / 1000}s...`,
-        });
+        au.logger.warn(`Download attempt ${attempt + 1} failed; retry in ${delay}ms`, e);
         await new Promise((resolve) => setTimeout(resolve, delay));
         if (!pendingVersion || status === "ready") {
           if (status === "retrying") status = pendingVersion ? "available" : "idle";
@@ -211,8 +199,8 @@ const startDownload = async (opts = {}) => {
         continue;
       }
       if (status === "retrying") status = pendingVersion ? "available" : "idle";
-      // electron-updater emits "error" for download failures; avoid duplicate IPC.
-      return { ok: false, error: e?.message };
+      send({ type: "error", message: errorMessage(e), recoverTo: "available" });
+      return { ok: false, error: errorMessage(e) };
     }
   }
 };
@@ -221,43 +209,35 @@ const getSnapshot = () => lastSnapshot;
 
 const INSTALL_GRACE_MS = 10000;
 
+const abortInstall = (e, attempt = installAttempt) => {
+  if (status !== "installing" || attempt !== installAttempt) return;
+  clearTimeout(installTimer);
+  status = "ready";
+  setAppIsQuitting(false);
+  send({ type: "error", message: e?.message || String(e), recoverTo: "ready" });
+};
+
 const scheduleInstall = (au) => {
   if (isDev || !au || status === "installing") return;
+  const attempt = ++installAttempt;
   status = "installing";
   setAppIsQuitting(true);
-  const abortInstall = (e) => {
-    if (status !== "installing") return;
-    status = "ready";
-    setAppIsQuitting(false);
-    send({ type: "error", message: e?.message || String(e) });
-  };
   // NSIS oneClick:false requires the wizard; silent install relaunches the old build.
   setImmediate(() => {
-    Promise.resolve(cancelRun())
-      .catch((e) => {
-        console.error("[updater] cancel before install failed:", e?.message || e);
+    Promise.resolve()
+      .then(() => cancelRun())
+      .then(() => {
+        if (status !== "installing" || attempt !== installAttempt) return;
+        return au.quitAndInstall(false, true);
       })
-      .finally(() => {
-        try {
-          const result = au.quitAndInstall(false, true);
-          if (result && typeof result.catch === "function") {
-            result.catch((e) => abortInstall(e));
-          }
-        } catch (e) {
-          abortInstall(e);
-        }
-      });
+      .catch((error) => abortInstall(error, attempt));
   });
   // NSIS may fail to spawn without rejecting; unlock for retry if the app stays alive.
-  setTimeout(() => {
-    if (status === "installing") {
-      status = "ready";
-      setAppIsQuitting(false);
-      send({
-        type: "error",
-        message: "No se pudo reiniciar para instalar la actualización. Inténtalo de nuevo.",
-      });
-    }
+  installTimer = setTimeout(() => {
+    abortInstall(
+      new Error("No se pudo reiniciar para instalar la actualización. Inténtalo de nuevo."),
+      attempt,
+    );
   }, INSTALL_GRACE_MS);
 };
 

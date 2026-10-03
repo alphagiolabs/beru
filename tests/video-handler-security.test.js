@@ -72,6 +72,18 @@ describe("video IPC handlers", () => {
     ]);
   });
 
+  it("exposes bounded release requests without granting access", async () => {
+    const { registerVideoHandlers } = await import("../main/handlers/video.js");
+    const pathSecurity = { releaseVideoPaths: vi.fn() };
+    registerVideoHandlers(pathSecurity);
+    const release = mocks.handlers.get("video:releasePaths");
+    expect(release({}, ["selected.mp4"])).toBe(true);
+    expect(pathSecurity.releaseVideoPaths).toHaveBeenCalledWith(["selected.mp4"]);
+    expect(release({}, null)).toBe(false);
+    expect(() => release({}, Array(501).fill("a.mp4"))).toThrow("Demasiados videos");
+    expect(pathSecurity.releaseVideoPaths).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves thumbnailBatch result order when a path is rejected", async () => {
     const { registerVideoHandlers } = await import("../main/handlers/video.js");
     const pathSecurity = {

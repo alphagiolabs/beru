@@ -2,7 +2,7 @@ import { reconcileBatchExport } from "./batch-export.js";
 import { persistWatermark, restoreWatermark } from "./sanitize-preset.js";
 
 export const SESSION_PERSIST_KEY = "beru-queue-session";
-export const SESSION_PERSIST_VERSION = 1;
+const SESSION_PERSIST_VERSION = 1;
 
 function sanitizeQueueItem(item) {
   if (!item?.path) return null;
@@ -33,7 +33,7 @@ function restoreQueueItem(item) {
 const asArray = (value) => (Array.isArray(value) ? value : []);
 const symmetric = (normalize) => ({ save: normalize, restore: normalize });
 
-export const SESSION_PERSIST_FIELDS = {
+const SESSION_PERSIST_FIELDS = {
   queue: {
     save: (items) => (Array.isArray(items) ? items : []).map(sanitizeQueueItem).filter(Boolean),
     restore: (items) =>
@@ -114,10 +114,8 @@ export function writeSessionSnapshotToStorage(state, storage = defaultSessionSto
     if (!storage) return;
     const snapshot = buildSessionSnapshot(state);
     if (!snapshot) {
-      if (_lastSessionJson != null) {
-        storage.removeItem(SESSION_PERSIST_KEY);
-        _lastSessionJson = null;
-      }
+      storage.removeItem(SESSION_PERSIST_KEY);
+      _lastSessionJson = null;
       return;
     }
     if (snapshot.excelRows !== _lastExcelRowsRef) {

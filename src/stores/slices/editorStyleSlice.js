@@ -1,8 +1,4 @@
-import {
-  GLOBAL_TEXT_STYLE_DEFAULTS,
-  patchToGlobalState,
-  pickTextStyle,
-} from "../../utils/text-style";
+import { GLOBAL_TEXT_STYLE_DEFAULTS } from "../../utils/text-style";
 import { DELOGO_FIELD_BOUNDS } from "../../utils/delogo-ops";
 
 export function createEditorStyleSlice(set, get) {
@@ -29,15 +25,6 @@ export function createEditorStyleSlice(set, get) {
     tempImageOpacity: 1,
 
     outputDir: null,
-
-    loadPreset: (preset) => {
-      const stylePatch = pickTextStyle(preset);
-      if (get().sidebarMode === "batch") {
-        get().patchBatchTextStyle(stylePatch);
-      } else {
-        set(patchToGlobalState(stylePatch));
-      }
-    },
 
     setDelogoMethod: (val) => set({ delogoMethod: val }),
     setDelogoFillColor: (val) => set({ delogoFillColor: val }),

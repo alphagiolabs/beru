@@ -25,9 +25,9 @@ function acquireWorker() {
         "error",
         () => {
           workerUnavailable = true;
-          for (const bridge of bridges.values()) bridge.pending.clear();
           sharedWorker?.terminate();
           sharedWorker = null;
+          for (const bridge of bridges.values()) bridge.workerFailed();
         },
         { once: true },
       );
@@ -38,6 +38,7 @@ function acquireWorker() {
         if (!entry) return;
         bridge.pending.delete(seq);
         entry.onResult(entry.context, result);
+        bridge.flush();
       });
     } catch {
       workerUnavailable = true;
@@ -47,17 +48,33 @@ function acquireWorker() {
   return sharedWorker;
 }
 
-export function createDelogoRenderBridge() {
+export function createDelogoRenderBridge({ onUnavailable } = {}) {
   const sessionId = ++nextSessionId;
   const pending = new Map();
   const localSession = createDelogoRenderSession();
   let seq = 0;
   let released = false;
+  let queued = null;
 
   const bridge = {
     pending,
+    flush() {
+      const next = queued;
+      queued = null;
+      if (next) bridge.compute(next.input, next.onResult);
+    },
+    workerFailed() {
+      pending.clear();
+      localSession.reset();
+      bridge.flush();
+      onUnavailable?.();
+    },
     compute({ method, params, frame, width, height, context }, onResult) {
       if (released) return;
+      if (pending.size) {
+        queued = { input: { method, params, frame, width, height, context }, onResult };
+        return;
+      }
       const mySeq = ++seq;
       const worker = acquireWorker();
       if (worker) {
@@ -86,12 +103,14 @@ export function createDelogoRenderBridge() {
     },
     reset() {
       pending.clear();
+      queued = null;
       localSession.reset();
       postShared({ type: "reset", sessionId });
     },
     release() {
       released = true;
       pending.clear();
+      queued = null;
       bridges.delete(sessionId);
       postShared({ type: "release", sessionId });
     },

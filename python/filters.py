@@ -12,7 +12,7 @@ import threading
 
 import media_probe
 from color_validation import _validate_drawtext_color
-from delogo_chains import _build_boxblur_filter, _build_delogo_chain
+from delogo_chains import _build_delogo_chain
 from fonts import _resolve_font
 from op_shared import (
     _build_enable_clause,
@@ -49,13 +49,7 @@ _DRAWTEXT_FORBIDDEN_CHARS = frozenset("[]")
 
 
 def _validate_drawtext_text(value):
-    """Reject control characters and filtergraph pad tokens.
-
-    `_escape_drawtext_text` neutralizes \\ : ' = ; , % { } and newlines, so
-    emoji, CJK, arrows and combining marks render safely (subject to font
-    glyph coverage) instead of failing the whole job. `[` and `]` stay
-    forbidden because escaping does not neutralize the pad-reference syntax.
-    """
+    """Reject control characters and filtergraph pad tokens."""
     for char in value:
         if char in _DRAWTEXT_FORBIDDEN_CHARS:
             raise ValueError("Drawtext contains forbidden characters")
@@ -66,19 +60,9 @@ def _validate_drawtext_text(value):
 
 
 def _escape_drawtext_text(value):
-    return (
-        value.replace("\\", "\\\\")
-        .replace(":", "\\:")
-        .replace("'", "\\'")
-        .replace("=", "\\=")
-        .replace(";", "\\;")
-        .replace(",", "\\,")
-        .replace("%", "\\%")
-        .replace("{", "\\{")
-        .replace("}", "\\}")
-        .replace("\n", "\\n")
-        .replace("\r", "")
-    )
+    # Escape option parsing, then apostrophes inside the quoted filtergraph value.
+    option_value = value.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+    return option_value.replace("'", "'\\''")
 
 
 def _get_drawtext_options(ffmpeg_path=None):
@@ -307,7 +291,7 @@ def build_drawtext(op, *, ffmpeg_path=None):
                 escaped = _escape_drawtext_text(cluster)
                 gx = int(round(x + dx))
                 gy = int(round(y + dy))
-                parts = [f"text='{escaped}'"] + _style_parts(
+                parts = [f"text='{escaped}'", "expansion=none"] + _style_parts(
                     gx, gy, include_line_spacing=False, include_native_spacing=False
                 )
                 filters.append("drawtext=" + ":".join(parts))
@@ -318,7 +302,7 @@ def build_drawtext(op, *, ffmpeg_path=None):
             return filter_str
 
     text = _escape_drawtext_text(text)
-    parts = [f"text='{text}'"] + _style_parts(
+    parts = [f"text='{text}'", "expansion=none"] + _style_parts(
         x_expr, y_expr, include_line_spacing=True, include_native_spacing=True
     )
     filter_str = "drawtext=" + ":".join(parts)
@@ -375,6 +359,7 @@ def _build_watermark_filter(watermark, video_w, video_h):
         dt_parts = [
             f"{font_key}={font_val}",
             f"text='{escaped_text}'",
+            "expansion=none",
             f"fontsize={font_size}",
             f"fontcolor={font_color}@{alpha}",
             f"x={x_expr}",
@@ -402,11 +387,12 @@ def _build_watermark_filter(watermark, video_w, video_h):
     return None, False, None
 
 
-def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg_path=None):
+def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg_path=None,
+                         source_pix_fmt=None, temporal_resolver=None):
     """Build ffmpeg -filter_complex argument for all operations.
 
-    Returns (filter_str, output_label, extra_image_paths) where extra_image_paths
-    is the list of image file paths to pass as additional `-loop 1 -i <path>` inputs.
+    Returns (filter_str, output_label, extra_media_paths). Image inputs loop;
+    generated Temporal MKV patches keep their original frame cadence.
     """
     filters = []
     n = 0
@@ -453,19 +439,14 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
             prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
             filters.append(f"{prev}{chain}[tmp{n}]")
         elif mode == "blur":
-            strength = _coerce_int(op.get("blur_strength"), 20, 1, 100)
-            luma = max(1, min(100, strength // 3))
-            enable_clause = _build_enable_clause(op)
-            overlay_opts = _overlay_opts(x, y, enable_clause)
-            blur_filter = _build_boxblur_filter(luma, power=3)
-            if enable_clause:
-                blur_filter += f":{enable_clause}"
-            prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
-            filters.append(
-                f"{prev}split[bg{n}][fg{n}];"
-                f"[bg{n}]crop={w}:{h}:{x}:{y},{blur_filter}[blur{n}];"
-                f"[fg{n}][blur{n}]overlay={overlay_opts}[tmp{n}]"
+            chain = _build_delogo_chain(
+                {**op, "region": region, "delogo_method": "blur", "edge_feather": 0},
+                f"tmp{n-1}" if n else None, n, video_w, video_h,
+                source_pix_fmt=source_pix_fmt,
             )
+            if not chain:
+                continue
+            filters.append(chain)
         elif mode == "crop":
             enable_clause = _build_enable_clause(op)
             prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
@@ -486,8 +467,15 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
                 video_w, video_h = cw, ch
         elif mode == "delogo":
             prev = f"tmp{n-1}" if n > 0 else None
+            patch = None
+            if temporal_resolver and (op.get("delogo_method") or "").lower() in {"temporal", "inpaint"}:
+                patch = temporal_resolver(
+                    n, {**op, "region": region}, video_w, video_h,
+                    ";".join(filters), f"[{prev}]" if prev else "[0:v]", image_paths,
+                )
             chain = _build_delogo_chain(
-                {**op, "region": region}, prev, n, video_w, video_h, img_input_index
+                {**op, "region": region}, prev, n, video_w, video_h, img_input_index,
+                source_pix_fmt, temporal_patch=patch,
             )
             if chain:
                 filters.append(chain)

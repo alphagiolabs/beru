@@ -83,13 +83,18 @@ describe("reduceUpdaterEvent", () => {
       releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v1.6.0",
     };
 
-    expect(reduceUpdaterEvent(available, { type: "error", message: "network" })).toBe(available);
+    expect(reduceUpdaterEvent(available, { type: "error", message: "network" })).toMatchObject({
+      status: "available",
+      error: "network",
+      version: "1.6.0",
+    });
   });
 
   it("keeps silent failures for background checks", () => {
-    expect(reduceUpdaterEvent(IDLE_UPDATE, { type: "error", message: "aborted" })).toEqual(
-      IDLE_UPDATE,
-    );
+    expect(reduceUpdaterEvent(IDLE_UPDATE, { type: "error", message: "aborted" })).toMatchObject({
+      status: "idle",
+      error: "aborted",
+    });
   });
 });
 

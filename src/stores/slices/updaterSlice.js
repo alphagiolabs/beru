@@ -13,7 +13,23 @@ export function createUpdaterSlice(set, get) {
     checkForUpdates: async () => {
       const api = window.api;
       if (!api?.checkForUpdates) return { ok: false, reason: "no-api" };
-      return await api.checkForUpdates();
+      let res;
+      try {
+        res = await api.checkForUpdates();
+      } catch (error) {
+        res = { ok: false, error: error?.message || "no-api" };
+      }
+      if (
+        res?.ok === false &&
+        ![
+          "check-in-progress",
+          "download-in-progress",
+          "already-ready",
+          "install-in-progress",
+        ].includes(res.reason)
+      )
+        get().applyUpdaterEvent({ type: "error", message: res.error || res.reason });
+      return res;
     },
 
     downloadUpdate: async () => {
@@ -43,10 +59,15 @@ export function createUpdaterSlice(set, get) {
         },
       }));
 
-      const res = await api.downloadUpdate({ version: targetVersion });
+      let res;
+      try {
+        res = await api.downloadUpdate({ version: targetVersion });
+      } catch (error) {
+        res = { ok: false, error: error?.message || "download-failed" };
+      }
       if (res?.ok === false) {
         const current = get().update;
-        if (current?.status === "downloading" && (current.percent || 0) === 0) {
+        if (current?.status === "downloading") {
           const failureReason = res.reason || res.error || "unknown";
           set((s) => ({
             update: {
@@ -67,7 +88,15 @@ export function createUpdaterSlice(set, get) {
     installUpdate: async () => {
       const api = window.api;
       if (!api?.installUpdate) return { ok: false, reason: "no-api" };
-      return await api.installUpdate();
+      let res;
+      try {
+        res = await api.installUpdate();
+      } catch (error) {
+        res = { ok: false, error: error?.message || "download-failed" };
+      }
+      if (res?.ok === false)
+        get().applyUpdaterEvent({ type: "error", message: res.error || res.reason });
+      return res;
     },
   };
 }

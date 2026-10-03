@@ -58,7 +58,7 @@ export default function UpdatePrompt() {
   const handleInstall = async () => {
     const res = await get().installUpdate();
     if (res?.ok === false) {
-      showToast({ kind: "err", text: t("header.updateDownloadFailed") });
+      showToast({ kind: "err", text: formatUpdateError(t, res.error || res.reason) });
     }
   };
 

@@ -53,19 +53,9 @@ describe("audit: project configuration", () => {
     expect(blockSrc).toMatch(/MODE|prepush|PREPUSH/);
   });
 
-  it("release loop checks git ancestry without Unix-only shell redirection", () => {
+  it("release loop checks the live remote main without Unix-only shell redirection", () => {
     expect(releaseLoop).not.toContain("2>/dev/null");
-    expect(releaseLoop).toMatch(/execFileSync\(\s*["']git["']/);
-  });
-
-  it("release loop quotes gh release create assets so paths with spaces don't break the command", () => {
-    const blockMatch = releaseLoop.match(
-      /const allAssets = \[\.\.\.exes, \.\.\.blockmaps, \.\.\.yamls\];([\s\S]*?)(?:const cmd = `gh release create)/,
-    );
-    expect(blockMatch, "asset-join + cmd block must exist").not.toBeNull();
-    const block = blockMatch[1];
-    expect(block).not.toMatch(/assets\s*=\s*allAssets\.join\(/);
-    expect(block).toMatch(/allAssets\.map\(/);
-    expect(block).toMatch(/\.join\(/);
+    expect(releaseLoop).toContain("git ls-remote origin refs/heads/main");
+    expect(releaseLoop).toMatch(/remoteHead !== runCapture\("git rev-parse HEAD"\)/);
   });
 });

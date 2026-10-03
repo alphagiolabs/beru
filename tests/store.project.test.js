@@ -8,6 +8,27 @@ const { default: useEditorStore } = await import("../src/stores/useEditorStore.j
 describe("projectSlice + editorStyleSlice", () => {
   beforeEach(() => resetEditorState(useEditorStore, mockApi));
 
+  it.each([null, undefined, "invalid"])(
+    "clears the previous watermark when a project has no watermark (%s)",
+    (watermark) => {
+      useEditorStore.setState({
+        watermark: { enabled: true, text: "OLD", imagePath: "old.png", imageDataUrl: "stale" },
+      });
+      const result = useEditorStore.getState()._applyProject({
+        type: "beru-project",
+        version: "1.3.0",
+        watermark,
+      });
+      expect(result.ok).toBe(true);
+      expect(useEditorStore.getState().watermark).toMatchObject({
+        enabled: false,
+        text: "",
+        imagePath: "",
+        imageDataUrl: "",
+      });
+    },
+  );
+
   it("round-trips advanced text style fields in project and preset data", () => {
     useEditorStore.setState({
       fontWeight: 900,
@@ -91,7 +112,7 @@ describe("projectSlice + editorStyleSlice", () => {
     );
   });
 
-  it("loadPreset applies advanced text style fields", () => {
+  it("applyPreset applies advanced text style fields", () => {
     useEditorStore.setState({
       sidebarMode: "logo",
       fontWeight: 400,
@@ -100,16 +121,20 @@ describe("projectSlice + editorStyleSlice", () => {
       textOpacity: 1,
     });
 
-    useEditorStore.getState().loadPreset({
-      fontSize: 42,
-      fontColor: "#abcdef",
-      fontFamily: "Arial Black",
-      fontWeight: 900,
-      letterSpacing: 3,
-      textAlign: "center",
-      textOpacity: 0.6,
+    const result = useEditorStore.getState().applyPreset({
+      type: "beru-preset",
+      textStyle: {
+        fontSize: 42,
+        fontColor: "#abcdef",
+        fontFamily: "Arial Black",
+        fontWeight: 900,
+        letterSpacing: 3,
+        textAlign: "center",
+        textOpacity: 0.6,
+      },
     });
 
+    expect(result.ok).toBe(true);
     expect(useEditorStore.getState()).toEqual(
       expect.objectContaining({
         textFontSize: 42,

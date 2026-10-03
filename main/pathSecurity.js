@@ -21,7 +21,7 @@ export function createPathSecurity(app) {
   function registerAllowedPath(filePath, kind) {
     const check = verdicts.inspectReadableFile(filePath, kind);
     if (!check.ok) return check;
-    consent.grantRead(check.resolvedPath);
+    consent.grantRead(check.resolvedPath, kind);
     return check;
   }
 
@@ -32,7 +32,7 @@ export function createPathSecurity(app) {
 
   function registerSelectedPath(filePath, kind) {
     const check = verdicts.inspectReadableFile(filePath, kind, { selectedByUser: true });
-    if (check.ok) consent.grantRead(check.resolvedPath);
+    if (check.ok) consent.grantRead(check.resolvedPath, kind);
     return check;
   }
 
@@ -50,11 +50,19 @@ export function createPathSecurity(app) {
     return check;
   }
 
+  function releaseVideoPaths(paths) {
+    for (const filePath of paths) {
+      const resolved = resolveSafe(filePath);
+      if (resolved) consent.revokeRead(resolved, "video");
+    }
+  }
+
   return {
     registerAllowedPath,
     registerAllowedPaths,
     registerSelectedPath,
     registerSelectedPaths,
+    releaseVideoPaths,
     registerOutputDirectory,
     getOutputDirectory: consent.getOutputDirectory,
     registerWritePath: writes.approve,

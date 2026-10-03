@@ -33,7 +33,7 @@ describe("processor-spawn", () => {
 
   it("bundled processor binary: present-and-valid OR absent (never partial)", () => {
     const bundled = getBundledProcessorPath();
-    if (!bundled) return; // Not built yet — fine in dev.
+    if (!bundled) return;
     expect(fs.existsSync(bundled)).toBe(true);
   });
 

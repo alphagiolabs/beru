@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from "electron";
+import { ipcMain } from "electron";
+import { showOpenDialog, showSaveDialog } from "../utils/dialog-history.js";
 import fs from "fs";
 import { getMainWindow } from "../shared-state.js";
 import { validateProjectDocument } from "../../shared/project-document.js";
@@ -18,7 +19,7 @@ async function readValidatedProject(resolvedPath) {
 export function registerProjectHandlers(pathSecurity) {
   handleIpc(IPC_INVOKE.saveProject, async (_event, payload) => {
     const win = getMainWindow();
-    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    const { canceled, filePath } = await showSaveDialog(win, {
       title: "Guardar proyecto Beru",
       defaultPath: "proyecto.beru.json",
       filters: [{ name: "Proyecto Beru", extensions: ["beru.json", "json"] }],
@@ -34,7 +35,7 @@ export function registerProjectHandlers(pathSecurity) {
 
   handleIpc(IPC_INVOKE.loadProject, async () => {
     const win = getMainWindow();
-    const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    const { canceled, filePaths } = await showOpenDialog(win, {
       title: "Cargar proyecto Beru",
       properties: ["openFile"],
       filters: [{ name: "Proyecto Beru", extensions: ["beru.json", "json"] }],

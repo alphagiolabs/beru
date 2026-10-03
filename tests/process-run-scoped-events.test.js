@@ -3,12 +3,7 @@ import { EventEmitter } from "events";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import {
-  IPC_EVENTS,
-  IPC_INVOKE,
-  RUN_SCOPED_CHANNELS,
-  emitRunEvent,
-} from "../shared/ipc-channels.js";
+import { IPC_EVENTS, IPC_INVOKE, emitRunEvent } from "../shared/ipc-channels.js";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
@@ -117,11 +112,6 @@ afterEach(async () => {
 });
 
 describe("run-scoped process events", () => {
-  it("RUN_SCOPED_CHANNELS is exactly the process:* subset of IPC_EVENTS", () => {
-    const processChannels = Object.values(IPC_EVENTS).filter((c) => c.startsWith("process:"));
-    expect([...RUN_SCOPED_CHANNELS].sort()).toEqual(processChannels.sort());
-  });
-
   it("emitRunEvent stamps runId onto the payload", () => {
     const send = vi.fn();
     emitRunEvent(send, IPC_EVENTS.onProgress, "run-1", { percent: 50 });
@@ -153,7 +143,7 @@ describe("run-scoped process events", () => {
     const emitted = mocks.sendToRenderer.mock.calls;
     expect(emitted.length).toBeGreaterThanOrEqual(6);
     for (const [channel, payload] of emitted) {
-      expect(RUN_SCOPED_CHANNELS.has(channel), `channel ${channel}`).toBe(true);
+      expect(channel.startsWith("process:"), `channel ${channel}`).toBe(true);
       expect(payload.runId, `payload of ${channel}`).toBe(runId);
     }
     expect(calls(IPC_EVENTS.onFinished)[0][1]).toMatchObject({ code: 0, runId });

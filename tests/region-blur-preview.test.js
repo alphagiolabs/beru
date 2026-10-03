@@ -32,7 +32,7 @@ describe("blur preview rendering path", () => {
 
     expect(drawBlurredVideoRegion(ctx, video, region, screen, 30)).toBe(true);
     expect(filterAtDraw).toBe("blur(2.5px)");
-    expect(ctx.drawImage).toHaveBeenCalledWith(video, 60, 25, 120, 85, -5, -5, 30, 21.25);
+    expect(ctx.drawImage).toHaveBeenCalledWith(video, 50, 15, 140, 105, -7.5, -7.5, 35, 26.25);
   });
 
   it("rounds the source origin like the FFmpeg job payload", () => {
@@ -50,10 +50,10 @@ describe("blur preview rendering path", () => {
       { w: 20, h: 11.25, sx: 0.25, sy: 0.25 },
       30,
     );
-    expect(ctx.drawImage.mock.calls[0][1]).toBe(62);
+    expect(ctx.drawImage.mock.calls[0][1]).toBe(52);
   });
 
-  it("caps live blur intensity to the same small-region radius as FFmpeg", () => {
+  it("preserves the requested blur intensity for small selections", () => {
     let filterAtDraw = "";
     const ctx = {
       filter: "none",
@@ -71,6 +71,6 @@ describe("blur preview rendering path", () => {
       { w: 32, h: 9, sx: 1, sy: 1 },
       100,
     );
-    expect(filterAtDraw).toBe("blur(4px)");
+    expect(filterAtDraw).toBe("blur(33px)");
   });
 });

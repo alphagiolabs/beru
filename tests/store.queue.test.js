@@ -11,6 +11,117 @@ const { default: useEditorStore } = await import("../src/stores/useEditorStore.j
 describe("queueSlice", () => {
   beforeEach(() => resetEditorState(useEditorStore, mockApi));
 
+  it("applies pending metadata to the surviving video after an earlier item is removed", async () => {
+    let resolveProbe;
+    mockApi.getVideoInfoBatch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveProbe = resolve;
+        }),
+    );
+    const importing = useEditorStore
+      .getState()
+      .addVideos(["C:\\v\\a.mp4", "C:\\v\\b.mp4"], mockApi);
+    useEditorStore.getState().removeVideo(0);
+    resolveProbe([
+      { width: 640, height: 360 },
+      { width: 1280, height: 720, duration: 12 },
+    ]);
+    await importing;
+    expect(useEditorStore.getState().queue).toHaveLength(1);
+    expect(useEditorStore.getState().queue[0]).toMatchObject({
+      path: "C:\\v\\b.mp4",
+      width: 1280,
+      height: 720,
+      duration: 12,
+    });
+  });
+
+  it("ignores metadata from a cleared import when the same path is imported again", async () => {
+    let resolveOldProbe;
+    mockApi.getVideoInfoBatch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveOldProbe = resolve;
+        }),
+    );
+    const oldImport = useEditorStore.getState().addVideos(["C:\\v\\a.mp4"], mockApi);
+    useEditorStore.getState().clearQueue();
+    mockApi.getVideoInfoBatch.mockResolvedValueOnce([{ width: 1280, height: 720, duration: 20 }]);
+    await useEditorStore.getState().addVideos(["C:\\v\\a.mp4"], mockApi);
+    resolveOldProbe([{ width: 640, height: 360, duration: 10 }]);
+    await oldImport;
+    expect(useEditorStore.getState().queue[0]).toMatchObject({
+      width: 1280,
+      height: 720,
+      duration: 20,
+    });
+  });
+
+  it("reuses output names during progress updates and invalidates them after a rename", () => {
+    const { getCellTextForRegion, getExcelDisplayId } = useEditorStore.getState();
+    try {
+      const cellText = vi.fn(() => "Title");
+      useEditorStore.setState({
+        queue: [makeQueueItem({ path: "C:\\v\\a.mp4" })],
+        templateRegions: [{ id: 1, label: "TEXT_1" }],
+        getCellTextForRegion: cellText,
+        getExcelDisplayId: () => "a",
+      });
+      const original = useEditorStore.getState().outputPathsForAll();
+      cellText.mockClear();
+      useEditorStore.setState((s) => ({
+        queue: s.queue.map((item) => ({ ...item, status: "processing", progress: 50 })),
+      }));
+      expect(useEditorStore.getState().outputPathsForAll()).toEqual(original);
+      expect(cellText).not.toHaveBeenCalled();
+      useEditorStore.setState((s) => ({
+        queue: s.queue.map((item) => ({ ...item, customOutputName: "renamed.mp4" })),
+      }));
+      expect(useEditorStore.getState().outputPathsForAll()).toEqual(["C:\\v\\renamed.mp4"]);
+    } finally {
+      useEditorStore.setState({ getCellTextForRegion, getExcelDisplayId });
+    }
+  });
+
+  it("releases removed videos and chunks the remaining grants when clearing a large queue", () => {
+    const releaseVideoPaths = vi.fn(async () => true);
+    mockApi.releaseVideoPaths = releaseVideoPaths;
+    const paths = Array.from({ length: 1002 }, (_, i) => `C:\\v\\${i}.mp4`);
+    try {
+      useEditorStore.setState({ queue: paths.map((path) => makeQueueItem({ path })) });
+      useEditorStore.getState().removeVideo(0);
+      expect(releaseVideoPaths.mock.calls).toEqual([[paths.slice(0, 1)]]);
+      useEditorStore.getState().clearQueue();
+      expect(releaseVideoPaths.mock.calls.map(([batch]) => batch.length)).toEqual([1, 500, 500, 1]);
+      expect(releaseVideoPaths.mock.calls.flatMap(([batch]) => batch)).toEqual(paths);
+    } finally {
+      delete mockApi.releaseVideoPaths;
+    }
+  });
+
+  it("invalidates cached names when the text operation changes", () => {
+    const region = { x: 0, y: 0, w: 0.2, h: 0.2 };
+    useEditorStore.setState({
+      templateRegions: [{ id: 1, label: "TEXT_1", region }],
+      queue: [
+        makeQueueItem({
+          path: "C:\\v\\a.mp4",
+          filename: "a.mp4",
+          operations: [{ mode: "text", batchRegionId: 1, region, text: "Old" }],
+        }),
+      ],
+    });
+    expect(useEditorStore.getState().outputPathsForAll()).toEqual(["C:\\v\\a_Old.mp4"]);
+    useEditorStore.setState((s) => ({
+      queue: s.queue.map((item) => ({
+        ...item,
+        operations: [{ ...item.operations[0], text: "New" }],
+      })),
+    }));
+    expect(useEditorStore.getState().outputPathsForAll()).toEqual(["C:\\v\\a_New.mp4"]);
+  });
+
   it("addVideos populates the queue and selects the first item", async () => {
     mockApi.getVideoInfoBatch.mockResolvedValueOnce([
       {

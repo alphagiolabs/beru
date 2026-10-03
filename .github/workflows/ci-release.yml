@@ -10,7 +10,11 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ci-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # Quality gate: runs on every push (main, PRs, and tags).
@@ -26,16 +30,20 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: ".node-version"
           cache: npm
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version-file: ".python-version"
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Validate tagged release source
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: node scripts/release-metadata.mjs --tag $env:GITHUB_REF_NAME
 
       - name: Prepare ffmpeg
         # npm ci runs postinstall, but this is idempotent and keeps the CI
@@ -43,10 +51,11 @@ jobs:
         timeout-minutes: 2
         run: npm run fetch:ffmpeg
 
+      - name: Install Python test dependencies
+        run: python -m pip install --quiet -r python/requirements-test.txt
+
       - name: Verify
-        run: |
-          python -m pip install --quiet numpy
-          npm run verify
+        run: npm run verify
 
   # Build & publish: only runs on tag pushes.
   # `needs: test` ensures the Windows quality gate passes before packaging.
@@ -56,28 +65,43 @@ jobs:
     needs: test
     runs-on: windows-latest
     timeout-minutes: 45
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: ".node-version"
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate version, notes and main ancestry
+        shell: pwsh
+        run: |
+          node scripts/release-metadata.mjs --tag $env:GITHUB_REF_NAME --notes "$env:RUNNER_TEMP/release-notes.md"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git merge-base --is-ancestor HEAD origin/main
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag must belong to main' }
+
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version-file: ".python-version"
 
       - name: Build bundled processor & fetch ffmpeg
         run: |
           npm run build:processor
           npm run fetch:ffmpeg
+
+      - name: Install Python test dependencies
+        run: python -m pip install --quiet -r python/requirements-test.txt
 
       - name: Run Python delogo tests
         # Run the Python pipeline tests on Windows where ffmpeg is guaranteed
@@ -97,62 +121,70 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npx vite build
 
-      - name: Package & publish
+      - name: Package installer
         shell: pwsh
-        # Only set CSC_LINK / CSC_KEY_PASSWORD when the signing secrets are
-        # present. When the cert secrets are absent, electron-builder builds
-        # an unsigned installer and still publishes it (SmartScreen will warn
-        # at install time). This lets releases ship while the cert is being
-        # provisioned; add WINDOWS_CERTIFICATE_BASE64 /
-        # WINDOWS_CERTIFICATE_PASSWORD to the repo secrets to enable signing.
-        # electron-builder treats an empty CSC_LINK as a relative path, which
-        # would resolve to the runner's cwd and crash the build with
-        # "WIN_CSC_LINK is not correct, cannot resolve: D:\a\beru\beru".
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         run: |
-          $cscLink = "${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}"
-          $cscKey  = "${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}"
-          $env:GH_TOKEN = "${{ secrets.GITHUB_TOKEN }}"
           $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
-          if ($cscLink) { $env:CSC_LINK = $cscLink }
-          if ($cscKey)  { $env:CSC_KEY_PASSWORD = $cscKey }
-          if (-not $cscLink) {
-            Write-Warning "WINDOWS_CERTIFICATE_BASE64 secret is not set — publishing an UNSIGNED installer. Set the secret to enable Authenticode signing."
+          if ($env:WINDOWS_CERTIFICATE_BASE64) {
+            $env:CSC_LINK = $env:WINDOWS_CERTIFICATE_BASE64
+            $env:CSC_KEY_PASSWORD = $env:WINDOWS_CERTIFICATE_PASSWORD
+            $env:BERU_SIGNING_MODE = 'signed'
+          } else {
+            $env:BERU_SIGNING_MODE = 'unsigned'
           }
-          npx electron-builder --win --publish always
+          "BERU_SIGNING_MODE=$env:BERU_SIGNING_MODE" >> $env:GITHUB_ENV
+          npx electron-builder --config scripts/electron-builder.config.cjs --win --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Verify installer signature
-        # Post-build diagnostic: log the Authenticode signature status of the
-        # produced installer. When the signing secrets are present this should
-        # report "Valid"; when absent it will report "NotSigned" and the build
-        # still succeeds (the installer is publishable but SmartScreen will
-        # warn). Add WINDOWS_CERTIFICATE_BASE64 to enable hard-fail behavior.
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
         shell: pwsh
+        run: ./scripts/verify-installer-signature.ps1 -Mode $env:BERU_SIGNING_MODE
+
+      - name: Verify packaged version and update metadata
+        run: node scripts/release-metadata.mjs --tag $env:GITHUB_REF_NAME --dist dist-installer
+
+      - name: Publish installers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $exe = Get-ChildItem -Path dist-installer -Filter "Beru-Setup-*.exe" | Select-Object -First 1
-          if (-not $exe) {
-            Write-Error "No installer .exe found in dist-installer/"
-            exit 1
-          }
-          $sig = Get-AuthenticodeSignature -FilePath $exe.FullName
-          Write-Host "Installer: $($exe.Name)"
-          Write-Host "Signature status: $($sig.Status)"
-          if ($sig.SignerCertificate) {
-            Write-Host "Signer: $($sig.SignerCertificate.Subject)"
+          $version = (Get-Content -Raw package.json | ConvertFrom-Json).version
+          $assets = @("dist-installer/Beru-Setup-$version.exe", "dist-installer/Beru-Setup-$version.exe.blockmap", 'dist-installer/latest.yml')
+          $release = gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --json isDraft
+          if ($LASTEXITCODE -eq 0) {
+            if (-not ($release | ConvertFrom-Json).isDraft) { throw 'Refusing to overwrite a published release' }
           } else {
-            Write-Host "Signer: (none — installer is unsigned)"
+            gh release create $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title $env:GITHUB_REF_NAME --notes-file "$env:RUNNER_TEMP/release-notes.md"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          if ($sig.Status -ne "Valid") {
-            Write-Warning "Installer signature is not Valid (status: $($sig.Status)). Publishing anyway because signing secrets are optional. Set WINDOWS_CERTIFICATE_BASE64 to enforce signing."
-          }
+          gh release upload $env:GITHUB_REF_NAME @assets --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $remote = gh release view $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --json assets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $expectedNames = @($assets | ForEach-Object { Split-Path -Leaf $_ })
+          $actualNames = @(($remote | ConvertFrom-Json).assets | ForEach-Object { $_.name })
+          if ($actualNames.Count -ne 3 -or @(Compare-Object $expectedNames $actualNames).Count -ne 0) { throw 'Unexpected release assets' }
+          $verification = Join-Path $env:RUNNER_TEMP 'release-verification'
+          gh release download $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --dir $verification --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/release-metadata.mjs --tag $env:GITHUB_REF_NAME --dist $verification --assets-only
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $localMap = (Get-FileHash -Algorithm SHA512 -LiteralPath $assets[1]).Hash
+          $remoteMap = (Get-FileHash -Algorithm SHA512 -LiteralPath (Join-Path $verification $expectedNames[1])).Hash
+          if ($localMap -ne $remoteMap) { throw 'Uploaded blockmap differs from local build' }
+          gh release edit $env:GITHUB_REF_NAME --repo $env:GITHUB_REPOSITORY --notes-file "$env:RUNNER_TEMP/release-notes.md" --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: beru-installers
           path: |
             dist-installer/*.exe
             dist-installer/*.exe.blockmap
             dist-installer/latest.yml
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14

@@ -21,8 +21,7 @@ export default function UpdateModal({
   const sections = parseReleaseNotesSections(update?.releaseNotes);
   const percent = Math.max(0, Math.min(100, Math.round(update?.percent || 0)));
   const version = update?.version || "?";
-  const inlineError =
-    status === "available" && update?.error ? formatUpdateError(t, update.error) : null;
+  const inlineError = update?.error ? formatUpdateError(t, update.error) : null;
   const isBusy = isStartingDownload || status === "downloading";
 
   useEffect(() => {
@@ -74,6 +73,11 @@ export default function UpdateModal({
         <h2 id="update-modal-title" className="status-footer-update-title">
           {title}
         </h2>
+        {inlineError && (
+          <p className="status-footer-update-error" role="alert">
+            {inlineError}
+          </p>
+        )}
 
         {status === "ready" ? (
           <>
@@ -112,11 +116,6 @@ export default function UpdateModal({
           <>
             <p className="status-footer-update-subtitle">{t("updater.modal.subtitle")}</p>
             <UpdateChangelog sections={sections} t={t} />
-            {inlineError && (
-              <p className="status-footer-update-error" role="alert">
-                {inlineError}
-              </p>
-            )}
             <Button
               type="button"
               variant="primary"

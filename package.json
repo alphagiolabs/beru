@@ -1,6 +1,6 @@
 {
   "name": "beru",
-  "version": "1.6.46",
+  "version": "1.6.47",
   "description": "Beru",
   "main": "main/main.js",
   "type": "module",
@@ -15,7 +15,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "vite build && electron-builder --win",
+    "build": "vite build && electron-builder --config scripts/electron-builder.config.cjs --win --publish never",
     "build:processor": "node scripts/build-processor.mjs",
     "preview": "vite preview",
     "start": "electron .",
@@ -30,7 +30,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "fetch:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
-    "postinstall": "node scripts/fetch-ffmpeg.mjs || node -e \"console.warn('[ffmpeg] postinstall skipped (deps not installed yet)')\""
+    "postinstall": "node scripts/fetch-ffmpeg.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -41,25 +41,25 @@
     "radix-ui": "^1.6.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "tailwind-merge": "^3.6.0",
+    "tailwind-merge": "2.6.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^4.5.7"
   },
   "devDependencies": {
+    "@electron/asar": "3.4.1",
     "@eslint/js": "^9.17.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "4.1.11",
     "autoprefixer": "^10.4.16",
-    "electron": "^42.11.10",
+    "electron": "43.7.7",
     "electron-builder": "^26.15.3",
     "eslint": "^9.17.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "^7.37.3",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.16",
-    "ffmpeg-static": "^5.3.0",
-    "ffprobe-static": "^3.1.0",
     "globals": "^15.14.0",
+    "js-yaml": "4.3.2",
     "jsdom": "^24.0.0",
     "postcss": "^8.4.32",
     "prettier": "^3.4.2",

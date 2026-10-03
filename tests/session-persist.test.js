@@ -5,6 +5,7 @@ import {
   buildSessionSnapshot,
   hasPersistedFieldChanged,
   parseSessionSnapshot,
+  readSessionSnapshotFromStorage,
   writeSessionSnapshotToStorage,
   resetSessionWriteCache,
 } from "../src/utils/session-persist.js";
@@ -128,6 +129,20 @@ describe("session-persist", () => {
     writeSessionSnapshotToStorage(state);
     expect(setItem).toHaveBeenCalledTimes(1);
     setItem.mockRestore();
+  });
+
+  it("removes a restored queue cleared before the first write", () => {
+    sessionStorage.setItem(
+      SESSION_PERSIST_KEY,
+      JSON.stringify({
+        queue: [{ path: "C:\\v\\a.mp4", operations: [{ mode: "text", text: "Old" }] }],
+      }),
+    );
+    const restored = readSessionSnapshotFromStorage();
+    expect(restored.queue).toHaveLength(1);
+    writeSessionSnapshotToStorage({ ...restored, queue: [] });
+    expect(readSessionSnapshotFromStorage()).toBeNull();
+    expect(sessionStorage.getItem(SESSION_PERSIST_KEY)).toBeNull();
   });
 
   it("persists watermark settings without imageDataUrl", () => {

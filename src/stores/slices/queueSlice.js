@@ -48,11 +48,32 @@ const namingContext = (s) => ({
 });
 
 function resolveOutputPathsForState(s) {
-  const key = namingInputs(s);
+  const key = [...namingInputs(s), s.getCellTextForRegion, s.getExcelDisplayId];
   const cached = outputPathsCache;
-  if (cached.paths && cached.key.every((v, i) => v === key[i])) return cached.paths;
+  if (cached.paths && cached.key.slice(1).every((v, i) => v === key[i + 1])) {
+    if (
+      cached.key[0] === s.queue ||
+      (cached.queueNames.length === s.queue.length &&
+        cached.queueNames.every(
+          (item, i) =>
+            item.path === s.queue[i].path &&
+            item.filename === s.queue[i].filename &&
+            item.customOutputName === s.queue[i].customOutputName &&
+            item.operations === s.queue[i].operations,
+        ))
+    ) {
+      cached.key = key;
+      return cached.paths;
+    }
+  }
   const paths = resolveOutputPaths(s.queue, s.outputDir, namingContext(s));
-  outputPathsCache = { key, paths };
+  const queueNames = s.queue.map(({ path, filename, customOutputName, operations }) => ({
+    path,
+    filename,
+    customOutputName,
+    operations,
+  }));
+  outputPathsCache = { key, paths, queueNames };
   return paths;
 }
 
@@ -60,6 +81,16 @@ export function createQueueSlice(set, get) {
   const priorityThumbnailLoads = new Map();
   const pendingThumbnails = new Map();
   let thumbnailFlushQueued = false;
+
+  const releaseVideoPaths = (paths) => {
+    const api = window.api;
+    if (!api?.releaseVideoPaths) return;
+    for (let offset = 0; offset < paths.length; offset += 500) {
+      void api
+        .releaseVideoPaths(paths.slice(offset, offset + 500))
+        .catch((error) => swallow("releaseVideoPaths", error));
+    }
+  };
 
   const flushPendingThumbnails = () => {
     thumbnailFlushQueued = false;
@@ -141,16 +172,14 @@ export function createQueueSlice(set, get) {
 
     outputPathsForAll: () => resolveOutputPathsForState(get()),
 
-    _patchQueueVideoInfo: (startIdx, pathList, infos) => {
+    _patchQueueVideoInfo: (items, infos) => {
       if (!Array.isArray(infos) || infos.length === 0) return;
       set((s) => {
-        const next = s.queue.slice();
-        for (let i = 0; i < pathList.length; i++) {
-          const idx = startIdx + i;
-          const info = infos[i] || {};
-          if (!next[idx] || next[idx].path !== pathList[i]) continue;
-          next[idx] = mergeProbeIntoQueueItem(next[idx], info);
-        }
+        const infoByImport = new Map(items.map((item, i) => [item.importId, infos[i] || {}]));
+        const next = s.queue.map((item) => {
+          const info = infoByImport.get(item.importId);
+          return info ? mergeProbeIntoQueueItem(item, info) : item;
+        });
         return { queue: next };
       });
     },
@@ -275,6 +304,7 @@ export function createQueueSlice(set, get) {
       const newItems = toAdd.map((p) => {
         const filename = p.split(/[\\/]/).pop();
         return createQueueItem({
+          importId: uid(),
           path: p,
           src: `beru://local/${encodeURIComponent(p)}`,
           filename,
@@ -295,7 +325,7 @@ export function createQueueSlice(set, get) {
       get()._scheduleThumbnailLoads(api, toAdd);
 
       return fetchVideoInfos(api, toAdd)
-        .then((infos) => get()._patchQueueVideoInfo(startIdx, toAdd, infos))
+        .then((infos) => get()._patchQueueVideoInfo(newItems, infos))
         .catch((err) => {
           swallow("getVideoInfoBatch", err);
           const lang = get().language;
@@ -314,6 +344,7 @@ export function createQueueSlice(set, get) {
     },
 
     removeVideo: (idx) => {
+      const removedPath = get().queue[idx]?.path;
       set((s) => {
         const removed = s.queue[idx];
         const next = s.queue.filter((_, i) => i !== idx);
@@ -338,6 +369,8 @@ export function createQueueSlice(set, get) {
           batchSummary: null,
         }).patch;
       });
+      if (removedPath && !get().queue.some((item) => item.path === removedPath))
+        releaseVideoPaths([removedPath]);
     },
 
     clearQueue: () => {
@@ -364,6 +397,7 @@ export function createQueueSlice(set, get) {
         _thumbnailAbortControllers: new Set(),
         thumbnailsByPath: {},
       }));
+      releaseVideoPaths(queue.map((item) => item.path));
       return true;
     },
 

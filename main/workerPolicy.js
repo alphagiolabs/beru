@@ -7,7 +7,6 @@ import {
 } from "./encodeProfiles.js";
 
 const MAX_BATCH_WORKERS = 16;
-export const AUTO_TARGET_WORKERS = 5;
 
 // Keep RAM estimates and worker caps in sync with python/capacity.py.
 const RAM_PER_JOB_MB = {

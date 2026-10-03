@@ -5,6 +5,7 @@ export const IPC_INVOKE = {
   restoreSessionPaths: "session:restorePaths",
   getVideoInfo: "fs:getVideoInfo",
   getVideoInfoBatch: "fs:getVideoInfoBatch",
+  releaseVideoPaths: "video:releasePaths",
   readExcel: "fs:readExcel",
   saveExcelDialog: "dialog:saveExcel",
   writeExcel: "fs:writeExcel",
@@ -67,18 +68,6 @@ export const IPC_EVENTS = {
   onRunStarted: "process:runStarted",
   onError: "process:error",
 };
-
-export const RUN_SCOPED_CHANNELS = new Set([
-  IPC_EVENTS.onProgress,
-  IPC_EVENTS.onJobProgress,
-  IPC_EVENTS.onComplete,
-  IPC_EVENTS.onSummary,
-  IPC_EVENTS.onJobError,
-  IPC_EVENTS.onJobCancelled,
-  IPC_EVENTS.onFinished,
-  IPC_EVENTS.onRunStarted,
-  IPC_EVENTS.onError,
-]);
 
 export function emitRunEvent(send, channel, runId, payload = {}) {
   send(channel, { ...payload, runId });
