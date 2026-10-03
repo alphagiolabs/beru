@@ -118,6 +118,38 @@ def test_trimmed_logo_export():
         assert abs(float(probe(silent_output)["format"]["duration"]) - 0.6) < 0.12
 
 
+def test_incomplete_metadata_keeps_high_depth_in_trim_and_watermark_exports():
+    with tempfile.TemporaryDirectory(prefix="beru-depth-restore-") as temp:
+        folder = Path(temp)
+        source = folder / "source.mp4"
+        run(
+            FFMPEG, "-v", "error", "-f", "lavfi", "-i", "color=blue:s=64x64:r=10:d=1",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p10le", str(source),
+        )
+        for name, effect in (
+            ("trim", {"trim_start": 0.2, "trim_end": 0.8}),
+            ("watermark", {"watermark": {
+                "enabled": True, "type": "text", "text": "WM", "position": "top-left",
+            }}),
+        ):
+            output = folder / f"{name}.mp4"
+            result = processor._process_one(0, {
+                "input_path": str(source), "output_path": str(output),
+                "width": 64, "height": 64, "video_duration": 1,
+                "pix_fmt": "yuv420p", "video_info_probed": False,
+                "operations": [], "encode_profile": "uquality", **effect,
+            }, FFMPEG, hw_encoder="", ctx=processor.BatchContext(
+                ffmpeg_path=FFMPEG, ffprobe_path=FFPROBE,
+            ))
+            assert result["status"] == "succeeded", result
+            streams = json.loads(run(
+                FFPROBE, "-v", "error", "-select_streams", "v:0", "-show_entries",
+                "stream=pix_fmt", "-of", "json", str(output),
+            ))["streams"]
+            assert streams[0]["pix_fmt"] == "yuv420p10le", (name, streams)
+
+
 if __name__ == "__main__":
     test_trimmed_logo_export()
+    test_incomplete_metadata_keeps_high_depth_in_trim_and_watermark_exports()
     print("Trim export: OK")

@@ -45,14 +45,9 @@ _DRAWTEXT_OPTIONS_CACHE = None
 _DRAWTEXT_OPTIONS_CACHE_FOR = None
 _DRAWTEXT_OPTIONS_LOCK = threading.Lock()
 
-_DRAWTEXT_FORBIDDEN_CHARS = frozenset("[]")
-
-
 def _validate_drawtext_text(value):
-    """Reject control characters and filtergraph pad tokens."""
+    """Reject control characters; printable text is quoted in the filtergraph."""
     for char in value:
-        if char in _DRAWTEXT_FORBIDDEN_CHARS:
-            raise ValueError("Drawtext contains forbidden characters")
         code = ord(char)
         if char != "\n" and (code < 0x20 or code == 0x7F):
             raise ValueError("Drawtext contains forbidden characters")
@@ -327,16 +322,19 @@ def _build_watermark_filter(watermark, video_w, video_h):
     position = watermark.get("position", "bottom-right")
 
     margin = 10
+    frame_w, frame_h, mark_w, mark_h = (
+        ("w", "h", "text_w", "text_h") if wm_type == "text" else ("W", "H", "w", "h")
+    )
     pos_map = {
         "top-left": f"{margin}:{margin}",
-        "top-center": f"(W-w)/2:{margin}",
-        "top-right": f"W-w-{margin}:{margin}",
-        "center-left": f"{margin}:(H-h)/2",
-        "center": "(W-w)/2:(H-h)/2",
-        "center-right": f"W-w-{margin}:(H-h)/2",
-        "bottom-left": f"{margin}:H-h-{margin}",
-        "bottom-center": f"(W-w)/2:H-h-{margin}",
-        "bottom-right": f"W-w-{margin}:H-h-{margin}",
+        "top-center": f"({frame_w}-{mark_w})/2:{margin}",
+        "top-right": f"{frame_w}-{mark_w}-{margin}:{margin}",
+        "center-left": f"{margin}:({frame_h}-{mark_h})/2",
+        "center": f"({frame_w}-{mark_w})/2:({frame_h}-{mark_h})/2",
+        "center-right": f"{frame_w}-{mark_w}-{margin}:({frame_h}-{mark_h})/2",
+        "bottom-left": f"{margin}:{frame_h}-{mark_h}-{margin}",
+        "bottom-center": f"({frame_w}-{mark_w})/2:{frame_h}-{mark_h}-{margin}",
+        "bottom-right": f"{frame_w}-{mark_w}-{margin}:{frame_h}-{mark_h}-{margin}",
     }
     xy = pos_map.get(position, pos_map["bottom-right"])
 
@@ -395,6 +393,8 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
     generated Temporal MKV patches keep their original frame cadence.
     """
     filters = []
+    source_w, source_h = video_w, video_h
+    crop_x = crop_y = 0
     n = 0
     image_index = {}
     image_paths = []
@@ -410,9 +410,21 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
         mode = op.get("mode")
         if _is_op_time_disabled(op):
             continue
-        region = _region_to_pixels(op.get("region", {}), video_w, video_h)
+        region = _region_to_pixels(op.get("region", {}), source_w, source_h)
         if not region:
             continue
+
+        region = {**region, "x": region["x"] - crop_x, "y": region["y"] - crop_y}
+        if (region["x"] >= video_w or region["y"] >= video_h
+                or region["x"] + region["w"] <= 0 or region["y"] + region["h"] <= 0):
+            continue
+        if mode == "crop":
+            left, top = max(0, region["x"]), max(0, region["y"])
+            right = min(video_w, region["x"] + region["w"])
+            bottom = min(video_h, region["y"] + region["h"])
+            region = {"x": left, "y": top, "w": right - left, "h": bottom - top}
+            if region["w"] < 2 or region["h"] < 2:
+                continue
 
         x = region["x"]
         y = region["y"]
@@ -463,7 +475,9 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
                     cw = max(2, cw - 1)
                 if ch % 2:
                     ch = max(2, ch - 1)
-                filters.append(f"{prev}crop={cw}:{ch}:{x}:{y}[tmp{n}]")
+                filters.append(f"{prev}crop={cw}:{ch}:{x}:{y}:exact=1[tmp{n}]")
+                crop_x += x
+                crop_y += y
                 video_w, video_h = cw, ch
         elif mode == "delogo":
             prev = f"tmp{n-1}" if n > 0 else None

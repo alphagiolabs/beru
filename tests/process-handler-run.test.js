@@ -46,10 +46,6 @@ vi.mock("../main/utils/media-task-pool.js", () => ({
   waitForMediaTasksToDrain: () => mocks.drain || Promise.resolve(),
 }));
 
-vi.mock("../main/utils/concurrency.js", () => ({
-  runWithConcurrency: async (jobs) => jobs,
-}));
-
 vi.mock("../main/utils/video-cache.js", () => ({ probeVideo: vi.fn() }));
 vi.mock("../main/utils/settings.js", () => ({ readSettings: () => ({}) }));
 vi.mock("../main/utils/renderer.js", () => ({
@@ -75,6 +71,7 @@ vi.mock("../main/utils/kill-process-tree.js", () => ({
 
 const { registerProcessHandlers } = await import("../main/handlers/process.js");
 const { startJobRun } = await import("../main/utils/job-worker.js");
+const { probeVideo } = await import("../main/utils/video-cache.js");
 const runModule = await import("../main/processing-run.js");
 
 let tmpDirs = [];
@@ -117,6 +114,7 @@ beforeEach(() => {
   mocks.drain = null;
   mocks.sendToRenderer.mockClear();
   mocks.killProcessTree.mockClear();
+  probeVideo.mockReset().mockResolvedValue({ width: 0, height: 0 });
   registerProcessHandlers({ getOutputDirectory: () => outputDir });
 });
 
@@ -145,6 +143,45 @@ function artifactsDirOf() {
 }
 
 describe("process:start with a fake job worker", () => {
+  it.each([
+    { trim_start: 1, trim_end: 9 },
+    { watermark: { enabled: true, type: "text", text: "WM" } },
+  ])("restores missing probe metadata for an export without operations: %j", async (effect) => {
+    probeVideo.mockResolvedValue({
+      width: 1920,
+      height: 1080,
+      duration: 10,
+      pixFmt: "yuv420p10le",
+      frameRate: 60,
+      videoCodec: "hevc",
+      audioCodec: "aac",
+      audioChannels: 6,
+    });
+    mocks.resolveDone({ ok: true });
+    const result = await mocks.handlers.get("process:start")({}, [
+      {
+        id: 0,
+        input_path: "hdr.mp4",
+        output_path: path.join(outputDir, "hdr.mp4"),
+        width: 1920,
+        height: 1080,
+        video_duration: 10,
+        pix_fmt: "yuv420p",
+        video_info_probed: false,
+        operations: [],
+        ...effect,
+      },
+    ]);
+    expect(result.success).toBe(true);
+    expect(mocks.jobs[0]).toMatchObject({
+      pix_fmt: "yuv420p10le",
+      frame_rate: 60,
+      video_codec: "hevc",
+      audio_codec: "aac",
+      audio_channels: 6,
+      video_info_probed: true,
+    });
+  });
   it("rejects an output that would overwrite another queued input", async () => {
     const input = path.join(outputDir, "a.mp4");
     const otherInput = path.join(outputDir, "a_beru.mp4");

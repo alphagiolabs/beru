@@ -499,8 +499,8 @@ def _process_one_impl(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
         output_label = "[trimmed]"
         output_duration = (trim_end if trim_end is not None else duration) - trim_start
 
-    src_pix_fmt = job.get("pix_fmt") or info.get("pix_fmt", "yuv420p")
-    src_audio_codec = job.get("audio_codec") or info.get("audio_codec", "")
+    src_pix_fmt = info.get("pix_fmt") or job.get("pix_fmt", "yuv420p")
+    src_audio_codec = info.get("audio_codec") or job.get("audio_codec", "")
     encode_profile = job.get("encode_profile", "balanced")
     hw_failed = bool(raw_job.get("_hw_failed"))
     if hw_failed or not profile_allows_hardware(encode_profile):
@@ -530,7 +530,8 @@ def _process_one_impl(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
         if trimmed:
             cmd += ["-af", f"atrim={trim_window},asetpts=PTS-STARTPTS"]
         cmd += build_audio_args(
-            output_path, src_audio_codec, job.get("audio_channels"), force_encode=trimmed,
+            output_path, src_audio_codec, info.get("audio_channels") or job.get("audio_channels"),
+            force_encode=trimmed,
         )
         out_ext = os.path.splitext(output_path)[1].lower()
         if out_ext in _FASTSTART_EXTS:

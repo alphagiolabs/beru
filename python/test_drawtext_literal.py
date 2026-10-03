@@ -43,7 +43,10 @@ def reference(text, directory, watermark=False):
 def test_exported_text_matches_literal_input():
     failures = []
     with tempfile.TemporaryDirectory(prefix="beru-literal-") as directory:
-        for text in ("O'Reilly", "100%", "a\nb", r"a\b", "x:y;z,t=2", "%{localtime}", "Price: ${99}"):
+        for text in (
+            "O'Reilly", "100%", "a\nb", r"a\b", "x:y;z,t=2", "%{localtime}",
+            "Price: ${99}", "Oferta [2026]", "safe'];movie=/tmp/payload[out]",
+        ):
             for watermark in (False, True):
                 try:
                     if watermark:
@@ -59,7 +62,7 @@ def test_exported_text_matches_literal_input():
                             "bg_enabled": False, "text_wrap": False, "line_height": 1,
                         }], 320, 180)
                     assert render(graph, label) == reference(text, directory, watermark), "Literal text pixels differ"
-                except AssertionError as error:
+                except (AssertionError, ValueError) as error:
                     failures.append(f"{text!r}, watermark={watermark}: {error}")
     assert not failures, "\n".join(failures)
 

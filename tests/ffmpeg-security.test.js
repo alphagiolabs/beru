@@ -41,10 +41,10 @@ describe("FFmpeg security validation", () => {
     }
   });
 
-  it("rejects drawtext filter injection characters", () => {
+  it("rejects control characters in drawtext", () => {
     const result = runPython(
       [
-        "op = {'text': \"safe'];movie=/tmp/payload[out]\", 'font_color': 'white', 'region': {'x': 0, 'y': 0, 'w': 400, 'h': 100}}",
+        "op = {'text': 'unsafe\\x00text', 'font_color': 'white', 'region': {'x': 0, 'y': 0, 'w': 400, 'h': 100}}",
         "try:",
         "    processor.build_drawtext(op)",
         "except ValueError:",
@@ -118,7 +118,7 @@ describe("FFmpeg security validation", () => {
     const result = runPython(
       [
         "values = [",
-        "    {'enabled': True, 'type': 'text', 'text': \"safe'];movie=x[out]\", 'fontColor': 'white'},",
+        "    {'enabled': True, 'type': 'text', 'text': 'unsafe\\x00text', 'fontColor': 'white'},",
         "    {'enabled': True, 'type': 'text', 'text': 'Safe text', 'fontColor': 'white:shadowx=999'},",
         "]",
         "results = []",

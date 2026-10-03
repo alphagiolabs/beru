@@ -30,6 +30,7 @@ def make_job(folder, *, encode=True):
         "source_width": 64,
         "source_height": 64,
         "video_duration": 1,
+        "pix_fmt": "yuv420p",
         "encode_profile": "balanced",
         "operations": [{"mode": "blur", "region": {"x": 8, "y": 8, "w": 32, "h": 32}}]
         if encode else [],

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { buildExportJob } from "../src/utils/export-pipeline.js";
 import {
   SESSION_PERSIST_KEY,
   SESSION_PERSIST_KEYS,
@@ -70,6 +71,45 @@ describe("session-persist", () => {
     expect(restored.queue[0].status).toBe("idle");
     expect(restored.outputDir).toBeNull();
     expect(restored.templateRegions).toEqual([]);
+  });
+
+  it("preserves source media metadata in an export after session restoration", () => {
+    const snapshot = buildSessionSnapshot({
+      queue: [
+        {
+          path: "C:\\v\\hdr.mp4",
+          filename: "hdr.mp4",
+          width: 1920,
+          height: 1080,
+          sourceWidth: 1920,
+          sourceHeight: 1080,
+          duration: 10,
+          trimStart: 1,
+          trimEnd: 9,
+          operations: [],
+          pixFmt: "yuv420p10le",
+          frameRate: 60,
+          videoCodec: "hevc",
+          audioCodec: "aac",
+          audioChannels: 6,
+        },
+      ],
+    });
+    const restored = parseSessionSnapshot(JSON.parse(JSON.stringify(snapshot)));
+    const job = buildExportJob(restored.queue[0], 0, { outputPath: "C:\\out\\hdr.mp4" });
+    expect(job).toMatchObject({
+      source_width: 1920,
+      source_height: 1080,
+      video_duration: 10,
+      trim_start: 1,
+      trim_end: 9,
+      pix_fmt: "yuv420p10le",
+      frame_rate: 60,
+      video_codec: "hevc",
+      audio_codec: "aac",
+      audio_channels: 6,
+      video_info_probed: true,
+    });
   });
 
   it("parses v1 snapshots and resets runtime queue fields", () => {

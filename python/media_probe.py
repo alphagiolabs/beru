@@ -364,7 +364,8 @@ def job_video_info(job, input_path, *, probe_fn=None):
     jw, jh = _job_dimensions(job)
     duration = float(job.get("video_duration") or 0)
     frame_rate = float(job.get("frame_rate") or 0)
-    if jw > 0 and jh > 0 and (duration > 0 or job.get("video_info_probed")):
+    already_probed = job.get("video_info_probed", duration > 0 and bool(job.get("pix_fmt")))
+    if jw > 0 and jh > 0 and already_probed:
         return {
             "width": jw,
             "height": jh,

@@ -123,13 +123,7 @@ function dispatchProcessorLine(run, line) {
 }
 
 async function enrichJobVideoInfo(job) {
-  if (
-    !Array.isArray(job.operations) ||
-    !job.operations.length ||
-    job.video_info_probed ||
-    !job.input_path
-  )
-    return job;
+  if (job.video_info_probed || !job.input_path) return job;
   try {
     const info = await probeVideo(job.input_path);
     if (info.width > 0 && info.height > 0) {
