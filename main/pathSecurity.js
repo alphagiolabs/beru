@@ -7,11 +7,11 @@ import { createPathVerdicts } from "./security/path-verdicts.js";
 /** @typedef {'excel' | 'image' | 'video' | 'project'} ReadKind */
 
 export function createPathSecurity(app) {
-  const { resolveSafe, normalizeKey } = createPathResolver();
-  const location = createLocationPolicy({ app, resolveSafe, normalizeKey });
+  const { resolveSafe, resolveSafeAsync, normalizeKey } = createPathResolver();
+  const location = createLocationPolicy({ app, resolveSafe, resolveSafeAsync, normalizeKey });
   const consent = createConsentStore({ normalizeKey });
   const writes = createWriteCapabilities({ resolveSafe, location, normalizeKey });
-  const verdicts = createPathVerdicts({ resolveSafe, location, consent });
+  const verdicts = createPathVerdicts({ resolveSafe, resolveSafeAsync, location, consent });
 
   /**
    * @param {string} filePath
@@ -68,6 +68,7 @@ export function createPathSecurity(app) {
     registerWritePath: writes.approve,
     consumeWritePath: writes.consume,
     validateReadableFile: verdicts.inspectReadableFile,
+    validateReadableFileAsync: verdicts.inspectReadableFileAsync,
     validateShellPath: verdicts.inspectShellPath,
     validateProtocolFile: verdicts.inspectProtocolFile,
   };

@@ -1,5 +1,29 @@
 import path from "path";
 import { deriveOutputPath } from "./process-output.js";
+import { runWithConcurrency } from "./concurrency.js";
+
+export async function sanitizeBatchJobMedia(jobs, pathSecurity, options) {
+  const checks = new Map();
+  const key = (filePath, kind) => JSON.stringify([filePath, kind]);
+  const add = (filePath, kind) => checks.set(key(filePath, kind), { filePath, kind });
+  for (const job of jobs) {
+    add(job?.input_path, "video");
+    for (const op of job?.operations || []) {
+      for (const imagePath of [op.image_path, op.delogo_image_path]) {
+        if (imagePath) add(imagePath, "image");
+      }
+    }
+    if (job?.watermark?.type === "image") {
+      const imagePath = job.watermark.imagePath || job.watermark.watermark_image;
+      if (imagePath) add(imagePath, "image");
+    }
+  }
+  await runWithConcurrency([...checks.entries()], 8, async ([id, { filePath, kind }]) => {
+    checks.set(id, await pathSecurity.validateReadableFileAsync(filePath, kind));
+  });
+  const validated = { validateReadableFile: (filePath, kind) => checks.get(key(filePath, kind)) };
+  return jobs.map((job) => sanitizeJobMedia(job, validated, options));
+}
 
 export function sanitizeJobMedia(job, pathSecurity, { outputDirectory } = {}) {
   const inputCheck = pathSecurity.validateReadableFile(job?.input_path, "video");

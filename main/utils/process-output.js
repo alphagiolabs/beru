@@ -40,35 +40,54 @@ export function deriveOutputPath(selectedDirectory, rendererOutputPath) {
   return outputPath;
 }
 
-function canonicalPathKey(filePath) {
+async function canonicalPathKey(filePath, realpath) {
   const resolved = path.resolve(filePath);
   let canonical = resolved;
   try {
-    canonical = fs.realpathSync(resolved);
+    canonical = await realpath(resolved);
   } catch {
     try {
-      canonical = path.join(fs.realpathSync(path.dirname(resolved)), path.basename(resolved));
+      canonical = path.join(await realpath(path.dirname(resolved)), path.basename(resolved));
     } catch {}
   }
   return canonical.toLowerCase();
 }
 
-export function validateBatchOutputPaths(jobs) {
-  const inputs = new Set();
+export async function validateBatchOutputPaths(jobs) {
+  const resolvedPaths = new Map();
+  const realpath = (filePath) => {
+    if (!resolvedPaths.has(filePath)) resolvedPaths.set(filePath, fs.promises.realpath(filePath));
+    return resolvedPaths.get(filePath);
+  };
+  const inputPaths = new Set();
   for (const job of jobs) {
-    inputs.add(canonicalPathKey(job.input_path));
+    inputPaths.add(job.input_path);
     for (const op of job.operations || []) {
       for (const imagePath of [op.image_path, op.delogo_image_path]) {
-        if (imagePath) inputs.add(canonicalPathKey(imagePath));
+        if (imagePath) inputPaths.add(imagePath);
       }
     }
     const imagePath = job.watermark?.imagePath || job.watermark?.watermark_image;
-    if (imagePath) inputs.add(canonicalPathKey(imagePath));
+    if (imagePath) inputPaths.add(imagePath);
   }
+  const paths = new Set(inputPaths);
+  for (const job of jobs) {
+    if (job.output_path) paths.add(job.output_path);
+  }
+  const keys = new Map();
+  const uniquePaths = [...paths];
+  for (let i = 0; i < uniquePaths.length; i += 8) {
+    await Promise.all(
+      uniquePaths.slice(i, i + 8).map(async (filePath) => {
+        keys.set(filePath, await canonicalPathKey(filePath, realpath));
+      }),
+    );
+  }
+  const inputs = new Set([...inputPaths].map((filePath) => keys.get(filePath)));
   const outputs = new Set();
   for (const job of jobs) {
     if (!job.output_path) continue;
-    const key = canonicalPathKey(job.output_path);
+    const key = keys.get(job.output_path);
     if (inputs.has(key)) throw new Error("La salida coincide con una entrada del lote");
     if (outputs.has(key)) throw new Error("Dos videos comparten la misma ruta de salida");
     outputs.add(key);

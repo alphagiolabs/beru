@@ -3,6 +3,7 @@ import { EventEmitter } from "events";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { IPC_EVENTS } from "../shared/ipc-channels.js";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   tempRoot: "",
   drain: null,
   jobs: [],
+  validation: null,
 }));
 
 vi.mock("electron", () => ({
@@ -60,10 +62,13 @@ vi.mock("../main/utils/process-input-validation.js", () => ({
   translateProcessorErrorMessage: (m) => m,
 }));
 vi.mock("../main/utils/process-media-validation.js", () => ({
-  sanitizeJobMedia: (job, _security, { outputDirectory }) => ({
-    ...job,
-    output_path: job.output_path || path.join(outputDirectory, "out.mp4"),
-  }),
+  sanitizeBatchJobMedia: async (jobs, _security, { outputDirectory }) => {
+    if (mocks.validation) await mocks.validation();
+    return jobs.map((job) => ({
+      ...job,
+      output_path: job.output_path || path.join(outputDirectory, "out.mp4"),
+    }));
+  },
 }));
 vi.mock("../main/utils/kill-process-tree.js", () => ({
   killProcessTree: (...args) => mocks.killProcessTree(...args),
@@ -112,6 +117,7 @@ beforeEach(() => {
   mocks.emitLine = null;
   mocks.stderrTail = "";
   mocks.drain = null;
+  mocks.validation = null;
   mocks.sendToRenderer.mockClear();
   mocks.killProcessTree.mockClear();
   probeVideo.mockReset().mockResolvedValue({ width: 0, height: 0 });
@@ -143,6 +149,34 @@ function artifactsDirOf() {
 }
 
 describe("process:start with a fake job worker", () => {
+  it("does not start a worker after cancelling asynchronous media validation", async () => {
+    let releaseValidation;
+    let enteredValidation;
+    const entered = new Promise((resolve) => {
+      enteredValidation = resolve;
+    });
+    mocks.validation = () =>
+      new Promise((resolve) => {
+        releaseValidation = resolve;
+        enteredValidation();
+      });
+    const pending = mocks.handlers.get("process:start")({}, [
+      {
+        input_path: "clip.mp4",
+        operations: [],
+        output_path: path.join(outputDir, "cancelled.mp4"),
+      },
+    ]);
+    await entered;
+    await mocks.handlers.get("process:cancel")({});
+    releaseValidation();
+    expect(await pending).toMatchObject({ success: false, cancelled: true });
+    expect(
+      mocks.sendToRenderer.mock.calls.some(([channel]) => channel === IPC_EVENTS.onRunStarted),
+    ).toBe(false);
+    expect(runModule.hasActiveProcessing()).toBe(false);
+  });
+
   it.each([
     { trim_start: 1, trim_end: 9 },
     { watermark: { enabled: true, type: "text", text: "WM" } },

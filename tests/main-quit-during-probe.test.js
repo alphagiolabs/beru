@@ -71,10 +71,11 @@ vi.mock("../main/utils/process-input-validation.js", () => ({
   translateProcessorErrorMessage: (err) => err,
 }));
 vi.mock("../main/utils/process-media-validation.js", () => ({
-  sanitizeJobMedia: (job, _security, { outputDirectory }) => ({
-    ...job,
-    output_path: job.output_path || path.join(outputDirectory, "out.mp4"),
-  }),
+  sanitizeBatchJobMedia: async (jobs, _security, { outputDirectory }) =>
+    jobs.map((job) => ({
+      ...job,
+      output_path: job.output_path || path.join(outputDirectory, "out.mp4"),
+    })),
 }));
 vi.mock("../main/utils/kill-process-tree.js", () => ({
   killProcessTree: vi.fn(async () => {}),

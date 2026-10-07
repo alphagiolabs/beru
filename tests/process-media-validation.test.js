@@ -3,7 +3,8 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { createPathSecurity } from "../main/pathSecurity.js";
-import { sanitizeJobMedia } from "../main/utils/process-media-validation.js";
+import { sanitizeJobMedia, sanitizeBatchJobMedia } from "../main/utils/process-media-validation.js";
+import { validateBatchOutputPaths } from "../main/utils/process-output.js";
 
 const fakeApp = {
   getPath: (name) => {
@@ -24,7 +25,11 @@ const fakeApp = {
   getAppPath: () => process.cwd(),
 };
 
-describe("process-media-validation", () => {
+describe.each(["preview", "batch"])("process-media-validation (%s)", (mode) => {
+  const sanitize = async (job, security, options) =>
+    mode === "preview"
+      ? sanitizeJobMedia(job, security, options)
+      : (await sanitizeBatchJobMedia([job], security, options))[0];
   let security;
   let tmpDir;
   let videoFile;
@@ -47,8 +52,8 @@ describe("process-media-validation", () => {
     } catch {}
   });
 
-  it("sanitizeJobMedia sets input_root and asset_roots for preview (no output dir)", () => {
-    const result = sanitizeJobMedia(
+  it("sets input_root and asset_roots without an output dir", async () => {
+    const result = await sanitize(
       {
         input_path: videoFile,
         operations: [{ mode: "image", image_path: imageFile }],
@@ -64,23 +69,23 @@ describe("process-media-validation", () => {
     expect(result.output_root).toBeUndefined();
   });
 
-  it("sanitizeJobMedia rejects unauthorized overlay images", () => {
+  it("rejects unauthorized overlay images", async () => {
     const outsideImage = "C:\\Windows\\System32\\beru-evil-overlay.png";
-    expect(() =>
-      sanitizeJobMedia(
+    await expect(
+      sanitize(
         {
           input_path: videoFile,
           operations: [{ mode: "image", image_path: outsideImage }],
         },
         security,
       ),
-    ).toThrow(/Imagen no permitida/i);
+    ).rejects.toThrow(/Imagen no permitida/i);
   });
 
-  it("sanitizeJobMedia derives output_path when outputDirectory is provided", () => {
+  it("derives output_path when outputDirectory is provided", async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "beru-out-"));
     try {
-      const job = sanitizeJobMedia(
+      const job = await sanitize(
         {
           input_path: videoFile,
           output_path: "out.mp4",
@@ -96,4 +101,34 @@ describe("process-media-validation", () => {
       fs.rmSync(outDir, { recursive: true, force: true });
     }
   });
+
+  if (mode === "batch") {
+    it("rejects output aliases to inputs and duplicate outputs after canonicalization", async () => {
+      const input = { input_path: videoFile, operations: [] };
+      await expect(
+        validateBatchOutputPaths([{ ...input, output_path: videoFile.toUpperCase() }]),
+      ).rejects.toThrow(/coincide con una entrada/);
+      await expect(
+        validateBatchOutputPaths([
+          { ...input, output_path: path.join(tmpDir, "out.mp4") },
+          { ...input, output_path: path.join(tmpDir, "OUT.mp4") },
+        ]),
+      ).rejects.toThrow(/comparten la misma ruta/);
+    });
+
+    it("rejects an input revoked between batches", async () => {
+      const restricted = createPathSecurity({
+        getPath: () => path.join(tmpDir, "trusted"),
+        getAppPath: () => path.join(tmpDir, "trusted"),
+        isPackaged: false,
+      });
+      restricted.registerSelectedPath(videoFile, "video");
+      const job = { input_path: videoFile, operations: [] };
+      expect((await sanitizeBatchJobMedia([job, job], restricted)).length).toBe(2);
+      restricted.releaseVideoPaths([videoFile]);
+      await expect(sanitizeBatchJobMedia([job], restricted)).rejects.toThrow(
+        /Entrada no permitida/,
+      );
+    });
+  }
 });
