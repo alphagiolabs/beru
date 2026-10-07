@@ -535,6 +535,27 @@ print(json.dumps({
     expect(JSON.parse(r.stdout.trim())).toEqual({ fonts: false, hardware: false, encode: false });
   });
 
+  it.each([{ trim_start: 1 }, { trim_end: 2 }])(
+    "detects hardware for a trim-only batch (%j)",
+    (trim) => {
+      const code = `
+import json
+import processor
+job = {"operations": [], "encode_profile": "balanced", **json.loads(${JSON.stringify(JSON.stringify(trim))})}
+print(json.dumps({"encode": processor._job_requires_encode(job),
+                  "hardware": processor._jobs_allow_hardware([job]),
+                  "copy": processor._job_takes_copy_path(job)}))
+`;
+      const result = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
+      expect(result.status, result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout.trim())).toEqual({
+        encode: true,
+        hardware: true,
+        copy: false,
+      });
+    },
+  );
+
   it("caps software fallback admission independently from GPU workers", () => {
     const code = `
 import json

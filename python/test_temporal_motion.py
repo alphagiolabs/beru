@@ -170,6 +170,39 @@ def test_motion_cuts_and_preview(folder):
     )
 
 
+def test_bounded_interval(folder):
+    _, marked = texture()
+    marked = np.tile(marked, (4, 1, 1, 1))
+    src = source(folder, "bounded-source", marked)
+    native = decode(src, depth="yuv444p")
+    for method in ("temporal", "inpaint"):
+        op = {**OP, "delogo_method": method}
+        full = decode(export(src, folder, f"full-{method}", [op]), depth="yuv444p")
+        window_op = {**op, "start_time": 13 / FPS, "end_time": 21 / FPS}
+        bounded_path = export(src, folder, f"bounded-{method}", [window_op])
+        bounded = decode(bounded_path, depth="yuv444p")
+        assert len(bounded) == len(marked), "Bounded repair changed the video duration"
+        assert np.array_equal(bounded[13:22], full[13:22]), "Window neighbors or timing changed"
+        assert np.array_equal(bounded[:13], native[:13]), "Repair appeared before its interval"
+        assert np.array_equal(bounded[22:], native[22:]), "Repair remained after its interval"
+        frames = json.loads(run(
+            FFPROBE, "-v", "error", "-count_frames", "-select_streams", "v:0",
+            "-show_entries", "stream=nb_read_frames", "-of", "json",
+            folder / "temporal-0.mkv",
+        ))["streams"][0]["nb_read_frames"]
+        radius = 3 if method == "inpaint" else OP["temporal_radius"]
+        assert int(frames) <= 9 + 2 * radius, "Prepared frames outside the required interval"
+        rgb = decode(bounded_path)
+        for index in (13, 17, 21):
+            result = processor.render_preview_frame({
+                "input_path": str(src), "timestamp": index / FPS, "operations": [window_op],
+            })
+            assert result["ok"], result
+            image = base64.b64decode(result["data_url"].split(",", 1)[1])
+            preview = decode(None, data=image)[0]
+            assert np.abs(preview.astype(float) - rgb[index]).mean() < 1, "Bounded preview/export misalignment"
+
+
 def test_static_and_variable_timing(folder):
     frames = np.full((8, HEIGHT, WIDTH, 3), 48, np.uint8)
     frames[4:] = 176
@@ -236,6 +269,14 @@ def test_static_and_variable_timing(folder):
     assert timestamps(temporal) == timestamps(
         vfr
     ), "Temporal changed variable frame timestamps"
+    bounded_vfr = export(vfr, folder, "variable-bounded", [
+        {**OP, "start_time": 0.4, "end_time": 0.64},
+    ])
+    assert timestamps(bounded_vfr) == timestamps(vfr), "Bounded repair changed VFR timing"
+    active = [0.4 <= float(frame["best_effort_timestamp_time"]) <= 0.64 for frame in timestamps(vfr)]
+    assert np.array_equal(
+        decode(bounded_vfr)[active, 40:64, 76:94], decode(spatial)[active, 40:64, 76:94]
+    ), "A bounded VFR operation must retain the safe spatial fallback"
 
 
 def test_high_depth_and_actual_job(folder):
@@ -325,6 +366,7 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="beru-motion-test-") as directory:
         root = Path(directory)
         test_motion_cuts_and_preview(root)
+        test_bounded_interval(root)
         test_static_and_variable_timing(root)
         test_high_depth_and_actual_job(root)
         test_cancellation_during_preparation(root)
