@@ -68,10 +68,12 @@ export async function validateInputPathReadableAsync(inputPath) {
 }
 
 export async function findUnreadableInputsAsync(jobs, limit = 8) {
+  const checks = new Map();
   const results = await runWithConcurrency(jobs, limit, async (job) => {
     const inputPath = job?.input_path;
     if (!inputPath) return null;
-    return unreadableIssue(inputPath, await validateInputPathReadableAsync(inputPath));
+    if (!checks.has(inputPath)) checks.set(inputPath, validateInputPathReadableAsync(inputPath));
+    return unreadableIssue(inputPath, await checks.get(inputPath));
   });
   return results.filter(Boolean);
 }

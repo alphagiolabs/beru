@@ -5,6 +5,7 @@ import useKeyboard from "../src/hooks/useKeyboard.js";
 import AppRail from "../src/components/AppRail.jsx";
 import WatermarkModal from "../src/components/WatermarkModal.jsx";
 import AppliedDelogoEditor from "../src/components/AppliedDelogoEditor.jsx";
+import OperationOverlays from "../src/components/video-preview/OperationOverlays.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { createQueueItem } from "../src/utils/types.js";
 
@@ -229,6 +230,21 @@ describe("Operaciones de imagen", () => {
     );
     expect(document.body.textContent).toMatch(/Imagen aplicada/);
     expect(document.querySelector('input[type="range"]')).toBeTruthy();
+  });
+
+  it("muestra una imagen aplicada aunque haya salido de la caché", async () => {
+    const op = useEditorStore.getState().queue[0].operations[0];
+    await mount(
+      <OperationOverlays
+        ops={[{ op: { ...op, id: "image" }, opIdx: 0, screen: { x: 0, y: 0, w: 100, h: 100 } }]}
+        currentTimeRef={{ current: 0 }}
+        imageDataCache={{}}
+        sidebarMode="logo"
+      />,
+    );
+    expect(document.querySelector("img")?.getAttribute("src")).toBe(
+      `beru://local/${encodeURIComponent(op.imagePath)}`,
+    );
   });
 
   it("Delete elimina una op de imagen seleccionada", async () => {

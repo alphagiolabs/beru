@@ -37,12 +37,7 @@ def _job_takes_copy_path(job):
 
 
 def _job_requires_encode(job):
-    if not isinstance(job, dict):
-        return False
-    watermark = job.get("watermark")
-    return bool(job.get("operations")) or (
-        isinstance(watermark, dict) and bool(watermark.get("enabled"))
-    )
+    return isinstance(job, dict) and not _job_takes_copy_path(job)
 
 
 def _jobs_require_fonts(jobs):

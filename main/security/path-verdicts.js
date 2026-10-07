@@ -28,6 +28,7 @@ const MAX_BYTES_BY_KIND = {
 
 export function createPathVerdicts({
   resolveSafe,
+  resolveSafeAsync,
   location,
   consent,
   statSync = fs.statSync,
@@ -51,6 +52,12 @@ export function createPathVerdicts({
     } catch {
       return { ok: false, error: "Archivo no encontrado" };
     }
+    const error = inspectFileStat(resolved, kind, stat);
+    if (error) return error;
+    return finishReadableFile(resolved, kind, stat, selectedByUser || canRead(resolved));
+  }
+
+  function inspectFileStat(resolved, kind, stat) {
     if (!stat.isFile()) {
       return { ok: false, error: "La ruta no es un archivo" };
     }
@@ -61,7 +68,11 @@ export function createPathVerdicts({
       return { ok: false, error: `Extensión no permitida: ${ext || "(sin extensión)"}` };
     }
 
-    if (!selectedByUser && !canRead(resolved)) {
+    return null;
+  }
+
+  function finishReadableFile(resolved, kind, stat, allowed) {
+    if (!allowed) {
       warn("[beru][security] Path outside trusted roots:", resolved);
       return { ok: false, error: "Archivo fuera de ubicaciones permitidas" };
     }
@@ -72,6 +83,25 @@ export function createPathVerdicts({
     }
 
     return { ok: true, resolvedPath: resolved };
+  }
+
+  async function inspectReadableFileAsync(filePath, kind) {
+    const resolved = await resolveSafeAsync(filePath);
+    if (!resolved) return { ok: false, error: "Ruta inválida" };
+    if (location.isDenied(resolved)) {
+      warn("[beru][security] Denied read:", resolved);
+      return { ok: false, error: "Ruta no permitida" };
+    }
+    let stat;
+    try {
+      stat = await fs.promises.stat(resolved);
+    } catch {
+      return { ok: false, error: "Archivo no encontrado" };
+    }
+    const error = inspectFileStat(resolved, kind, stat);
+    if (error) return error;
+    const allowed = consent.hasReadConsent(resolved) || (await location.isUnderRootAsync(resolved));
+    return finishReadableFile(resolved, kind, stat, allowed);
   }
 
   function inspectShellPath(targetPath) {
@@ -118,6 +148,7 @@ export function createPathVerdicts({
 
   return {
     inspectReadableFile,
+    inspectReadableFileAsync,
     inspectShellPath,
     inspectOutputDirectory,
     inspectProtocolFile,

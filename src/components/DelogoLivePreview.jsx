@@ -220,15 +220,18 @@ function submitBlur(
     box: patch.box,
     feather: patch.feather,
   };
-  paintResult(
-    ws,
-    ctx,
-    screen,
-    spatialLogoFallback(patch.frame.data, patch.width, patch.height, params, "blur"),
-    "source",
-    true,
-    crop,
-  );
+  if (!video.paused) {
+    paintResult(
+      ws,
+      ctx,
+      screen,
+      spatialLogoFallback(patch.frame.data, patch.width, patch.height, params, "blur"),
+      "source",
+      true,
+      crop,
+    );
+    return;
+  }
   if (!runWorker) return;
   bridge.compute(
     {
@@ -312,15 +315,17 @@ function submitInpaint(
     radius: 3,
     timestamp,
   };
-  paintResult(
-    ws,
-    ctx,
-    screen,
-    spatialLogoFallback(patch.frame.data, patch.width, patch.height, params),
-    "source",
-    true,
-    crop,
-  );
+  if (!video.paused) {
+    paintResult(
+      ws,
+      ctx,
+      screen,
+      spatialLogoFallback(patch.frame.data, patch.width, patch.height, params),
+      "source",
+      true,
+      crop,
+    );
+  }
   if (!runWorker) return;
   bridge.compute(
     {
@@ -382,15 +387,17 @@ function submitTemporal(
     referenceGuard: Math.max(1, Math.ceil(patch.scale)),
     timestamp,
   };
-  paintResult(
-    ws,
-    ctx,
-    screen,
-    spatialLogoFallback(patch.frame.data, patch.width, patch.height, params),
-    "source",
-    true,
-    crop,
-  );
+  if (!video.paused) {
+    paintResult(
+      ws,
+      ctx,
+      screen,
+      spatialLogoFallback(patch.frame.data, patch.width, patch.height, params),
+      "source",
+      true,
+      crop,
+    );
+  }
   if (!runWorker) return;
   bridge.compute(
     {

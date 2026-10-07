@@ -144,22 +144,13 @@ export default function OperationOverlays({
           }}
           onMouseDown={(e) => onImageDragStart(op, opIdx, e)}
         >
-          {dataUrl ? (
-            <img
-              src={dataUrl}
-              alt=""
-              className="w-full h-full"
-              style={{ objectFit: "fill" }}
-              draggable={false}
-            />
-          ) : (
-            <div
-              className="w-full h-full flex items-center justify-center text-[10px]"
-              style={{ background: "rgba(16,185,129,0.10)", color: "#10b981" }}
-            >
-              {op.imagePath.split(/[\\/]/).pop()}
-            </div>
-          )}
+          <img
+            src={dataUrl || `beru://local/${encodeURIComponent(op.imagePath)}`}
+            alt={op.imagePath.split(/[\\/]/).pop()}
+            className="w-full h-full"
+            style={{ objectFit: "fill" }}
+            draggable={false}
+          />
         </div>
       );
     }

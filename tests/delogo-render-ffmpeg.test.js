@@ -65,6 +65,57 @@ function repairedPixels(input, op) {
 }
 
 describe("quick logo kernels against real FFmpeg export", () => {
+  it.each([1, 11, 31])("preserves RGB channels in a three-pass blur with radius=%i", (radius) => {
+    const input = inputPixels();
+    const frame = new Uint8ClampedArray(width * height * 4);
+    for (let i = 0; i < width * height; i++) {
+      const value = input[i * 3];
+      const color = [value, (value + 37) % 256, (value * 3 + 19) % 256];
+      input.set(color, i * 3);
+      frame.set([...color, 255], i * 4);
+    }
+    const expected = run(
+      ffmpeg,
+      [
+        "-v",
+        "error",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        "96x64",
+        "-i",
+        "pipe:0",
+        "-vf",
+        `format=gbrp,boxblur=lr=${radius}:lp=3:cr=${radius}:cp=3`,
+        "-frames:v",
+        "1",
+        "-pix_fmt",
+        "rgb24",
+        "-f",
+        "rawvideo",
+        "pipe:1",
+      ],
+      input,
+    );
+    const result = createDelogoRenderSession().compute(
+      "blur",
+      { box: { x: 0, y: 0, w: width, h: height }, radius, feather: 0 },
+      frame,
+      width,
+      height,
+    );
+    let error = 0;
+    for (let i = 0; i < width * height; i++) {
+      for (let channel = 0; channel < 3; channel++) {
+        error += Math.abs(result.data[i * 4 + channel] - expected[i * 3 + channel]);
+      }
+      expect(result.data[i * 4 + 3]).toBe(255);
+    }
+    expect(error / (width * height * 3)).toBeLessThan(2);
+  });
+
   it.each([18, 28, 38])("avoids sampling the compressed logo halo at H.264 CRF %i", (crf) => {
     const rgb = Buffer.alloc(width * height * 3);
     for (let i = 0; i < rgb.length; i += 3) rgb.set([40, 80, 120], i);

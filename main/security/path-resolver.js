@@ -8,7 +8,11 @@ const RESOLVE_CACHE_MAX = 4000;
 const defaultRealpath = (p) =>
   fs.realpathSync.native ? fs.realpathSync.native(p) : fs.realpathSync(p);
 
-export function createPathResolver({ realpath = defaultRealpath, env = process.env } = {}) {
+export function createPathResolver({
+  realpath = defaultRealpath,
+  realpathAsync = fs.promises.realpath,
+  env = process.env,
+} = {}) {
   const resolveCache = new Map();
   const resolveCacheTtlMs = () => Number(env.BERU_RESOLVE_CACHE_TTL_MS) || 5000;
   const cacheEnabled = () => env.BERU_RESOLVE_CACHE !== "0";
@@ -57,5 +61,36 @@ export function createPathResolver({ realpath = defaultRealpath, env = process.e
     }
   }
 
-  return { resolveSafe, normalizeKey };
+  async function resolveSafeAsync(filePath) {
+    if (typeof filePath !== "string" || !filePath.trim() || NULL_BYTE.test(filePath)) return null;
+    if (cacheEnabled()) {
+      const hit = resolveCache.get(filePath);
+      if (hit && Date.now() - hit.ts <= resolveCacheTtlMs()) return hit.resolved;
+    }
+    let resolved;
+    try {
+      resolved = await realpathAsync(filePath);
+    } catch {
+      resolved = path.resolve(filePath);
+      let dir = resolved;
+      const tail = [];
+      while (dir !== path.dirname(dir)) {
+        try {
+          const realDir = await realpathAsync(dir);
+          resolved = tail.length ? path.join(realDir, ...tail) : realDir;
+          break;
+        } catch {
+          tail.unshift(path.basename(dir));
+          dir = path.dirname(dir);
+        }
+      }
+    }
+    if (cacheEnabled()) {
+      resolveCache.set(filePath, { resolved, ts: Date.now() });
+      trimOldest(resolveCache, RESOLVE_CACHE_MAX);
+    }
+    return resolved;
+  }
+
+  return { resolveSafe, resolveSafeAsync, normalizeKey };
 }

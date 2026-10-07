@@ -5,11 +5,13 @@ import { unwrapJobManifest } from "../utils/jobManifest.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 import { handleIpc } from "../utils/ipc.js";
 import { findUnreadableInputsAsync } from "../utils/process-input-validation.js";
-import { sanitizeJobMedia } from "../utils/process-media-validation.js";
+import { sanitizeBatchJobMedia } from "../utils/process-media-validation.js";
 import { validateBatchOutputPaths } from "../utils/process-output.js";
 
 export function registerProcessHandlers(pathSecurity) {
+  let validationGeneration = 0;
   handleIpc(IPC_INVOKE.startProcessing, async (_event, payload) => {
+    const generation = validationGeneration;
     const { jobs, manifest, error } = unwrapJobManifest(payload);
     if (error) {
       return { success: false, error };
@@ -35,13 +37,16 @@ export function registerProcessHandlers(pathSecurity) {
 
     let safeJobs;
     try {
-      safeJobs = jobs.map((job) => sanitizeJobMedia(job, pathSecurity, { outputDirectory }));
-      validateBatchOutputPaths(safeJobs);
+      safeJobs = await sanitizeBatchJobMedia(jobs, pathSecurity, { outputDirectory });
+      await validateBatchOutputPaths(safeJobs);
     } catch (securityError) {
       return { success: false, error: securityError.message };
     }
 
     const unreadable = await findUnreadableInputsAsync(safeJobs);
+    if (generation !== validationGeneration) {
+      return { success: false, cancelled: true, error: "Procesamiento cancelado" };
+    }
     if (unreadable.length > 0) {
       const first = unreadable[0];
       return {
@@ -63,6 +68,7 @@ export function registerProcessHandlers(pathSecurity) {
   });
 
   handleIpc(IPC_INVOKE.cancelProcessing, async () => {
+    validationGeneration++;
     const result = await cancelRun();
     return { success: true, idle: !!result?.idle };
   });

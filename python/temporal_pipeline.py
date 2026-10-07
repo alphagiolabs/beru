@@ -1,6 +1,7 @@
 """Build bounded, lossless spatial and temporal patches for FFmpeg compositing."""
 
 import logging
+import math
 import os
 import queue
 import re
@@ -31,6 +32,7 @@ class MotionPatch:
     y: int
     width: int
     height: int
+    start: float = 0
 
 
 def extra_media_input_args(path, *, duration=0, image_fps=None):
@@ -78,6 +80,25 @@ class TemporalPatchResolver:
         spatial = (op.get("delogo_method") or "").lower() == "inpaint"
         if spatial:
             radius = 3
+        bounds = {}
+        for snake, camel in (("start_time", "startTime"), ("end_time", "endTime")):
+            try:
+                value = float(op.get(snake, op.get(camel)))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                bounds[snake] = value
+        start = max(0, math.floor(bounds.get("start_time", 0) * self.fps + 1e-6) - radius) / self.fps
+        end = None
+        if "end_time" in bounds:
+            end = (math.ceil(bounds["end_time"] * self.fps - 1e-6) + radius + 1) / self.fps
+            if end <= start:
+                return None
+        frame_limit = self.frame_limit
+        if frame_limit is not None:
+            frame_limit -= math.floor(start * self.fps + 1e-6)
+            if frame_limit <= 0:
+                return None
         effect = _build_padded_region(
             x, y, w, h, width, height, max(2, feather), aligned=True
         )
@@ -113,9 +134,15 @@ class TemporalPatchResolver:
             fallback = f"format={spatial_format}," + _build_boxblur_filter(
                 r, max(1, r // 2), 3
             )
+        trim = ""
+        if start > 0 or end is not None:
+            trim = f"trim=start={start:.8f}"
+            if end is not None:
+                trim += f":end={end:.8f}"
+            trim += ","
         graph = (
             (prefix + ";" if prefix else "")
-            + f'{label or "[0:v]"}crop={bw}:{bh}:{bx}:{by},split[mt_original][mt_fallback];'
+            + f'{label or "[0:v]"}{trim}crop={bw}:{bh}:{bx}:{by},split[mt_original][mt_fallback];'
         )
         graph += f"[mt_original]format=rgb48le[mt_rgb];[mt_fallback]{fallback},format=rgb48le[mt_fill];"
         graph += "[mt_rgb][mt_fill]hstack,showinfo[mt_decode]"
@@ -133,8 +160,8 @@ class TemporalPatchResolver:
             "-map",
             "[mt_decode]",
         ]
-        if self.frame_limit:
-            decoder += ["-frames:v", str(self.frame_limit)]
+        if frame_limit:
+            decoder += ["-frames:v", str(frame_limit)]
         decoder += [
             "-fps_mode",
             "passthrough",
@@ -173,7 +200,7 @@ class TemporalPatchResolver:
             "1",
             path,
         ]
-        ok = self._render(
+        patch_start = self._render(
             decoder,
             encoder,
             bw,
@@ -183,11 +210,11 @@ class TemporalPatchResolver:
             (ex - bx, ey - by, ew, eh),
             spatial=spatial,
         )
-        if not ok:
+        if patch_start is None:
             if os.path.exists(path):
                 os.unlink(path)
             return None
-        return MotionPatch(path, ex, ey, ew, eh)
+        return MotionPatch(path, ex, ey, ew, eh, patch_start)
 
     def _render(
         self, decoder, encoder, width, height, box, radius, crop, *, spatial=False
@@ -203,6 +230,7 @@ class TemporalPatchResolver:
         errors = StderrBuffer()
         variable = False
         count = 0
+        first_timestamp = None
         timed_out = threading.Event()
 
         def read_errors(proc, capture_pts):
@@ -239,7 +267,7 @@ class TemporalPatchResolver:
                     return
 
         def frames():
-            nonlocal variable, count
+            nonlocal variable, count, first_timestamp
             previous = None
             size = width * 2 * height * 6
             while True:
@@ -251,6 +279,8 @@ class TemporalPatchResolver:
                 if len(data) != size:
                     raise RuntimeError("Incomplete temporal frame")
                 timestamp = timestamps.get(timeout=10)
+                if first_timestamp is None:
+                    first_timestamp = timestamp
                 if previous is not None and abs(
                     timestamp - previous - 1 / self.fps
                 ) > max(0.003, 0.05 / self.fps):
@@ -314,7 +344,7 @@ class TemporalPatchResolver:
             processes[1].stdin.close()
             if variable:
                 logger.info("Temporal: variable frame timing; using spatial repair")
-                return False
+                return None
             for proc in processes:
                 if proc.wait(timeout=30) != 0:
                     if _check_cancelled(self.ctx):
@@ -324,13 +354,13 @@ class TemporalPatchResolver:
                     )
             if not count:
                 raise RuntimeError("Temporal source produced no frames")
-            return True
+            return first_timestamp
         except Exception:
             if timed_out.is_set() and not _check_cancelled(self.ctx):
                 logger.info(
                     "Temporal: preparation exceeded its time/disk budget; using spatial repair"
                 )
-                return False
+                return None
             raise
         finally:
             stop.set()

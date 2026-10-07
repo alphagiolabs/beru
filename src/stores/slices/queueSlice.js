@@ -18,24 +18,33 @@ import { swallow } from "../../utils/swallow.js";
 
 const MAX_UNDO_STACK = 50;
 const IMAGE_DATA_CACHE_MAX = 50;
+const IMAGE_DATA_CACHE_MAX_BYTES = 32 * 1024 * 1024;
 const THUMBNAILS_BY_PATH_MAX = 2000;
+
+function boundImageDataCache(entries) {
+  const kept = [];
+  let bytes = 0;
+  for (let i = entries.length - 1; i >= 0 && kept.length < IMAGE_DATA_CACHE_MAX; i--) {
+    const [imagePath, dataUrl] = entries[i];
+    if (typeof dataUrl !== "string") continue;
+    const size = dataUrl.length * 2;
+    if (bytes + size > IMAGE_DATA_CACHE_MAX_BYTES) continue;
+    kept.push([imagePath, dataUrl]);
+    bytes += size;
+  }
+  return Object.fromEntries(kept.reverse());
+}
 
 function pruneImageDataCache(cache, queue) {
   const used = new Set();
   for (const item of queue) {
     for (const op of item.operations || []) {
       if (op.mode === "image" && op.imagePath) used.add(op.imagePath);
+      if (op.mode === "delogo" && op.delogoImagePath) used.add(op.delogoImagePath);
     }
   }
   const entries = Object.entries(cache || {}).filter(([path]) => used.has(path));
-  if (entries.length > IMAGE_DATA_CACHE_MAX) {
-    entries.splice(0, entries.length - IMAGE_DATA_CACHE_MAX);
-  }
-  const next = {};
-  for (const [path, dataUrl] of entries) {
-    next[path] = dataUrl;
-  }
-  return next;
+  return boundImageDataCache(entries);
 }
 
 let outputPathsCache = { key: null, paths: null };
@@ -337,10 +346,13 @@ export function createQueueSlice(set, get) {
     },
 
     cacheImageData: (imagePath, dataUrl) => {
-      if (!imagePath || !dataUrl) return;
-      set((s) => ({
-        imageDataCache: { ...s.imageDataCache, [imagePath]: dataUrl },
-      }));
+      if (!imagePath || typeof dataUrl !== "string" || !dataUrl) return;
+      set((s) => {
+        const images = { ...s.imageDataCache };
+        delete images[imagePath];
+        images[imagePath] = dataUrl;
+        return { imageDataCache: boundImageDataCache(Object.entries(images)) };
+      });
     },
 
     removeVideo: (idx) => {
@@ -543,13 +555,14 @@ export function createQueueSlice(set, get) {
       };
       const newCache = { ...get().imageDataCache };
       if (mode === "image" && op.imagePath && get().tempImageDataUrl) {
+        delete newCache[op.imagePath];
         newCache[op.imagePath] = get().tempImageDataUrl;
       }
       set({
         queue: updated,
         selectedOperationIdx: updated[selectedIdx].operations.length - 1,
         currentRegion: null,
-        imageDataCache: newCache,
+        imageDataCache: boundImageDataCache(Object.entries(newCache)),
       });
     },
 
