@@ -109,32 +109,54 @@ function boxBlurRGBA(data, width, height, radius, passes) {
   if (!r) return data;
   const horizontal = new Uint8ClampedArray(data.length);
   const output = new Uint8ClampedArray(data.length);
+  const sums = new Int32Array(width * 4);
+  const stride = width * 4;
   const divisor = 2 * r + 1;
+  // Integer sums over an odd window round exactly by adding r before truncation.
   const reflect = (index, size) =>
     index < 0 ? -index - 1 : index >= size ? 2 * size - index - 1 : index;
   for (let pass = 0; pass < passes; pass++) {
-    for (let y = 0; y < height; y++)
-      for (let c = 0; c < 3; c++) {
-        let sum = 0;
-        for (let x = -r; x <= r; x++) sum += data[(y * width + reflect(x, width)) * 4 + c];
-        for (let x = 0; x < width; x++) {
-          horizontal[(y * width + x) * 4 + c] = Math.round(sum / divisor);
-          sum +=
-            data[(y * width + reflect(x + r + 1, width)) * 4 + c] -
-            data[(y * width + reflect(x - r, width)) * 4 + c];
-        }
+    for (let y = 0; y < height; y++) {
+      const row = y * stride;
+      let red = 0,
+        green = 0,
+        blue = 0;
+      for (let x = -r; x <= r; x++) {
+        const i = row + reflect(x, width) * 4;
+        red += data[i];
+        green += data[i + 1];
+        blue += data[i + 2];
       }
-    for (let x = 0; x < width; x++)
-      for (let c = 0; c < 3; c++) {
-        let sum = 0;
-        for (let y = -r; y <= r; y++) sum += horizontal[(reflect(y, height) * width + x) * 4 + c];
-        for (let y = 0; y < height; y++) {
-          output[(y * width + x) * 4 + c] = Math.round(sum / divisor);
-          sum +=
-            horizontal[(reflect(y + r + 1, height) * width + x) * 4 + c] -
-            horizontal[(reflect(y - r, height) * width + x) * 4 + c];
-        }
+      for (let x = 0; x < width; x++) {
+        const i = row + x * 4;
+        horizontal[i] = ((red + r) / divisor) | 0;
+        horizontal[i + 1] = ((green + r) / divisor) | 0;
+        horizontal[i + 2] = ((blue + r) / divisor) | 0;
+        const add = row + reflect(x + r + 1, width) * 4;
+        const remove = row + reflect(x - r, width) * 4;
+        red += data[add] - data[remove];
+        green += data[add + 1] - data[remove + 1];
+        blue += data[add + 2] - data[remove + 2];
       }
+    }
+    sums.fill(0);
+    for (let y = -r; y <= r; y++) {
+      const row = reflect(y, height) * stride;
+      for (let x = 0; x < stride; x++) sums[x] += horizontal[row + x];
+    }
+    for (let y = 0; y < height; y++) {
+      const row = y * stride;
+      const add = reflect(y + r + 1, height) * stride;
+      const remove = reflect(y - r, height) * stride;
+      for (let x = 0; x < stride; x += 4) {
+        output[row + x] = ((sums[x] + r) / divisor) | 0;
+        output[row + x + 1] = ((sums[x + 1] + r) / divisor) | 0;
+        output[row + x + 2] = ((sums[x + 2] + r) / divisor) | 0;
+        sums[x] += horizontal[add + x] - horizontal[remove + x];
+        sums[x + 1] += horizontal[add + x + 1] - horizontal[remove + x + 1];
+        sums[x + 2] += horizontal[add + x + 2] - horizontal[remove + x + 2];
+      }
+    }
     data = output;
   }
   for (let i = 3; i < output.length; i += 4) output[i] = 255;
@@ -149,20 +171,25 @@ function applyLogoMask(data, width, height, box, feather = 0) {
   const topF = Math.min(feather, box.y);
   const rightF = Math.min(feather, width - box.x - box.w);
   const bottomF = Math.min(feather, height - box.y - box.h);
-  for (let y = 0; y < height; y++)
+  const horizontal = new Float64Array(width);
+  for (let x = 0; x < width; x++) {
+    horizontal[x] = Math.min(
+      1,
+      leftF ? (x - box.x + leftF) / leftF : Number(x >= box.x),
+      rightF ? (right + rightF - x) / rightF : Number(x <= right),
+    );
+  }
+  for (let y = 0; y < height; y++) {
+    const vertical = Math.min(
+      1,
+      topF ? (y - box.y + topF) / topF : Number(y >= box.y),
+      bottomF ? (bottom + bottomF - y) / bottomF : Number(y <= bottom),
+    );
     for (let x = 0; x < width; x++) {
-      const opacity = Math.max(
-        0,
-        Math.min(
-          1,
-          leftF ? (x - box.x + leftF) / leftF : Number(x >= box.x),
-          topF ? (y - box.y + topF) / topF : Number(y >= box.y),
-          rightF ? (right + rightF - x) / rightF : Number(x <= right),
-          bottomF ? (bottom + bottomF - y) / bottomF : Number(y <= bottom),
-        ),
-      );
+      const opacity = Math.max(0, Math.min(horizontal[x], vertical));
       data[(y * width + x) * 4 + 3] = Math.floor(255 * opacity * opacity * (3 - 2 * opacity));
     }
+  }
 }
 
 function reconstructSpatialLogo(frame, width, height, params) {

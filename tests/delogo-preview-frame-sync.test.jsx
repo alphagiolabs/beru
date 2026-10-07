@@ -35,7 +35,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-async function mountPreview(playing = false) {
+async function mountPreview(playing = false, method = "inpaint") {
   vi.resetModules();
   vi.stubGlobal("React", React);
   vi.stubGlobal("Worker", DeferredWorker);
@@ -98,7 +98,7 @@ async function mountPreview(playing = false) {
       createElement(Preview, {
         videoRef: { current: video },
         operation: {
-          delogoMethod: "inpaint",
+          delogoMethod: method,
           edgeFeather: 4,
           region: { x: 0.25, y: 0.25, w: 0.1, h: 0.1 },
         },
@@ -129,6 +129,20 @@ async function mountPreview(playing = false) {
 }
 
 describe("quick logo preview frame ownership", () => {
+  it.each(["blur", "inpaint", "temporal"])(
+    "paints a paused %s preview once its worker result is ready",
+    async (method) => {
+      const h = await mountPreview(false, method);
+      h.drawNext();
+      expect(h.paintedValues()).toEqual([]);
+
+      const worker = DeferredWorker.instance;
+      const current = worker.sent.find((message) => message.type === "compute");
+      act(() => worker.reply(current, 27));
+      expect(h.paintedValues()).toEqual([27]);
+    },
+  );
+
   it("redraws a playing seek immediately without waiting for another decoded frame", async () => {
     const h = await mountPreview(true);
     h.presentFrame(0, 0);
@@ -139,6 +153,14 @@ describe("quick logo preview frame ownership", () => {
     act(() => h.video.dispatchEvent(new Event("seeked")));
     if (h.frames.size) h.drawNext();
     expect(h.canvas.style.visibility).toBe("visible");
+  });
+
+  it("paints a playing blur on every presented frame without waiting for a worker", async () => {
+    const h = await mountPreview(true, "blur");
+    h.presentFrame(0, 0.02);
+    expect(h.paintedValues()).toEqual([40]);
+    h.presentFrame(1 / 12, 0.11);
+    expect(h.paintedValues()).toEqual([40, 40]);
   });
 
   it("clears the patch at seek start and rejects the preceding worker response", async () => {

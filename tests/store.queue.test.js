@@ -334,6 +334,30 @@ describe("queueSlice", () => {
     expect(useEditorStore.getState().imageDataCache).toEqual({});
   });
 
+  it("bounds cached images on insertion and keeps recently replaced entries", () => {
+    const cache = useEditorStore.getState().cacheImageData;
+    for (let i = 0; i < 50; i++) cache(`image-${i}.png`, `data:image/png;base64,${i}`);
+    cache("image-0.png", "data:image/png;base64,replaced");
+    cache("image-50.png", "data:image/png;base64,new");
+    const images = useEditorStore.getState().imageDataCache;
+    expect(Object.keys(images)).toHaveLength(50);
+    expect(images["image-0.png"]).toBe("data:image/png;base64,replaced");
+    expect(images["image-1.png"]).toBeUndefined();
+    expect(images["image-50.png"]).toBe("data:image/png;base64,new");
+  });
+
+  it("bounds retained image data by bytes even below the entry limit", () => {
+    const cache = useEditorStore.getState().cacheImageData;
+    for (let i = 0; i < 12; i++) {
+      cache(`image-${i}.png`, "data:image/png;base64," + String(i).repeat(2 * 1024 * 1024));
+    }
+    const images = useEditorStore.getState().imageDataCache;
+    expect(
+      Object.values(images).reduce((sum, data) => sum + data.length * 2, 0),
+    ).toBeLessThanOrEqual(32 * 1024 * 1024);
+    expect(images["image-11.png"]).toBeTruthy();
+  });
+
   it("prunes imageDataCache when an image operation is removed", () => {
     useEditorStore.setState({
       queue: [
