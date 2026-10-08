@@ -17,35 +17,7 @@ import { tStatic } from "../../utils/format-message.js";
 import { swallow } from "../../utils/swallow.js";
 
 const MAX_UNDO_STACK = 50;
-const IMAGE_DATA_CACHE_MAX = 50;
-const IMAGE_DATA_CACHE_MAX_BYTES = 32 * 1024 * 1024;
 const THUMBNAILS_BY_PATH_MAX = 2000;
-
-function boundImageDataCache(entries) {
-  const kept = [];
-  let bytes = 0;
-  for (let i = entries.length - 1; i >= 0 && kept.length < IMAGE_DATA_CACHE_MAX; i--) {
-    const [imagePath, dataUrl] = entries[i];
-    if (typeof dataUrl !== "string") continue;
-    const size = dataUrl.length * 2;
-    if (bytes + size > IMAGE_DATA_CACHE_MAX_BYTES) continue;
-    kept.push([imagePath, dataUrl]);
-    bytes += size;
-  }
-  return Object.fromEntries(kept.reverse());
-}
-
-function pruneImageDataCache(cache, queue) {
-  const used = new Set();
-  for (const item of queue) {
-    for (const op of item.operations || []) {
-      if (op.mode === "image" && op.imagePath) used.add(op.imagePath);
-      if (op.mode === "delogo" && op.delogoImagePath) used.add(op.delogoImagePath);
-    }
-  }
-  const entries = Object.entries(cache || {}).filter(([path]) => used.has(path));
-  return boundImageDataCache(entries);
-}
 
 let outputPathsCache = { key: null, paths: null };
 
@@ -157,7 +129,6 @@ export function createQueueSlice(set, get) {
     selectedIdx: -1,
     selectedOperationIdx: null,
     currentRegion: null,
-    imageDataCache: {},
     undoStack: [],
     redoStack: [],
 
@@ -345,16 +316,6 @@ export function createQueueSlice(set, get) {
         });
     },
 
-    cacheImageData: (imagePath, dataUrl) => {
-      if (!imagePath || typeof dataUrl !== "string" || !dataUrl) return;
-      set((s) => {
-        const images = { ...s.imageDataCache };
-        delete images[imagePath];
-        images[imagePath] = dataUrl;
-        return { imageDataCache: boundImageDataCache(Object.entries(images)) };
-      });
-    },
-
     removeVideo: (idx) => {
       const removedPath = get().queue[idx]?.path;
       set((s) => {
@@ -376,7 +337,6 @@ export function createQueueSlice(set, get) {
           currentRegion: null,
           undoStack: [],
           redoStack: [],
-          imageDataCache: pruneImageDataCache(s.imageDataCache, next),
           thumbnailsByPath,
           batchSummary: null,
         }).patch;
@@ -395,7 +355,7 @@ export function createQueueSlice(set, get) {
       }
       priorityThumbnailLoads.clear();
       pendingThumbnails.clear();
-      set((s) => ({
+      set(() => ({
         queue: [],
         selectedIdx: -1,
         selectedOperationIdx: null,
@@ -403,7 +363,6 @@ export function createQueueSlice(set, get) {
         undoStack: [],
         redoStack: [],
         excelMatchStatus: {},
-        imageDataCache: pruneImageDataCache(s.imageDataCache, []),
         batchSummary: null,
         templateIdx: -1,
         _thumbnailAbortControllers: new Set(),
@@ -535,6 +494,7 @@ export function createQueueSlice(set, get) {
           delogoFillColor: get().delogoFillColor,
           delogoFillOpacity: get().delogoFillOpacity,
           delogoImagePath: get().delogoImagePath,
+          delogoImageV: get().delogoImageV,
           temporalRadius: get().temporalRadius,
           mosaicSize: get().mosaicSize,
           mirrorSide: get().mirrorSide,
@@ -542,6 +502,7 @@ export function createQueueSlice(set, get) {
           text: get().textInput,
           ...pickTextStyle(getGlobalTextStyleFromState(get())),
           imagePath: get().tempImagePath,
+          imageV: get().tempImageV,
           imageOpacity: get().tempImageOpacity,
           startTime: get().tempStart,
           endTime: get().tempEnd,
@@ -553,16 +514,10 @@ export function createQueueSlice(set, get) {
         ...updated[selectedIdx],
         operations: [...updated[selectedIdx].operations, op],
       };
-      const newCache = { ...get().imageDataCache };
-      if (mode === "image" && op.imagePath && get().tempImageDataUrl) {
-        delete newCache[op.imagePath];
-        newCache[op.imagePath] = get().tempImageDataUrl;
-      }
       set({
         queue: updated,
         selectedOperationIdx: updated[selectedIdx].operations.length - 1,
         currentRegion: null,
-        imageDataCache: boundImageDataCache(Object.entries(newCache)),
       });
     },
 
@@ -597,7 +552,6 @@ export function createQueueSlice(set, get) {
       const changes = {
         queue: updated,
         selectedOperationIdx: nextSelectedOperationIdx,
-        imageDataCache: pruneImageDataCache(get().imageDataCache, updated),
       };
       if (regionId != null && op?.mode === "text") {
         get().syncTextToExcel(videoIdx, regionId, "", changes);

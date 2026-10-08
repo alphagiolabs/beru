@@ -89,6 +89,7 @@ from fonts import (
     _get_normalized_fonts,
     _resolve_font,
     get_system_fonts,
+    reset_caches,
 )
 from filters import (
     _DRAWTEXT_CACHE,
@@ -783,6 +784,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
     ffmpeg_path = ctx.ffmpeg_path
 
     if _jobs_require_fonts(jobs):
+        reset_caches()
         get_system_fonts()
 
     if not _jobs_allow_hardware(jobs):
@@ -1006,7 +1008,7 @@ def _load_jobs_manifest(jobs_path):
 
 
 def _preflight_hw_encoder(jobs, *, verified, ctx=None):
-    """Real-encode probe runs once per process; later calls reuse the cache."""
+    """Real-encode probe runs until an encoder verifies; failures re-probe."""
     if not _jobs_allow_hardware(jobs):
         return None, verified
     hw = detect_hw_encoder(
@@ -1015,7 +1017,7 @@ def _preflight_hw_encoder(jobs, *, verified, ctx=None):
     )
     if hw is None:
         logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
-    return hw, True
+    return hw, hw is not None
 
 
 def job_worker_main():

@@ -19,6 +19,7 @@ export default [
       ".runtime/**",
       ".tmp-job-audit-*/**",
       "beru_*/**",
+      "beru-*/**",
     ],
   },
   js.configs.recommended,

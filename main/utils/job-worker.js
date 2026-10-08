@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { buildProcessorChildEnv } from "./processor-spawn.js";
+import { buildProcessorChildEnv, invalidateSystemPythonCache } from "./processor-spawn.js";
 import { validateMediaBinaries } from "./paths.js";
 import { createLineWorker } from "./line-worker.js";
 
@@ -38,10 +38,12 @@ const lineWorker = createLineWorker({
     const mediaOpts = media.ok
       ? { ffmpegPath: media.ffmpegPath, ffprobePath: media.ffprobePath }
       : {};
-    return spawn(spawnSpec.command, [...spawnSpec.args, "--job-worker"], {
+    const proc = spawn(spawnSpec.command, [...spawnSpec.args, "--job-worker"], {
       windowsHide: true,
       env: buildProcessorChildEnv(process.env, mediaOpts),
     });
+    proc.once("error", invalidateSystemPythonCache);
+    return proc;
   },
   onMessage: (msg, line, proc) => {
     if (msg && msg.type === "run_end" && activeRun?.proc === proc) {

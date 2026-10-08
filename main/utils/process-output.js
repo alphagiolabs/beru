@@ -1,7 +1,9 @@
 import fs from "fs";
 import path from "path";
 import { OUTPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
+import { invalidateBeruStatCache } from "./beru-protocol.js";
 const CONTROL_CHARACTERS = /[\x00-\x1f\x7f]/;
+const EXPORT_DIR_PREFIX = ".beru-export-";
 
 function isPathInsideRoot(candidatePath, rootPath) {
   const root = path.resolve(rootPath);
@@ -102,7 +104,8 @@ export function createRunOutputFiles(jobs, outputRoot) {
   if (new Set(targets.map((job) => job.key)).size !== targets.length) {
     throw new Error("Dos trabajos comparten el mismo identificador");
   }
-  const dir = fs.mkdtempSync(path.join(path.resolve(outputRoot), ".beru-export-"));
+  const root = path.resolve(outputRoot);
+  const dir = fs.mkdtempSync(path.join(root, EXPORT_DIR_PREFIX));
   const stagedJobs = jobs.map((job, index) => ({
     ...job,
     output_path: path.join(dir, `${index}${path.extname(targets[index].outputPath)}`),
@@ -116,6 +119,7 @@ export function createRunOutputFiles(jobs, outputRoot) {
       if (position < 0) throw new Error("El procesador devolvió un trabajo desconocido");
       if (!completed.has(index)) {
         fs.renameSync(stagedJobs[position].output_path, targets[position].outputPath);
+        invalidateBeruStatCache(targets[position].outputPath);
         completed.add(index);
       }
       return targets[position].outputPath;

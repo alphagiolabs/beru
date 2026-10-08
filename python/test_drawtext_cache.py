@@ -8,6 +8,8 @@ the env var remains as an explicit opt-out.
 """
 
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -62,8 +64,79 @@ def test_identical_op_is_memoized():
     assert layout.call_count == 1
 
 
+def test_hit_survives_eviction_horizon():
+    """A hit re-enqueues the key, so hot entries outlive the eviction cap."""
+    processor._DRAWTEXT_CACHE.clear()
+    saved_max = filters._DRAWTEXT_CACHE_MAX
+    filters._DRAWTEXT_CACHE_MAX = 4
+    try:
+        hot_op = _text_op(text="Hot")
+        processor.build_drawtext(hot_op)
+        for i in range(3):
+            processor.build_drawtext(_text_op(text=f"Filler {i}"))
+        with patch.object(filters, "_layout_export_text", wraps=filters._layout_export_text) as layout:
+            processor.build_drawtext(dict(hot_op))
+            for i in range(3):
+                processor.build_drawtext(_text_op(text=f"Cold {i}"))
+            layout.reset_mock()
+            processor.build_drawtext(dict(hot_op))
+        assert layout.call_count == 0
+    finally:
+        filters._DRAWTEXT_CACHE_MAX = saved_max
+        processor._DRAWTEXT_CACHE.clear()
+
+
+def test_cache_hit_during_eviction_keeps_both_filters_valid():
+    eviction_started = threading.Event()
+    promotion_paused = threading.Event()
+    eviction_finished = threading.Event()
+    filters._DRAWTEXT_CACHE.clear()
+    with patch.object(filters, "_DRAWTEXT_CACHE_MAX", 4), patch.object(
+        filters, "_drawtext_supports", return_value=False
+    ):
+        for i in range(3):
+            filters.build_drawtext(_text_op(text=f"Filler {i}"))
+        hot_op = _text_op(text="Hot")
+        hot_filter = filters.build_drawtext(hot_op)
+        hot_key = next(key for key, value in filters._DRAWTEXT_CACHE.items() if value == hot_filter)
+
+        class PausedEvictionCache(dict):
+            def __iter__(self):
+                iterator = super().__iter__()
+                eviction_started.set()
+                promotion_paused.wait(0.2)
+                return iterator
+
+            def pop(self, key, default=None):
+                value = super().pop(key, default)
+                if key == hot_key:
+                    promotion_paused.set()
+                    assert eviction_finished.wait(5), "eviction did not finish"
+                return value
+
+        def cold_filter():
+            try:
+                return filters.build_drawtext(_text_op(text="Cold"))
+            finally:
+                eviction_finished.set()
+
+        def concurrent_hit():
+            assert eviction_started.wait(5), "eviction did not start"
+            return filters.build_drawtext(hot_op)
+
+        with patch.object(filters, "_DRAWTEXT_CACHE", PausedEvictionCache(filters._DRAWTEXT_CACHE)):
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                hit = workers.submit(concurrent_hit)
+                cold = workers.submit(cold_filter)
+                assert "Cold" in cold.result(timeout=10)
+                assert hit.result(timeout=10) == hot_filter
+    filters._DRAWTEXT_CACHE.clear()
+
+
 if __name__ == "__main__":
     test_cache_enabled_by_default()
     test_env_opt_out_disables_cache()
     test_identical_op_is_memoized()
+    test_hit_survives_eviction_horizon()
+    test_cache_hit_during_eviction_keeps_both_filters_valid()
     print("ALL PASSED")

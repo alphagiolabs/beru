@@ -9,33 +9,36 @@ const VIDEO_INFO_CACHE_MAX = 500;
 
 const pendingProbes = new Map();
 
-function getVideoMtimeMs(filePath) {
+function getVideoStatKey(filePath) {
   try {
-    return fs.statSync(filePath).mtimeMs;
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile()) return null;
+    const { dev, ino, size, mtimeMs, ctimeMs } = stat;
+    return JSON.stringify([dev, ino, size, mtimeMs, ctimeMs]);
   } catch {
-    return -1;
+    return null;
   }
 }
 
-function getCachedVideoInfo(filePath, mtime) {
-  if (mtime < 0) return null;
+function getCachedVideoInfo(filePath, statKey) {
+  if (!statKey) return null;
   const hit = videoInfoCache.get(filePath);
-  if (!hit || hit.mtime !== mtime || !hasVideoDimensions(hit.info)) return null;
+  if (!hit || hit.statKey !== statKey || !hasVideoDimensions(hit.info)) return null;
   return hit.info;
 }
 
-function setCachedVideoInfo(filePath, mtime, info) {
-  if (mtime < 0 || !hasVideoDimensions(info)) return;
-  videoInfoCache.set(filePath, { mtime, info });
+function setCachedVideoInfo(filePath, statKey, info) {
+  if (!statKey || !hasVideoDimensions(info)) return;
+  videoInfoCache.set(filePath, { statKey, info });
   trimOldest(videoInfoCache, VIDEO_INFO_CACHE_MAX);
 }
 
 function probeVideoCached(filePath, { key, timeoutMs, allowFfmpegFallback }) {
-  const mtime = getVideoMtimeMs(filePath);
-  const cached = getCachedVideoInfo(filePath, mtime);
+  const statKey = getVideoStatKey(filePath);
+  const cached = getCachedVideoInfo(filePath, statKey);
   if (cached) return Promise.resolve(cached);
 
-  const probeKey = `${key}:${filePath}:${mtime}`;
+  const probeKey = `${key}:${filePath}:${statKey}`;
   const pending = pendingProbes.get(probeKey);
   if (pending) return pending;
 
@@ -46,7 +49,9 @@ function probeVideoCached(filePath, { key, timeoutMs, allowFfmpegFallback }) {
     allowFfmpegFallback,
   })
     .then((info) => {
-      setCachedVideoInfo(filePath, mtime, info);
+      if (statKey === getVideoStatKey(filePath)) {
+        setCachedVideoInfo(filePath, statKey, info);
+      }
       pendingProbes.delete(probeKey);
       return info;
     })

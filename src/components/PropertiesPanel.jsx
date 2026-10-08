@@ -7,6 +7,7 @@ import BatchPanel from "./BatchPanel";
 import AppliedTextEditor from "./AppliedTextEditor";
 import AppliedDelogoEditor from "./AppliedDelogoEditor";
 import { isRegionUsable } from "../utils/video-utils";
+import { beruLocalUrl, imageVersion } from "../utils/beru-url";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
 import { storeErrorText } from "../utils/store-errors";
 import { InspectorGroup } from "./inspector";
@@ -79,10 +80,10 @@ export default function PropertiesPanel() {
       }),
       shallow,
     );
-  const { tempImagePath, tempImageDataUrl, tempImageOpacity } = useEditorStore(
+  const { tempImagePath, tempImageV, tempImageOpacity } = useEditorStore(
     (s) => ({
       tempImagePath: s.tempImagePath,
-      tempImageDataUrl: s.tempImageDataUrl,
+      tempImageV: s.tempImageV,
       tempImageOpacity: s.tempImageOpacity,
     }),
     shallow,
@@ -258,14 +259,15 @@ export default function PropertiesPanel() {
                     onClick={async () => {
                       const res = await window.api?.pickImage();
                       if (res?.success) {
-                        get().setTempImagePath(res.path);
-                        const r = await window.api?.readImage(res.path);
-                        if (r?.success) get().setTempImageDataUrl(r.dataUrl);
-                        else
+                        const r = await window.api?.statImage(res.path);
+                        if (r?.success) get().setTempImagePath(res.path, imageVersion(r));
+                        else {
+                          get().setTempImagePath(res.path);
                           showToast({
                             kind: "err",
                             text: storeErrorText(t, r, "errors.imageReadFailed"),
                           });
+                        }
                       }
                     }}
                     variant="secondary"
@@ -278,7 +280,6 @@ export default function PropertiesPanel() {
                     <Button
                       onClick={() => {
                         get().setTempImagePath("");
-                        get().setTempImageDataUrl("");
                       }}
                       variant="tertiary"
                       size="icon"
@@ -291,13 +292,13 @@ export default function PropertiesPanel() {
                     </Button>
                   )}
                 </div>
-                {tempImageDataUrl && (
+                {tempImagePath && (
                   <div
                     className="rounded overflow-hidden border"
                     style={{ borderColor: "var(--border)" }}
                   >
                     <img
-                      src={tempImageDataUrl}
+                      src={beruLocalUrl(tempImagePath, tempImageV)}
                       alt="preview"
                       className="block w-full max-h-32 object-contain"
                       style={{ background: "var(--bg-app)" }}
@@ -619,11 +620,8 @@ export default function PropertiesPanel() {
                         onClick={async () => {
                           const res = await window.api?.pickImage();
                           if (res?.success) {
-                            get().setDelogoImagePath(res.path);
-                            const r = await window.api?.readImage(res.path);
-                            if (r?.success) {
-                              get().cacheImageData(res.path, r.dataUrl);
-                            }
+                            const r = await window.api?.statImage(res.path);
+                            get().setDelogoImagePath(res.path, r?.success ? imageVersion(r) : "");
                           } else if (res && !res.canceled) {
                             get().showToast({
                               kind: "err",

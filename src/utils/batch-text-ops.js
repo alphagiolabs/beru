@@ -1,10 +1,5 @@
 import { createOperation } from "./operation.js";
-import {
-  findTextOpForRegion,
-  getGlobalTextStyleFromState,
-  mergeTextStyles,
-  pickTextStyle,
-} from "./text-style.js";
+import { findTextOpForRegion, getGlobalTextStyleFromState, mergeTextStyles } from "./text-style.js";
 
 export function applyBatchTextOperations(
   item,
@@ -30,7 +25,7 @@ export function applyBatchTextOperations(
           ...ops[opIdx],
           batchRegionId: tr.id,
           text,
-          ...pickTextStyle(baseStyle),
+          ...baseStyle,
         };
       } else {
         ops.push(
@@ -39,7 +34,7 @@ export function applyBatchTextOperations(
             batchRegionId: tr.id,
             region: { ...tr.region },
             text,
-            ...pickTextStyle(baseStyle),
+            ...baseStyle,
           }),
         );
       }

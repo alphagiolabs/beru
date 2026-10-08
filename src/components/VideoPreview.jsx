@@ -43,7 +43,6 @@ export default function VideoPreview() {
     tempEnd,
     undoStack,
     redoStack,
-    imageDataCache,
     templateRegions,
     selectedTemplateRegionId,
     watermark,
@@ -60,7 +59,6 @@ export default function VideoPreview() {
       tempEnd: s.tempEnd,
       undoStack: s.undoStack,
       redoStack: s.redoStack,
-      imageDataCache: s.imageDataCache,
       templateRegions: s.templateRegions,
       selectedTemplateRegionId: s.selectedTemplateRegionId,
       watermark: s.watermark,
@@ -307,7 +305,6 @@ export default function VideoPreview() {
               showFfmpegOverlay={showFfmpegOverlay}
               logoComparisonVisible={logoComparisonVisible}
               currentRegion={currentRegion}
-              imageDataCache={imageDataCache}
               onRegionOpDragStart={handleRegionOpDragStart}
               onImageDragStart={handleImageDragStart}
             />

@@ -20,7 +20,7 @@ export function getBatchProgress({ queue, progressDone, progressTotal, jobProgre
       p = Number(item.progress);
     }
     if (Number.isFinite(p) && p > 0) {
-      inFlight += Math.min(100, Math.max(0, p)) / 100;
+      inFlight += Math.min(100, p) / 100;
     }
   }
 

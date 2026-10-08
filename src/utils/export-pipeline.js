@@ -171,7 +171,11 @@ export function applyJobDone({
     progress: 100,
     error: null,
     ...(signature && artifactPath
-      ? { exportSignature: signature, exportedOutputPath: artifactPath }
+      ? {
+          exportSignature: signature,
+          exportedOutputPath: artifactPath,
+          exportedOutputStat: msg?.outputStat ?? null,
+        }
       : {}),
   };
   const nextProgress =

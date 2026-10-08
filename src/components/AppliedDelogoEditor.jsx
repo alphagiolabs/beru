@@ -1,5 +1,6 @@
 import { Upload, X } from "lucide-react";
 import { clampRegionToVideo } from "../utils/video-utils";
+import { imageVersion } from "../utils/beru-url";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
 import { storeErrorText } from "../utils/store-errors";
 import useEditorStore from "../stores/useEditorStore";
@@ -102,11 +103,11 @@ function CoverPicker({ op, onPatch }) {
           onClick={async () => {
             const res = await window.api?.pickImage();
             if (res?.success) {
-              onPatch({ delogoImagePath: res.path });
-              const r = await window.api?.readImage(res.path);
-              if (r?.success) {
-                get().cacheImageData(res.path, r.dataUrl);
-              }
+              const r = await window.api?.statImage(res.path);
+              onPatch({
+                delogoImagePath: res.path,
+                delogoImageV: r?.success ? imageVersion(r) : "",
+              });
             } else if (res && !res.canceled) {
               get().showToast?.({
                 kind: "err",
@@ -123,7 +124,7 @@ function CoverPicker({ op, onPatch }) {
         {op.delogoImagePath && (
           <Button
             type="button"
-            onClick={() => onPatch({ delogoImagePath: "" })}
+            onClick={() => onPatch({ delogoImagePath: "", delogoImageV: "" })}
             variant="tertiary"
             size="icon"
             className="text-[var(--rose)]"
@@ -345,11 +346,11 @@ function ImageFields({ op, onPatch }) {
             onClick={async () => {
               const res = await window.api?.pickImage();
               if (res?.success) {
-                onPatch({ imagePath: res.path });
-                const r = await window.api?.readImage(res.path);
-                if (r?.success) {
-                  get().cacheImageData(res.path, r.dataUrl);
-                }
+                const r = await window.api?.statImage(res.path);
+                onPatch({
+                  imagePath: res.path,
+                  imageV: r?.success ? imageVersion(r) : "",
+                });
               } else if (res && !res.canceled) {
                 get().showToast?.({
                   kind: "err",

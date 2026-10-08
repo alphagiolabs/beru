@@ -10,6 +10,7 @@ vi.mock("child_process", async (importOriginal) => {
 vi.mock("../main/utils/processor-spawn.js", () => ({
   validateProcessorAvailableAsync: async () => ({ ok: true, command: "python", args: [] }),
   buildProcessorChildEnv: () => ({}),
+  invalidateSystemPythonCache: () => {},
 }));
 vi.mock("../main/utils/paths.js", () => ({ validateMediaBinaries: () => ({ ok: false }) }));
 vi.mock("../main/utils/kill-process-tree.js", () => ({

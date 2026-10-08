@@ -5,11 +5,13 @@ import { runMediaTask } from "./media-task-pool.js";
 import { runCapturedProcess } from "./run-captured.js";
 import { createThumbnailDiskCache } from "./thumbnail-disk-cache.js";
 
-const THUMBNAIL_CACHE_MAX = 300;
 const FILMSTRIP_CACHE_MAX = 12;
 const MAX_THUMBNAIL_BYTES = 4 * 1024 * 1024;
 
-const thumbnailCache = new Map();
+// No hay caché en memoria para thumbnails: el renderer ya deduplica por path
+// (thumbnailsByPath) y runMediaTask deduplica extracciones concurrentes por key.
+// El disco es el único nivel en main; una tercera copia del mismo dataUrl no
+// compensa los ~ms que ahorra en releer el JSON.
 const filmstripCache = new Map();
 let diskCache;
 
@@ -96,17 +98,9 @@ async function runThumbnailFfmpeg(ffmpeg, filePath, filter, seekSeconds = 1, sig
 export async function extractThumbnail(filePath, width = 80, priority = {}) {
   const cacheKey = thumbnailKey(filePath, width);
   if (!cacheKey) return null;
-  const hit = thumbnailCache.get(cacheKey);
-  if (hit) return hit;
   const stored = await getDiskCache().get(cacheKey);
   if (cacheKey !== thumbnailKey(filePath, width)) return null;
-  if (stored) {
-    thumbnailCache.set(cacheKey, stored);
-    trimOldest(thumbnailCache, THUMBNAIL_CACHE_MAX);
-    return stored;
-  }
-  const ready = thumbnailCache.get(cacheKey);
-  if (ready) return ready;
+  if (stored) return stored;
   const ffmpeg = getFfmpegPath();
   if (!ffmpeg || !fs.existsSync(ffmpeg)) return null;
   return runMediaTask(
@@ -124,8 +118,6 @@ export async function extractThumbnail(filePath, width = 80, priority = {}) {
   )
     .then(async (result) => {
       if (result && cacheKey === thumbnailKey(filePath, width)) {
-        thumbnailCache.set(cacheKey, result);
-        trimOldest(thumbnailCache, THUMBNAIL_CACHE_MAX);
         await getDiskCache().set(cacheKey, result);
       }
       return result;

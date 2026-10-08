@@ -6,7 +6,7 @@ import { getMainWindow } from "../shared-state.js";
 import { OUTPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 import { handleIpc } from "../utils/ipc.js";
-import { IMAGE_CONTENT_TYPES } from "../utils/beru-protocol.js";
+import { invalidateBeruStatCache } from "../utils/beru-protocol.js";
 import { parseExcelBuffer } from "../utils/excel.js";
 
 export function registerFileHandlers(pathSecurity) {
@@ -45,17 +45,16 @@ export function registerFileHandlers(pathSecurity) {
     return { success: true, filePath: writeTarget };
   });
 
-  handleIpc(IPC_INVOKE.readImage, async (_event, imagePath) => {
+  handleIpc(IPC_INVOKE.statImage, async (_event, imagePath) => {
     const check = pathSecurity.validateReadableFile(imagePath, "image");
     if (!check.ok) return { success: false, error: check.error };
-    const ext = path.extname(check.resolvedPath).toLowerCase();
-    const mime = IMAGE_CONTENT_TYPES[ext];
-    if (!mime) {
-      return { success: false, error: `Formato no soportado: ${ext}` };
+    try {
+      const stat = await fs.promises.stat(check.resolvedPath);
+      invalidateBeruStatCache(check.resolvedPath);
+      return { success: true, size: stat.size, mtimeMs: stat.mtimeMs };
+    } catch {
+      return { success: false, error: "Archivo no encontrado" };
     }
-    const buf = await fs.promises.readFile(check.resolvedPath);
-    const dataUrl = `data:${mime};base64,${buf.toString("base64")}`;
-    return { success: true, dataUrl, size: buf.length, mime };
   });
 
   handleIpc(IPC_INVOKE.pickImage, async () => {
@@ -98,7 +97,7 @@ export function registerFileHandlers(pathSecurity) {
   });
 
   ipcMain.handle(IPC_INVOKE.restoreSessionPaths, async (_event, payload = {}) => {
-    const result = { ok: true, outputDir: null, videos: 0, excel: false, errors: [] };
+    const result = { ok: true, outputDir: null, videos: 0, images: 0, excel: false, errors: [] };
     const outputDir = payload?.outputDir;
     if (outputDir) {
       const check = pathSecurity.registerOutputDirectory(outputDir);
@@ -115,6 +114,15 @@ export function registerFileHandlers(pathSecurity) {
         result.videos += 1;
       } else {
         result.errors.push(check.error || videoPath);
+      }
+    }
+    const imagePaths = Array.isArray(payload?.imagePaths) ? payload.imagePaths : [];
+    for (const imagePath of imagePaths) {
+      const check = pathSecurity.registerAllowedPath(imagePath, "image");
+      if (check.ok) {
+        result.images += 1;
+      } else {
+        result.errors.push(check.error || imagePath);
       }
     }
     if (payload?.excelPath) {

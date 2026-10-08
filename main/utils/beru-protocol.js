@@ -14,9 +14,17 @@ function statCacheTtlMs() {
   return Number(process.env.BERU_PROTOCOL_STAT_CACHE_TTL_MS) || 5000;
 }
 
+const realpath = fs.realpathSync.native || fs.realpathSync;
+
 export function invalidateBeruStatCache(filePath) {
-  if (filePath === undefined) statCache.clear();
-  else statCache.delete(filePath);
+  if (filePath === undefined) {
+    statCache.clear();
+    return;
+  }
+  statCache.delete(filePath);
+  try {
+    statCache.delete(realpath(filePath));
+  } catch {}
 }
 
 function statFile(filePath) {

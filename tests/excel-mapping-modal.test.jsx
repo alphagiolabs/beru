@@ -77,6 +77,38 @@ describe("ExcelMappingModal", () => {
     root = null;
   });
 
+  it("refreshes video matches when Excel rows or the ID column change", () => {
+    root = createRoot(document.getElementById("root"));
+    act(() => {
+      root.render(<ExcelMappingModal />);
+    });
+
+    const previewValues = () =>
+      Array.from(document.querySelector("tbody tr").cells, (cell) => cell.textContent);
+    expect(previewValues()).toEqual(["1.mp4", "1", "89989989865", "50% OFF"]);
+
+    act(() => {
+      useEditorStore.setState({
+        excelRows: [
+          { id: 2, code: "1", TEXT_1: "Por código", TEXT_2: "Código 1" },
+          { id: 1, code: "2", TEXT_1: "Por ID", TEXT_2: "ID 1" },
+        ],
+      });
+    });
+    expect(previewValues()).toEqual(["1.mp4", "1", "Por ID", "ID 1"]);
+
+    act(() => {
+      useEditorStore.setState({
+        excelHeaders: ["id", "code", "TEXT_1", "TEXT_2"],
+        excelMapping: {
+          idColumn: "code",
+          columns: { "region-1": "TEXT_1", "region-2": "TEXT_2" },
+        },
+      });
+    });
+    expect(previewValues()).toEqual(["1.mp4", "1", "Por código", "Código 1"]);
+  });
+
   it("applies the edited mapping when the apply button is clicked", () => {
     root = createRoot(document.getElementById("root"));
 

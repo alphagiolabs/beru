@@ -69,7 +69,7 @@ export function persistWatermark(wm) {
 export function restoreWatermark(wm) {
   const persisted = persistWatermark(wm);
   if (!persisted) return null;
-  return { ...persisted, imageDataUrl: "" };
+  return { ...persisted, imageV: "" };
 }
 
 export function sanitizeDefaults(defaults = {}) {

@@ -14,7 +14,7 @@ function setupModal() {
       enabled: true,
       type: "image",
       imagePath: "",
-      imageDataUrl: "",
+      imageV: "",
       scale: 1,
       opacity: 0.5,
       position: "bottom-right",
@@ -42,18 +42,19 @@ describe("WatermarkModal — image picker consistency", () => {
     setupModal();
     window.api = {
       pickImage: vi.fn(),
-      readImage: vi.fn(),
+      statImage: vi.fn(),
     };
     useEditorStore.setState({
       showToast: vi.fn(() => {}),
     });
   });
 
-  it("sets imagePath and imageDataUrl atomically on success", async () => {
+  it("sets imagePath and imageV atomically on success", async () => {
     window.api.pickImage.mockResolvedValue({ success: true, path: "C:\\imgs\\wm.png" });
-    window.api.readImage.mockResolvedValue({
+    window.api.statImage.mockResolvedValue({
       success: true,
-      dataUrl: "data:image/png;base64,AAAA",
+      size: 4,
+      mtimeMs: 1700000000000,
     });
 
     renderModal();
@@ -67,12 +68,12 @@ describe("WatermarkModal — image picker consistency", () => {
 
     const state = useEditorStore.getState().watermark;
     expect(state.imagePath).toBe("C:\\imgs\\wm.png");
-    expect(state.imageDataUrl).toBe("data:image/png;base64,AAAA");
+    expect(state.imageV).toBe("1700000000000-4");
   });
 
-  it("does NOT set imagePath when readImage fails (no divergence)", async () => {
+  it("does NOT set imagePath when statImage fails (no divergence)", async () => {
     window.api.pickImage.mockResolvedValue({ success: true, path: "C:\\imgs\\bad.png" });
-    window.api.readImage.mockResolvedValue({ success: false, error: "too big" });
+    window.api.statImage.mockResolvedValue({ success: false, error: "too big" });
 
     renderModal();
     const btn = findChooseButton();
@@ -84,7 +85,7 @@ describe("WatermarkModal — image picker consistency", () => {
 
     const state = useEditorStore.getState().watermark;
     expect(state.imagePath).toBe("");
-    expect(state.imageDataUrl).toBe("");
+    expect(state.imageV).toBe("");
   });
 
   it("keeps the configured image when user cancels image pick", async () => {
@@ -93,7 +94,7 @@ describe("WatermarkModal — image picker consistency", () => {
         enabled: true,
         type: "image",
         imagePath: "C:\\old.png",
-        imageDataUrl: "data:image/png;base64,OLD",
+        imageV: "111-9",
         scale: 1,
         opacity: 0.5,
         position: "bottom-right",
@@ -111,6 +112,6 @@ describe("WatermarkModal — image picker consistency", () => {
 
     const state = useEditorStore.getState().watermark;
     expect(state.imagePath).toBe("C:\\old.png");
-    expect(state.imageDataUrl).toBe("data:image/png;base64,OLD");
+    expect(state.imageV).toBe("111-9");
   });
 });

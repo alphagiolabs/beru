@@ -151,19 +151,19 @@ describe("sanitize-preset", () => {
   });
 
   describe("persistWatermark", () => {
-    it("drops imageDataUrl and restores an empty data URL", () => {
+    it("drops imageV and restores an empty version", () => {
       const persisted = persistWatermark({
         enabled: true,
         type: "image",
         imagePath: "C:\\wm\\logo.png",
-        imageDataUrl: "data:image/png;base64,AAAA",
+        imageV: "1700000000000-4",
         opacity: 0.4,
       });
-      expect(persisted.imageDataUrl).toBeUndefined();
+      expect(persisted.imageV).toBeUndefined();
       expect(restoreWatermark(persisted)).toMatchObject({
         enabled: true,
         imagePath: "C:\\wm\\logo.png",
-        imageDataUrl: "",
+        imageV: "",
       });
     });
   });

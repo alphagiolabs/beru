@@ -3,12 +3,14 @@ import { PassThrough } from "stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const spawn = vi.hoisted(() => vi.fn());
+const invalidateSystemPythonCache = vi.hoisted(() => vi.fn());
 vi.mock("child_process", async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, default: { ...actual.default, spawn }, spawn };
 });
 vi.mock("../main/utils/processor-spawn.js", () => ({
   buildProcessorChildEnv: () => ({}),
+  invalidateSystemPythonCache,
 }));
 vi.mock("../main/utils/paths.js", () => ({
   validateMediaBinaries: () => ({ ok: false }),
@@ -50,6 +52,7 @@ function requestLine(proc, call = 0) {
 afterEach(() => {
   disposeJobWorker();
   spawn.mockReset();
+  invalidateSystemPythonCache.mockReset();
 });
 
 describe("job worker protocol", () => {
@@ -157,6 +160,16 @@ describe("job worker protocol", () => {
     expect(id2).not.toBe(id1);
     first.proc.stdout.write(`${JSON.stringify({ type: "run_end", id: id2, ok: true })}\n`);
     expect(await secondRun.done).toMatchObject({ ok: true });
+  });
+
+  it("invalidates the resolved python cache when the worker fails to spawn", async () => {
+    const proc = fakeWorker();
+    spawn.mockReturnValueOnce(proc);
+    const pending = startJobRun({ spawnSpec: SPAWN_SPEC, jobsFile: "m.json" });
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled());
+    proc.emit("error", new Error("spawn ENOENT"));
+    await expect(pending).rejects.toThrow("spawn ENOENT");
+    expect(invalidateSystemPythonCache).toHaveBeenCalled();
   });
 
   it("resolves done with died when the worker exits mid-run", async () => {

@@ -27,7 +27,7 @@ if (globalThis.HTMLCanvasElement) {
 
 window.api = {
   pickImage: vi.fn(async () => ({ success: true, path: "C:\\imgs\\patch.png" })),
-  readImage: vi.fn(async () => ({ success: true, dataUrl: "data:image/png;base64,AAAA" })),
+  statImage: vi.fn(async () => ({ success: true, size: 4, mtimeMs: 1700000000000 })),
 };
 
 const queueItem = (operations = []) => ({

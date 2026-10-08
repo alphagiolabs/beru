@@ -103,7 +103,7 @@ def _drawtext_cache_enabled():
 
 
 def _drawtext_cache_store(cache_key, filter_str):
-    """Insert into the memo cache with FIFO eviction once the cap is reached."""
+    """Insert into the memo cache; the least recently used entry is evicted at the cap."""
     with _DRAWTEXT_CACHE_LOCK:
         if len(_DRAWTEXT_CACHE) >= _DRAWTEXT_CACHE_MAX:
             _DRAWTEXT_CACHE.pop(next(iter(_DRAWTEXT_CACHE)), None)
@@ -118,16 +118,36 @@ def build_drawtext(op, *, ffmpeg_path=None):
     _validate_drawtext_text(text)
 
     ffmpeg_path = ffmpeg_path or media_probe.FFMPEG
+    font_family = str(op.get("font_family", "Arial") or "Arial").strip()
+    if not re.fullmatch(r"[\w .-]{1,100}", font_family, re.UNICODE):
+        raise ValueError("font_family contains forbidden characters")
+    bold = 1 if op.get("bold") else 0
+    italic = 1 if op.get("italic") else 0
+    font_weight = op.get("font_weight")
+    if font_weight is None and bold:
+        font_weight = 700
+    resolved_font = _resolve_font(
+        font_family,
+        font_weight=font_weight,
+        italic=bool(italic),
+        bold=bool(bold),
+    )
     cache_key = None
     if _drawtext_cache_enabled():
         try:
-            cache_key = (ffmpeg_path, json.dumps(op, sort_keys=True, separators=(",", ":")))
+            cache_key = (
+                ffmpeg_path,
+                json.dumps(op, sort_keys=True, separators=(",", ":")),
+                resolved_font,
+            )
         except (TypeError, ValueError):
             cache_key = None
         if cache_key is not None:
-            cached = _DRAWTEXT_CACHE.get(cache_key)
-            if cached is not None:
-                return cached
+            with _DRAWTEXT_CACHE_LOCK:
+                cached = _DRAWTEXT_CACHE.pop(cache_key, None)
+                if cached is not None:
+                    _DRAWTEXT_CACHE[cache_key] = cached
+                    return cached
 
     region = op.get("region", {}) or {}
     try:
@@ -173,14 +193,6 @@ def build_drawtext(op, *, ffmpeg_path=None):
         tight_glyph_layout = True
 
     font_color = _validate_drawtext_color(op.get("font_color", "white"), "font_color")
-    font_family = str(op.get("font_family", "Arial") or "Arial").strip()
-    if not re.fullmatch(r"[\w .-]{1,100}", font_family, re.UNICODE):
-        raise ValueError("font_family contains forbidden characters")
-    bold = 1 if op.get("bold") else 0
-    italic = 1 if op.get("italic") else 0
-    font_weight = op.get("font_weight")
-    if font_weight is None and bold:
-        font_weight = 700
 
     text_align = op.get("text_align", "left")
     vertical_align = str(op.get("vertical_align") or "top").lower()
@@ -199,12 +211,7 @@ def build_drawtext(op, *, ffmpeg_path=None):
     else:
         y_expr = str(y)
 
-    font_key, font_val, is_fontfile = _resolve_font(
-        font_family,
-        font_weight=font_weight,
-        italic=bool(italic),
-        bold=bool(bold),
-    )
+    font_key, font_val, is_fontfile = resolved_font
     if is_fontfile:
         font_val = f"'{font_val}'"
 

@@ -12,6 +12,7 @@ export function createEditorStyleSlice(set, get) {
     delogoFillColor: "black",
     delogoFillOpacity: 1,
     delogoImagePath: "",
+    delogoImageV: "",
     temporalRadius: DELOGO_FIELD_BOUNDS.temporalRadius.default,
     mosaicSize: DELOGO_FIELD_BOUNDS.mosaicSize.default,
     mirrorSide: "right",
@@ -21,7 +22,7 @@ export function createEditorStyleSlice(set, get) {
     tempEnd: null,
 
     tempImagePath: "",
-    tempImageDataUrl: "",
+    tempImageV: "",
     tempImageOpacity: 1,
 
     outputDir: null,
@@ -29,7 +30,7 @@ export function createEditorStyleSlice(set, get) {
     setDelogoMethod: (val) => set({ delogoMethod: val }),
     setDelogoFillColor: (val) => set({ delogoFillColor: val }),
     setDelogoFillOpacity: (val) => set({ delogoFillOpacity: Number(val) }),
-    setDelogoImagePath: (val) => set({ delogoImagePath: val || "" }),
+    setDelogoImagePath: (val, v) => set({ delogoImagePath: val || "", delogoImageV: v || "" }),
     setTemporalRadius: (val) => set({ temporalRadius: Number(val) }),
     setMosaicSize: (val) => set({ mosaicSize: Number(val) }),
     setMirrorSide: (val) => set({ mirrorSide: val }),
@@ -38,15 +39,14 @@ export function createEditorStyleSlice(set, get) {
     setBlurStrength: (val) => set({ blurStrength: Number(val) }),
     setTempStart: (val) => set({ tempStart: val === null || val === "" ? null : Number(val) }),
     setTempEnd: (val) => set({ tempEnd: val === null || val === "" ? null : Number(val) }),
-    setTempImagePath: (val) => set({ tempImagePath: val || "" }),
-    setTempImageDataUrl: (val) => set({ tempImageDataUrl: val || "" }),
+    setTempImagePath: (val, v) => set({ tempImagePath: val || "", tempImageV: v || "" }),
     setTempImageOpacity: (val) => set({ tempImageOpacity: Number(val) }),
     setActiveTool: (val) =>
       set({
         activeTool: val,
         currentRegion: null,
         tempImagePath: val === "image" ? get().tempImagePath : "",
-        tempImageDataUrl: val === "image" ? get().tempImageDataUrl : "",
+        tempImageV: val === "image" ? get().tempImageV : "",
       }),
     setSidebarMode: (val) => {
       if (val === "batch") {

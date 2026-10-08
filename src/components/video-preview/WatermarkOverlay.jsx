@@ -1,3 +1,5 @@
+import { beruLocalUrl } from "../../utils/beru-url";
+
 export default function WatermarkOverlay({ watermark, videoRef }) {
   const video = videoRef.current;
   if (!video) return null;
@@ -54,9 +56,7 @@ export default function WatermarkOverlay({ watermark, videoRef }) {
       </div>
     );
   }
-  const imageSrc =
-    watermark.imageDataUrl ||
-    (watermark.imagePath ? `beru://local/${encodeURIComponent(watermark.imagePath)}` : "");
+  const imageSrc = watermark.imagePath ? beruLocalUrl(watermark.imagePath, watermark.imageV) : "";
   if (watermark.type === "image" && imageSrc) {
     const baseSize = 80 * sy;
     const scaledSize = baseSize * (watermark.scale || 1);

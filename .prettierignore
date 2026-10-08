@@ -7,8 +7,10 @@ terminals
 agent-tools
 coverage
 .pytest_cache
+.tmp
 package-lock.json
 /.audit-tmp/
 /.runtime/
 /.tmp-job-audit-*/
 /beru_*/
+/beru-*/

@@ -82,12 +82,8 @@ async function readFfmpegEncoders(ffmpeg) {
 }
 
 async function detectHwEncoder() {
-  try {
-    const text = await readFfmpegEncoders(getFfmpegPath());
-    return pickHwEncoderFromEncodersText(text) || "";
-  } catch {
-    return "";
-  }
+  const text = await readFfmpegEncoders(getFfmpegPath());
+  return pickHwEncoderFromEncodersText(text) || "";
 }
 
 export async function detectHwEncoderCached() {
@@ -96,6 +92,8 @@ export async function detectHwEncoderCached() {
   try {
     cachedHwEncoder = await hwEncoderPromise;
     return cachedHwEncoder || null;
+  } catch {
+    return null;
   } finally {
     hwEncoderPromise = null;
   }

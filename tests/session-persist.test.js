@@ -171,6 +171,20 @@ describe("session-persist", () => {
     setItem.mockRestore();
   });
 
+  it("logs once when sessionStorage setItem throws", () => {
+    const state = { queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }] };
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    writeSessionSnapshotToStorage(state);
+    writeSessionSnapshotToStorage({ ...state, outputDir: "C:\\out2" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("Session persist");
+    warn.mockRestore();
+    setItem.mockRestore();
+  });
+
   it("removes a restored queue cleared before the first write", () => {
     sessionStorage.setItem(
       SESSION_PERSIST_KEY,
@@ -185,7 +199,7 @@ describe("session-persist", () => {
     expect(sessionStorage.getItem(SESSION_PERSIST_KEY)).toBeNull();
   });
 
-  it("persists watermark settings without imageDataUrl", () => {
+  it("persists watermark settings without imageV", () => {
     const snap = buildSessionSnapshot({
       queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }],
       outputDir: "C:\\out",
@@ -194,7 +208,7 @@ describe("session-persist", () => {
         type: "image",
         text: "",
         imagePath: "C:\\wm\\logo.png",
-        imageDataUrl: "data:image/png;base64,AAAA",
+        imageV: "1700000000000-4",
         opacity: 0.4,
         scale: 1.2,
         position: "top-left",
@@ -209,12 +223,12 @@ describe("session-persist", () => {
       imagePath: "C:\\wm\\logo.png",
       opacity: 0.4,
     });
-    expect(snap.watermark.imageDataUrl).toBeUndefined();
+    expect(snap.watermark.imageV).toBeUndefined();
     const restored = parseSessionSnapshot(snap);
     expect(restored.watermark).toMatchObject({
       enabled: true,
       imagePath: "C:\\wm\\logo.png",
-      imageDataUrl: "",
+      imageV: "",
     });
   });
 

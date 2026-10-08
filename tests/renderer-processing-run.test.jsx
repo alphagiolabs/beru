@@ -117,7 +117,12 @@ describe("renderer Processing Run through the store and IPC adapter", () => {
   it("keeps completed artifacts and job errors after partial batch cancellation", async () => {
     mount();
     const pending = start("run-a");
-    emit("onComplete", { runId: "run-a", index: 0, output: "C:\\output\\a.mp4" });
+    emit("onComplete", {
+      runId: "run-a",
+      index: 0,
+      output: "C:\\output\\a.mp4",
+      outputStat: { size: 11, mtimeMs: 3, ctimeMs: 4 },
+    });
     emit("onJobError", { runId: "run-a", index: 1, error: "Invalid video" });
     emit("onJobProgress", { runId: "run-a", index: 2, percent: 40 });
     emit("onFinished", { runId: "run-a", code: null, cancelled: true });
@@ -128,6 +133,7 @@ describe("renderer Processing Run through the store and IPC adapter", () => {
       progress: 100,
       exportedOutputPath: "C:\\output\\a.mp4",
       exportSignature: expect.any(String),
+      exportedOutputStat: { size: 11, mtimeMs: 3, ctimeMs: 4 },
     });
     expect(get().queue[1]).toMatchObject({ status: "error", error: "Invalid video" });
     expect(get().queue[2]).toMatchObject({ status: "idle", progress: 0, error: null });

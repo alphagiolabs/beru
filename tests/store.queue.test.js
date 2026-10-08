@@ -281,7 +281,6 @@ describe("queueSlice", () => {
       undoStack: [[{ id: "op-1", mode: "blur", region: null }]],
       redoStack: [[{ id: "op-2", mode: "blur", region: null }]],
       excelMatchStatus: { 0: "matched", 1: "unmatched" },
-      imageDataCache: { "C:\\img\\a.png": "data:image/png;base64,abc" },
       batchSummary: { total: 2, succeeded: 1, failed: 1 },
       templateIdx: 0,
     });
@@ -297,7 +296,6 @@ describe("queueSlice", () => {
     expect(state.undoStack).toEqual([]);
     expect(state.redoStack).toEqual([]);
     expect(state.excelMatchStatus).toEqual({});
-    expect(state.imageDataCache).toEqual({});
     expect(state.batchSummary).toBeNull();
     expect(state.templateIdx).toBe(-1);
   });
@@ -309,75 +307,6 @@ describe("queueSlice", () => {
 
     expect(cleared).toBe(false);
     expect(useEditorStore.getState().queue).toEqual([]);
-  });
-
-  it("prunes imageDataCache when a video is removed from the queue", () => {
-    useEditorStore.setState({
-      queue: [
-        makeQueueItem({
-          operations: [
-            {
-              id: "img-1",
-              mode: "image",
-              imagePath: "C:\\img\\a.png",
-              region: { x: 0, y: 0, w: 0.1, h: 0.1 },
-            },
-          ],
-        }),
-        makeQueueItem({ path: "C:\\videos\\b.mp4", filename: "b.mp4" }),
-      ],
-      imageDataCache: { "C:\\img\\a.png": "data:image/png;base64,abc" },
-    });
-
-    useEditorStore.getState().removeVideo(0);
-
-    expect(useEditorStore.getState().imageDataCache).toEqual({});
-  });
-
-  it("bounds cached images on insertion and keeps recently replaced entries", () => {
-    const cache = useEditorStore.getState().cacheImageData;
-    for (let i = 0; i < 50; i++) cache(`image-${i}.png`, `data:image/png;base64,${i}`);
-    cache("image-0.png", "data:image/png;base64,replaced");
-    cache("image-50.png", "data:image/png;base64,new");
-    const images = useEditorStore.getState().imageDataCache;
-    expect(Object.keys(images)).toHaveLength(50);
-    expect(images["image-0.png"]).toBe("data:image/png;base64,replaced");
-    expect(images["image-1.png"]).toBeUndefined();
-    expect(images["image-50.png"]).toBe("data:image/png;base64,new");
-  });
-
-  it("bounds retained image data by bytes even below the entry limit", () => {
-    const cache = useEditorStore.getState().cacheImageData;
-    for (let i = 0; i < 12; i++) {
-      cache(`image-${i}.png`, "data:image/png;base64," + String(i).repeat(2 * 1024 * 1024));
-    }
-    const images = useEditorStore.getState().imageDataCache;
-    expect(
-      Object.values(images).reduce((sum, data) => sum + data.length * 2, 0),
-    ).toBeLessThanOrEqual(32 * 1024 * 1024);
-    expect(images["image-11.png"]).toBeTruthy();
-  });
-
-  it("prunes imageDataCache when an image operation is removed", () => {
-    useEditorStore.setState({
-      queue: [
-        makeQueueItem({
-          operations: [
-            {
-              id: "img-1",
-              mode: "image",
-              imagePath: "C:\\img\\a.png",
-              region: { x: 0, y: 0, w: 0.1, h: 0.1 },
-            },
-          ],
-        }),
-      ],
-      imageDataCache: { "C:\\img\\a.png": "data:image/png;base64,abc" },
-    });
-
-    useEditorStore.getState().removeOperationAt(0, 0);
-
-    expect(useEditorStore.getState().imageDataCache).toEqual({});
   });
 
   it("outputPathFor suffixes colliding basenames in the same batch", () => {

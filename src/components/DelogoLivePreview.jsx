@@ -10,6 +10,7 @@ import {
 } from "../utils/delogo-preview-geometry.js";
 import { useThrottledVideoDraw } from "./video-preview/use-throttled-video-draw.js";
 import { isOpActive } from "../utils/operation.js";
+import { beruLocalUrl } from "../utils/beru-url.js";
 import { useT } from "../i18n/useT";
 
 const previewWorkspaces = new WeakMap();
@@ -427,6 +428,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   const draftFillColor = useEditorStore((s) => s.delogoFillColor);
   const draftFillOpacity = useEditorStore((s) => s.delogoFillOpacity);
   const draftImagePath = useEditorStore((s) => s.delogoImagePath);
+  const draftImageV = useEditorStore((s) => s.delogoImageV);
   const draftMosaicSize = useEditorStore((s) => s.mosaicSize);
   const draftMirrorSide = useEditorStore((s) => s.mirrorSide);
   const draftTemporalRadius = useEditorStore((s) => s.temporalRadius);
@@ -442,6 +444,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   const delogoFillColor = operation?.delogoFillColor ?? draftFillColor;
   const delogoFillOpacity = operation?.delogoFillOpacity ?? draftFillOpacity;
   const delogoImagePath = operation?.delogoImagePath ?? draftImagePath;
+  const delogoImageV = operation?.delogoImageV ?? draftImageV;
   const mosaicSize = operation?.mosaicSize ?? draftMosaicSize;
   const mirrorSide = operation?.mirrorSide ?? draftMirrorSide;
   const temporalRadius = operation?.temporalRadius ?? draftTemporalRadius;
@@ -675,11 +678,6 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
       setCoverImgData(null);
       return;
     }
-    const cached = useEditorStore.getState().imageDataCache?.[delogoImagePath];
-    if (cached) {
-      setCoverImgData(cached);
-      return;
-    }
     setCoverImgData(null);
     let cancelled = false;
     const img = new Image();
@@ -695,11 +693,11 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
         setCoverImgData(null);
       }
     };
-    img.src = `beru://local/${encodeURIComponent(delogoImagePath)}`;
+    img.src = beruLocalUrl(delogoImagePath, delogoImageV);
     return () => {
       cancelled = true;
     };
-  }, [visible, delogoMethod, delogoImagePath]);
+  }, [visible, delogoMethod, delogoImagePath, delogoImageV]);
 
   if (!visible) return null;
 

@@ -98,6 +98,7 @@ nul
 !/scripts/release-metadata.mjs
 !/scripts/verify-update-download.cjs
 !/scripts/test-python.mjs
+!/scripts/test-environment.mjs
 !/scripts/verify.mjs
 !/scripts/benchmark-memory.mjs
 !/scripts/performance/

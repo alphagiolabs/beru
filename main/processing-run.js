@@ -101,7 +101,12 @@ function dispatchProcessorLine(run, line) {
     else if (msg.type === "complete") {
       try {
         const output = run.outputFiles.complete(msg.index);
-        emit(run, IPC_EVENTS.onComplete, { ...msg, output });
+        const { size, mtimeMs, ctimeMs } = fs.statSync(output);
+        emit(run, IPC_EVENTS.onComplete, {
+          ...msg,
+          output,
+          outputStat: { size, mtimeMs, ctimeMs },
+        });
       } catch (err) {
         run.outputError = true;
         run.lastError = "No se pudo guardar la exportación: " + err.message;

@@ -1,3 +1,23 @@
+import { afterAll } from "vitest";
+import { createTestEnvironment } from "../scripts/test-environment.mjs";
+
+const testEnvironment = createTestEnvironment();
+const previousEnvironment = Object.fromEntries(
+  Object.keys(testEnvironment.env).map((key) => [key, process.env[key]]),
+);
+Object.assign(process.env, testEnvironment.env);
+
+afterAll(() => {
+  try {
+    testEnvironment.cleanup();
+  } finally {
+    for (const [key, value] of Object.entries(previousEnvironment)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 class ResizeObserverStub {
   constructor(callback) {
     this.callback = callback;

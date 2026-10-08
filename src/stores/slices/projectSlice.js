@@ -30,7 +30,7 @@ function templateState(data) {
     selectedTemplateRegionId: templateRegions[0]?.id ?? null,
     currentRegion: null,
     templateIdx: -1,
-    imageDataCache: {},
+    delogoImageV: "",
     ...sanitizeTextStyle(data.textStyle || {}),
     ...sanitizeDefaults(data.defaults || {}),
     watermark,

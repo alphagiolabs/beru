@@ -1,3 +1,4 @@
+import fs from "fs";
 import { ipcMain } from "electron";
 import { IPC_INVOKE, IPC_EVENTS } from "../../shared/ipc-channels.js";
 import { probeVideo, probeVideoFast } from "../utils/video-cache.js";
@@ -7,6 +8,20 @@ import { sanitizeJobMedia } from "../utils/process-media-validation.js";
 import { runMediaTask } from "../utils/media-task-pool.js";
 
 const MAX_BATCH_PATHS = 500;
+
+function artifactStatMatches(filePath, expected) {
+  if (expected == null) return true;
+  try {
+    const stat = fs.statSync(filePath);
+    return (
+      stat.size === expected?.size &&
+      stat.mtimeMs === expected?.mtimeMs &&
+      stat.ctimeMs === expected?.ctimeMs
+    );
+  } catch {
+    return false;
+  }
+}
 
 function collectValidVideoFiles(filePaths, pathSecurity) {
   const validated = filePaths.map((filePath) =>
@@ -173,6 +188,9 @@ export function registerVideoHandlers(pathSecurity) {
     const check = pathSecurity.validateReadableFile(filePath, "video");
     if (!check.ok) {
       return { ok: false, error: check.error };
+    }
+    if (!artifactStatMatches(check.resolvedPath, payload?.expected_stat)) {
+      return { ok: false, error: "La exportación en disco ya no coincide" };
     }
     const timestamp = Math.max(0, Number(payload?.timestamp) || 0);
     return renderSourceFrame({ input_path: check.resolvedPath, timestamp });

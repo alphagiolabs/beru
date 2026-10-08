@@ -125,6 +125,17 @@ describe("pathSecurity", () => {
     expect(security.registerOutputDirectory(tmpFile).ok).toBe(false);
   });
 
+  it("preserves another instance's staging when an output directory is registered", () => {
+    const outputDirectory = path.dirname(tmpFile);
+    const orphan = path.join(outputDirectory, ".beru-export-stale");
+    fs.mkdirSync(orphan);
+    fs.writeFileSync(path.join(orphan, "0.mp4"), "partial");
+
+    expect(security.registerOutputDirectory(outputDirectory).ok).toBe(true);
+    expect(fs.readFileSync(path.join(orphan, "0.mp4"), "utf8")).toBe("partial");
+    expect(fs.existsSync(tmpFile)).toBe(true);
+  });
+
   it("cannot allow-list denied paths via register then validateReadableFile", () => {
     const denied = "C:\\Windows\\System32\\drivers\\etc\\hosts";
     const reg = security.registerAllowedPath(denied, "excel");

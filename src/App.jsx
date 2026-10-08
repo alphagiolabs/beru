@@ -44,9 +44,16 @@ export default function App() {
     if (!api?.restoreSessionPaths) return;
     const { outputDir, queue, excelPath, watermark } = useEditorStore.getState();
     const videoPaths = (queue || []).map((item) => item?.path).filter(Boolean);
-    if (watermark?.imagePath) videoPaths.push(watermark.imagePath);
+    const imagePaths = [];
+    for (const item of queue || []) {
+      for (const op of item?.operations || []) {
+        if (op?.imagePath) imagePaths.push(op.imagePath);
+        if (op?.delogoImagePath) imagePaths.push(op.delogoImagePath);
+      }
+    }
+    if (watermark?.imagePath) imagePaths.push(watermark.imagePath);
     if (!outputDir && videoPaths.length === 0 && !excelPath) return;
-    void api.restoreSessionPaths({ outputDir, videoPaths, excelPath });
+    void api.restoreSessionPaths({ outputDir, videoPaths, imagePaths, excelPath });
   }, []);
 
   useEffect(() => {

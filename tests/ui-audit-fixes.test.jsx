@@ -149,7 +149,7 @@ describe("WatermarkModal picker", () => {
         type: "image",
         text: "",
         imagePath: "C:\\img\\logo.png",
-        imageDataUrl: "data:image/png;base64,xx",
+        imageV: "222-7",
         scale: 0.2,
         opacity: 0.8,
         position: "bottom-right",
@@ -175,7 +175,7 @@ describe("WatermarkModal picker", () => {
     });
     const wm = useEditorStore.getState().watermark;
     expect(wm.imagePath).toBe("C:\\img\\logo.png");
-    expect(wm.imageDataUrl).toBe("data:image/png;base64,xx");
+    expect(wm.imageV).toBe("222-7");
   });
 });
 
@@ -232,18 +232,17 @@ describe("Operaciones de imagen", () => {
     expect(document.querySelector('input[type="range"]')).toBeTruthy();
   });
 
-  it("muestra una imagen aplicada aunque haya salido de la caché", async () => {
-    const op = useEditorStore.getState().queue[0].operations[0];
+  it("muestra una imagen aplicada streameada por beru:// con su versión", async () => {
+    const op = { ...useEditorStore.getState().queue[0].operations[0], id: "image", imageV: "9-3" };
     await mount(
       <OperationOverlays
-        ops={[{ op: { ...op, id: "image" }, opIdx: 0, screen: { x: 0, y: 0, w: 100, h: 100 } }]}
+        ops={[{ op, opIdx: 0, screen: { x: 0, y: 0, w: 100, h: 100 } }]}
         currentTimeRef={{ current: 0 }}
-        imageDataCache={{}}
         sidebarMode="logo"
       />,
     );
     expect(document.querySelector("img")?.getAttribute("src")).toBe(
-      `beru://local/${encodeURIComponent(op.imagePath)}`,
+      `beru://local/${encodeURIComponent(op.imagePath)}?v=9-3`,
     );
   });
 

@@ -269,6 +269,22 @@ class ProcessorContextTests(unittest.TestCase):
             self.assertIn("ffmpeg-a", probes)
             self.assertIn("ffmpeg-b", probes)
 
+    def test_failed_encoder_listing_is_not_cached(self):
+        encoders._HW_ENCODER_CACHE = None
+        encoders._HW_ENCODER_CACHE_FOR = None
+        calls = []
+
+        def run(cmd, **kwargs):
+            calls.append(cmd)
+            if len(calls) == 1:
+                raise OSError("spawn failed")
+            return SimpleNamespace(stdout="h264_nvenc", stderr="")
+
+        with patch.object(encoders.subprocess, "run", side_effect=run):
+            self.assertIsNone(encoders.detect_hw_encoder("flaky-ffmpeg"))
+            self.assertEqual(encoders.detect_hw_encoder("flaky-ffmpeg"), "h264_nvenc")
+        self.assertEqual(len(calls), 2)
+
     def test_hardware_capabilities_are_not_reused_for_another_binary(self):
         with patch.object(encoders.subprocess, "run", side_effect=[
             SimpleNamespace(stdout="h264_nvenc", stderr=""),

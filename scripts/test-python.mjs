@@ -5,6 +5,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createTestEnvironment } from "./test-environment.mjs";
 
 requireWindows();
 
@@ -30,31 +31,38 @@ function main() {
   const files = listPythonTests();
   if (files.length === 0) {
     console.error(`${RED}test:python: no test_*.py files found in ${PYTHON_DIR}${RESET}`);
-    process.exit(1);
+    return 1;
   }
 
   console.log(`${DIM}test:python: running ${files.length} test files${RESET}`);
 
-  for (const file of files) {
-    process.stdout.write(`\n${DIM}--- python/${file} ---${RESET}\n`);
-    const result = spawnSync(PY, [path.join("python", file)], {
-      cwd: ROOT,
-      stdio: "inherit",
-    });
-    if (result.error) {
-      console.error(`${RED}${file} could not start:${RESET} ${result.error.message}`);
-      process.exit(1);
+  const testEnvironment = createTestEnvironment();
+  try {
+    for (const file of files) {
+      process.stdout.write(`\n${DIM}--- python/${file} ---${RESET}\n`);
+      const result = spawnSync(PY, [path.join("python", file)], {
+        cwd: ROOT,
+        stdio: "inherit",
+        env: { ...process.env, ...testEnvironment.env },
+      });
+      if (result.error) {
+        console.error(`${RED}${file} could not start:${RESET} ${result.error.message}`);
+        return 1;
+      }
+      if (result.status !== 0) {
+        console.error(`\n${RED}${file} failed (exit ${result.status})${RESET}`);
+        return result.status ?? 1;
+      }
     }
-    if (result.status !== 0) {
-      console.error(`\n${RED}${file} failed (exit ${result.status})${RESET}`);
-      process.exit(result.status ?? 1);
-    }
+  } finally {
+    testEnvironment.cleanup();
   }
 
   console.log(`\n${GREEN}test:python: all ${files.length} test files passed${RESET}`);
+  return 0;
 }
 
 const invokedAs = process.argv[1] ? path.resolve(process.argv[1]) : "";
 if (invokedAs.toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()) {
-  main();
+  process.exitCode = main();
 }

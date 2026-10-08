@@ -264,6 +264,11 @@ describe("process:start with a fake job worker", () => {
     expect(runId).toBeTruthy();
     expect(calls("process:complete")[0][1]).toMatchObject({ index: 7, runId });
     expect(calls("process:complete")[0][1].output).toBe(output);
+    expect(calls("process:complete")[0][1].outputStat).toMatchObject({
+      size: "exported".length,
+      mtimeMs: expect.any(Number),
+      ctimeMs: expect.any(Number),
+    });
     expect(fs.readFileSync(output, "utf8")).toBe("exported");
     expect(calls("process:finished")).toHaveLength(1);
     expect(calls("process:finished")[0][1]).toMatchObject({ code: 0, runId });

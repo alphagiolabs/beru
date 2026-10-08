@@ -36,11 +36,10 @@ function getBundledPetsRoot() {
   return candidates[0];
 }
 
-export function readBundledCatalog() {
-  const catalogPath = path.join(getBundledPetsRoot(), "catalog.json");
-  if (!fs.existsSync(catalogPath)) return null;
+function readPetManifest(filePath) {
+  if (!fs.existsSync(filePath)) return null;
   try {
-    const parsed = JSON.parse(fs.readFileSync(catalogPath, "utf8"));
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
     if (!parsed || !Array.isArray(parsed.pets)) return null;
     return parsed;
   } catch {
@@ -48,16 +47,12 @@ export function readBundledCatalog() {
   }
 }
 
+export function readBundledCatalog() {
+  return readPetManifest(path.join(getBundledPetsRoot(), "catalog.json"));
+}
+
 export function readCachedManifest() {
-  const cachePath = getManifestCachePath();
-  if (!fs.existsSync(cachePath)) return null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(cachePath, "utf8"));
-    if (!parsed || !Array.isArray(parsed.pets)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  return readPetManifest(getManifestCachePath());
 }
 
 export function writeManifestCache(manifest) {
