@@ -40,3 +40,31 @@ describe("restored image watermark preview", () => {
     );
   });
 });
+
+describe("watermark preview layout", () => {
+  it("lays out from the unzoomed video box and keeps FFmpeg's bottom-right margin", () => {
+    const video = {
+      videoHeight: 360,
+      offsetWidth: 640,
+      offsetHeight: 360,
+      getBoundingClientRect: () => ({ width: 1280, height: 720 }),
+    };
+    document.body.innerHTML = '<div id="root"></div>';
+    root = createRoot(document.getElementById("root"));
+    act(() =>
+      root.render(
+        <WatermarkOverlay
+          watermark={{ type: "text", text: "WM", fontSize: 18, position: "bottom-right" }}
+          videoRef={{ current: video }}
+        />,
+      ),
+    );
+    const box = document.getElementById("root").firstElementChild;
+    expect(box.style.width).toBe("640px");
+    expect(box.style.height).toBe("360px");
+    const label = box.firstElementChild;
+    expect(label.style.right).toBe("10px");
+    expect(label.style.bottom).toBe("10px");
+    expect(label.style.fontSize).toBe("18px");
+  });
+});

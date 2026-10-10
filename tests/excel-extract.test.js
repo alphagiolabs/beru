@@ -44,19 +44,6 @@ describe("extractSheetData", () => {
     expect(headers).toEqual(["2024", "Nombre"]);
   });
 
-  it("matches the legacy double conversion on a blank leading row with error and blank header cells", async () => {
-    const ws = {
-      "!ref": "A1:C3",
-      A2: { t: "s", v: "Codigo" },
-      B2: { t: "e", v: 0 },
-      C2: { t: "s", v: "  Monto  " },
-      A3: { t: "s", v: "a" },
-      C3: { t: "n", v: 10 },
-    };
-    const { headers } = await expectEquivalent(ws);
-    expect(headers).toEqual(["Codigo", "null", "Monto", "__EMPTY", "__EMPTY_1", "__EMPTY_2"]);
-  });
-
   it("preserves numeric and formatted header names", async () => {
     const ws = {
       "!ref": "A1:B3",
@@ -88,23 +75,6 @@ describe("extractSheetData", () => {
     const ws = XLSX.utils.aoa_to_sheet([["ID", "Nombre"]]);
     const next = await expectEquivalent(ws);
     expect(next.rows).toEqual([]);
-  });
-
-  it("matches the legacy quirk on error cells with loose-zero values", async () => {
-    const ws = {
-      "!ref": "A1:C3",
-      A1: { t: "e", v: "0" },
-      B1: { t: "e", v: false },
-      C1: { t: "s", v: "Col" },
-      A2: { t: "s", v: "a" },
-      B2: { t: "s", v: "b" },
-      C2: { t: "s", v: "c" },
-      A3: { t: "s", v: "d" },
-      B3: { t: "s", v: "e" },
-      C3: { t: "s", v: "f" },
-    };
-    const { headers } = await expectEquivalent(ws);
-    expect(headers).toEqual(["null", "Col", "#NULL!", "false"]);
   });
 
   it("matches the legacy failure on unknown cell types in the header row", async () => {

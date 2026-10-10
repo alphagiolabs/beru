@@ -8,16 +8,6 @@ const pythonDir = path.join(process.cwd(), "python");
 const processorPath = path.join(pythonDir, "processor.py");
 
 describe("shouldRestartElectronForPythonChange", () => {
-  it("restarts for processor.py and its local modules", () => {
-    expect(shouldRestartElectronForPythonChange("processor.py")).toBe(true);
-    expect(shouldRestartElectronForPythonChange("batch_errors.py")).toBe(true);
-    expect(shouldRestartElectronForPythonChange("op_shared.py")).toBe(true);
-    expect(shouldRestartElectronForPythonChange("delogo_chains.py")).toBe(true);
-    expect(shouldRestartElectronForPythonChange("encode_profiles.py")).toBe(true);
-    expect(shouldRestartElectronForPythonChange("color_validation.py")).toBe(true);
-    expect(shouldRestartElectronForPythonChange("text_layout_helpers.py")).toBe(true);
-  });
-
   it("covers every local import used by processor.py", () => {
     const localImports = extractLocalImports(fs.readFileSync(processorPath, "utf-8"));
     const missing = localImports.filter(

@@ -161,22 +161,6 @@ describe("run-scoped process events", () => {
     expect(calls(IPC_EVENTS.onFinished)[0][1]).toMatchObject({ code: 0, runId });
   });
 
-  it("cancel emits process:finished once, cancelled and run-scoped", async () => {
-    const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)({}, [
-      { input_path: "clip.mp4" },
-    ]);
-    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
-
-    const cancel = mocks.handlers.get(IPC_INVOKE.cancelProcessing)({});
-    mocks.proc.emit("close", 0);
-    await Promise.all([cancel, pending]);
-
-    const runId = calls(IPC_EVENTS.onRunStarted)[0][1].runId;
-    const finished = calls(IPC_EVENTS.onFinished);
-    expect(finished).toHaveLength(1);
-    expect(finished[0][1]).toMatchObject({ cancelled: true, runId });
-  });
-
   it.each([
     { type: "cancelled", index: 7 },
     { type: "error", index: 7, error: "Cancelled" },

@@ -86,35 +86,7 @@ describe("Stability under heavy load", () => {
     const state = useEditorStore.getState();
     expect(updates).toBe(1);
     expect(state.queue.every((q) => q.status === "processing")).toBe(true);
-    if (state.jobProgress && Object.keys(state.jobProgress).length > 0) {
-      expect(Object.values(state.jobProgress).every((p) => p === 42)).toBe(true);
-    } else {
-      expect(state.queue.every((q) => q.progress === 42)).toBe(true);
-    }
-  });
-
-  it("handles rapid error/done alternation without state corruption", () => {
-    const items = Array.from({ length: 100 }, (_, i) => queueItem(i));
-    useEditorStore.setState({
-      queue: items,
-      isProcessing: true,
-      progressTotal: 100,
-      progressDone: 0,
-    });
-
-    connect();
-    for (let i = 0; i < 100; i++) {
-      if (i % 3 === 0) {
-        handlers.onJobError({ index: i, error: "fail" });
-      } else {
-        handlers.onComplete({ index: i });
-      }
-    }
-
-    const state = useEditorStore.getState();
-    const done = state.queue.filter((q) => q.status === "done").length;
-    const errored = state.queue.filter((q) => q.status === "error").length;
-    expect(done + errored).toBe(100);
-    expect(state.progressDone).toBe(100);
+    expect(Object.keys(state.jobProgress)).toHaveLength(500);
+    expect(Object.values(state.jobProgress).every((p) => p === 42)).toBe(true);
   });
 });

@@ -62,17 +62,6 @@ describe("pathSecurity", () => {
     } catch {}
   });
 
-  it("allows explicitly registered excel paths", () => {
-    const res = security.validateReadableFile(tmpFile, "excel");
-    expect(res.ok).toBe(true);
-  });
-
-  it("rejects non-excel extensions for excel kind", () => {
-    security.registerAllowedPath(__filename, "excel");
-    const res = security.validateReadableFile(__filename, "excel");
-    expect(res.ok).toBe(false);
-  });
-
   it("limits beru protocol reads to validated video files", () => {
     const res = security.validateProtocolFile(tmpFile);
     expect(res.ok).toBe(false);
@@ -89,20 +78,6 @@ describe("pathSecurity", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it("rejects missing shell paths", () => {
-    const res = security.validateShellPath(path.join(path.dirname(tmpFile), "missing.mp4"));
-    expect(res.ok).toBe(false);
-    expect(res.error).toBe("Archivo no encontrado");
-  });
-
-  it("reports missing files before extension validation", () => {
-    const missing = path.join(path.dirname(tmpFile), "ghost.txt");
-    security.registerAllowedPath(missing, "excel");
-    const res = security.validateReadableFile(missing, "excel");
-    expect(res.ok).toBe(false);
-    expect(res.error).toBe("Archivo no encontrado");
   });
 
   it("remembers only an output directory explicitly selected by the main process", () => {

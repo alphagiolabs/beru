@@ -21,8 +21,8 @@ const GREEN = "\x1b[32m";
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
 
-export function listPythonTests(dir = PYTHON_DIR) {
-  return readdirSync(dir)
+function listPythonTests() {
+  return readdirSync(PYTHON_DIR)
     .filter((name) => name.startsWith("test_") && name.endsWith(".py"))
     .sort();
 }

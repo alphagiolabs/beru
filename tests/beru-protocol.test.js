@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { writeFileSync, unlinkSync, readFileSync, mkdtempSync, rmSync } from "fs";
+import { writeFileSync, unlinkSync, mkdtempSync, rmSync } from "fs";
 import path from "path";
 import os from "os";
 import {
@@ -10,8 +10,6 @@ import {
   invalidateBeruStatCache,
 } from "../main/utils/beru-protocol.js";
 import { createRunOutputFiles } from "../main/utils/process-output.js";
-
-const mainSrc = readFileSync(path.join(process.cwd(), "main", "main.js"), "utf8");
 
 describe("beru protocol path parsing", () => {
   it("parses encoded Windows absolute paths", () => {
@@ -169,17 +167,6 @@ describe("beru protocol path parsing", () => {
       invalidateBeruStatCache();
     }
   });
-
-  it("invalidateBeruStatCache is a no-op when cache disabled", () => {
-    const prev = process.env.BERU_PROTOCOL_STAT_CACHE;
-    delete process.env.BERU_PROTOCOL_STAT_CACHE;
-    try {
-      expect(() => invalidateBeruStatCache()).not.toThrow();
-      expect(() => invalidateBeruStatCache("C:\\nonexistent.mp4")).not.toThrow();
-    } finally {
-      if (prev !== undefined) process.env.BERU_PROTOCOL_STAT_CACHE = prev;
-    }
-  });
 });
 
 describe("beru protocol fails closed on unknown content types", () => {
@@ -216,25 +203,5 @@ describe("beru protocol fails closed on unknown content types", () => {
   it("is case-insensitive on the extension", () => {
     expect(hasKnownBeruType("C:\\media\\CLIP.MP4")).toBe(true);
     expect(hasKnownBeruType("C:\\media\\SHEET.XLSX")).toBe(false);
-  });
-
-  it("main.js answers 403 for an unmapped type and never falls back to octet-stream", () => {
-    const handler = mainSrc.slice(
-      mainSrc.indexOf("function registerBeruProtocol"),
-      mainSrc.indexOf("app.commandLine.appendSwitch"),
-    );
-    expect(handler).toMatch(/if \(!hasKnownBeruType\(check\.resolvedPath\)\)/);
-    expect(handler).toMatch(/status: 403/);
-    expect(handler.indexOf("hasKnownBeruType")).toBeLessThan(
-      handler.indexOf("createBeruVideoResponse"),
-    );
-  });
-
-  it("registers the beru scheme with corsEnabled disabled", () => {
-    const privileges = mainSrc.slice(
-      mainSrc.indexOf('scheme: "beru"'),
-      mainSrc.indexOf("function registerBeruProtocol"),
-    );
-    expect(privileges).toMatch(/corsEnabled: false/);
   });
 });

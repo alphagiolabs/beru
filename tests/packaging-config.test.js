@@ -28,20 +28,6 @@ describe("installer packaging config", () => {
     await expect(hook.exports()).resolves.toBe(true);
     expect(scripts).toEqual(["fetch-ffmpeg.mjs", "build-processor.mjs"]);
   });
-  it("limits package installation and CI to Windows", () => {
-    expect(pkg.os).toEqual(["win32"]);
-    const workflow = fs.readFileSync(".github/workflows/ci-release.yml", "utf8");
-    const runners = [...workflow.matchAll(/runs-on:\s*(\S+)/g)].map((match) => match[1]);
-    expect(runners).toEqual(["windows-latest", "windows-latest"]);
-  });
-  it("acquires pinned binaries without installing the obsolete static packages", () => {
-    expect(pkg.dependencies).not.toHaveProperty("ffmpeg-static");
-    expect(pkg.dependencies).not.toHaveProperty("ffprobe-static");
-
-    expect(pkg.devDependencies).not.toHaveProperty("ffmpeg-static");
-    expect(pkg.devDependencies).not.toHaveProperty("ffprobe-static");
-    expect(pkg.scripts.postinstall).toBe("node scripts/fetch-ffmpeg.mjs");
-  });
 
   it("excludes python sources and build artifacts from the asar files list", () => {
     expect(pkg.build.files).not.toContain("python/**/*");

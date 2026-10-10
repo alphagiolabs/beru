@@ -1,19 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { spawnSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { describeIfPython } from "./helpers/python.js";
 
 const PY = "python";
-const hasPython = (() => {
-  try {
-    const r = spawnSync(PY, ["--version"], { encoding: "utf8" });
-    return r.status === 0;
-  } catch {
-    return false;
-  }
-})();
-const describeIfPython = hasPython ? describe : describe.skip;
 
 describeIfPython("python processor logging", () => {
   it("imports with stderr-only logging when the log path is unusable", () => {

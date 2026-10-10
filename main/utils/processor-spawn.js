@@ -115,7 +115,7 @@ function warnIfProcessorStale(bundledPath) {
   } catch {}
 }
 
-export function getBundledProcessorPath() {
+function getBundledProcessorPath() {
   const devBin = path.join(__dirname, "..", "..", "bin", PROCESSOR_NAME);
   if (fs.existsSync(devBin)) {
     warnIfProcessorStale(devBin);

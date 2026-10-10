@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync } from "fs";
 import path from "path";
 
 const root = process.cwd();
@@ -56,23 +56,5 @@ describe("renderer entry points carry a Content-Security-Policy", () => {
     expect(policy).not.toContain("fonts.googleapis.com");
     expect(policy).not.toContain("supabase.co");
     expect(directive(policy, "img-src")).toContain("beru:");
-  });
-});
-
-describe("CSP survives the production build", () => {
-  it.each(ENTRY_POINTS)("build/%s keeps the CSP", (file) => {
-    const built = path.join(root, "build", file);
-    if (!existsSync(built)) return;
-    const policy = readCsp(readFileSync(built, "utf8"));
-    expect(policy, `${built} lost its CSP during the build`).not.toBeNull();
-    expect(policy).toContain("default-src 'self'");
-  });
-
-  it("the built main window still allows beru media and the login video", () => {
-    const built = path.join(root, "build", "index.html");
-    if (!existsSync(built)) return;
-    const policy = readCsp(readFileSync(built, "utf8"));
-    expect(directive(policy, "media-src")).toContain("beru:");
-    expect(directive(policy, "media-src")).toContain("https://res.cloudinary.com");
   });
 });

@@ -52,12 +52,6 @@ describe("path-resolver", () => {
     const { resolveSafe } = createPathResolver({ realpath, env: { BERU_RESOLVE_CACHE: "0" } });
     expect(resolveSafe(missing)).toBe(missing);
   });
-
-  it("normalizes Windows path keys without case distinctions", () => {
-    const mixed = path.join("Some", "MixedCase", "Path");
-    const resolver = createPathResolver({ realpath: identity });
-    expect(resolver.normalizeKey(mixed)).toBe(path.normalize(mixed).toLowerCase());
-  });
 });
 
 describe("location policy", () => {

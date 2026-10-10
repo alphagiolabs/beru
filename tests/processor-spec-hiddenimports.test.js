@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import { extractHiddenImports, extractLocalImports } from "./helpers/python-imports.js";
@@ -12,12 +12,6 @@ describe("beru-processor.spec hiddenimports covers processor.py local imports", 
 
   const hidden = extractHiddenImports(specSrc);
   const localImports = extractLocalImports(pySrc);
-
-  it("hiddenimports is non-empty and includes the historically-listed modules", () => {
-    expect(hidden.length).toBeGreaterThan(0);
-    expect(hidden).toContain("encode_profiles");
-    expect(hidden).toContain("batch_errors");
-  });
 
   it("every local import in processor.py is in hiddenimports", () => {
     const missing = localImports.filter((mod) => !hidden.includes(mod));

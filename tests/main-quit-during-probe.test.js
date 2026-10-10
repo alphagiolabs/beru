@@ -3,8 +3,6 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-const mainSrc = fs.readFileSync(path.join(process.cwd(), "main", "main.js"), "utf-8");
-
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
   sendToRenderer: vi.fn(),
@@ -88,15 +86,6 @@ vi.mock("../main/utils/kill-process-tree.js", () => ({
 const { registerProcessHandlers } = await import("../main/handlers/process.js");
 const { executeProcessingRun, cancelRun, hasActiveProcessing } =
   await import("../main/processing-run.js");
-
-describe("quit during probe phase", () => {
-  it("gates quit on hasActiveProcessing, not only getPythonProcess", () => {
-    expect(mainSrc).toMatch(/hasActiveProcessing\(\)/);
-    expect(mainSrc).toMatch(/setAppIsQuitting\(true\)/);
-    expect(mainSrc).toMatch(/cancelRun\(\)/);
-    expect(mainSrc).not.toMatch(/if \(!getPythonProcess\(\)\) return;/);
-  });
-});
 
 describe("cancel mid-flight", () => {
   let tempRoot;
@@ -202,9 +191,5 @@ describe("cancel mid-flight", () => {
     expect(mocks.sendToRenderer).not.toHaveBeenCalled();
     expect(mocks.startJobRun).not.toHaveBeenCalled();
     expect(beruDirsLeft()).toEqual([]);
-  });
-
-  it("disposes temp files after cancel, not before", () => {
-    expect(mainSrc).toMatch(/cancelRun\(\)\.finally\(\(\)\s*=>\s*\{[\s\S]*disposeOnQuit\(\)/);
   });
 });

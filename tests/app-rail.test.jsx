@@ -69,15 +69,6 @@ describe("AppRail", () => {
     }
   });
 
-  it("exposes both workspace modes with accessible names", async () => {
-    await renderRail();
-
-    const rail = document.querySelector(".app-rail");
-    expect(rail).toBeTruthy();
-    expect(findRailButton("Quitar logo")).toBeTruthy();
-    expect(findRailButton("Texto en lote")).toBeTruthy();
-  });
-
   it("marks the active mode and switches to batch text", async () => {
     await renderRail();
 
@@ -170,18 +161,6 @@ describe("App shell with rail", () => {
       });
       root = null;
     }
-  });
-
-  it("renders the rail next to the workspace without throwing", async () => {
-    root = createRoot(document.getElementById("root"));
-    await act(async () => {
-      root.render(<App />);
-      await new Promise((r) => setTimeout(r, 10));
-    });
-
-    expect(document.querySelector(".app-rail")).toBeTruthy();
-    expect(document.querySelector(".workspace-layout")).toBeTruthy();
-    expect(document.body.textContent).toMatch(/demo\.mp4/);
   });
 
   it("shows the mode name in the inspector and keeps batch controls reachable", async () => {

@@ -9,19 +9,10 @@ import {
   truncateText,
   wrapTextToWidth,
 } from "../src/utils/text-layout.js";
+import { describeIfPython } from "./helpers/python.js";
 
 const PY = "python";
 const PY_CODE_PREFIX = "import sys; sys.path.insert(0, 'python'); ";
-
-const hasPython = (() => {
-  try {
-    return spawnSync(PY, ["--version"], { encoding: "utf8" }).status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-const describeIfPython = hasPython ? describe : describe.skip;
 
 function jsBoundsForCase(c) {
   const boxPad = textBoxPad(c.op);
