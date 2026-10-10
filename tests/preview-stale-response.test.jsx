@@ -307,6 +307,7 @@ describe("ffmpeg strict preview staleness", () => {
             ...s.queue[0],
             exportSignature: JSON.stringify(exportShape),
             exportedOutputPath: "C:/out/clip.mp4",
+            exportedOutputStat: { size: 8, mtimeMs: 1, ctimeMs: 2 },
           },
         ],
       })),
@@ -314,6 +315,11 @@ describe("ffmpeg strict preview staleness", () => {
     window.api.renderSourceFrame = vi.fn(async () => ({ ok: false, error: "Missing artifact" }));
     await act(() => window.dispatchEvent(new Event("beru:preview:renderFrame")));
     expect(window.api.renderSourceFrame).toHaveBeenCalledOnce();
+    expect(window.api.renderSourceFrame).toHaveBeenCalledWith({
+      input_path: "C:/out/clip.mp4",
+      timestamp: 0,
+      expected_stat: { size: 8, mtimeMs: 1, ctimeMs: 2 },
+    });
     expect(requests).toHaveLength(1);
     expect(requests[0].job.operations[0].blur_strength).toBe(20);
     await act(async () =>
@@ -322,6 +328,27 @@ describe("ffmpeg strict preview staleness", () => {
     expect(document.querySelector(STRICT_IMG)?.getAttribute("src")).toContain("FALLBACK");
     expect(document.querySelector(STRICT_IMG)?.parentElement.textContent).toBe("FFmpeg");
     expect(document.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("skips an exported artifact that has no recorded stat", async () => {
+    const { timestamp: _timestamp, ...exportShape } = useEditorStore
+      .getState()
+      .buildPreviewFrameJob(0, 0);
+    act(() =>
+      useEditorStore.setState((s) => ({
+        queue: [
+          {
+            ...s.queue[0],
+            exportSignature: JSON.stringify(exportShape),
+            exportedOutputPath: "C:/out/clip.mp4",
+          },
+        ],
+      })),
+    );
+    window.api.renderSourceFrame = vi.fn(async () => ({ ok: true, data_url: "data:x" }));
+    await act(() => window.dispatchEvent(new Event("beru:preview:renderFrame")));
+    expect(window.api.renderSourceFrame).not.toHaveBeenCalled();
+    expect(requests).toHaveLength(1);
   });
 
   it.each([
@@ -352,6 +379,7 @@ describe("ffmpeg strict preview staleness", () => {
             ...s.queue[0],
             exportSignature: JSON.stringify(exportShape),
             exportedOutputPath: "C:/out/trimmed.mp4",
+            exportedOutputStat: { size: 8, mtimeMs: 1, ctimeMs: 2 },
           },
         ],
       })),
@@ -365,6 +393,7 @@ describe("ffmpeg strict preview staleness", () => {
     expect(window.api.renderSourceFrame).toHaveBeenCalledWith({
       input_path: "C:/out/trimmed.mp4",
       timestamp: exportTime,
+      expected_stat: { size: 8, mtimeMs: 1, ctimeMs: 2 },
     });
     expect(requests).toHaveLength(0);
   });

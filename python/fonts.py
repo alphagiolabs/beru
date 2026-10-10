@@ -158,20 +158,41 @@ def _get_normalized_fonts(fonts):
         return normalized
 
 
+def reset_caches():
+    """Drop all memoized font state so the next lookup re-scans the system.
+
+    Worker processes are persistent across runs; a font installed or deleted
+    between runs must be seen by the next run's resolution.
+    """
+    global _SYSTEM_FONTS_CACHE, _normalized_fonts_state
+    with _resolve_font_cache_lock:
+        _SYSTEM_FONTS_CACHE = None
+        _resolve_font_cache.clear()
+        _normalized_fonts_state = None
+
+
 def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
     """Resolve a font family name to a fontfile path or fallback name.
     Returns (option_key, value, is_fontfile) where option_key is 'fontfile' or 'font'."""
     cache_key = (font_family, font_weight, italic, bold)
-    cached = _resolve_font_cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    fonts = get_system_fonts()
-    normalized_fonts = _get_normalized_fonts(fonts)
 
     def _format_fontfile(full_path):
         """Escape a font path for use in an FFmpeg drawtext filter option."""
         return full_path.replace("\\", "/").replace(":", "\\:")
+
+    def _emit(result):
+        # Cache entries hold the raw path so a hit can be re-verified.
+        return (result[0], _format_fontfile(result[1]), True) if result[2] else result
+
+    with _resolve_font_cache_lock:
+        cached = _resolve_font_cache.get(cache_key)
+        if cached is not None:
+            if not cached[2] or os.path.isfile(cached[1]):
+                return _emit(cached)
+            _resolve_font_cache.pop(cache_key, None)
+
+    fonts = get_system_fonts()
+    normalized_fonts = _get_normalized_fonts(fonts)
 
     result = None
     for candidate in _font_style_candidates(font_family, font_weight, italic, bold):
@@ -180,7 +201,7 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
             full_path, _stem = match
             if os.path.isfile(full_path):
                 validate_media_path(full_path, _path_parent(full_path), FONT_EXTENSIONS)
-                result = ("fontfile", _format_fontfile(full_path), True)
+                result = ("fontfile", full_path, True)
                 break
             logger.debug("Font file missing, skipping: %s", full_path)
 
@@ -191,7 +212,7 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
             if key in normalized_key or normalized_key in key:
                 if os.path.isfile(fpath):
                     validate_media_path(fpath, _path_parent(fpath), FONT_EXTENSIONS)
-                    result = ("fontfile", _format_fontfile(fpath), True)
+                    result = ("fontfile", fpath, True)
                     break
                 logger.debug("Font file missing (partial), skipping: %s", fpath)
 
@@ -202,4 +223,4 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
         if len(_resolve_font_cache) >= _RESOLVE_FONT_CACHE_MAX:
             _resolve_font_cache.pop(next(iter(_resolve_font_cache)), None)
         _resolve_font_cache[cache_key] = result
-    return result
+    return _emit(result)

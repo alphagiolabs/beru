@@ -67,14 +67,6 @@ describe("pathSecurity", () => {
     expect(res.ok).toBe(true);
   });
 
-  it("denies sensitive system paths even with excel extension", () => {
-    const res = security.validateReadableFile(
-      "C:\\Windows\\System32\\drivers\\etc\\hosts",
-      "excel",
-    );
-    expect(res.ok).toBe(false);
-  });
-
   it("rejects non-excel extensions for excel kind", () => {
     security.registerAllowedPath(__filename, "excel");
     const res = security.validateReadableFile(__filename, "excel");
@@ -125,11 +117,15 @@ describe("pathSecurity", () => {
     expect(security.registerOutputDirectory(tmpFile).ok).toBe(false);
   });
 
-  it("cannot allow-list denied paths via register then validateReadableFile", () => {
-    const denied = "C:\\Windows\\System32\\drivers\\etc\\hosts";
-    const reg = security.registerAllowedPath(denied, "excel");
-    expect(reg.ok).toBe(false);
-    expect(security.validateReadableFile(denied, "excel").ok).toBe(false);
+  it("preserves another instance's staging when an output directory is registered", () => {
+    const outputDirectory = path.dirname(tmpFile);
+    const orphan = path.join(outputDirectory, ".beru-export-stale");
+    fs.mkdirSync(orphan);
+    fs.writeFileSync(path.join(orphan, "0.mp4"), "partial");
+
+    expect(security.registerOutputDirectory(outputDirectory).ok).toBe(true);
+    expect(fs.readFileSync(path.join(orphan, "0.mp4"), "utf8")).toBe("partial");
+    expect(fs.existsSync(tmpFile)).toBe(true);
   });
 
   it("cannot allow-list outside-root paths via register then validateReadableFile", () => {

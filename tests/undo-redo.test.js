@@ -60,7 +60,6 @@ describe("undo / redo", () => {
       recent: [],
       undoStack: [],
       redoStack: [],
-      imageDataCache: {},
       currentRegion: null,
       textInput: "",
       tempImagePath: "",

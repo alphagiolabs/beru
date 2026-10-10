@@ -33,7 +33,6 @@ describe("thumbnailsByPath cache", () => {
       selectedIdx: -1,
       thumbnailsByPath: {},
       excelMatchStatus: {},
-      imageDataCache: {},
     });
   });
 

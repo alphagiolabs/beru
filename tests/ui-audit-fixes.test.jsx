@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import useKeyboard from "../src/hooks/useKeyboard.js";
 import AppRail from "../src/components/AppRail.jsx";
-import WatermarkModal from "../src/components/WatermarkModal.jsx";
 import AppliedDelogoEditor from "../src/components/AppliedDelogoEditor.jsx";
 import OperationOverlays from "../src/components/video-preview/OperationOverlays.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
@@ -139,46 +138,6 @@ describe("Editor de tabla con cola vacía", () => {
   });
 });
 
-describe("WatermarkModal picker", () => {
-  beforeEach(() => {
-    useEditorStore.setState({
-      language: "es",
-      showWatermarkModal: true,
-      watermark: {
-        enabled: true,
-        type: "image",
-        text: "",
-        imagePath: "C:\\img\\logo.png",
-        imageDataUrl: "data:image/png;base64,xx",
-        scale: 0.2,
-        opacity: 0.8,
-        position: "bottom-right",
-      },
-    });
-    api.pickImage = vi.fn(async () => ({ canceled: true }));
-  });
-
-  afterEach(async () => {
-    if (root) await act(() => root.unmount());
-    root = null;
-    delete api.pickImage;
-  });
-
-  it("cancelar el diálogo conserva la imagen configurada", async () => {
-    await mount(<WatermarkModal />);
-    const pick = Array.from(document.querySelectorAll("button")).find((b) =>
-      /elegir/i.test(b.textContent),
-    );
-    await act(async () => {
-      pick.click();
-      await new Promise((r) => setTimeout(r, 20));
-    });
-    const wm = useEditorStore.getState().watermark;
-    expect(wm.imagePath).toBe("C:\\img\\logo.png");
-    expect(wm.imageDataUrl).toBe("data:image/png;base64,xx");
-  });
-});
-
 describe("Operaciones de imagen", () => {
   beforeEach(() => {
     useEditorStore.setState({
@@ -232,18 +191,17 @@ describe("Operaciones de imagen", () => {
     expect(document.querySelector('input[type="range"]')).toBeTruthy();
   });
 
-  it("muestra una imagen aplicada aunque haya salido de la caché", async () => {
-    const op = useEditorStore.getState().queue[0].operations[0];
+  it("muestra una imagen aplicada streameada por beru:// con su versión", async () => {
+    const op = { ...useEditorStore.getState().queue[0].operations[0], id: "image", imageV: "9-3" };
     await mount(
       <OperationOverlays
-        ops={[{ op: { ...op, id: "image" }, opIdx: 0, screen: { x: 0, y: 0, w: 100, h: 100 } }]}
+        ops={[{ op, opIdx: 0, screen: { x: 0, y: 0, w: 100, h: 100 } }]}
         currentTimeRef={{ current: 0 }}
-        imageDataCache={{}}
         sidebarMode="logo"
       />,
     );
     expect(document.querySelector("img")?.getAttribute("src")).toBe(
-      `beru://local/${encodeURIComponent(op.imagePath)}`,
+      `beru://local/${encodeURIComponent(op.imagePath)}?v=9-3`,
     );
   });
 

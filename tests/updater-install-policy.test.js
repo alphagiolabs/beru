@@ -12,6 +12,7 @@ describe("updater install authorization", () => {
     harness.emit("update-downloaded", { version: "1.6.99" });
 
     expect(harness.events.at(-1)).toMatchObject({ type: "ready", version: "1.6.99" });
+    expect(harness.autoUpdater.autoDownload).toBe(false);
     expect(harness.autoUpdater.autoInstallOnAppQuit).toBe(false);
     expect(harness.autoUpdater.quitAndInstall).not.toHaveBeenCalled();
   });

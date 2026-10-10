@@ -2,6 +2,7 @@ import { X, Type, Image as ImageIcon, Upload } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import { storeErrorText } from "../utils/store-errors";
+import { beruLocalUrl, imageVersion } from "../utils/beru-url";
 import { WATERMARK_POSITIONS } from "../utils/watermark-position";
 import { Button } from "./ui/Button";
 import { PositionIcon } from "./ui/PositionIcon";
@@ -17,8 +18,7 @@ export default function WatermarkModal() {
   if (!show) return null;
 
   const isText = wm.type === "text";
-  const imageSrc =
-    wm.imageDataUrl || (wm.imagePath ? `beru://local/${encodeURIComponent(wm.imagePath)}` : "");
+  const imageSrc = wm.imagePath ? beruLocalUrl(wm.imagePath, wm.imageV) : "";
 
   return (
     <div className="cap-modal-overlay" onClick={close}>
@@ -175,9 +175,9 @@ export default function WatermarkModal() {
                         });
                         return;
                       }
-                      const r = await window.api?.readImage(res.path);
+                      const r = await window.api?.statImage(res.path);
                       if (r?.success) {
-                        setWatermark({ imagePath: res.path, imageDataUrl: r.dataUrl });
+                        setWatermark({ imagePath: res.path, imageV: imageVersion(r) });
                       } else {
                         showToast?.({
                           kind: "err",
@@ -194,7 +194,7 @@ export default function WatermarkModal() {
                   {wm.imagePath && (
                     <Button
                       type="button"
-                      onClick={() => setWatermark({ imagePath: "", imageDataUrl: "" })}
+                      onClick={() => setWatermark({ imagePath: "", imageV: "" })}
                       variant="tertiary"
                       size="icon"
                       title={t("common.remove")}

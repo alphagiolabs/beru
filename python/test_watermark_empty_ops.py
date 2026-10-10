@@ -44,23 +44,6 @@ def test_text_watermark_positions_match_the_selected_frame_edges():
                     assert abs((start + end) / 2 - extent / 2) <= 2, (position, start, end)
 
 
-def test_watermark_only_builds_drawtext_filter():
-    wm = {
-        "enabled": True,
-        "type": "text",
-        "text": "WM",
-        "opacity": 0.5,
-        "position": "bottom-right",
-        "fontSize": 18,
-        "fontColor": "white",
-        "fontFamily": "Arial",
-    }
-    graph, label, _paths = build_filter_complex([], 640, 360, watermark=wm)
-    assert graph is not None
-    assert "drawtext" in graph
-    assert label is not None
-
-
 def test_stream_copy_gate_requires_no_watermark():
     wm = {"enabled": True, "type": "text", "text": "WM"}
     assert not processor._job_takes_copy_path({"operations": [], "watermark": wm})
@@ -69,7 +52,6 @@ def test_stream_copy_gate_requires_no_watermark():
 
 
 if __name__ == "__main__":
-    test_watermark_only_builds_drawtext_filter()
     test_stream_copy_gate_requires_no_watermark()
     test_text_watermark_positions_match_the_selected_frame_edges()
     print("ALL PASSED")

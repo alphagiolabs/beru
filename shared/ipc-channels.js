@@ -42,7 +42,7 @@ export const IPC_INVOKE = {
   getPetOverlayState: "petOverlay:getState",
   popInPetOverlay: "petOverlay:popIn",
   dragPetOverlayBy: "petOverlay:dragBy",
-  readImage: "image:read",
+  statImage: "image:stat",
   pickImage: "image:pick",
   resolveDroppedPaths: "fs:resolveDroppedPaths",
   getThumbnail: "video:thumbnail",

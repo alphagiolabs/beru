@@ -118,39 +118,6 @@ describe("App render", () => {
     expect(document.querySelector(".status-footer-version-dl")).toBeTruthy();
   });
 
-  it("mounts batch preview with template regions without throwing", async () => {
-    useEditorStore.setState({
-      queue: [
-        createQueueItem({
-          path: "C:\\videos\\demo.mp4",
-          src: "beru://local/C%3A%5Cvideos%5Cdemo.mp4",
-          filename: "demo.mp4",
-          width: 1920,
-          height: 1080,
-          duration: 10,
-        }),
-      ],
-      selectedIdx: 0,
-      sidebarMode: "batch",
-      templateRegions: [
-        {
-          id: 1,
-          label: "TEXT_1",
-          region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 },
-          style: {},
-        },
-      ],
-      selectedTemplateRegionId: 1,
-    });
-
-    root = createRoot(document.getElementById("root"));
-    await act(async () => {
-      root.render(<App />);
-      await new Promise((r) => setTimeout(r, 10));
-    });
-    expect(document.body.textContent).toMatch(/demo\.mp4/);
-  });
-
   it("keeps the editor header responsive and icon controls named", async () => {
     useEditorStore.setState({
       queue: [
@@ -285,6 +252,7 @@ describe("App render", () => {
     });
 
     expect(document.body.textContent).toMatch(/Región aplicada/i);
+    expect(document.body.textContent).toMatch(/demo\.mp4/);
     expect(document.body.textContent).toMatch(/Cuadro de texto/i);
     expect(document.body.textContent).toMatch(/Ajuste de línea/i);
   });

@@ -33,6 +33,7 @@ a = Analysis(
         "media_probe",
         "op_shared",
         "preview",
+        "process_lifetime",
         "temporal_motion",
         "temporal_pipeline",
         "spatial_inpaint",

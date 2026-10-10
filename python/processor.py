@@ -6,15 +6,30 @@ Imported helpers remain re-exported for compatibility; wrappers forward
 processor state and patched dependencies to the helper modules.
 """
 
+import os
+import subprocess
+import sys
+
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "--run-media":
+    try:
+        if sys.platform != "win32":
+            raise RuntimeError("Beru solo admite Windows.")
+        from process_lifetime import protect_process_tree
+        protect_process_tree()
+        code = subprocess.call(
+            sys.argv[2:], stdin=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except Exception as exc:
+        print(f"No se pudo iniciar el proceso de medios: {exc}", file=sys.stderr, flush=True)
+        code = 1
+    sys.exit(code)
+
 import concurrent.futures
 import json
 import logging
 import logging.handlers
 import math
-import os
 import shutil
-import subprocess
-import sys
 import tempfile
 import threading
 from collections import deque
@@ -25,6 +40,7 @@ import filters
 import fonts
 import media_probe
 import preview
+from process_lifetime import protect_process_tree
 from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 
 from encode_profiles import (
@@ -89,6 +105,7 @@ from fonts import (
     _get_normalized_fonts,
     _resolve_font,
     get_system_fonts,
+    reset_caches,
 )
 from filters import (
     _DRAWTEXT_CACHE,
@@ -411,7 +428,7 @@ def _process_one_impl(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
         out_ext = os.path.splitext(output_path)[1].lower()
         src_audio_codec = (job.get("audio_codec") or "").lower()
         if _native_copy_eligible(input_path, output_path, ctx=ctx):
-            ok, err = _native_stream_copy(input_path, output_path, ctx=ctx)
+            ok, err = _native_stream_copy(input_path, output_path, ctx=ctx, job_id=job_id)
             if ok:
                 logger.info("Job %d: native copy -> %s", idx, os.path.basename(output_path))
                 _emit_job_complete(job_id, output_path)
@@ -421,7 +438,7 @@ def _process_one_impl(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
                 return _job_cancelled_result(job_id)
             logger.warning("Job %d: native copy failed, remuxing instead: %s", idx, err)
         logger.debug("Job %d: no operations, copying stream", idx)
-        copy_args = [ffmpeg_path, "-y", "-loglevel", "error", "-i", input_path]
+        copy_args = [ffmpeg_path, "-nostdin", "-xerror", "-y", "-loglevel", "error", "-progress", "pipe:2", "-nostats", "-i", input_path]
         if src_audio_codec and src_audio_codec not in _AUDIO_COPY_CODECS.get(out_ext, frozenset()):
             # Container cannot hold the source audio: re-encode audio, keep video copy.
             copy_args += ["-map", "0:v:0?", "-c:v", "copy"]
@@ -437,7 +454,10 @@ def _process_one_impl(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
         except OSError:
             input_bytes = 0
         copy_timeout = max(300, min(7200, int(input_bytes / (25 * 1024 * 1024))))
-        ok, err = _run_ffmpeg(copy_args, timeout_sec=copy_timeout, ctx=ctx)
+        ok, err = _run_ffmpeg(
+            copy_args, timeout_sec=copy_timeout, job_id=job_id,
+            duration_sec=float(job.get("video_duration") or 0), ctx=ctx,
+        )
         if ok:
             logger.info("Job %d: copied -> %s", idx, os.path.basename(output_path))
             _emit_job_complete(job_id, output_path)
@@ -514,7 +534,7 @@ def _process_one_impl(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
 
     def _build_cmd(force_software=False):
         loglevel = "info" if duration > 0 else "error"
-        cmd = [ffmpeg_path, "-y", "-loglevel", loglevel]
+        cmd = [ffmpeg_path, "-nostdin", "-xerror", "-y", "-loglevel", loglevel, "-progress", "pipe:2", "-nostats"]
         cmd += ["-i", input_path]
         for img_path in image_paths:
             cmd += extra_media_input_args(img_path, duration=duration, image_fps=1)
@@ -674,7 +694,8 @@ def _execute_batch(
             result = fut.result()
         except Exception as e:
             job_pos = getattr(fut, "_beru_job_pos", -1)
-            job_id = jobs[job_pos].get("id", job_pos) if 0 <= job_pos < total else -1
+            job = jobs[job_pos] if 0 <= job_pos < total else None
+            job_id = job.get("id", job_pos) if isinstance(job, dict) else job_pos
             result = _job_failed_result(job_id, str(e), max_workers=max_workers)
 
         with state_lock:
@@ -692,7 +713,8 @@ def _execute_batch(
             if emit_batch_progress:
                 job_pos = getattr(fut, "_beru_job_pos", -1)
                 if 0 <= job_pos < total:
-                    fname = os.path.basename(jobs[job_pos].get("input_path", "")) or "?"
+                    job = jobs[job_pos]
+                    fname = os.path.basename(job.get("input_path", "")) if isinstance(job, dict) else "?"
                 else:
                     fname = "?"
                 _emit_batch_progress(state, total, fname)
@@ -783,6 +805,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
     ffmpeg_path = ctx.ffmpeg_path
 
     if _jobs_require_fonts(jobs):
+        reset_caches()
         get_system_fonts()
 
     if not _jobs_allow_hardware(jobs):
@@ -1006,7 +1029,7 @@ def _load_jobs_manifest(jobs_path):
 
 
 def _preflight_hw_encoder(jobs, *, verified, ctx=None):
-    """Real-encode probe runs once per process; later calls reuse the cache."""
+    """Real-encode probe runs until an encoder verifies; failures re-probe."""
     if not _jobs_allow_hardware(jobs):
         return None, verified
     hw = detect_hw_encoder(
@@ -1015,7 +1038,7 @@ def _preflight_hw_encoder(jobs, *, verified, ctx=None):
     )
     if hw is None:
         logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
-    return hw, True
+    return hw, hw is not None
 
 
 def job_worker_main():
@@ -1061,7 +1084,10 @@ def job_worker_main():
             )
             result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
             _safe_print(json.dumps({"type": "summary", **result}))
-            _safe_print(json.dumps({"type": "run_end", "id": request_id, "ok": True}))
+            _safe_print(json.dumps({
+                "type": "run_end", "id": request_id,
+                "ok": result["failed"] == 0 and result["cancelled"] == 0,
+            }))
         except Exception as exc:
             logger.exception("Job worker request failed")
             _safe_print(json.dumps({"type": "error", "error": str(exc)}))
@@ -1073,6 +1099,8 @@ def job_worker_main():
 def main():
     if sys.platform != "win32":
         raise RuntimeError("Beru solo admite Windows.")
+
+    protect_process_tree()
 
     if len(sys.argv) >= 2 and sys.argv[1] == "--preview-frame-worker":
         preview_frame_worker_main()
@@ -1102,6 +1130,7 @@ def main():
     preflight_hw, _ = _preflight_hw_encoder(jobs, verified=False, ctx=ctx)
     result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
     print(json.dumps({"type": "summary", **result}))
+    sys.exit(1 if result["failed"] else 130 if result["cancelled"] else 0)
 
 
 if __name__ == "__main__":

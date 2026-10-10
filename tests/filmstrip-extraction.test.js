@@ -62,6 +62,40 @@ describe("filmstrip extraction", () => {
     expect(captured).toHaveBeenCalledTimes(8);
   });
 
+  it("keeps a replacement strip independent of a cancelled extraction", async () => {
+    const pending = [];
+    captured.mockImplementation(
+      (_command, args, options) =>
+        new Promise((resolve) => {
+          pending.push({
+            time: Number(args[args.indexOf("-ss") + 1]),
+            signal: options.spawnOptions.signal,
+            resolve,
+          });
+        }),
+    );
+    const progress = vi.fn();
+    const controller = new AbortController();
+    const first = extractFilmstrip(input, { count: 4, duration: 8, signal: controller.signal });
+    await vi.waitFor(() => expect(pending).toHaveLength(4));
+    controller.abort();
+    captured.mockImplementation(async (_command, args) =>
+      jpeg(Number(args[args.indexOf("-ss") + 1])),
+    );
+    const second = extractFilmstrip(input, {
+      count: 4,
+      duration: 8,
+      signal: new AbortController().signal,
+      onFrame: progress,
+    });
+    for (const p of pending)
+      p.resolve(p.signal.aborted ? { code: 1, stdout: Buffer.alloc(0) } : jpeg(p.time));
+    const [a, b] = await Promise.all([first, second]);
+    expect(a).toBeNull();
+    expect(b?.frames.filter(Boolean)).toHaveLength(4);
+    expect(progress).toHaveBeenCalledTimes(4);
+  });
+
   it("reuses complete strips but invalidates changed sampling options and replaced files", async () => {
     const options = { count: 2, duration: 8 };
     const first = await extractFilmstrip(input, options);

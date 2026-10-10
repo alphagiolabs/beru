@@ -12,7 +12,7 @@ describe("projectSlice + editorStyleSlice", () => {
     "clears the previous watermark when a project has no watermark (%s)",
     (watermark) => {
       useEditorStore.setState({
-        watermark: { enabled: true, text: "OLD", imagePath: "old.png", imageDataUrl: "stale" },
+        watermark: { enabled: true, text: "OLD", imagePath: "old.png", imageV: "stale" },
       });
       const result = useEditorStore.getState()._applyProject({
         type: "beru-project",
@@ -24,7 +24,7 @@ describe("projectSlice + editorStyleSlice", () => {
         enabled: false,
         text: "",
         imagePath: "",
-        imageDataUrl: "",
+        imageV: "",
       });
     },
   );
@@ -215,7 +215,7 @@ describe("projectSlice + editorStyleSlice", () => {
 
   it("restores a preset watermark and clears the previous image cache", () => {
     useEditorStore.setState({
-      watermark: { enabled: false, text: "Previous", imageDataUrl: "stale" },
+      watermark: { enabled: false, text: "Previous", imageV: "stale" },
     });
     useEditorStore.getState().applyPreset({
       type: "beru-preset",
@@ -233,7 +233,7 @@ describe("projectSlice + editorStyleSlice", () => {
       text: "Saved",
       opacity: 0.5,
       position: "top-left",
-      imageDataUrl: "",
+      imageV: "",
     });
   });
 

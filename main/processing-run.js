@@ -26,8 +26,7 @@ export const getPythonProcess = () => activeRun?.proc || null;
 
 const isCurrent = (run) => activeRun === run && !run.result;
 const isInterrupted = (run) => !isCurrent(run) || run.cancellation || getAppIsQuitting();
-const isChildAlive = (proc) =>
-  Boolean(proc && proc.exitCode == null && proc.signalCode == null && !proc.killed);
+const isChildAlive = (proc) => Boolean(proc && proc.exitCode == null && proc.signalCode == null);
 
 function emit(run, channel, payload) {
   if (isCurrent(run)) emitRunEvent(sendToRenderer, channel, run.runId, payload);
@@ -39,8 +38,36 @@ function emitError(run, error) {
   emit(run, IPC_EVENTS.onError, { error });
 }
 
+function settlePendingJobs(
+  run,
+  cancelled = false,
+  error = "El procesador finalizó sin confirmar el resultado de este video",
+) {
+  for (const [index, result] of run.jobs || []) {
+    if (result) continue;
+    run.jobs.set(index, { status: cancelled ? "cancelled" : "failed", error });
+    emit(run, cancelled ? IPC_EVENTS.onJobCancelled : IPC_EVENTS.onJobError, {
+      type: cancelled ? "cancelled" : "error",
+      index,
+      ...(!cancelled ? { error } : {}),
+    });
+  }
+}
+
 function finish(run, result, channel, payload) {
   if (run.result) return;
+  settlePendingJobs(run, result.cancelled, result.error);
+  if (run.jobs) {
+    const outcomes = [...run.jobs.values()];
+    emit(run, IPC_EVENTS.onSummary, {
+      ...run.summary,
+      type: "summary",
+      total: outcomes.length,
+      succeeded: outcomes.filter((job) => job.status === "succeeded").length,
+      failed: outcomes.filter((job) => job.status === "failed").length,
+      cancelled: outcomes.filter((job) => job.status === "cancelled").length,
+    });
+  }
   run.result = { ...result, runId: run.runId };
   clearTimeout(run.watchdog);
   run.detachChild?.();
@@ -96,30 +123,56 @@ function dispatchProcessorLine(run, line) {
   if (!isCurrent(run) || !line.trim()) return;
   try {
     const msg = JSON.parse(line);
+    if (!msg || typeof msg !== "object") throw new Error("Respuesta inválida del procesador");
+    if (
+      ["complete", "cancelled", "job_progress"].includes(msg.type) ||
+      (msg.type === "error" && msg.index != null)
+    ) {
+      if (!run.jobs.has(msg.index))
+        throw new Error("El procesador devolvió un trabajo desconocido");
+      if (run.jobs.get(msg.index)?.status === "succeeded") return;
+    }
     if (msg.type === "progress") emit(run, IPC_EVENTS.onProgress, msg);
     else if (msg.type === "job_progress") emit(run, IPC_EVENTS.onJobProgress, msg);
     else if (msg.type === "complete") {
       try {
         const output = run.outputFiles.complete(msg.index);
-        emit(run, IPC_EVENTS.onComplete, { ...msg, output });
+        const { size, mtimeMs, ctimeMs } = fs.statSync(output);
+        run.jobs.set(msg.index, { status: "succeeded" });
+        emit(run, IPC_EVENTS.onComplete, {
+          ...msg,
+          output,
+          outputStat: { size, mtimeMs, ctimeMs },
+        });
       } catch (err) {
         run.outputError = true;
         run.lastError = "No se pudo guardar la exportación: " + err.message;
+        run.jobs.set(msg.index, { status: "failed", error: run.lastError });
         emit(run, IPC_EVENTS.onJobError, { type: "error", index: msg.index, error: run.lastError });
       }
-    } else if (msg.type === "cancelled") emit(run, IPC_EVENTS.onJobCancelled, msg);
-    else if (msg.type === "error") {
+    } else if (msg.type === "cancelled") {
+      run.jobs.set(msg.index, { status: "cancelled" });
+      emit(run, IPC_EVENTS.onJobCancelled, msg);
+    } else if (msg.type === "error") {
       const error = msg.error || "Unknown error";
       if (Number.isInteger(msg.index) && msg.index >= 0) {
+        run.jobs.set(msg.index, { status: error === "Cancelled" ? "cancelled" : "failed", error });
         if (error === "Cancelled")
           emit(run, IPC_EVENTS.onJobCancelled, { type: "cancelled", index: msg.index });
         else emit(run, IPC_EVENTS.onJobError, msg);
       } else {
         run.lastError = translateProcessorErrorMessage(error);
+        run.protocolError = true;
         emitError(run, run.lastError);
       }
-    } else if (msg.type === "summary") emit(run, IPC_EVENTS.onSummary, msg);
-  } catch {}
+    } else if (msg.type === "summary") {
+      run.summary = msg;
+    } else throw new Error("Evento desconocido: " + msg.type);
+  } catch (err) {
+    run.protocolError = true;
+    run.lastError = "Respuesta inválida del procesador: " + err.message;
+    console.error("[beru]", run.lastError);
+  }
 }
 
 async function enrichJobVideoInfo(job) {
@@ -154,12 +207,15 @@ function watchWorker(run, worker) {
   const proc = worker.proc;
   const end = (code) => {
     if (!isCurrent(run) || run.cancellation) return;
-    if (run.outputError && code === 0) code = 1;
+    settlePendingJobs(run);
+    const jobFailure = [...run.jobs.values()].find((result) => result.status !== "succeeded");
+    if ((run.protocolError || run.outputError || jobFailure) && code === 0) code = 1;
     const failed = code !== 0;
     const tail = worker.stderrTail().trim();
     const error = failed
       ? translateProcessorErrorMessage(
           run.lastError ||
+            jobFailure?.error ||
             "Process exited with code " + code + (tail ? ": " + tail.slice(-300) : ""),
         )
       : undefined;
@@ -169,13 +225,30 @@ function watchWorker(run, worker) {
     });
   };
   const onClose = (code) => {
-    if (!run.termination) end(code);
+    if (!run.termination) end(code || 1);
   };
   const onError = (err) => {
     if (!isCurrent(run) || run.cancellation || run.termination) return;
     const error = translateProcessorErrorMessage(err.message);
-    emitError(run, error);
-    finish(run, { success: false, code: 1, error });
+    run.lastError = error;
+    const termination = proc.pid && isChildAlive(proc) ? stopWorker(run, 0) : Promise.resolve();
+    termination
+      .then(() => {
+        if (!isCurrent(run) || run.cancellation) return;
+        emitError(run, error);
+        finish(run, { success: false, code: 1, error });
+      })
+      .catch((killError) => {
+        console.error("[beru] failed worker is still active:", killError.message);
+        for (const [index, result] of run.jobs) {
+          if (!result)
+            emit(run, IPC_EVENTS.onJobError, {
+              type: "error",
+              index,
+              error: error + ": " + killError.message,
+            });
+        }
+      });
   };
   proc.once("close", onClose);
   proc.once("error", onError);
@@ -198,6 +271,7 @@ function watchWorker(run, worker) {
 
 async function prepareAndStart(run, { manifest, jobs, outputDirectory, spawnSpec }) {
   run.outputFiles = createRunOutputFiles(jobs, outputDirectory);
+  run.jobs = new Map(jobs.map((job, index) => [Number.isInteger(job.id) ? job.id : index, null]));
   const artifacts = await createCancelArtifacts(app.getPath("temp"));
   if (stopIfInterrupted(run)) {
     artifacts.dispose();
@@ -326,12 +400,18 @@ async function terminateRunProcess(proc, graceMs = CANCEL_KILL_GRACE_MS) {
     } catch (err) {
       console.error("[beru] kill escalate error:", err.message);
     }
-    await waitForProcessClose(proc, 3000);
+    if (!(await waitForProcessClose(proc, 3000))) {
+      throw new Error("No se pudo confirmar el cierre del motor de procesamiento");
+    }
   }
 }
 
 function stopWorker(run, graceMs) {
-  if (!run.termination) run.termination = terminateRunProcess(run.proc, graceMs);
+  if (!run.termination)
+    run.termination = terminateRunProcess(run.proc, graceMs).catch((err) => {
+      run.termination = null;
+      throw err;
+    });
   return run.termination;
 }
 
@@ -347,10 +427,14 @@ export async function cancelRun() {
     run.artifacts?.markCancelled();
     const termination = run.proc?.pid ? stopWorker(run) : Promise.resolve();
     termination
-      .catch((err) => console.error("[beru] cancel termination failed:", err.message))
-      .finally(() => {
+      .then(() => {
         finishCancelled(run);
         resolveCancellation({ success: true, idle: false });
+      })
+      .catch((err) => {
+        console.error("[beru] cancel termination failed:", err.message);
+        run.cancellation = null;
+        resolveCancellation({ success: false, error: err.message });
       });
   }
   return run.cancellation;

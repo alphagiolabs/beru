@@ -59,47 +59,6 @@ describe("batchSlice", () => {
     expect(job.output_path).toBe("C:\\output\\promo_Subtitulo.mp4");
   });
 
-  it("reapplies Excel rows using advanced text style defaults", () => {
-    useEditorStore.setState({
-      queue: [makeQueueItem()],
-      templateRegions: [
-        { id: "region-1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
-      ],
-      excelRows: [{ id: "sample", TEXT_1: "Hola" }],
-      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
-      fontWeight: 700,
-      letterSpacing: 4,
-      textAlign: "center",
-      textOpacity: 0.75,
-      boxBorderWidth: 9,
-      textShadowEnabled: true,
-      textShadowColor: "#111111",
-      textShadowOffsetX: 3,
-      textShadowOffsetY: 4,
-    });
-
-    useEditorStore
-      .getState()
-      .updateExcelMapping({ idColumn: "id", columns: { "region-1": "TEXT_1" } });
-    const op = useEditorStore.getState().queue[0].operations[0];
-
-    expect(useEditorStore.getState().excelMatchStatus).toEqual({ 0: "matched" });
-    expect(op).toEqual(
-      expect.objectContaining({
-        text: "Hola",
-        fontWeight: 700,
-        letterSpacing: 4,
-        textAlign: "center",
-        textOpacity: 0.75,
-        boxBorderWidth: 9,
-        textShadowEnabled: true,
-        textShadowColor: "#111111",
-        textShadowOffsetX: 3,
-        textShadowOffsetY: 4,
-      }),
-    );
-  });
-
   it("getBatchPreviewPayload returns Excel text without a text operation", () => {
     useEditorStore.setState({
       queue: [makeQueueItem()],
@@ -413,31 +372,6 @@ describe("batchSlice", () => {
     expect(useEditorStore.getState().excelRows[0].TEXT_1).toBe("Despues");
   });
 
-  it("setTextForRegion materializes an op seeded from the Excel cell", () => {
-    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
-    useEditorStore.setState({
-      queue: [makeQueueItem()],
-      selectedIdx: 0,
-      templateRegions: [{ id: "region-1", label: "TEXT_1", region, style: { fontSize: 48 } }],
-      excelRows: [{ id: "sample", TEXT_1: "Desde Excel" }],
-      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
-    });
-
-    const opIdx = useEditorStore.getState().setTextForRegion(0, "region-1");
-    const state = useEditorStore.getState();
-
-    expect(opIdx).toBe(0);
-    expect(state.queue[0].operations[0]).toEqual(
-      expect.objectContaining({
-        mode: "text",
-        batchRegionId: "region-1",
-        region,
-        text: "Desde Excel",
-        fontSize: 48,
-      }),
-    );
-  });
-
   it("setTextForRegion updates an existing op and syncs Excel", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     useEditorStore.setState({
@@ -510,12 +444,19 @@ describe("batchSlice", () => {
       queue: [makeQueueItem()],
       selectedIdx: 0,
       undoStack: [],
-      templateRegions: [{ id: "region-1", label: "TEXT_1", region }],
+      templateRegions: [{ id: "region-1", label: "TEXT_1", region, style: { fontSize: 48 } }],
       excelRows: [{ id: "sample", TEXT_1: "Desde Excel" }],
       excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
     });
 
-    useEditorStore.getState().setTextForRegion(0, "region-1");
+    expect(useEditorStore.getState().setTextForRegion(0, "region-1")).toBe(0);
+    expect(useEditorStore.getState().queue[0].operations[0]).toMatchObject({
+      mode: "text",
+      batchRegionId: "region-1",
+      region,
+      text: "Desde Excel",
+      fontSize: 48,
+    });
     expect(useEditorStore.getState().undoStack).toHaveLength(1);
 
     useEditorStore.getState().undo();

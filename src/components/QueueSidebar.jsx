@@ -416,6 +416,36 @@ export default function QueueSidebar() {
 
   const hasOutputDir = Boolean(outputDir);
 
+  const renderRow = (item, idx, key) => {
+    const derived = deriveRow(item, idx, excelPath, excelMatchStatus);
+    return (
+      <QueueRow
+        key={key}
+        item={item}
+        idx={idx}
+        thumbnail={thumbnailsByPath?.[item.path] || null}
+        isSelected={idx === selectedIdx}
+        isTemplate={idx === templateIdx}
+        textOps={derived.textOps}
+        otherOps={derived.otherOps}
+        matchStatus={derived.matchStatus}
+        showMatch={Boolean(excelPath)}
+        isOpen={openMenuIdx === idx}
+        isProcessing={isProcessing}
+        hasOutputDir={hasOutputDir}
+        t={t}
+        menuRef={openMenuIdx === idx ? setMenuRef : null}
+        onSelect={handleSelect}
+        onToggleMenu={handleToggleMenu}
+        onProcessThis={handleProcessThis}
+        onReveal={handleReveal}
+        onOpenOutputDir={handleOpenOutputDir}
+        onCopyName={handleCopyName}
+        onRemove={handleRemove}
+      />
+    );
+  };
+
   return (
     <aside
       className="queue-sidebar w-[220px] flex-shrink-0 flex flex-col border-r relative"
@@ -475,7 +505,6 @@ export default function QueueSidebar() {
               const idx = vRow.index;
               const item = queue[idx];
               if (!item) return null;
-              const derived = deriveRow(item, idx, excelPath, excelMatchStatus);
               return (
                 <div
                   key={item.path}
@@ -489,63 +518,13 @@ export default function QueueSidebar() {
                     transform: `translateY(${vRow.start}px)`,
                   }}
                 >
-                  <QueueRow
-                    item={item}
-                    idx={idx}
-                    thumbnail={thumbnailsByPath?.[item.path] || null}
-                    isSelected={idx === selectedIdx}
-                    isTemplate={idx === templateIdx}
-                    textOps={derived.textOps}
-                    otherOps={derived.otherOps}
-                    matchStatus={derived.matchStatus}
-                    showMatch={Boolean(excelPath)}
-                    isOpen={openMenuIdx === idx}
-                    isProcessing={isProcessing}
-                    hasOutputDir={hasOutputDir}
-                    t={t}
-                    menuRef={openMenuIdx === idx ? setMenuRef : null}
-                    onSelect={handleSelect}
-                    onToggleMenu={handleToggleMenu}
-                    onProcessThis={handleProcessThis}
-                    onReveal={handleReveal}
-                    onOpenOutputDir={handleOpenOutputDir}
-                    onCopyName={handleCopyName}
-                    onRemove={handleRemove}
-                  />
+                  {renderRow(item, idx)}
                 </div>
               );
             })}
           </div>
         ) : (
-          queue.map((item, idx) => {
-            const derived = deriveRow(item, idx, excelPath, excelMatchStatus);
-            return (
-              <QueueRow
-                key={item.path}
-                item={item}
-                idx={idx}
-                thumbnail={thumbnailsByPath?.[item.path] || null}
-                isSelected={idx === selectedIdx}
-                isTemplate={idx === templateIdx}
-                textOps={derived.textOps}
-                otherOps={derived.otherOps}
-                matchStatus={derived.matchStatus}
-                showMatch={Boolean(excelPath)}
-                isOpen={openMenuIdx === idx}
-                isProcessing={isProcessing}
-                hasOutputDir={hasOutputDir}
-                t={t}
-                menuRef={openMenuIdx === idx ? setMenuRef : null}
-                onSelect={handleSelect}
-                onToggleMenu={handleToggleMenu}
-                onProcessThis={handleProcessThis}
-                onReveal={handleReveal}
-                onOpenOutputDir={handleOpenOutputDir}
-                onCopyName={handleCopyName}
-                onRemove={handleRemove}
-              />
-            );
-          })
+          queue.map((item, idx) => renderRow(item, idx, item.path))
         )}
       </div>
     </aside>

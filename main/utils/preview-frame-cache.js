@@ -44,7 +44,9 @@ async function frameKey(payload) {
 
 function remember(key, result) {
   if (result?.ok !== true || typeof result.data_url !== "string" || !result.data_url) return;
-  const bytes = 2 * JSON.stringify(result).length + 2 * key.length;
+  // Approximate retained bytes: the ASCII data URL dominates the result and
+  // V8 stores it as a one-byte-per-char string, so its byte length tracks usage.
+  const bytes = Buffer.byteLength(result.data_url) + Buffer.byteLength(key);
   if (bytes > MAX_BYTES) return;
   while (frames.size >= MAX_FRAMES || retainedBytes + bytes > MAX_BYTES) {
     const oldest = frames.keys().next().value;

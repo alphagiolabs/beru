@@ -66,7 +66,7 @@ export default function ExcelMappingModal() {
         }),
       };
     });
-  }, [queue, excelRows, idCol, draft.columns, templateRegions, showMappingModal]);
+  }, [queue, excelRows, idCol, rowIndexById, draft.columns, templateRegions, showMappingModal]);
 
   const headerOptions = useMemo(
     () => excelHeaders.map((h) => ({ value: h, label: h })),

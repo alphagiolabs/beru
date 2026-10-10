@@ -3,8 +3,6 @@ import {
   sanitizeTemplateRegions,
   sanitizeTextStyle,
   sanitizeDefaults,
-  persistWatermark,
-  restoreWatermark,
 } from "../src/utils/sanitize-preset.js";
 
 describe("sanitize-preset", () => {
@@ -147,24 +145,6 @@ describe("sanitize-preset", () => {
     it("uses fallback values for NaN inputs", () => {
       expect(sanitizeDefaults({ blurStrength: NaN }).blurStrength).toBe(20);
       expect(sanitizeDefaults({ temporalRadius: NaN }).temporalRadius).toBe(3);
-    });
-  });
-
-  describe("persistWatermark", () => {
-    it("drops imageDataUrl and restores an empty data URL", () => {
-      const persisted = persistWatermark({
-        enabled: true,
-        type: "image",
-        imagePath: "C:\\wm\\logo.png",
-        imageDataUrl: "data:image/png;base64,AAAA",
-        opacity: 0.4,
-      });
-      expect(persisted.imageDataUrl).toBeUndefined();
-      expect(restoreWatermark(persisted)).toMatchObject({
-        enabled: true,
-        imagePath: "C:\\wm\\logo.png",
-        imageDataUrl: "",
-      });
     });
   });
 });

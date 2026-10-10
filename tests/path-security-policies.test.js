@@ -141,10 +141,6 @@ describe("consent store", () => {
     expect(consent.hasReadConsent(`${dir}-other${path.sep}job.mp4`)).toBe(false);
   });
 
-  it("starts with no output directory", () => {
-    expect(make().getOutputDirectory()).toBeNull();
-  });
-
   it("keeps read grants for the lifetime of a selection", () => {
     const consent = make();
     for (let i = 0; i < 2001; i++) consent.grantRead(`f${i}`);

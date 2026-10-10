@@ -25,7 +25,9 @@ export function createLineWorker({
     void killProcessTree(proc).catch(() => {
       try {
         proc.kill();
-      } catch {}
+      } catch (err) {
+        console.error(`[beru] ${name} termination failed:`, err.message);
+      }
     });
   }
 
@@ -42,7 +44,9 @@ export function createLineWorker({
     if (rest.trim() && onFlushRemainder) {
       try {
         onFlushRemainder(rest, proc);
-      } catch {}
+      } catch (err) {
+        console.error(`[beru] ${name} output consumer failed:`, err.message);
+      }
     }
   }
 
@@ -97,7 +101,9 @@ export function createLineWorker({
         let msg = null;
         try {
           msg = JSON.parse(line);
-        } catch {}
+        } catch (err) {
+          console.error(`[beru] ${name} returned invalid JSON:`, err.message);
+        }
 
         if (msg && msg.type === "ready") {
           if (!msg.ok) {
@@ -117,7 +123,9 @@ export function createLineWorker({
 
         try {
           onMessage?.(msg, line, proc);
-        } catch {}
+        } catch (err) {
+          console.error(`[beru] ${name} message consumer failed:`, err.message);
+        }
       };
 
       const startupTimer = setTimeout(() => {
@@ -150,6 +158,7 @@ export function createLineWorker({
       });
 
       proc.stderr.on("data", (chunk) => {
+        if (worker !== proc) return;
         const text = chunk.toString();
         stderrTail = (stderrTail + text).slice(-stderrTailChars);
         if (stderrLogTag && text.trim()) console.error(`[beru][${stderrLogTag}]`, text.trim());

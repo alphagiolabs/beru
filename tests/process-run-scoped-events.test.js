@@ -39,7 +39,18 @@ vi.mock("../main/utils/media-task-pool.js", () => ({
   waitForMediaTasksToDrain: async () => {},
 }));
 vi.mock("../main/utils/concurrency.js", () => ({
-  runWithConcurrency: async (jobs) => jobs,
+  runWithConcurrency: async (items, limit, worker) => {
+    const results = new Array(items.length);
+    let cursor = 0;
+    const launch = async () => {
+      while (cursor < items.length) {
+        const idx = cursor++;
+        results[idx] = await worker(items[idx], idx);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, launch));
+    return results;
+  },
 }));
 vi.mock("../main/utils/video-cache.js", () => ({ probeVideo: vi.fn() }));
 vi.mock("../main/utils/settings.js", () => ({ readSettings: () => ({}) }));

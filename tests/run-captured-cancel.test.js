@@ -17,6 +17,20 @@ vi.mock("child_process", async (importOriginal) => {
 import { runCapturedProcess } from "../main/utils/run-captured.js";
 
 describe("captured process cancellation", () => {
+  it.each(["timeout", "overflow"])("waits for a real child to close after %s", async (failure) => {
+    const code =
+      failure === "overflow"
+        ? "process.stdout.write('X'.repeat(4096)); setInterval(() => {}, 1000)"
+        : "setInterval(() => {}, 1000)";
+    const result = await runCapturedProcess(process.execPath, ["-e", code], {
+      timeoutMs: failure === "timeout" ? 50 : 5000,
+      maxStdoutBytes: 1024,
+    });
+    expect(result).toMatchObject(
+      failure === "timeout" ? { timedOut: true } : { outputExceeded: true },
+    );
+    expect(children.at(-1).closed).toBe(true);
+  });
   it("kills a real child and waits for exit before releasing its media slot", async () => {
     const controller = new AbortController();
     const result = runCapturedProcess(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {

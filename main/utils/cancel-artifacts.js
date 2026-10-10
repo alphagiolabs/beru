@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 
 const TEMP_DIR_PREFIX = "beru-jobs-";
+const ORPHAN_PREFIXES = [TEMP_DIR_PREFIX, "beru-temporal-", "beru-preview-"];
 const MANIFEST_NAME = "manifest.json";
 
 const sentinelPathFor = (manifestPath) => {
@@ -18,7 +19,9 @@ export async function createCancelArtifacts(tempRoot) {
     markCancelled() {
       try {
         fs.writeFileSync(cancelPath, "1");
-      } catch {}
+      } catch (err) {
+        console.error("[beru] cancellation signal could not be written:", err.message);
+      }
     },
     isCancelled() {
       return fs.existsSync(cancelPath);
@@ -39,7 +42,7 @@ export async function createCancelArtifacts(tempRoot) {
 export function sweepOrphanedArtifacts(tempRoot) {
   try {
     for (const entry of fs.readdirSync(tempRoot, { withFileTypes: true })) {
-      if (!entry.name.startsWith(TEMP_DIR_PREFIX)) continue;
+      if (!ORPHAN_PREFIXES.some((prefix) => entry.name.startsWith(prefix))) continue;
       const target = path.join(tempRoot, entry.name);
       if (entry.isDirectory()) {
         try {

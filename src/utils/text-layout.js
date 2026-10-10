@@ -106,9 +106,7 @@ export function wrapTextToWidth(text, maxWidthPx, fontSizePx) {
         line = token.trimStart();
       }
     }
-    if (line.trim() || paragraph === "") {
-      lines.push(line.trim() ? line.trimEnd() : "");
-    } else if (line) {
+    if (line || paragraph === "") {
       lines.push(line.trimEnd());
     }
   }

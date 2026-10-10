@@ -71,14 +71,16 @@ describe("operationsToJobPayload", () => {
     const payloads = operationsToJobPayload(
       [
         { mode: "text", text: "  ", region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 } },
+        { mode: "text", text: "", region: { x: 0.5, y: 0.5, w: 0.2, h: 0.1 } },
         { mode: "text", text: "Hola", region: { x: 0.2, y: 0.2, w: 0.2, h: 0.1 } },
         { mode: "image", imagePath: "", region: { x: 0.3, y: 0.3, w: 0.1, h: 0.1 } },
         { mode: "delogo", region: { x: 0.4, y: 0.4, w: 0.1, h: 0.1 } },
+        { mode: "blur", region: { x: 0.1, y: 0.1, w: 0.1, h: 0.1 }, blurStrength: 20 },
       ],
       1000,
       1000,
     );
-    expect(payloads.map((op) => op.mode)).toEqual(["text", "delogo"]);
+    expect(payloads.map((op) => op.mode)).toEqual(["text", "delogo", "blur"]);
     expect(payloads[0].text).toBe("Hola");
   });
 });

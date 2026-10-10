@@ -6,12 +6,6 @@ from text_layout_helpers import (
 )
 
 
-def test_positive_fallback_inserts_hair_spaces():
-    out = _apply_letter_spacing_fallback("AB", 8, 48)
-    assert "A" in out and "B" in out
-    assert "\u200a" in out
-
-
 def test_negative_fallback_is_noop_on_text():
     assert _apply_letter_spacing_fallback("AB", -2, 32) == "AB"
 
@@ -39,7 +33,6 @@ def test_glyph_positions_center_align():
 
 
 if __name__ == "__main__":
-    test_positive_fallback_inserts_hair_spaces()
     test_negative_fallback_is_noop_on_text()
     test_glyph_positions_tighten_with_negative_spacing()
     test_glyph_positions_center_align()

@@ -98,11 +98,14 @@ def _run_preview_image_cmd(cmd, vw, vh, timestamp):
                     proc.kill()
                 except OSError:
                     pass
-        except OSError as exc:
+        except Exception as exc:
             output[f"{key}_error"] = str(exc)
 
     try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.Popen(
+            cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
         readers = [
             threading.Thread(
                 target=read_limited, args=(proc.stdout, "stdout", PREVIEW_MAX_IMAGE_BYTES), daemon=True,
@@ -246,7 +249,7 @@ def _render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
     if source_only:
         def make_source_command(sample_timestamp):
             return [
-                ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y",
+                ffmpeg_path, "-nostdin", "-xerror", "-hide_banner", "-loglevel", "error", "-y",
                 "-ss", f"{sample_timestamp:.3f}",
                 "-i", input_path,
                 "-map", "0:v:0",
@@ -290,7 +293,7 @@ def _render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
         )
 
         cmd = [
-            ffmpeg_path, "-hide_banner", "-loglevel", "error", "-y",
+            ffmpeg_path, "-nostdin", "-xerror", "-hide_banner", "-loglevel", "error", "-y",
             "-ss", f"{seek:.3f}",
             "-i", input_path,
         ]

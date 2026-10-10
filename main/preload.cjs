@@ -58,7 +58,7 @@ contextBridge.exposeInMainWorld("api", {
   onPetOverlayState: (cb) => subscribe("petOverlay:state", cb),
   onPetOverlayEvent: (cb) => subscribe("petOverlay:event", cb),
   onUpdaterEvent: (cb) => subscribe("updater:event", cb),
-  readImage: invoke("image:read"),
+  statImage: invoke("image:stat"),
   pickImage: invoke("image:pick"),
   resolveDroppedPaths: invoke("fs:resolveDroppedPaths"),
   getPathForFile: (file) => webUtils.getPathForFile(file),

@@ -26,7 +26,7 @@ describe("Windows process-tree termination", () => {
     expect(mocks.execFile).toHaveBeenCalledWith(
       "taskkill",
       ["/F", "/T", "/PID", "123"],
-      { windowsHide: true },
+      { windowsHide: true, timeout: 5000 },
       expect.any(Function),
     );
     await Promise.resolve();

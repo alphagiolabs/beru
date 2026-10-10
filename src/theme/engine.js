@@ -152,10 +152,10 @@ export function migrateThemeSettings(settings = {}) {
   if (!hasNewSchema) {
     themeSlot1 = DEFAULT_SLOT1_PRESET;
     themeSlot2 = DEFAULT_SLOT2_PRESET;
-    themeActiveSlot = legacyThemeToSlot(settings.theme === "light" ? "light" : "dark");
+    themeActiveSlot = legacyThemeToSlot(settings.theme);
   } else {
     if (themeActiveSlot !== 1 && themeActiveSlot !== 2) {
-      themeActiveSlot = legacyThemeToSlot(settings.theme === "light" ? "light" : "dark");
+      themeActiveSlot = legacyThemeToSlot(settings.theme);
     }
     if (!isValidThemeRef(themeSlot1, customThemes)) themeSlot1 = DEFAULT_SLOT1_PRESET;
     if (!isValidThemeRef(themeSlot2, customThemes)) themeSlot2 = DEFAULT_SLOT2_PRESET;

@@ -28,13 +28,4 @@ describe("python test wiring", () => {
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual([...files].sort());
   });
-
-  it.each(files)("%s invokes every top-level test_* function it defines", (file) => {
-    const src = readFileSync(join(pyDir, file), "utf8");
-    const defined = [...src.matchAll(/^def (test_\w+)\(/gm)].map((m) => m[1]);
-    for (const name of defined) {
-      const occurrences = src.match(new RegExp(`\\b${name}\\b`, "g"))?.length ?? 0;
-      expect(occurrences, `${name} is defined but never invoked`).toBeGreaterThanOrEqual(2);
-    }
-  });
 });

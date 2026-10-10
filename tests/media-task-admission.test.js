@@ -129,7 +129,7 @@ describe("media task admission during export", () => {
 });
 
 describe("media task queue depth", () => {
-  it("rejects past the cap instead of leaving the caller pending", async () => {
+  it("rejects past the cap and accepts work again once the queue drains", async () => {
     const release = [];
     const blockers = Array.from({ length: 8 }, () =>
       runMediaTask(() => new Promise((resolve) => release.push(resolve))),
@@ -148,20 +148,6 @@ describe("media task queue depth", () => {
     release.forEach((finish) => finish());
     await Promise.all([...blockers, ...queued]);
     expect(started).toEqual([]);
-  });
-
-  it("accepts work again once the queue drains", async () => {
-    const release = [];
-    const blockers = Array.from({ length: 8 }, () =>
-      runMediaTask(() => new Promise((resolve) => release.push(resolve))),
-    );
-    await Promise.resolve();
-
-    const queued = Array.from({ length: 2000 }, () => runMediaTask(() => Promise.resolve("ok")));
-    await expect(runMediaTask(() => Promise.resolve("late"))).rejects.toThrow(Error);
-
-    release.forEach((finish) => finish());
-    await Promise.all([...blockers, ...queued]);
     await expect(runMediaTask(() => Promise.resolve("after"))).resolves.toBe("after");
   });
 
@@ -240,6 +226,38 @@ describe("ffmpeg encoder probe output limit", () => {
 
     await expect(detected).resolves.toBe("h264_nvenc");
     expect(probe.text).toBe(text);
+  });
+});
+
+describe("hw encoder probe caching", () => {
+  it("does not cache a failed probe and retries detection", async () => {
+    const { detectHwEncoderCached } = await loadEncoderDetection();
+    const bad = fakeProcess();
+    spawn.mockReturnValueOnce(bad);
+    const first = detectHwEncoderCached();
+    bad.emit("error", new Error("spawn ffmpeg failed"));
+    await expect(first).resolves.toBeNull();
+
+    const good = fakeProcess();
+    spawn.mockReturnValueOnce(good);
+    const second = detectHwEncoderCached();
+    good.stdout.write(Buffer.from(NVENC_LINE));
+    good.emit("close", 0);
+    await expect(second).resolves.toBe("h264_nvenc");
+  });
+
+  it("caches a completed probe even when no hardware encoder is found", async () => {
+    const { detectHwEncoderCached } = await loadEncoderDetection();
+    const proc = fakeProcess();
+    spawn.mockReturnValueOnce(proc);
+    const first = detectHwEncoderCached();
+    proc.stdout.write(Buffer.from("Encoders:\n V....D libx264  libx264 H.264\n"));
+    proc.emit("close", 0);
+    await expect(first).resolves.toBeNull();
+
+    const callsAfterFirst = spawn.mock.calls.length;
+    await expect(detectHwEncoderCached()).resolves.toBeNull();
+    expect(spawn.mock.calls.length).toBe(callsAfterFirst);
   });
 });
 

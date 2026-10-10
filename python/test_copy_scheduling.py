@@ -92,167 +92,175 @@ def test_split_pools_overlap():
     """Copies ahead of encodes must not occupy encode slots: with the old
     shared pool the leading copies would fill every worker and the encodes
     would wait, so `encodes_started` would never fire."""
-    folder = Path(tempfile.mkdtemp(prefix="beru_pools_"))
-    blur = {"mode": "blur", "region": {"x": 8, "y": 8, "w": 32, "h": 32}}
-    jobs = [_make_job(folder, i) for i in range(4)]
-    jobs += [_make_job(folder, 10 + i, operations=[blur]) for i in range(2)]
+    with tempfile.TemporaryDirectory(prefix="beru_pools_") as tmp:
+        folder = Path(tmp)
+        blur = {"mode": "blur", "region": {"x": 8, "y": 8, "w": 32, "h": 32}}
+        jobs = [_make_job(folder, i) for i in range(4)]
+        jobs += [_make_job(folder, 10 + i, operations=[blur]) for i in range(2)]
 
-    encodes_started = threading.Event()
-    lock = threading.Lock()
-    active = {"encode": 0, "copy": 0}
-    peaks = {"encode": 0, "copy": 0}
+        encodes_started = threading.Event()
+        lock = threading.Lock()
+        active = {"encode": 0, "copy": 0}
+        peaks = {"encode": 0, "copy": 0}
 
-    def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
-        cls = "encode" if "-filter_complex" in cmd else "copy"
-        with lock:
-            active[cls] += 1
-            peaks[cls] = max(peaks[cls], active[cls])
-        try:
-            if cls == "encode":
-                encodes_started.set()
-                time.sleep(0.05)
-            else:
-                assert encodes_started.wait(timeout=10)
-        finally:
+        def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
+            cls = "encode" if "-filter_complex" in cmd else "copy"
             with lock:
-                active[cls] -= 1
-        return True, None
+                active[cls] += 1
+                peaks[cls] = max(peaks[cls], active[cls])
+            try:
+                if cls == "encode":
+                    encodes_started.set()
+                    time.sleep(0.05)
+                else:
+                    assert encodes_started.wait(timeout=10)
+            finally:
+                with lock:
+                    active[cls] -= 1
+            return True, None
 
-    processor._cancel_event.clear()
-    with _Stub(_run_ffmpeg=fake_run, _native_copy_eligible=lambda *a, **k: False):
-        result = processor.process_jobs(jobs, "ffmpeg", max_workers=2, hw_encoder=None)
+        processor._cancel_event.clear()
+        with _Stub(_run_ffmpeg=fake_run, _native_copy_eligible=lambda *a, **k: False):
+            result = processor.process_jobs(
+                jobs, "ffmpeg", max_workers=2, hw_encoder=None
+            )
 
-    assert result["succeeded"] == 6, result
-    assert encodes_started.is_set()
-    assert peaks["encode"] <= 2, peaks
-    assert 1 <= peaks["copy"] <= 2, peaks
+        assert result["succeeded"] == 6, result
+        assert encodes_started.is_set()
+        assert peaks["encode"] <= 2, peaks
+        assert 1 <= peaks["copy"] <= 2, peaks
 
 
 def test_native_copy_eligibility():
-    folder = Path(tempfile.mkdtemp(prefix="beru_natelig_"))
-    fast = folder / "fast.mp4"
-    fast.write_bytes(MOOV_FIRST)
-    slow = folder / "slow.mp4"
-    slow.write_bytes(MOOV_LAST)
-    mkv = folder / "in.mkv"
-    mkv.write_bytes(b"fake mkv")
-    out_mp4 = folder / "out.mp4"
-    out_mkv = folder / "out.mkv"
+    with tempfile.TemporaryDirectory(prefix="beru_natelig_") as tmp:
+        folder = Path(tmp)
+        fast = folder / "fast.mp4"
+        fast.write_bytes(MOOV_FIRST)
+        slow = folder / "slow.mp4"
+        slow.write_bytes(MOOV_LAST)
+        mkv = folder / "in.mkv"
+        mkv.write_bytes(b"fake mkv")
+        out_mp4 = folder / "out.mp4"
+        out_mkv = folder / "out.mkv"
 
-    def eligible(src, dst, streams):
-        with _Stub(_probe_stream_types=lambda p, s=streams: s):
-            return processor._native_copy_eligible(str(src), str(dst))
+        def eligible(src, dst, streams):
+            with _Stub(_probe_stream_types=lambda p, s=streams: s):
+                return processor._native_copy_eligible(str(src), str(dst))
 
-    va = [("video", "h264"), ("audio", "aac")]
-    assert eligible(fast, out_mp4, va)
-    assert not eligible(slow, out_mp4, va)
-    assert not eligible(fast, out_mkv, va)
-    assert not eligible(fast, out_mp4, va + [("audio", "aac")])
-    assert not eligible(fast, out_mp4, va + [("subtitle", "mov_text")])
-    assert not eligible(mkv, out_mkv, [("video", "h264"), ("audio", "pcm_s16le")])
-    assert eligible(mkv, out_mkv, va)
-    assert not eligible(mkv, out_mkv, [])
-    assert not eligible(mkv, out_mkv, None)
+        va = [("video", "h264"), ("audio", "aac")]
+        assert eligible(fast, out_mp4, va)
+        assert not eligible(slow, out_mp4, va)
+        assert not eligible(fast, out_mkv, va)
+        assert not eligible(fast, out_mp4, va + [("audio", "aac")])
+        assert not eligible(fast, out_mp4, va + [("subtitle", "mov_text")])
+        assert not eligible(mkv, out_mkv, [("video", "h264"), ("audio", "pcm_s16le")])
+        assert eligible(mkv, out_mkv, va)
+        assert not eligible(mkv, out_mkv, [])
+        assert not eligible(mkv, out_mkv, None)
 
 
 def test_native_copy_end_to_end():
-    folder = Path(tempfile.mkdtemp(prefix="beru_native_"))
-    src = folder / "in.mp4"
-    src.write_bytes(MOOV_FIRST)
-    out = folder / "out.mp4"
-    job = {
-        "id": 0,
-        "input_path": str(src),
-        "output_path": str(out),
-        "audio_codec": "aac",
-        "operations": [],
-    }
+    with tempfile.TemporaryDirectory(prefix="beru_native_") as tmp:
+        folder = Path(tmp)
+        src = folder / "in.mp4"
+        src.write_bytes(MOOV_FIRST)
+        out = folder / "out.mp4"
+        job = {
+            "id": 0,
+            "input_path": str(src),
+            "output_path": str(out),
+            "audio_codec": "aac",
+            "operations": [],
+        }
 
-    def forbidden(*a, **k):
-        raise AssertionError("eligible copy must not spawn ffmpeg")
+        def forbidden(*a, **k):
+            raise AssertionError("eligible copy must not spawn ffmpeg")
 
-    processor._cancel_event.clear()
-    with _Stub(
-        _probe_stream_types=lambda p: [("video", "h264"), ("audio", "aac")],
-        _run_ffmpeg=forbidden,
-    ):
-        result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
+        processor._cancel_event.clear()
+        with _Stub(
+            _probe_stream_types=lambda p: [("video", "h264"), ("audio", "aac")],
+            _run_ffmpeg=forbidden,
+        ):
+            result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
 
-    assert result["status"] == "succeeded", result
-    assert out.read_bytes() == MOOV_FIRST
+        assert result["status"] == "succeeded", result
+        assert out.read_bytes() == MOOV_FIRST
 
 
 def test_native_copy_falls_back_to_remux():
-    folder = Path(tempfile.mkdtemp(prefix="beru_remux_"))
-    src = folder / "slow.mp4"
-    src.write_bytes(MOOV_LAST)
-    job = _make_job(folder, 0)
-    job["input_path"] = str(src)
+    with tempfile.TemporaryDirectory(prefix="beru_remux_") as tmp:
+        folder = Path(tmp)
+        src = folder / "slow.mp4"
+        src.write_bytes(MOOV_LAST)
+        job = _make_job(folder, 0)
+        job["input_path"] = str(src)
 
-    calls = []
+        calls = []
 
-    def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
-        calls.append(cmd)
-        return True, None
+        def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
+            calls.append(cmd)
+            return True, None
 
-    processor._cancel_event.clear()
-    with _Stub(
-        _run_ffmpeg=fake_run,
-        _probe_stream_types=lambda p: [("video", "h264"), ("audio", "aac")],
-    ):
-        result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
+        processor._cancel_event.clear()
+        with _Stub(
+            _run_ffmpeg=fake_run,
+            _probe_stream_types=lambda p: [("video", "h264"), ("audio", "aac")],
+        ):
+            result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
 
-    assert result["status"] == "succeeded", result
-    assert calls, "expected remux fallback"
-    cmd = calls[0]
-    assert "-c" in cmd and "copy" in cmd
-    assert "+faststart" in cmd
+        assert result["status"] == "succeeded", result
+        assert calls, "expected remux fallback"
+        cmd = calls[0]
+        assert "-c" in cmd and "copy" in cmd
+        assert "+faststart" in cmd
 
 
 def test_native_copy_cancelled_midway():
-    folder = Path(tempfile.mkdtemp(prefix="beru_cancel_"))
-    src = folder / "in.mp4"
-    src.write_bytes(MOOV_FIRST)
-    out = folder / "out.mp4"
-    job = {
-        "id": 0,
-        "input_path": str(src),
-        "output_path": str(out),
-        "audio_codec": "aac",
-        "operations": [],
-    }
+    with tempfile.TemporaryDirectory(prefix="beru_cancel_") as tmp:
+        folder = Path(tmp)
+        src = folder / "in.mp4"
+        src.write_bytes(MOOV_FIRST)
+        out = folder / "out.mp4"
+        job = {
+            "id": 0,
+            "input_path": str(src),
+            "output_path": str(out),
+            "audio_codec": "aac",
+            "operations": [],
+        }
 
-    def probe_then_cancel(path):
-        processor._cancel_event.set()
-        return [("video", "h264"), ("audio", "aac")]
+        def probe_then_cancel(path):
+            processor._cancel_event.set()
+            return [("video", "h264"), ("audio", "aac")]
 
-    processor._cancel_event.clear()
-    try:
-        with _Stub(_probe_stream_types=probe_then_cancel):
-            result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
-    finally:
         processor._cancel_event.clear()
+        try:
+            with _Stub(_probe_stream_types=probe_then_cancel):
+                result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
+        finally:
+            processor._cancel_event.clear()
 
-    assert result["status"] == "cancelled", result
-    assert not out.exists()
+        assert result["status"] == "cancelled", result
+        assert not out.exists()
 
 
 def test_cancelled_remux_reports_cancelled():
-    folder = Path(tempfile.mkdtemp(prefix="beru_remcancel_"))
-    job = _make_job(folder, 0)
-    src = folder / "in0.mkv"
-    src.write_bytes(b"fake mkv")
-    job["input_path"] = str(src)
-    job["output_path"] = str(folder / "out0.mp4")
+    with tempfile.TemporaryDirectory(prefix="beru_remcancel_") as tmp:
+        folder = Path(tmp)
+        job = _make_job(folder, 0)
+        src = folder / "in0.mkv"
+        src.write_bytes(b"fake mkv")
+        job["input_path"] = str(src)
+        job["output_path"] = str(folder / "out0.mp4")
 
-    processor._cancel_event.clear()
-    with _Stub(
-        _run_ffmpeg=lambda *a, **k: (False, "Cancelled"),
-        _native_copy_eligible=lambda *a, **k: False,
-    ):
-        result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
+        processor._cancel_event.clear()
+        with _Stub(
+            _run_ffmpeg=lambda *a, **k: (False, "Cancelled"),
+            _native_copy_eligible=lambda *a, **k: False,
+        ):
+            result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
 
-    assert result["status"] == "cancelled", result
+        assert result["status"] == "cancelled", result
 
 
 def main():

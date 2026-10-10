@@ -48,7 +48,7 @@ describe("video probe process output limits", () => {
     expect(proc.kill).toHaveBeenCalled();
   });
 
-  it("cleans stream listeners on timeout without waiting for close", async () => {
+  it("keeps the media slot until the timed-out child closes, then cleans listeners", async () => {
     vi.useFakeTimers();
     try {
       const proc = fakeProcess();
@@ -59,6 +59,13 @@ describe("video probe process output limits", () => {
         allowFfmpegFallback: false,
       });
       await vi.advanceTimersByTimeAsync(11);
+      let settled = false;
+      result.then(() => {
+        settled = true;
+      });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      proc.emit("close", 1);
       expect((await result).width).toBe(0);
       expect(proc.kill).toHaveBeenCalled();
       expect(proc.stdout.listenerCount("data")).toBe(0);

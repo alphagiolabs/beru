@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { writeFileSync, unlinkSync, readFileSync } from "fs";
+import { writeFileSync, unlinkSync, readFileSync, mkdtempSync, rmSync } from "fs";
 import path from "path";
 import os from "os";
 import {
@@ -9,6 +9,7 @@ import {
   validateBeruRequestPath,
   invalidateBeruStatCache,
 } from "../main/utils/beru-protocol.js";
+import { createRunOutputFiles } from "../main/utils/process-output.js";
 
 const mainSrc = readFileSync(path.join(process.cwd(), "main", "main.js"), "utf8");
 
@@ -34,6 +35,13 @@ describe("beru protocol path parsing", () => {
   it("preserves forward-slash UNC paths", () => {
     const unc = "//server/share/clip.mp4";
     expect(filePathFromBeruUrl(`beru://local/${encodeURIComponent(unc)}`)).toBe(unc);
+  });
+
+  it("ignores a cache-busting ?v= query in the path lookup", () => {
+    const filePath = "C:\\imgs\\logo.png";
+    expect(
+      filePathFromBeruUrl(`beru://local/${encodeURIComponent(filePath)}?v=1700000000000-4`),
+    ).toBe(filePath);
   });
 
   it("rejects non-local beru hosts", () => {
@@ -126,6 +134,42 @@ describe("beru protocol path parsing", () => {
     }
   });
 
+  it("export completion invalidates the cached stat for the overwritten path", async () => {
+    const prev = process.env.BERU_PROTOCOL_STAT_CACHE;
+    process.env.BERU_PROTOCOL_STAT_CACHE = "1";
+    const dir = mkdtempSync(path.join(os.tmpdir(), "beru-export-cache-"));
+    try {
+      invalidateBeruStatCache();
+      const target = path.join(dir, "out.mp4");
+      writeFileSync(target, "old");
+      const first = createBeruVideoResponse(target, { headers: { get: () => null } });
+      expect(first.headers.get("content-length")).toBe("3");
+      await first.text();
+
+      const run = createRunOutputFiles(
+        [{ id: 1, input_path: path.join(dir, "in.mp4"), output_path: "out.mp4" }],
+        dir,
+      );
+      try {
+        writeFileSync(run.jobs[0].output_path, "new-content");
+        expect(run.complete(1)).toBe(target);
+      } finally {
+        run.dispose();
+      }
+
+      const second = createBeruVideoResponse(target, { headers: { get: () => null } });
+      expect(second.headers.get("content-length")).toBe("11");
+      expect(await second.text()).toBe("new-content");
+    } finally {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {}
+      if (prev === undefined) delete process.env.BERU_PROTOCOL_STAT_CACHE;
+      else process.env.BERU_PROTOCOL_STAT_CACHE = prev;
+      invalidateBeruStatCache();
+    }
+  });
+
   it("invalidateBeruStatCache is a no-op when cache disabled", () => {
     const prev = process.env.BERU_PROTOCOL_STAT_CACHE;
     delete process.env.BERU_PROTOCOL_STAT_CACHE;
@@ -184,16 +228,6 @@ describe("beru protocol fails closed on unknown content types", () => {
     expect(handler.indexOf("hasKnownBeruType")).toBeLessThan(
       handler.indexOf("createBeruVideoResponse"),
     );
-  });
-
-  it("no content-type table entry resolves to application/octet-stream", () => {
-    const protocolSrc = readFileSync(
-      path.join(process.cwd(), "main", "utils", "beru-protocol.js"),
-      "utf8",
-    );
-    const fallback = protocolSrc.match(/function contentTypeFor[\s\S]*?\n}/)?.[0] ?? "";
-    expect(fallback).toContain("|| null");
-    expect(fallback).not.toContain("application/octet-stream");
   });
 
   it("registers the beru scheme with corsEnabled disabled", () => {

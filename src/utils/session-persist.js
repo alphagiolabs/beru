@@ -1,5 +1,6 @@
 import { reconcileBatchExport } from "./batch-export.js";
 import { persistWatermark, restoreWatermark } from "./sanitize-preset.js";
+import { swallow } from "./swallow.js";
 
 export const SESSION_PERSIST_KEY = "beru-queue-session";
 const SESSION_PERSIST_VERSION = 1;
@@ -115,6 +116,7 @@ export function readSessionSnapshotFromStorage(storage = defaultSessionStorage()
 let _lastSessionJson = null;
 let _lastExcelRowsRef = null;
 let _lastExcelRowsJson = "[]";
+let _writeFailureLogged = false;
 
 export function writeSessionSnapshotToStorage(state, storage = defaultSessionStorage()) {
   try {
@@ -135,11 +137,18 @@ export function writeSessionSnapshotToStorage(state, storage = defaultSessionSto
     if (json === _lastSessionJson) return;
     storage.setItem(SESSION_PERSIST_KEY, json);
     _lastSessionJson = json;
-  } catch {}
+    _writeFailureLogged = false;
+  } catch (error) {
+    if (!_writeFailureLogged) {
+      _writeFailureLogged = true;
+      swallow("Session persist", error);
+    }
+  }
 }
 
 export function resetSessionWriteCache() {
   _lastSessionJson = null;
   _lastExcelRowsRef = null;
   _lastExcelRowsJson = "[]";
+  _writeFailureLogged = false;
 }

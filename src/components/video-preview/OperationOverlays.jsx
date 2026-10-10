@@ -3,6 +3,7 @@ import RegionBlurPreview from "./RegionBlurPreview";
 import DelogoLivePreview from "../DelogoLivePreview";
 import TextOverlay from "../TextOverlay";
 import { isOpActive } from "../../utils/operation";
+import { beruLocalUrl } from "../../utils/beru-url";
 import { useT } from "../../i18n/useT";
 
 function RegionHitLayer({ screen, dragging, disabled, onDragStart, title }) {
@@ -37,7 +38,6 @@ export default function OperationOverlays({
   showFfmpegOverlay,
   logoComparisonVisible,
   currentRegion,
-  imageDataCache,
   onRegionOpDragStart,
   onImageDragStart,
 }) {
@@ -125,7 +125,6 @@ export default function OperationOverlays({
       );
     }
     if (op.mode === "image" && op.imagePath) {
-      const dataUrl = imageDataCache?.[op.imagePath];
       const isDragging = draggingOp?.opIdx === opIdx;
       return (
         <div
@@ -145,7 +144,7 @@ export default function OperationOverlays({
           onMouseDown={(e) => onImageDragStart(op, opIdx, e)}
         >
           <img
-            src={dataUrl || `beru://local/${encodeURIComponent(op.imagePath)}`}
+            src={beruLocalUrl(op.imagePath, op.imageV)}
             alt={op.imagePath.split(/[\\/]/).pop()}
             className="w-full h-full"
             style={{ objectFit: "fill" }}

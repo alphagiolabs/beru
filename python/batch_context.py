@@ -58,6 +58,8 @@ class _ResourceAdmission:
     def acquire(self):
         while not _check_cancelled(self.ctx):
             with self.condition:
+                if _check_cancelled(self.ctx):
+                    return False
                 available = _get_available_ram_mb()
                 memory_ok = (
                     self.active == 0

@@ -145,7 +145,7 @@ describe("exact preview frame cache", () => {
   it("evicts large responses before reaching the entry limit", async () => {
     mocks.render.mockResolvedValue({
       ...FRAME,
-      data_url: `data:image/jpeg;base64,${"A".repeat(3 * 1024 * 1024)}`,
+      data_url: `data:image/jpeg;base64,${"A".repeat(6 * 1024 * 1024)}`,
     });
     for (let timestamp = 0; timestamp < 6; timestamp++) {
       await renderPreviewFrame({ ...job, timestamp });
@@ -189,6 +189,21 @@ describe("exact preview frame cache", () => {
     expect(await handle({}, job)).toMatchObject({
       ok: false,
       error: expect.stringContaining("Access revoked"),
+    });
+    expect(mocks.render).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a source frame when the artifact stat no longer matches", async () => {
+    registerVideoHandlers({
+      validateReadableFile: (filePath) => ({ ok: true, resolvedPath: filePath }),
+    });
+    const handle = mocks.handlers.get("video:renderSourceFrame");
+    const info = fs.statSync(input);
+    const expected = { size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs };
+    expect(await handle({}, { input_path: input, expected_stat: expected })).toEqual(FRAME);
+    fs.utimesSync(input, info.atime, new Date(info.mtimeMs + 5000));
+    expect(await handle({}, { input_path: input, expected_stat: expected })).toMatchObject({
+      ok: false,
     });
     expect(mocks.render).toHaveBeenCalledTimes(1);
   });

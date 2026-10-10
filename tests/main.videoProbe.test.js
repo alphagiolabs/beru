@@ -79,7 +79,7 @@ describeIfBundledFfmpeg("main/videoProbe fallback", () => {
         { encoding: "utf8" },
       );
 
-      expect(makeVideo.status).toBe(0);
+      expect(makeVideo.status, makeVideo.error?.message || makeVideo.stderr).toBe(0);
 
       const info = await probeVideoFile(tmp, {
         ffprobePath: bundledFfmpeg,

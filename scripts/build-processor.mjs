@@ -165,6 +165,7 @@ const watchFiles = [
   join(pythonDir, "media_probe.py"),
   join(pythonDir, "op_shared.py"),
   join(pythonDir, "preview.py"),
+  join(pythonDir, "process_lifetime.py"),
   join(pythonDir, "temporal_motion.py"),
   join(pythonDir, "temporal_pipeline.py"),
   join(pythonDir, "spatial_inpaint.py"),

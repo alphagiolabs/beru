@@ -27,7 +27,7 @@ describe("shouldRestartElectronForPythonChange", () => {
   });
 
   it("ignores test_*.py files", () => {
-    expect(shouldRestartElectronForPythonChange("test_batch_summary_cancelled.py")).toBe(false);
+    expect(shouldRestartElectronForPythonChange("test_processor_context.py")).toBe(false);
     expect(shouldRestartElectronForPythonChange("test_delogo.py")).toBe(false);
   });
 

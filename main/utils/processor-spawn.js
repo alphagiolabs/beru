@@ -25,6 +25,13 @@ function getConfiguredPython() {
   return command && fs.existsSync(command) ? { command, args: [] } : null;
 }
 
+function cachedPythonUsable(value) {
+  if (!value) return false;
+  const configured = process.env.BERU_PYTHON;
+  if (configured && configured !== value.command && fs.existsSync(configured)) return false;
+  return !/[\\/]/.test(value.command) || fs.existsSync(value.command);
+}
+
 async function probePythonCandidateAsync(candidate) {
   const result = await runCapturedProcess(candidate.command, [...candidate.args, "--version"], {
     timeoutMs: 5000,
@@ -38,10 +45,16 @@ async function probePythonCandidateAsync(candidate) {
   return candidate;
 }
 
+export function invalidateSystemPythonCache() {
+  systemPythonCache = { resolved: false, value: null };
+}
+
 async function resolveSystemPythonSpawnAsync() {
-  if (systemPythonCache.resolved) return systemPythonCache.value;
+  if (systemPythonCache.resolved && cachedPythonUsable(systemPythonCache.value)) {
+    return systemPythonCache.value;
+  }
   if (systemPythonPromise) return systemPythonPromise;
-  systemPythonPromise = (async () => {
+  const promise = (async () => {
     let value = getConfiguredPython();
     if (!value) {
       for (const candidate of WINDOWS_CANDIDATES) {
@@ -52,10 +65,14 @@ async function resolveSystemPythonSpawnAsync() {
       }
     }
     systemPythonCache = { resolved: true, value };
-    systemPythonPromise = null;
     return value;
   })();
-  return systemPythonPromise;
+  systemPythonPromise = promise;
+  try {
+    return await promise;
+  } finally {
+    if (systemPythonPromise === promise) systemPythonPromise = null;
+  }
 }
 
 function newestMtimeMs(dir) {
@@ -176,6 +193,8 @@ export function buildProcessorChildEnv(baseEnv, { ffmpegPath, ffprobePath } = {}
     ...baseEnv,
     PYTHONIOENCODING: "utf-8",
     PYTHONUTF8: "1",
+    OPENBLAS_NUM_THREADS: baseEnv.OPENBLAS_NUM_THREADS || "1",
+    BERU_PARENT_PID: String(process.pid),
   };
   if (ffmpegPath) childEnv.BERU_FFMPEG = ffmpegPath;
   if (ffprobePath) childEnv.BERU_FFPROBE = ffprobePath;

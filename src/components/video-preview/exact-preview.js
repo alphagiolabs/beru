@@ -219,7 +219,9 @@ export function createExactPreview({ videoRef, onChange, t }) {
       const { timestamp: _timestamp, ...exportShape } = baseJob;
       const liveItem = live.queue[idx];
       const artifactPath =
-        !draft && liveItem?.exportSignature === JSON.stringify(exportShape)
+        !draft &&
+        liveItem?.exportSignature === JSON.stringify(exportShape) &&
+        liveItem.exportedOutputStat
           ? liveItem.exportedOutputPath
           : null;
       let result;
@@ -234,6 +236,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
         result = await api.renderSourceFrame({
           input_path: artifactPath,
           timestamp: Math.min(lastFrame, Math.max(0, job.timestamp - trimStart)),
+          expected_stat: liveItem.exportedOutputStat,
         });
         if (!valid()) return;
         artifact = !!result?.ok;

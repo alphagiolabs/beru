@@ -66,7 +66,7 @@ def _detect_hw_encoder(ffmpeg_path, *, force_test=False, env=None):
         encoders_text = (result.stdout or "") + (result.stderr or "")
     except Exception as e:
         logger.warning("HW encoder detection failed: %s", e)
-        _HW_ENCODER_CACHE = ""
+        _HW_ENCODER_CACHE = None
         return None
 
     priority = ["h264_nvenc", "h264_qsv", "h264_mf", "h264_amf"]

@@ -137,28 +137,7 @@ describe("session-persist", () => {
     });
   });
 
-  it("round-trips through sessionStorage under the stable key", () => {
-    const snap = buildSessionSnapshot({
-      queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }],
-      outputDir: "C:\\out",
-      templateRegions: [],
-      selectedTemplateRegionId: null,
-      nextRegionLabel: 1,
-      excelPath: null,
-      excelHeaders: [],
-      excelRows: [],
-      excelMapping: { idColumn: null, columns: {} },
-      excelMatchStatus: {},
-      excelRowIndexByFilename: {},
-    });
-    sessionStorage.setItem(SESSION_PERSIST_KEY, JSON.stringify(snap));
-    const raw = sessionStorage.getItem(SESSION_PERSIST_KEY);
-    const restored = parseSessionSnapshot(JSON.parse(raw));
-    expect(restored.outputDir).toBe("C:\\out");
-    expect(restored.queue[0].path).toBe("C:\\v\\a.mp4");
-  });
-
-  it("skips sessionStorage setItem when snapshot JSON is unchanged", () => {
+  it("writes and restores under the stable key without rewriting an unchanged snapshot", () => {
     const state = {
       queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }],
       outputDir: "C:\\out",
@@ -168,6 +147,28 @@ describe("session-persist", () => {
     writeSessionSnapshotToStorage(state);
     writeSessionSnapshotToStorage(state);
     expect(setItem).toHaveBeenCalledTimes(1);
+    expect(setItem.mock.calls[0][0]).toBe("beru-queue-session");
+    expect(JSON.parse(setItem.mock.calls[0][1])).toMatchObject({
+      outputDir: "C:\\out",
+      queue: [{ path: "C:\\v\\a.mp4" }],
+    });
+    const restored = readSessionSnapshotFromStorage();
+    expect(restored.outputDir).toBe("C:\\out");
+    expect(restored.queue[0].path).toBe("C:\\v\\a.mp4");
+    setItem.mockRestore();
+  });
+
+  it("logs once when sessionStorage setItem throws", () => {
+    const state = { queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }] };
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota exceeded", "QuotaExceededError");
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    writeSessionSnapshotToStorage(state);
+    writeSessionSnapshotToStorage({ ...state, outputDir: "C:\\out2" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("Session persist");
+    warn.mockRestore();
     setItem.mockRestore();
   });
 
@@ -185,7 +186,7 @@ describe("session-persist", () => {
     expect(sessionStorage.getItem(SESSION_PERSIST_KEY)).toBeNull();
   });
 
-  it("persists watermark settings without imageDataUrl", () => {
+  it("persists watermark settings without imageV", () => {
     const snap = buildSessionSnapshot({
       queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }],
       outputDir: "C:\\out",
@@ -194,7 +195,7 @@ describe("session-persist", () => {
         type: "image",
         text: "",
         imagePath: "C:\\wm\\logo.png",
-        imageDataUrl: "data:image/png;base64,AAAA",
+        imageV: "1700000000000-4",
         opacity: 0.4,
         scale: 1.2,
         position: "top-left",
@@ -209,12 +210,12 @@ describe("session-persist", () => {
       imagePath: "C:\\wm\\logo.png",
       opacity: 0.4,
     });
-    expect(snap.watermark.imageDataUrl).toBeUndefined();
+    expect(snap.watermark.imageV).toBeUndefined();
     const restored = parseSessionSnapshot(snap);
     expect(restored.watermark).toMatchObject({
       enabled: true,
       imagePath: "C:\\wm\\logo.png",
-      imageDataUrl: "",
+      imageV: "",
     });
   });
 

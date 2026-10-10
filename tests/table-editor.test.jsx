@@ -354,6 +354,31 @@ describe("TableEditor keyboard", () => {
     expect(ops[0].text).toBe("Desde Excel");
   });
 
+  it("preserves playback and the playhead when text in the focused video changes", () => {
+    root = createRoot(document.getElementById("root"));
+    act(() => {
+      root.render(<TableEditor />);
+    });
+
+    const video = document.querySelector("video");
+    act(() => {
+      video.currentTime = 4;
+      video.dispatchEvent(new Event("play"));
+      video.dispatchEvent(new Event("timeupdate"));
+    });
+    expect(document.querySelector('.te-transport [aria-label="Pausar"]')).not.toBeNull();
+    expect(document.querySelector(".te-scrub").value).toBe("0.4");
+
+    act(() => {
+      useEditorStore.getState().setTextForRegion(0, "region-1", "Texto actualizado");
+    });
+
+    expect(useEditorStore.getState().getCellTextForRegion(0, "region-1")).toBe("Texto actualizado");
+    expect(document.querySelector('.te-transport [aria-label="Pausar"]')).not.toBeNull();
+    expect(document.querySelector(".te-scrub").value).toBe("0.4");
+    expect(video.currentTime).toBe(4);
+  });
+
   it("Delete on an Excel-only cell clears the Excel value", () => {
     useEditorStore.setState({
       excelPath: "C:\\data\\book.xlsx",

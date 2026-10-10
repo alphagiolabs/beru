@@ -18,7 +18,7 @@ from delogo_chains import (
     _build_padded_region,
     _delogo_reconstruction_filter,
 )
-from ffmpeg_runner import StderrBuffer
+from ffmpeg_runner import StderrBuffer, _kill_ffmpeg_process
 from op_shared import _coerce_int
 
 logger = logging.getLogger("beru")
@@ -146,7 +146,7 @@ class TemporalPatchResolver:
         )
         graph += f"[mt_original]format=rgb48le[mt_rgb];[mt_fallback]{fallback},format=rgb48le[mt_fill];"
         graph += "[mt_rgb][mt_fill]hstack,showinfo[mt_decode]"
-        decoder = [self.ffmpeg, "-hide_banner", "-loglevel", "info", "-threads", "1"]
+        decoder = [self.ffmpeg, "-nostdin", "-xerror", "-hide_banner", "-loglevel", "info", "-threads", "1"]
         if self.seek:
             decoder += ["-ss", f"{self.seek:.3f}"]
         decoder += ["-i", self.input_path]
@@ -174,6 +174,8 @@ class TemporalPatchResolver:
         path = os.path.join(self.directory, f"temporal-{index}.mkv")
         encoder = [
             self.ffmpeg,
+            "-nostdin",
+            "-xerror",
             "-v",
             "error",
             "-y",
@@ -228,43 +230,57 @@ class TemporalPatchResolver:
         stop = threading.Event()
         timestamps = queue.Queue(maxsize=128)
         errors = StderrBuffer()
+        error_lock = threading.Lock()
+        background_error = []
         variable = False
         count = 0
         first_timestamp = None
         timed_out = threading.Event()
 
+        def stop_processes():
+            for proc in processes:
+                _kill_ffmpeg_process(proc)
+
+        def fail_background(exc):
+            with error_lock:
+                background_error.append(str(exc))
+            stop.set()
+            stop_processes()
+
         def read_errors(proc, capture_pts):
-            for line in iter(proc.stderr.readline, b""):
-                text = line.decode("utf-8", errors="replace")
-                if capture_pts and (match := _PTS.search(text)):
-                    while not stop.is_set():
-                        try:
-                            timestamps.put(float(match.group(1)), timeout=0.1)
-                            break
-                        except queue.Full:
-                            pass
-                else:
-                    errors.append(text)
+            try:
+                for line in iter(lambda: proc.stderr.readline(4096), b""):
+                    text = line.decode("utf-8", errors="replace")
+                    if capture_pts and (match := _PTS.search(text)):
+                        while not stop.is_set():
+                            try:
+                                timestamps.put(float(match.group(1)), timeout=0.1)
+                                break
+                            except queue.Full:
+                                pass
+                    else:
+                        with error_lock:
+                            errors.append(text)
+            except Exception as exc:
+                fail_background(exc)
 
         def watch():
             deadline = time.monotonic() + self.timeout
-            while not stop.wait(0.1):
-                disk_bytes = sum(
-                    item.stat().st_size
-                    for item in os.scandir(self.directory)
-                    if item.name.endswith(".mkv")
-                )
-                if (
-                    _check_cancelled(self.ctx)
-                    or time.monotonic() > deadline
-                    or disk_bytes > 512 * 1024 * 1024
-                ):
-                    if not _check_cancelled(self.ctx):
-                        timed_out.set()
-                    for proc in processes:
-                        if proc.poll() is None:
-                            proc.kill()
-                    return
+            try:
+                while not stop.wait(0.1):
+                    with os.scandir(self.directory) as entries:
+                        disk_bytes = sum(item.stat().st_size for item in entries if item.name.endswith(".mkv"))
+                    if (
+                        _check_cancelled(self.ctx)
+                        or time.monotonic() > deadline
+                        or disk_bytes > 512 * 1024 * 1024
+                    ):
+                        if not _check_cancelled(self.ctx):
+                            timed_out.set()
+                        stop_processes()
+                        return
+            except Exception as exc:
+                fail_background(exc)
 
         def frames():
             nonlocal variable, count, first_timestamp
@@ -295,12 +311,15 @@ class TemporalPatchResolver:
             env = dict(self.ctx.env) if self.ctx else None
             processes.append(
                 subprocess.Popen(
-                    decoder, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env
+                    decoder, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+                    stdin=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
             )
             processes.append(
                 subprocess.Popen(
-                    encoder, stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=env
+                    encoder, stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
             )
             for proc, capture in zip(processes, (True, False)):
@@ -346,16 +365,21 @@ class TemporalPatchResolver:
                 logger.info("Temporal: variable frame timing; using spatial repair")
                 return None
             for proc in processes:
-                if proc.wait(timeout=30) != 0:
+                code = proc.wait(timeout=30)
+                if code != 0:
                     if _check_cancelled(self.ctx):
                         raise RuntimeError("Cancelled")
-                    raise RuntimeError(
-                        errors.join()[-2000:] or "Temporal FFmpeg failed"
-                    )
+                    with error_lock:
+                        detail = background_error[0] if background_error else errors.join()[-2000:]
+                    raise RuntimeError(f"Temporal FFmpeg exited with code {code}: {detail}")
+            if background_error:
+                raise RuntimeError(background_error[0])
             if not count:
                 raise RuntimeError("Temporal source produced no frames")
             return first_timestamp
-        except Exception:
+        except Exception as exc:
+            if background_error:
+                raise RuntimeError(background_error[0]) from exc
             if timed_out.is_set() and not _check_cancelled(self.ctx):
                 logger.info(
                     "Temporal: preparation exceeded its time/disk budget; using spatial repair"
@@ -364,13 +388,7 @@ class TemporalPatchResolver:
             raise
         finally:
             stop.set()
-            for proc in processes:
-                if proc.poll() is None:
-                    proc.kill()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    pass
+            stop_processes()
             for thread in threads:
                 thread.join(timeout=1)
             for proc in processes:
