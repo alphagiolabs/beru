@@ -70,6 +70,6 @@ export function registerProcessHandlers(pathSecurity) {
   handleIpc(IPC_INVOKE.cancelProcessing, async () => {
     validationGeneration++;
     const result = await cancelRun();
-    return { success: true, idle: !!result?.idle };
+    return { ...result, idle: !!result?.idle };
   });
 }

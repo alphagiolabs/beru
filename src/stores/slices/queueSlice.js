@@ -355,7 +355,7 @@ export function createQueueSlice(set, get) {
       }
       priorityThumbnailLoads.clear();
       pendingThumbnails.clear();
-      set(() => ({
+      set({
         queue: [],
         selectedIdx: -1,
         selectedOperationIdx: null,
@@ -367,7 +367,7 @@ export function createQueueSlice(set, get) {
         templateIdx: -1,
         _thumbnailAbortControllers: new Set(),
         thumbnailsByPath: {},
-      }));
+      });
       releaseVideoPaths(queue.map((item) => item.path));
       return true;
     },

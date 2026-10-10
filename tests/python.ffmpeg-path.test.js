@@ -708,12 +708,13 @@ import json
 import os
 import processor
 
-calls = {"n": 0}
+calls = []
 
 def fake_process(idx, job, ffmpeg_path, **kwargs):
-    calls["n"] += 1
+    ctx = kwargs["ctx"]
+    calls.append({"workers": ctx.max_workers, "encoder": ctx.hw_encoder})
     job_id = job.get("id", idx)
-    if calls["n"] <= 1:
+    if len(calls) == 1:
         return {"index": job_id, "status": "failed", "error": "nvenc init failed"}
     return {"index": job_id, "status": "succeeded"}
 
@@ -721,9 +722,9 @@ processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: "h264_nvenc"
 processor.get_system_fonts = lambda: {}
 processor._process_one = fake_process
 os.environ["BERU_RETRY_FAILED"] = "1"
-jobs = [{"id": 3, "input_path": "C:/tmp/a.mp4", "output_path": "C:/tmp/out.mp4"}]
+jobs = [{"id": 3, "input_path": "C:/tmp/a.mp4", "output_path": "C:/tmp/out.mp4", "operations": [{"mode": "blur"}]}]
 result = processor.process_jobs(jobs, "ffmpeg", max_workers=4)
-print(json.dumps({"calls": calls["n"], "result": result}))
+print(json.dumps({"calls": calls, "result": result}))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
       encoding: "utf8",
@@ -731,7 +732,10 @@ print(json.dumps({"calls": calls["n"], "result": result}))
     });
     expect(r.status).toBe(0);
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
-    expect(parsed.calls).toBe(2);
+    expect(parsed.calls).toEqual([
+      { workers: 4, encoder: "h264_nvenc" },
+      { workers: 2, encoder: "h264_nvenc" },
+    ]);
     expect(parsed.result.succeeded).toBe(1);
     expect(parsed.result.failed).toBe(0);
   });
@@ -803,7 +807,7 @@ def fake_process(idx, job, ffmpeg_path, **kwargs):
 processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: None
 processor.get_system_fonts = lambda: {}
 processor._process_one = fake_process
-jobs = [{"id": i, "input_path": f"C:/tmp/{i}.mp4"} for i in range(8)]
+jobs = [{"id": i, "input_path": f"C:/tmp/{i}.mp4", "operations": [{"mode": "blur"}]} for i in range(8)]
 result = processor.process_jobs(jobs, "ffmpeg", max_workers=2)
 print(json.dumps({"max_active": active["max"], "result": result}))
 `;
@@ -1321,7 +1325,7 @@ def fake_process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None, c
     seen["jobs"] = jobs
     seen["ffmpeg_path"] = ffmpeg_path
     seen["hw_encoder"] = hw_encoder
-    return {"total": len(jobs), "succeeded": len(jobs), "failed": 0}
+    return {"total": len(jobs), "succeeded": len(jobs), "failed": 0, "cancelled": 0}
 
 try:
     with open(jobs_path, "w", encoding="utf-8") as f:
@@ -1337,7 +1341,10 @@ try:
     processor.get_system_fonts = lambda: {}
     processor.process_jobs = fake_process_jobs
     sys.argv = ["processor.py", jobs_path]
-    processor.main()
+    try:
+        processor.main()
+    except SystemExit as exit:
+        assert exit.code == 0, exit.code
 finally:
     os.unlink(jobs_path)
     os.unlink(ffmpeg.name)

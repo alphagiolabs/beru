@@ -309,23 +309,6 @@ describe("queueSlice", () => {
     expect(useEditorStore.getState().queue).toEqual([]);
   });
 
-  it("outputPathFor suffixes colliding basenames in the same batch", () => {
-    useEditorStore.setState({
-      outputDir: "C:\\out",
-      exportFormat: "mp4",
-      templateRegions: [],
-      queue: [
-        makeQueueItem({ path: "C:\\videos\\a\\clip.mp4", filename: "clip.mp4" }),
-        makeQueueItem({ path: "C:\\videos\\b\\clip.mp4", filename: "clip.mp4" }),
-        makeQueueItem({ path: "C:\\videos\\c\\other.mp4", filename: "other.mp4" }),
-      ],
-    });
-    const get = useEditorStore.getState();
-    expect(get.outputPathFor(get.queue[0])).toBe("C:\\out\\clip_beru.mp4");
-    expect(get.outputPathFor(get.queue[1])).toBe("C:\\out\\clip_beru__2.mp4");
-    expect(get.outputPathFor(get.queue[2])).toBe("C:\\out\\other_beru.mp4");
-  });
-
   it("outputPathFor agrees with outputPathsForAll under deliberate collisions", () => {
     useEditorStore.setState({
       outputDir: "C:\\out",

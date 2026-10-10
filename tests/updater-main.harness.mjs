@@ -58,8 +58,8 @@ export function createUpdaterHarness() {
       if (id === "electron-updater") {
         if (!autoUpdater) {
           autoUpdater = {
-            autoDownload: false,
-            autoInstallOnAppQuit: false,
+            autoDownload: true,
+            autoInstallOnAppQuit: true,
             logger: null,
             verifyUpdateCodeSignature: vi.fn(async () => "invalid signature"),
             on: (event, cb) => handlers.set(event, cb),

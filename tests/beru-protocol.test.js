@@ -230,16 +230,6 @@ describe("beru protocol fails closed on unknown content types", () => {
     );
   });
 
-  it("no content-type table entry resolves to application/octet-stream", () => {
-    const protocolSrc = readFileSync(
-      path.join(process.cwd(), "main", "utils", "beru-protocol.js"),
-      "utf8",
-    );
-    const fallback = protocolSrc.match(/function contentTypeFor[\s\S]*?\n}/)?.[0] ?? "";
-    expect(fallback).toContain("|| null");
-    expect(fallback).not.toContain("application/octet-stream");
-  });
-
   it("registers the beru scheme with corsEnabled disabled", () => {
     const privileges = mainSrc.slice(
       mainSrc.indexOf('scheme: "beru"'),

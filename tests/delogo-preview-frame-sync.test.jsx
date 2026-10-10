@@ -37,6 +37,7 @@ afterEach(() => {
 
 async function mountPreview(playing = false, method = "inpaint") {
   vi.resetModules();
+  DeferredWorker.instance = null;
   vi.stubGlobal("React", React);
   vi.stubGlobal("Worker", DeferredWorker);
   const frames = new Map();
@@ -84,13 +85,11 @@ async function mountPreview(playing = false, method = "inpaint") {
     currentSrc: "local-fixture",
   });
   const decodedFrames = new Map();
-  if (playing) {
-    video.requestVideoFrameCallback = (callback) => {
-      decodedFrames.set(++nextFrame, callback);
-      return nextFrame;
-    };
-    video.cancelVideoFrameCallback = (id) => decodedFrames.delete(id);
-  }
+  video.requestVideoFrameCallback = (callback) => {
+    decodedFrames.set(++nextFrame, callback);
+    return nextFrame;
+  };
+  video.cancelVideoFrameCallback = (id) => decodedFrames.delete(id);
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
   act(() =>
@@ -155,13 +154,17 @@ describe("quick logo preview frame ownership", () => {
     expect(h.canvas.style.visibility).toBe("visible");
   });
 
-  it("paints a playing blur on every presented frame without waiting for a worker", async () => {
-    const h = await mountPreview(true, "blur");
-    h.presentFrame(0, 0.02);
-    expect(h.paintedValues()).toEqual([40]);
-    h.presentFrame(1 / 12, 0.11);
-    expect(h.paintedValues()).toEqual([40, 40]);
-  });
+  it.each(["blur", "inpaint", "temporal"])(
+    "paints a playing %s on every presented frame without waiting for a worker",
+    async (method) => {
+      const h = await mountPreview(true, method);
+      h.presentFrame(0, 0.02);
+      expect(h.paintedValues()).toEqual([40]);
+      h.presentFrame(1 / 12, 0.11);
+      expect(h.paintedValues()).toEqual([40, 40]);
+      expect(DeferredWorker.instance).toBeNull();
+    },
+  );
 
   it("clears the patch at seek start and rejects the preceding worker response", async () => {
     const h = await mountPreview();
@@ -195,17 +198,20 @@ describe("quick logo preview frame ownership", () => {
     expect(h.paintedValues()).not.toContain(99);
   });
 
-  it("uses decoded frame timestamps and rejects a delayed result across a playing cut", async () => {
-    const h = await mountPreview(true);
-    h.presentFrame(0, 0.02);
+  it("rejects a paused worker result after playback advances to another frame", async () => {
+    const h = await mountPreview();
+    h.drawNext();
     const worker = DeferredWorker.instance;
     const old = worker.sent.find((message) => message.type === "compute");
+    expect(old).toBeDefined();
+    h.video.paused = false;
+    h.video.currentTime = 0.02;
+    act(() => h.video.dispatchEvent(new Event("play")));
+    h.drawNext();
+    expect(h.paintedValues()).toEqual([40]);
     h.presentFrame(1 / 12, 0.11);
     act(() => worker.reply(old, 99));
-    expect(h.paintedValues()).not.toContain(99);
-    const next = worker.sent.filter((message) => message.type === "compute").at(-1);
-    expect(next.params.timestamp).toBe(1 / 12);
-    act(() => worker.reply(next, 27));
-    expect(h.paintedValues().at(-1)).toBe(27);
+    expect(h.paintedValues()).toEqual([40, 40]);
+    expect(worker.sent.filter((message) => message.type === "compute")).toHaveLength(1);
   });
 });

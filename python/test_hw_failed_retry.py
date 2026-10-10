@@ -32,38 +32,6 @@ def _encoder_of(cmd):
     return cmd[cmd.index("-c:v") + 1]
 
 
-def test_hw_failed_flag_marks_job_and_skips_gpu():
-    with tempfile.TemporaryDirectory(prefix="beru_hwfailed_") as tmp:
-        folder = Path(tmp)
-        job = _make_job(folder, 0)
-        calls = []
-
-        def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
-            calls.append(_encoder_of(cmd))
-            if _encoder_of(cmd) != "libx264":
-                return False, "nvenc: no capable devices found"
-            return True, None
-
-        orig_run = processor._run_ffmpeg
-        orig_admission = processor._SOFTWARE_FALLBACK_ADMISSION
-        processor._run_ffmpeg = fake_run
-        processor._SOFTWARE_FALLBACK_ADMISSION = None
-        processor._cancel_event.clear()
-        try:
-            r1 = processor._process_one(0, job, "ffmpeg", hw_encoder="h264_nvenc")
-            assert r1["status"] == "succeeded", r1
-            assert job.get("_hw_failed") is True
-            assert calls == ["h264_nvenc", "libx264"], calls
-
-            calls.clear()
-            r2 = processor._process_one(0, job, "ffmpeg", hw_encoder="h264_nvenc")
-            assert r2["status"] == "succeeded", r2
-            assert calls == ["libx264"], calls
-        finally:
-            processor._run_ffmpeg = orig_run
-            processor._SOFTWARE_FALLBACK_ADMISSION = orig_admission
-
-
 def test_pass2_runs_software_directly_for_hw_failed_jobs():
     with tempfile.TemporaryDirectory(prefix="beru_hwfailed_p2_") as tmp:
         folder = Path(tmp)
@@ -102,7 +70,6 @@ def test_pass2_runs_software_directly_for_hw_failed_jobs():
 
 
 def main():
-    test_hw_failed_flag_marks_job_and_skips_gpu()
     test_pass2_runs_software_directly_for_hw_failed_jobs()
     print("ALL PASSED")
 

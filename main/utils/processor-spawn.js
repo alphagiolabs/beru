@@ -193,6 +193,8 @@ export function buildProcessorChildEnv(baseEnv, { ffmpegPath, ffprobePath } = {}
     ...baseEnv,
     PYTHONIOENCODING: "utf-8",
     PYTHONUTF8: "1",
+    OPENBLAS_NUM_THREADS: baseEnv.OPENBLAS_NUM_THREADS || "1",
+    BERU_PARENT_PID: String(process.pid),
   };
   if (ffmpegPath) childEnv.BERU_FFMPEG = ffmpegPath;
   if (ffprobePath) childEnv.BERU_FFPROBE = ffprobePath;

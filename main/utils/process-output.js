@@ -118,6 +118,10 @@ export function createRunOutputFiles(jobs, outputRoot) {
       const position = targets.findIndex((job) => job.key === index);
       if (position < 0) throw new Error("El procesador devolvió un trabajo desconocido");
       if (!completed.has(index)) {
+        const stat = fs.statSync(stagedJobs[position].output_path);
+        if (!stat.isFile() || stat.size === 0) {
+          throw new Error("FFmpeg no produjo un archivo de salida válido");
+        }
         fs.renameSync(stagedJobs[position].output_path, targets[position].outputPath);
         invalidateBeruStatCache(targets[position].outputPath);
         completed.add(index);

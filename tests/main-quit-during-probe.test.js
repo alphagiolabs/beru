@@ -51,9 +51,13 @@ vi.mock("../main/utils/media-task-pool.js", () => ({
 }));
 
 vi.mock("../main/utils/concurrency.js", () => ({
-  runWithConcurrency: async (jobs) => {
+  runWithConcurrency: async (items, _limit, worker) => {
+    const results = new Array(items.length);
+    for (let idx = 0; idx < items.length; idx++) {
+      results[idx] = await worker(items[idx], idx);
+    }
     await mocks.state.interrupt("probe");
-    return jobs;
+    return results;
   },
 }));
 

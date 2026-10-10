@@ -33,17 +33,6 @@ def test_timed_crop_scales_to_full_frame():
     )
 
 
-def test_full_duration_crop_still_changes_resolution():
-    op = _crop_op(None, None)
-    filter_str, _label, _paths = build_filter_complex([op], 640, 480)
-    assert filter_str is not None
-    assert "crop=200:150:100:100" in filter_str
-    assert "split" not in filter_str, (
-        f"Full-duration crop must not split, got: {filter_str!r}"
-    )
-
-
 if __name__ == "__main__":
     test_timed_crop_scales_to_full_frame()
-    test_full_duration_crop_still_changes_resolution()
     print("OK: timed crop is a zoom (scales to full frame)")

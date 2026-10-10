@@ -200,6 +200,47 @@ function renderMirror(ctx, video, region, screen, side) {
   ctx.restore();
 }
 
+function renderLogoPatch(
+  bridge,
+  ws,
+  video,
+  ctx,
+  screen,
+  patch,
+  params,
+  method,
+  isCurrent,
+  runWorker,
+) {
+  const { crop } = patch;
+  if (!video.paused) {
+    paintResult(
+      ws,
+      ctx,
+      screen,
+      spatialLogoFallback(patch.frame.data, patch.width, patch.height, params, method),
+      "source",
+      true,
+      crop,
+    );
+    return;
+  }
+  if (!runWorker) return;
+  bridge.compute(
+    {
+      method,
+      params,
+      frame: patch.frame,
+      width: patch.width,
+      height: patch.height,
+      context: { screen, crop },
+    },
+    (context, result) => {
+      if (isCurrent()) paintResult(ws, ctx, context.screen, result, "source", true, context.crop);
+    },
+  );
+}
+
 function submitBlur(
   bridge,
   ws,
@@ -215,38 +256,12 @@ function submitBlur(
   const radius = Math.max(1, Math.floor(Math.max(1, Math.min(100, Number(strength) || 20)) / 3));
   const rect = paddedLogoRect(geometry.effect, video, 3 * radius);
   const patch = captureLogoPatch(ws, video, rect, geometry, screen, feather);
-  const { crop } = patch;
   const params = {
     radius: Math.max(1, Math.round(radius * patch.scale)),
     box: patch.box,
     feather: patch.feather,
   };
-  if (!video.paused) {
-    paintResult(
-      ws,
-      ctx,
-      screen,
-      spatialLogoFallback(patch.frame.data, patch.width, patch.height, params, "blur"),
-      "source",
-      true,
-      crop,
-    );
-    return;
-  }
-  if (!runWorker) return;
-  bridge.compute(
-    {
-      method: "blur",
-      params,
-      frame: patch.frame,
-      width: patch.width,
-      height: patch.height,
-      context: { screen, crop },
-    },
-    (context, result) => {
-      if (isCurrent()) paintResult(ws, ctx, context.screen, result, "source", true, context.crop);
-    },
-  );
+  renderLogoPatch(bridge, ws, video, ctx, screen, patch, params, "blur", isCurrent, runWorker);
 }
 
 function submitInpaint(
@@ -285,7 +300,6 @@ function submitInpaint(
   }
   const rectWithContext = paddedLogoRect(geometry.effect, video, 96);
   const patch = captureLogoPatch(ws, video, rectWithContext, geometry, screen, feather);
-  const { crop } = patch;
   if (
     patch.box.x < 1 ||
     patch.box.y < 1 ||
@@ -316,31 +330,7 @@ function submitInpaint(
     radius: 3,
     timestamp,
   };
-  if (!video.paused) {
-    paintResult(
-      ws,
-      ctx,
-      screen,
-      spatialLogoFallback(patch.frame.data, patch.width, patch.height, params),
-      "source",
-      true,
-      crop,
-    );
-  }
-  if (!runWorker) return;
-  bridge.compute(
-    {
-      method: "inpaint",
-      params,
-      frame: patch.frame,
-      width: patch.width,
-      height: patch.height,
-      context: { screen, crop },
-    },
-    (context, result) => {
-      if (isCurrent()) paintResult(ws, ctx, context.screen, result, "source", true, context.crop);
-    },
-  );
+  renderLogoPatch(bridge, ws, video, ctx, screen, patch, params, "inpaint", isCurrent, runWorker);
 }
 
 function submitTemporal(
@@ -378,7 +368,6 @@ function submitTemporal(
     submitBlur(bridge, ws, video, geometry, screen, ctx, strength, feather, isCurrent, runWorker);
     return;
   }
-  const { crop } = patch;
   const params = {
     radius,
     box: patch.box,
@@ -388,31 +377,7 @@ function submitTemporal(
     referenceGuard: Math.max(1, Math.ceil(patch.scale)),
     timestamp,
   };
-  if (!video.paused) {
-    paintResult(
-      ws,
-      ctx,
-      screen,
-      spatialLogoFallback(patch.frame.data, patch.width, patch.height, params),
-      "source",
-      true,
-      crop,
-    );
-  }
-  if (!runWorker) return;
-  bridge.compute(
-    {
-      method: "temporal",
-      params,
-      frame: patch.frame,
-      width: patch.width,
-      height: patch.height,
-      context: { screen, crop },
-    },
-    (context, result) => {
-      if (isCurrent()) paintResult(ws, ctx, context.screen, result, "source", true, context.crop);
-    },
-  );
+  renderLogoPatch(bridge, ws, video, ctx, screen, patch, params, "temporal", isCurrent, runWorker);
 }
 
 const CANVAS_METHODS = new Set(["temporal", "mirror", "mosaic", "inpaint", "blur"]);

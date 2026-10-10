@@ -16,6 +16,7 @@ const RUNTIME_PROCESSOR_MODULES = new Set([
   "media_probe.py",
   "op_shared.py",
   "preview.py",
+  "process_lifetime.py",
   "temporal_motion.py",
   "temporal_pipeline.py",
   "spatial_inpaint.py",

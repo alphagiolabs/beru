@@ -103,13 +103,22 @@ describe("system python resolution cache", () => {
 
   it("invalidateSystemPythonCache forces a fresh resolution", async () => {
     const mod = await freshModule();
-    const first = tempPython();
-    process.env.BERU_PYTHON = first;
-    expect((await mod.resolveProcessorSpawnAsync([]))?.command).toBe(first);
+    delete process.env.BERU_PYTHON;
+    spawn.mockImplementation(() => {
+      const proc = new EventEmitter();
+      proc.stdout = new PassThrough();
+      proc.stderr = new PassThrough();
+      proc.kill = vi.fn(() => true);
+      setImmediate(() => proc.emit("close", 0));
+      return proc;
+    });
+    const first = await mod.resolveProcessorSpawnAsync([]);
+    expect(first?.mode).toBe("script");
+    expect(await mod.resolveProcessorSpawnAsync([])).toEqual(first);
+    expect(spawn).toHaveBeenCalledTimes(1);
 
-    const second = tempPython();
-    process.env.BERU_PYTHON = second;
     mod.invalidateSystemPythonCache();
-    expect((await mod.resolveProcessorSpawnAsync([]))?.command).toBe(second);
+    expect(await mod.resolveProcessorSpawnAsync([])).toEqual(first);
+    expect(spawn).toHaveBeenCalledTimes(2);
   });
 });

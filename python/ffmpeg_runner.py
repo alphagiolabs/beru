@@ -5,6 +5,7 @@ Cancellation uses the run context, falling back to batch_context defaults.
 
 import json
 import logging
+import os
 import re
 import subprocess
 import threading
@@ -26,11 +27,13 @@ MAX_RETRIES = 2
 RETRY_DELAYS = [2, 5]
 MAX_STDERR_LINES = 256
 MAX_STDERR_CHARS = 48_000
+STALL_TIMEOUT_SEC = 120
 _tr_print_lock = threading.Lock()
 _last_job_progress_emit = {}
 _job_progress_lock = threading.Lock()
 _FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+\.?\d*)")
 _FFMPEG_SPEED_RE = re.compile(r"speed=\s*([0-9.]+)x")
+_FFMPEG_FRAME_RE = re.compile(r"(?:^|\s)frame=\s*(\d+)")
 
 
 def _safe_print(msg):
@@ -82,7 +85,7 @@ def _emit_job_progress(job_id, percent, speed, *, ctx=None):
     lock = ctx.progress_lock if ctx is not None else _job_progress_lock
     with lock:
         last_t = times.get(job_id, 0.0)
-        if pct < 99.0 and (now - last_t) < 1.0:
+        if pct < 100.0 and (now - last_t) < 1.0:
             return
         times[job_id] = now
     _safe_print(json.dumps({
@@ -105,39 +108,27 @@ def _is_transient_error(stderr_text):
 
 
 class StderrBuffer:
-    """Bounded stderr accumulator.
+    """Bounded stderr accumulator with constant-time append and eviction."""
 
-    Replaces the previous list+pop(0)+"".join() approach, which was O(n) per
-    appended line (list shift and full-buffer join inside the stderr lock).
-    Uses a deque(maxlen=...) for O(1) append/eviction and a running char count
-    so the char-cap check is O(1) per line instead of O(total buffered chars).
-    """
-
-    __slots__ = ("_buf", "_chars", "_max_chars", "_total")
+    __slots__ = ("_buf", "_chars", "_max_chars")
 
     def __init__(self, max_lines=MAX_STDERR_LINES, max_chars=MAX_STDERR_CHARS):
         self._buf = deque(maxlen=max_lines)
         self._chars = 0
         self._max_chars = max_chars
-        self._total = 0
 
     def append(self, line):
+        line = line[-self._max_chars:]
         if len(self._buf) == self._buf.maxlen:
             self._chars -= len(self._buf[0])
         self._buf.append(line)
         self._chars += len(line)
-        self._total += 1
         while self._chars > self._max_chars and len(self._buf) > 1:
             evicted = self._buf.popleft()
             self._chars -= len(evicted)
 
     def __len__(self):
         return len(self._buf)
-
-    def total_appended(self):
-        """Total lines ever appended (unbounded). Use this — not len() — to
-        detect ongoing stderr activity, since len() is capped at max_lines."""
-        return self._total
 
     def join(self):
         return "".join(self._buf)
@@ -227,110 +218,136 @@ def _kill_ffmpeg_process(proc):
         return
     try:
         proc.kill()
-    except Exception:
-        pass
+    except OSError:
+        if proc.poll() is None:
+            raise
     try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        try:
-            proc.terminate()
-            proc.wait(timeout=2)
-        except Exception:
-            pass
+        proc.terminate()
+        proc.wait(timeout=2)
 
 
 def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=None):
     """Run FFmpeg with bounded stderr capture, optional progress parsing, and cancel polling."""
     proc = subprocess.Popen(
         cmd,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
         encoding="utf-8",
         errors="replace",
         bufsize=1,
+        env=dict(ctx.env) if ctx is not None else None,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     stderr_lines = StderrBuffer()
     stderr_lock = threading.Lock()
     reader_done = threading.Event()
-    progress_state = {"last_pct": -1.0}
+    progress_state = {
+        "seconds": -1.0, "frame": -1,
+        "advanced_at": time.monotonic(), "reader_error": None, "speed": None,
+    }
 
     def read_stderr():
         try:
             if proc.stderr is None:
                 return
-            for line in proc.stderr:
+            for line in iter(lambda: proc.stderr.readline(4096), ""):
                 with stderr_lock:
                     stderr_lines.append(line)
-                if job_id is None or duration_sec <= 0:
-                    continue
                 m = _FFMPEG_TIME_RE.search(line)
-                if not m:
+                cur = None
+                if m:
+                    cur = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+                elif line.startswith("out_time_us="):
+                    value = line.strip().partition("=")[2]
+                    if value.lstrip("-").isdigit():
+                        cur = int(value) / 1_000_000
+                frame = _FFMPEG_FRAME_RE.search(line)
+                with stderr_lock:
+                    if cur is not None and cur > progress_state["seconds"]:
+                        progress_state["seconds"] = cur
+                        progress_state["advanced_at"] = time.monotonic()
+                    if frame and int(frame.group(1)) > progress_state["frame"]:
+                        progress_state["frame"] = int(frame.group(1))
+                        progress_state["advanced_at"] = time.monotonic()
+                if cur is None or job_id is None:
+                    sm = _FFMPEG_SPEED_RE.search(line)
+                    if sm:
+                        progress_state["speed"] = float(sm.group(1))
                     continue
-                h, mi, sec = int(m.group(1)), int(m.group(2)), float(m.group(3))
-                cur = h * 3600 + mi * 60 + sec
-                pct = (cur / duration_sec) * 100.0
+                pct = min(99.0, (cur / duration_sec) * 100.0) if duration_sec > 0 else 0
                 sm = _FFMPEG_SPEED_RE.search(line)
-                speed = float(sm.group(1)) if sm else None
-                if pct - progress_state["last_pct"] >= 1.0 or pct >= 99.0:
-                    _emit_job_progress(job_id, pct, speed, ctx=ctx)
-                    progress_state["last_pct"] = pct
+                speed = float(sm.group(1)) if sm else progress_state["speed"]
+                _emit_job_progress(job_id, pct, speed, ctx=ctx)
+        except Exception as exc:
+            with stderr_lock:
+                progress_state["reader_error"] = f"FFmpeg progress reader failed: {exc}"
         finally:
-            if proc.stderr is not None:
-                proc.stderr.close()
-            reader_done.set()
+            try:
+                if proc.stderr is not None:
+                    proc.stderr.close()
+            except OSError as exc:
+                with stderr_lock:
+                    progress_state["reader_error"] = f"FFmpeg stderr close failed: {exc}"
+            finally:
+                reader_done.set()
 
-    threading.Thread(target=read_stderr, daemon=True).start()
     deadline = time.monotonic() + timeout_sec
-
-    STALL_TIMEOUT_SEC = 120
-    last_output_time = time.monotonic()
-    prev_total = 0
-    stall_enabled = job_id is not None and duration_sec > 0
+    stall_enabled = job_id is not None
+    failure = None
 
     try:
+        threading.Thread(target=read_stderr, daemon=True).start()
         while True:
+            with stderr_lock:
+                reader_error = progress_state["reader_error"]
+                last_advance = progress_state["advanced_at"]
+            if reader_error:
+                failure = reader_error
+                break
             returncode = proc.poll()
             if returncode is not None:
                 break
             if _check_cancelled(ctx):
-                _kill_ffmpeg_process(proc)
-                reader_done.wait(timeout=1)
-                _cleanup_ffmpeg_partial(cmd)
-                return False, "Cancelled"
+                failure = "Cancelled"
+                break
             now = time.monotonic()
             if now >= deadline:
-                _kill_ffmpeg_process(proc)
-                reader_done.wait(timeout=1)
-                _cleanup_ffmpeg_partial(cmd)
-                return False, f"Timeout after {timeout_sec}s"
-            if stall_enabled:
-                with stderr_lock:
-                    current_total = stderr_lines.total_appended()
-                if current_total > prev_total:
-                    last_output_time = now
-                    prev_total = current_total
-                elif now - last_output_time > STALL_TIMEOUT_SEC:
-                    _kill_ffmpeg_process(proc)
-                    reader_done.wait(timeout=1)
-                    _cleanup_ffmpeg_partial(cmd)
-                    return False, f"FFmpeg stalled (no output for {STALL_TIMEOUT_SEC}s)"
-            time.sleep(0.2)
-    except Exception:
+                failure = f"Timeout after {timeout_sec}s"
+                break
+            if stall_enabled and now - last_advance > STALL_TIMEOUT_SEC:
+                failure = f"FFmpeg stalled (no progress for {STALL_TIMEOUT_SEC}s)"
+                break
+            try:
+                proc.wait(timeout=0.2)
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
         if proc.poll() is None:
             _kill_ffmpeg_process(proc)
-        reader_done.wait(timeout=1)
-        raise
-
-    reader_done.wait(timeout=2)
+        if not reader_done.wait(timeout=2):
+            failure = failure or "FFmpeg stderr did not close"
     with stderr_lock:
         stderr = stderr_lines.join()
+        failure = failure or progress_state["reader_error"]
+
+    if failure:
+        _cleanup_ffmpeg_partial(cmd)
+        detail = _extract_error_line(stderr)
+        return False, failure if failure == "Cancelled" or not detail else f"{failure}: {detail}"
 
     if returncode == 0:
-        if job_id is not None and duration_sec > 0:
+        output = _output_path_from_ffmpeg_cmd(cmd) if _input_path_from_ffmpeg_cmd(cmd) else None
+        if output and (not os.path.isfile(output) or os.path.getsize(output) == 0):
+            return False, "FFmpeg exited with code 0 but produced no valid output file"
+        if job_id is not None:
             _emit_job_progress(job_id, 100.0, None, ctx=ctx)
         return True, None
-    return False, _extract_error_line(stderr)
+    detail = _extract_error_line(stderr)
+    return False, f"FFmpeg exited with code {returncode}" + (f": {detail}" if detail else "")
 
 
 def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
@@ -374,27 +391,34 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None
 
 
 def _wait_retry(delay, ctx):
-    if ctx is None:
-        time.sleep(delay)
-        return
     deadline = time.monotonic() + delay
     while not _check_cancelled(ctx):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
-        ctx.cancel_event.wait(min(0.2, remaining))
+        if ctx is None:
+            time.sleep(min(0.2, remaining))
+        else:
+            ctx.cancel_event.wait(min(0.2, remaining))
 
 
-def _native_stream_copy(input_path, output_path, *, ctx=None):
+def _native_stream_copy(input_path, output_path, *, ctx=None, job_id=None):
     """Chunked byte copy with cooperative cancellation. Returns (ok, err)."""
     try:
+        total_bytes = os.path.getsize(input_path)
+        copied_bytes = 0
         with open(input_path, "rb") as fin, open(output_path, "wb") as fout:
+            buffer = bytearray(min(8 * 1024 * 1024, max(1, total_bytes)))
+            view = memoryview(buffer)
             while True:
                 if _check_cancelled(ctx):
                     return False, "Cancelled"
-                chunk = fin.read(8 * 1024 * 1024)
-                if not chunk:
+                count = fin.readinto(buffer)
+                if not count:
+                    _emit_job_progress(job_id, 100, None, ctx=ctx)
                     return True, None
-                fout.write(chunk)
+                fout.write(view[:count])
+                copied_bytes += count
+                _emit_job_progress(job_id, min(99, copied_bytes * 100 / max(1, total_bytes)), None, ctx=ctx)
     except OSError as exc:
         return False, str(exc)

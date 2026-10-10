@@ -68,8 +68,14 @@ class ProcessorContextTests(unittest.TestCase):
             with patch.object(processor, "_run_ffmpeg", return_value=(True, None)), redirect_stdout(io.StringIO()):
                 cancelled = processor.process_jobs([job], "ffmpeg", ctx=first)
                 completed = processor.process_jobs([job], "ffmpeg", ctx=second)
-            self.assertEqual(cancelled["cancelled"], 1)
-            self.assertEqual(completed["succeeded"], 1)
+            self.assertEqual(
+                {key: cancelled[key] for key in ("total", "succeeded", "failed", "cancelled")},
+                {"total": 1, "succeeded": 0, "failed": 0, "cancelled": 1},
+            )
+            self.assertEqual(
+                {key: completed[key] for key in ("total", "succeeded", "failed", "cancelled")},
+                {"total": 1, "succeeded": 1, "failed": 0, "cancelled": 0},
+            )
 
     def test_running_remux_encode_and_software_fallback_are_cancelled(self):
         real_popen = subprocess.Popen
@@ -220,7 +226,7 @@ class ProcessorContextTests(unittest.TestCase):
             self.assertEqual([event["cancelled"] for event in summaries], [1, 0])
             self.assertEqual([event["succeeded"] for event in summaries], [0, 1])
             self.assertEqual([event for event in events if event["type"] == "run_end"], [
-                {"type": "run_end", "id": 1, "ok": True},
+            {"type": "run_end", "id": 1, "ok": False},
                 {"type": "run_end", "id": 2, "ok": True},
             ])
 

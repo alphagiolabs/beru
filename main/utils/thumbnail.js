@@ -8,10 +8,6 @@ import { createThumbnailDiskCache } from "./thumbnail-disk-cache.js";
 const FILMSTRIP_CACHE_MAX = 12;
 const MAX_THUMBNAIL_BYTES = 4 * 1024 * 1024;
 
-// No hay caché en memoria para thumbnails: el renderer ya deduplica por path
-// (thumbnailsByPath) y runMediaTask deduplica extracciones concurrentes por key.
-// El disco es el único nivel en main; una tercera copia del mismo dataUrl no
-// compensa los ~ms que ahorra en releer el JSON.
 const filmstripCache = new Map();
 let diskCache;
 

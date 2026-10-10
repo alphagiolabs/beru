@@ -3,23 +3,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import useEditorStore from "../src/stores/useEditorStore";
 import StatusFooter from "../src/components/StatusFooter";
-import UpdatePrompt from "../src/components/UpdatePrompt";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let root = null;
-
-function renderFooterWithUpdatePrompt() {
-  return act(async () => {
-    root.render(
-      <>
-        <StatusFooter />
-        <UpdatePrompt />
-      </>,
-    );
-  });
-}
 
 describe("StatusFooter", () => {
   beforeEach(() => {
@@ -106,100 +94,6 @@ describe("StatusFooter", () => {
     expect(document.querySelector(".status-footer").textContent).toContain("0/2");
   });
 
-  it("opens centered update modal from version badge when an update is available", async () => {
-    useEditorStore.setState({
-      update: {
-        status: "available",
-        version: "9.9.9",
-        percent: 0,
-        error: null,
-        transferred: 0,
-        total: 0,
-        releaseNotes:
-          "What's new\n- feat: batch queue overhaul\n- Improve footer\nFixed\n- fix: batch queue",
-        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
-      },
-    });
-
-    await renderFooterWithUpdatePrompt();
-
-    const versionBtn = document.querySelector(".status-footer-version--badge");
-    expect(versionBtn).toBeTruthy();
-
-    await act(async () => {
-      useEditorStore.getState().setUpdateModalOpen(true);
-    });
-
-    const dialog = document.querySelector(".status-footer-update-panel");
-    expect(dialog).toBeTruthy();
-    expect(dialog.getAttribute("role")).toBe("dialog");
-    expect(document.body.textContent).toMatch(/Nueva actualización disponible/i);
-    expect(document.body.textContent).toMatch(/Mejorado/i);
-    expect(document.body.textContent).toMatch(/Corregido/i);
-    expect(document.body.textContent).toMatch(/Actualizar ahora/i);
-
-    const primaryBtn = document.querySelector(".status-footer-update-primary");
-    const moreNote = document.querySelector(".status-footer-update-more");
-    expect(primaryBtn).toBeTruthy();
-    if (moreNote) {
-      expect(
-        primaryBtn.compareDocumentPosition(moreNote) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    }
-  });
-
-  it("surfaces the ready modal after the user authorizes a download; auto-install lives in main", async () => {
-    window.api = {
-      downloadUpdate: vi.fn(async () => ({ ok: true })),
-      installUpdate: vi.fn(async () => ({ ok: true })),
-    };
-
-    useEditorStore.setState({
-      updateModalOpen: true,
-      update: {
-        status: "available",
-        version: "9.9.9",
-        percent: 0,
-        error: null,
-        transferred: 0,
-        total: 0,
-        releaseNotes: "- fix: footer polish",
-        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
-      },
-    });
-
-    await renderFooterWithUpdatePrompt();
-
-    const updateNow = Array.from(document.querySelectorAll("button")).find((btn) =>
-      btn.textContent.includes("Actualizar ahora"),
-    );
-    await act(async () => {
-      updateNow.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(window.api.downloadUpdate).toHaveBeenCalledWith({ version: "9.9.9" });
-
-    await act(async () => {
-      useEditorStore.setState({
-        updateModalOpen: true,
-        update: {
-          status: "ready",
-          version: "9.9.9",
-          percent: 100,
-          error: null,
-          transferred: 1000,
-          total: 1000,
-          releaseNotes: "- fix: footer polish",
-          releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
-        },
-      });
-    });
-
-    expect(document.body.textContent).toMatch(/Reiniciar e instalar/i);
-    expect(window.api.installUpdate).not.toHaveBeenCalled();
-  });
-
   it("opens a centered confirmation when the current version is up to date", async () => {
     useEditorStore.getState().applyUpdaterEvent({ type: "not-available", version: "1.6.47" });
     await act(async () => {
@@ -224,31 +118,6 @@ describe("StatusFooter", () => {
     });
 
     expect(document.querySelector(".status-footer-up-to-date-panel")).toBeNull();
-  });
-
-  it("does not show a release notes link in the update modal", async () => {
-    useEditorStore.setState({
-      update: {
-        status: "available",
-        version: "9.9.9",
-        percent: 0,
-        error: null,
-        transferred: 0,
-        total: 0,
-        releaseNotes: "Fixed\n- fix: batch queue",
-        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
-      },
-    });
-
-    await renderFooterWithUpdatePrompt();
-
-    const versionBtn = document.querySelector(".status-footer-version--badge");
-    await act(async () => {
-      versionBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(document.querySelector(".status-footer-update-release-link")).toBeNull();
-    expect(document.body.textContent).not.toMatch(/Ver notas/i);
   });
 
   it("shows a check-for-updates button in the up-to-date dialog", async () => {

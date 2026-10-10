@@ -74,21 +74,24 @@ describe("delogo render core parity with the legacy inline kernels", () => {
 });
 
 describe("delogo render session semantics", () => {
-  it("restarts the history when the sample size changes", () => {
+  it("discards the cached frame when the sample size changes at the same timestamp", () => {
     const session = createDelogoRenderSession();
-    session.compute("temporal", { radius: 7 }, constantFrame(2, 2, 255), 2, 2);
-    session.compute("temporal", { radius: 7 }, constantFrame(2, 2, 255), 2, 2);
-    const result = session.compute("temporal", { radius: 7 }, constantFrame(1, 1, 0), 1, 1);
-    expect(result.data[0]).toBe(0);
+    const params = { box: { x: 4, y: 4, w: 4, h: 4 }, radius: 7, timestamp: 0 };
+    session.compute("temporal", params, constantFrame(16, 16, 255), 16, 16);
+    const result = session.compute("temporal", params, constantFrame(20, 16, 0), 20, 16);
+    expect(result.width).toBe(20);
+    expect(result.height).toBe(16);
+    expect(result.data).toHaveLength(20 * 16 * 4);
+    expect(result.data[(4 * 20 + 4) * 4]).toBe(0);
   });
 
-  it("clears the history on reset()", () => {
+  it("clears the cached frame on reset before another clip starts at the same timestamp", () => {
     const session = createDelogoRenderSession();
-    session.compute("temporal", { radius: 7 }, constantFrame(1, 1, 255), 1, 1);
-    session.compute("temporal", { radius: 7 }, constantFrame(1, 1, 255), 1, 1);
+    const params = { box: { x: 4, y: 4, w: 4, h: 4 }, radius: 7, timestamp: 0 };
+    session.compute("temporal", params, constantFrame(16, 16, 255), 16, 16);
     session.reset();
-    const result = session.compute("temporal", { radius: 7 }, constantFrame(1, 1, 0), 1, 1);
-    expect(result.data[0]).toBe(0);
+    const result = session.compute("temporal", params, constantFrame(16, 16, 0), 16, 16);
+    expect(result.data[(4 * 16 + 4) * 4]).toBe(0);
   });
 
   it("reports mosaic output size as the tiny grid", () => {

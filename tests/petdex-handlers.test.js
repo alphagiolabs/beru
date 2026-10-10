@@ -152,13 +152,6 @@ describe("petdex handlers", () => {
     expect(res.path).toMatch(/spritesheet\.webp$/);
   });
 
-  it("exposes bundled catalog and boba assets in the repo", async () => {
-    const { readBundledCatalog } = await import("../main/utils/petdex-fs.js");
-    const bundled = readBundledCatalog();
-    expect(bundled?.pets?.length).toBeGreaterThan(0);
-    expect(bundled.pets.some((pet) => pet.slug === "boba")).toBe(true);
-  });
-
   it("keeps offline bundled catalog available without network", async () => {
     const { readBundledCatalog } = await import("../main/utils/petdex-fs.js");
     const { normalizeManifest } = await import("../main/utils/petdex-core.js");

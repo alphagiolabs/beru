@@ -137,28 +137,7 @@ describe("session-persist", () => {
     });
   });
 
-  it("round-trips through sessionStorage under the stable key", () => {
-    const snap = buildSessionSnapshot({
-      queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }],
-      outputDir: "C:\\out",
-      templateRegions: [],
-      selectedTemplateRegionId: null,
-      nextRegionLabel: 1,
-      excelPath: null,
-      excelHeaders: [],
-      excelRows: [],
-      excelMapping: { idColumn: null, columns: {} },
-      excelMatchStatus: {},
-      excelRowIndexByFilename: {},
-    });
-    sessionStorage.setItem(SESSION_PERSIST_KEY, JSON.stringify(snap));
-    const raw = sessionStorage.getItem(SESSION_PERSIST_KEY);
-    const restored = parseSessionSnapshot(JSON.parse(raw));
-    expect(restored.outputDir).toBe("C:\\out");
-    expect(restored.queue[0].path).toBe("C:\\v\\a.mp4");
-  });
-
-  it("skips sessionStorage setItem when snapshot JSON is unchanged", () => {
+  it("writes and restores under the stable key without rewriting an unchanged snapshot", () => {
     const state = {
       queue: [{ path: "C:\\v\\a.mp4", filename: "a.mp4" }],
       outputDir: "C:\\out",
@@ -168,6 +147,14 @@ describe("session-persist", () => {
     writeSessionSnapshotToStorage(state);
     writeSessionSnapshotToStorage(state);
     expect(setItem).toHaveBeenCalledTimes(1);
+    expect(setItem.mock.calls[0][0]).toBe("beru-queue-session");
+    expect(JSON.parse(setItem.mock.calls[0][1])).toMatchObject({
+      outputDir: "C:\\out",
+      queue: [{ path: "C:\\v\\a.mp4" }],
+    });
+    const restored = readSessionSnapshotFromStorage();
+    expect(restored.outputDir).toBe("C:\\out");
+    expect(restored.queue[0].path).toBe("C:\\v\\a.mp4");
     setItem.mockRestore();
   });
 

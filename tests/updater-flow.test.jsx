@@ -43,6 +43,7 @@ describe("realistic update flow", () => {
       queue: [],
       batchSummary: null,
       language: "es",
+      authStatus: "authenticated",
       updateModalOpen: false,
       update: {
         status: "idle",
@@ -116,6 +117,7 @@ describe("realistic update flow", () => {
     });
 
     expect(document.body.textContent).toMatch(/Reiniciar e instalar/i);
+    expect(installUpdate).not.toHaveBeenCalled();
     expect(document.querySelector(".status-footer-update-release-link")).toBeNull();
     expect(document.body.textContent).not.toMatch(/Ver notas/i);
 
@@ -129,7 +131,7 @@ describe("realistic update flow", () => {
     };
 
     useEditorStore.setState({
-      updateModalOpen: true,
+      updateModalOpen: false,
       update: {
         status: "available",
         version: "9.9.9",
@@ -144,6 +146,21 @@ describe("realistic update flow", () => {
     });
 
     await renderFooter();
+
+    await act(async () => {
+      document
+        .querySelector(".status-footer-version--badge")
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(document.querySelector(".status-footer-update-panel").getAttribute("role")).toBe(
+      "dialog",
+    );
+    expect(document.body.textContent).toMatch(/Nueva actualización disponible/i);
+    expect(document.body.textContent).toMatch(/Mejorado/i);
+    expect(document.body.textContent).toMatch(/Corregido/i);
+    expect(document.body.textContent).toMatch(/Actualizar ahora/i);
+    expect(document.body.textContent).not.toMatch(/Ver notas/i);
 
     const changelog = document.querySelector(".status-footer-update-changelog");
     const primaryBtn = document.querySelector(".status-footer-update-primary");

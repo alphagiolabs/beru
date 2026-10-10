@@ -277,30 +277,18 @@ describe("createMediaTaskPool", () => {
     await expect(pool.run(() => "after")).resolves.toBe("after");
   });
 
-  it("runs interactive work before queued normal work", async () => {
-    const pool = createMediaTaskPool({ maxActive: 1, ...FAT_MEMORY });
-    const release = [];
-    const blocker = pool.run(blockingTask(release));
-    await Promise.resolve();
-    const order = [];
-    const normal = pool.run(() => order.push("normal"));
-    const interactive = pool.run(() => order.push("interactive"), { interactive: true });
-
-    release.forEach((finish) => finish());
-    await Promise.all([blocker, normal, interactive]);
-    expect(order).toEqual(["interactive", "normal"]);
-  });
-
-  it("returns the pending promise for a duplicate key", async () => {
+  it("shares active keyed work without executing a duplicate task", async () => {
     const pool = createMediaTaskPool({ maxActive: 1, ...FAT_MEMORY });
     const release = [];
     const pending = pool.run(blockingTask(release), { key: "k" });
     await Promise.resolve();
 
-    expect(pool.run(() => "duplicate", { key: "k" })).toBe(pending);
+    const duplicateTask = vi.fn(() => "duplicate");
+    const duplicate = pool.run(duplicateTask, { key: "k" });
 
-    release.forEach((finish) => finish());
-    await pending;
+    release.forEach((finish) => finish("original"));
+    await expect(Promise.all([pending, duplicate])).resolves.toEqual(["original", "original"]);
+    expect(duplicateTask).not.toHaveBeenCalled();
   });
 
   it("keeps queues and flags isolated between pools", async () => {

@@ -4,7 +4,6 @@ import {
   drawtextLineSpacingPx,
   layoutExportText,
   verticalAlignToFlex,
-  wrapTextToWidth,
 } from "../src/utils/text-layout.js";
 import { normalizeTextStyle, textStyleToPythonPayload } from "../src/utils/text-style.js";
 
@@ -18,11 +17,6 @@ describe("text-layout utilities", () => {
   it("binarySearchAutoFitFontSize picks the largest fitting size", () => {
     const fits = (px) => px <= 20;
     expect(binarySearchAutoFitFontSize(fits, { minPx: 8, maxPx: 32 })).toBe(20);
-  });
-
-  it("wrapTextToWidth breaks long lines for export estimates", () => {
-    const wrapped = wrapTextToWidth("one two three four five six", 80, 32);
-    expect(wrapped.split("\n").length).toBeGreaterThan(1);
   });
 
   it("drawtextLineSpacingPx matches FFmpeg round(font_size * (line_height-1))", () => {

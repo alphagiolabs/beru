@@ -108,13 +108,14 @@ function boxBlurRGBA(data, width, height, radius, passes) {
   );
   if (!r) return data;
   const horizontal = new Uint8ClampedArray(data.length);
-  const output = new Uint8ClampedArray(data.length);
+  let output = new Uint8ClampedArray(data.length);
   const sums = new Int32Array(width * 4);
   const stride = width * 4;
   const divisor = 2 * r + 1;
-  // Integer sums over an odd window round exactly by adding r before truncation.
+  // The vertical window is odd and the sums are integers, so `+ r` rounds exactly.
   const reflect = (index, size) =>
     index < 0 ? -index - 1 : index >= size ? 2 * size - index - 1 : index;
+  let passOutput = output;
   for (let pass = 0; pass < passes; pass++) {
     for (let y = 0; y < height; y++) {
       const row = y * stride;
@@ -157,10 +158,12 @@ function boxBlurRGBA(data, width, height, radius, passes) {
         sums[x + 2] += horizontal[add + x + 2] - horizontal[remove + x + 2];
       }
     }
-    data = output;
+    const passOutput = output;
+    output = data;
+    data = passOutput;
   }
-  for (let i = 3; i < output.length; i += 4) output[i] = 255;
-  return output;
+  for (let i = 3; i < passOutput.length; i += 4) passOutput[i] = 255;
+  return passOutput;
 }
 
 function applyLogoMask(data, width, height, box, feather = 0) {

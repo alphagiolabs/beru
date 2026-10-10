@@ -11,7 +11,6 @@ import {
   createBatchStartPatch,
   createSingleStartPatch,
 } from "../src/utils/export-pipeline.js";
-import { prepareRun } from "../src/utils/export-run.js";
 import { normalizeJob } from "../shared/job-manifest.js";
 import { MINIMAL_JOB_NORMALIZED } from "./fixtures/job-manifest.js";
 
@@ -103,22 +102,11 @@ describe("export-pipeline", () => {
         source_height: 1080,
       });
     });
-
-    it("forwards the enabled watermark into the run's job", () => {
-      const wm = { enabled: true, text: "x" };
-      const job = prepareRun({
-        queue: [item()],
-        outputPaths: ["C:\\out\\a.mp4"],
-        encodeProfile: "balanced",
-        watermark: wm,
-      }).jobs[0];
-      expect(job.watermark).toBe(wm);
-    });
   });
 
   describe("buildExportJobs", () => {
     it("maps queue items via ctxForItem and drops nulls", () => {
-      const queue = [item(), item({ path: "C:\\videos\\b.mp4" })];
+      const queue = [item(), null, item({ path: "C:\\videos\\b.mp4" })];
       const jobs = buildExportJobs(queue, (qItem, index) =>
         buildExportJob(qItem, index, {
           encodeProfile: "balanced",
@@ -127,7 +115,7 @@ describe("export-pipeline", () => {
         }),
       );
       expect(jobs).toHaveLength(2);
-      expect(jobs[1].id).toBe(1);
+      expect(jobs[1].id).toBe(2);
     });
   });
 

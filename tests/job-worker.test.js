@@ -56,6 +56,71 @@ afterEach(() => {
 });
 
 describe("job worker protocol", () => {
+  it("terminates a worker that stays alive without reporting progress and permits a replacement", async () => {
+    let proc;
+    vi.useFakeTimers();
+    try {
+      const ready = await readyWorker();
+      proc = ready.proc;
+      await vi.advanceTimersByTimeAsync(5 * 60_000 + 1);
+      expect(await ready.run.done).toMatchObject({
+        died: true,
+        error: expect.stringMatching(/dejó de responder/),
+      });
+      expect(proc.kill).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+    const replacement = await readyWorker();
+    expect(replacement.proc).not.toBe(proc);
+  });
+
+  it("keeps a slow export alive while it reports progress", async () => {
+    vi.useFakeTimers();
+    try {
+      const { proc, run } = await readyWorker();
+      let settled = false;
+      run.done.then(() => {
+        settled = true;
+      });
+      for (let i = 0; i < 3; i++) {
+        await vi.advanceTimersByTimeAsync(4 * 60_000);
+        proc.stdout.write('{"type":"job_progress","index":0,"percent":0}\n');
+      }
+      expect(settled).toBe(false);
+      expect(proc.kill).not.toHaveBeenCalled();
+      proc.stdout.write(
+        `${JSON.stringify({ type: "run_end", id: requestLine(proc).id, ok: true })}\n`,
+      );
+      expect(await run.done).toMatchObject({ ok: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("does not let an obsolete run_end settle a newer request", async () => {
+    const first = await readyWorker();
+    const firstId = requestLine(first.proc).id;
+    first.proc.stdout.write(`${JSON.stringify({ type: "run_end", id: firstId, ok: true })}\n`);
+    await first.run.done;
+    const next = await startJobRun({ spawnSpec: SPAWN_SPEC, jobsFile: "next.json" });
+    let settled = false;
+    next.done.then(() => {
+      settled = true;
+    });
+    first.proc.stdout.write(`${JSON.stringify({ type: "run_end", id: firstId, ok: true })}\n`);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    first.proc.stdout.write(
+      `${JSON.stringify({ type: "run_end", id: requestLine(first.proc, 1).id, ok: true })}\n`,
+    );
+    expect(await next.done).toMatchObject({ ok: true });
+  });
+
+  it("rejects a run_end that omits explicit success", async () => {
+    const { proc, run } = await readyWorker();
+    proc.stdout.write(`${JSON.stringify({ type: "run_end", id: requestLine(proc).id })}\n`);
+    expect(await run.done).toMatchObject({ ok: false, error: expect.stringMatching(/inválida/) });
+  });
   it("does not submit a cancelled request when the worker becomes ready later", async () => {
     const proc = fakeWorker();
     spawn.mockReturnValueOnce(proc);
@@ -72,7 +137,9 @@ describe("job worker protocol", () => {
 
     const next = await startJobRun({ spawnSpec: SPAWN_SPEC, jobsFile: "next.json" });
     expect(requestLine(proc).jobs_file).toBe("next.json");
-    proc.stdout.write('{"type":"run_end","ok":true}\n');
+    proc.stdout.write(
+      `${JSON.stringify({ type: "run_end", id: requestLine(proc).id, ok: true })}\n`,
+    );
     expect(await next.done).toMatchObject({ ok: true });
   });
 

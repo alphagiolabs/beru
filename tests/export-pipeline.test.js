@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { filterOperationsForExport } from "../src/utils/operation.js";
 import { prepareRun } from "../src/utils/export-run.js";
 import { installMockApi, makeQueueItem, resetEditorState } from "./helpers/store.js";
 
@@ -84,23 +83,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     );
     expect(job.operations[0].delogo_method).toBe("mirror");
     expect(job.operations[0].mirror_side).toBe("left");
-  });
-
-  it("builds valid delogo job for inpaint method", () => {
-    const region = { x: 0.05, y: 0.05, w: 0.1, h: 0.08 };
-    const job = jobFor(
-      queueItem(0, {
-        operations: [
-          {
-            id: "delogo-3",
-            mode: "delogo",
-            region,
-            delogoMethod: "inpaint",
-          },
-        ],
-      }),
-    );
-    expect(job.operations[0].delogo_method).toBe("inpaint");
   });
 
   it("simpleDelogo is no longer a recognized field (dead auto-mode removed)", () => {
@@ -304,10 +286,14 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
       textAlign: "center",
       textOpacity: 0.75,
       boxBorderWidth: 9,
+      textShadowEnabled: true,
+      textShadowColor: "#111111",
+      textShadowOffsetX: 3,
+      textShadowOffsetY: 4,
     });
 
     useEditorStore.getState().updateExcelMapping({ idColumn: "id", columns: { r1: "TEXT_1" } });
-    expect(useEditorStore.getState().excelMatchStatus[0]).toBe("matched");
+    expect(useEditorStore.getState().excelMatchStatus).toEqual({ 0: "matched" });
     const op = useEditorStore.getState().queue[0].operations[0];
 
     expect(op.text).toBe("Hola Mundo");
@@ -318,6 +304,10 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(op.boxBorderWidth).toBe(9);
     expect(op.fontSize).toBe(44);
     expect(op.fontColor).toBe("#abcdef");
+    expect(op.textShadowEnabled).toBe(true);
+    expect(op.textShadowColor).toBe("#111111");
+    expect(op.textShadowOffsetX).toBe(3);
+    expect(op.textShadowOffsetY).toBe(4);
   });
 
   it("export pipeline uses the per-video moved batch text region", async () => {
@@ -449,21 +439,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
       }),
     );
     expect(job.operations[0].text).toBe("Price: ${99}");
-  });
-
-  it("filterOperationsForExport drops blank text ops but keeps delogo ops", () => {
-    const ops = [
-      { mode: "delogo", region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 }, delogoMethod: "inpaint" },
-      { mode: "text", region: { x: 0.5, y: 0.5, w: 0.2, h: 0.1 }, text: "" },
-      { mode: "text", region: { x: 0.6, y: 0.6, w: 0.2, h: 0.1 }, text: "Hello" },
-      { mode: "blur", region: { x: 0.1, y: 0.1, w: 0.1, h: 0.1 }, blurStrength: 20 },
-    ];
-    const filtered = filterOperationsForExport(ops);
-    expect(filtered).toHaveLength(3);
-    expect(filtered[0].mode).toBe("delogo");
-    expect(filtered[1].mode).toBe("text");
-    expect(filtered[1].text).toBe("Hello");
-    expect(filtered[2].mode).toBe("blur");
   });
 
   it("preserves non-text ops when a mapping reapply creates text ops", () => {

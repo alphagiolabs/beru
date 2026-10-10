@@ -319,6 +319,28 @@ describe("renderer Processing Run through the store and IPC adapter", () => {
     expect(showToast).not.toHaveBeenCalled();
   });
 
+  it("does not report batch success over a confirmed job failure", async () => {
+    mount();
+    const pending = start("run-a");
+    emit("onJobError", { runId: "run-a", index: 0, error: "FFmpeg exited with code 9" });
+    emit("onComplete", { runId: "run-a", index: 1, output: "C:\\output\\b.mp4" });
+    emit("onFinished", { runId: "run-a", code: 0 });
+    expect(await reply(0, { success: true, runId: "run-a" }, pending)).toMatchObject({ ok: false });
+    expect(get().queue[0].status).toBe("error");
+    expect(get().queue[1].status).toBe("done");
+    expect(get().isProcessing).toBe(false);
+  });
+
+  it("treats a signal exit with no numeric code as a failure", async () => {
+    mount();
+    const pending = start("run-a");
+    emit("onFinished", { runId: "run-a", code: null });
+    expect(await reply(0, { success: false, runId: "run-a" }, pending)).toMatchObject({
+      ok: false,
+    });
+    expect(showToast).toHaveBeenCalledOnce();
+  });
+
   it("cancels without a finished event and retains completed exports", async () => {
     mount();
     const pending = start("run-a");

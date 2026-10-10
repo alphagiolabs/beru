@@ -149,6 +149,48 @@ function artifactsDirOf() {
 }
 
 describe("process:start with a fake job worker", () => {
+  it.each(["missing", "empty", "failed", "exit-zero"])(
+    "rejects a false successful worker outcome after %s output",
+    async (failure) => {
+      const pending = mocks.handlers.get("process:start")({}, [{ id: 0, input_path: "clip.mp4" }]);
+      await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
+      if (failure === "empty") {
+        fs.writeFileSync(mocks.jobs[0].output_path, "");
+        mocks.emitLine('{"type":"complete","index":0}');
+      } else if (failure === "failed") {
+        mocks.emitLine('{"type":"error","index":0,"error":"Encoder crashed (exit 9)"}');
+      }
+      if (failure === "exit-zero") mocks.proc.exitCode = 0;
+      mocks.emitLine('{"type":"summary","total":1,"succeeded":1,"failed":0,"cancelled":0}');
+      mocks.resolveDone(failure === "exit-zero" ? { died: true, code: 0 } : { ok: true });
+      expect(await pending).toMatchObject({ success: false });
+      expect(calls("process:complete")).toHaveLength(0);
+      expect(calls("process:summary").at(-1)[1]).toMatchObject({
+        total: 1,
+        succeeded: 0,
+        failed: 1,
+        cancelled: 0,
+      });
+      expect(runModule.hasActiveProcessing()).toBe(false);
+    },
+  );
+
+  it("preserves a healthy later job after an earlier failure and fails the batch", async () => {
+    const pending = mocks.handlers.get("process:start")({}, [
+      { id: 0, input_path: "bad.mp4", output_path: path.join(outputDir, "bad.mp4") },
+      { id: 1, input_path: "good.mp4", output_path: path.join(outputDir, "good.mp4") },
+    ]);
+    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
+    mocks.emitLine('{"type":"error","index":0,"error":"Encoder crashed (exit 9)"}');
+    fs.writeFileSync(mocks.jobs[1].output_path, "export");
+    mocks.emitLine('{"type":"complete","index":1}');
+    mocks.resolveDone({ ok: true });
+    expect(await pending).toMatchObject({ success: false });
+    expect(calls("process:jobError")[0][1]).toMatchObject({ index: 0 });
+    expect(calls("process:complete")[0][1]).toMatchObject({ index: 1 });
+    expect(fs.readFileSync(path.join(outputDir, "good.mp4"), "utf8")).toBe("export");
+  });
+
   it("does not start a worker after cancelling asynchronous media validation", async () => {
     let releaseValidation;
     let enteredValidation;
@@ -191,7 +233,12 @@ describe("process:start with a fake job worker", () => {
       audioCodec: "aac",
       audioChannels: 6,
     });
-    mocks.resolveDone({ ok: true });
+    startJobRun.mockImplementationOnce(async ({ onLine, jobsFile }) => {
+      mocks.jobs = JSON.parse(fs.readFileSync(jobsFile, "utf8")).jobs;
+      fs.writeFileSync(mocks.jobs[0].output_path, "exported");
+      onLine('{"type":"complete","index":0}');
+      return { proc: mocks.proc, done: Promise.resolve({ ok: true }), stderrTail: () => "" };
+    });
     const result = await mocks.handlers.get("process:start")({}, [
       {
         id: 0,
@@ -277,6 +324,10 @@ describe("process:start with a fake job worker", () => {
   });
 
   it("a settled run cannot emit process:finished twice (error then close)", async () => {
+    mocks.killProcessTree.mockImplementationOnce(async (proc) => {
+      proc.exitCode = 1;
+      proc.emit("close", 1);
+    });
     const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
 
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
@@ -284,6 +335,7 @@ describe("process:start with a fake job worker", () => {
     const result = await pending;
 
     expect(result).toMatchObject({ success: false });
+    expect(mocks.killProcessTree).toHaveBeenCalledWith(mocks.proc);
     expect(calls("process:error")).toHaveLength(1);
     mocks.proc.emit("close", 1);
     mocks.resolveDone({ ok: true });
@@ -312,6 +364,28 @@ describe("process:start with a fake job worker", () => {
     expect(mocks.killProcessTree).toHaveBeenCalledWith(mocks.proc);
     expect(runModule.hasActiveProcessing()).toBe(false);
     expect(fs.existsSync(artifactsDir)).toBe(false);
+  });
+
+  it("reports a failed cancellation and keeps the run owned until the child dies", async () => {
+    const pending = mocks.handlers.get("process:start")({}, [{ id: 0, input_path: "clip.mp4" }]);
+    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
+    vi.useFakeTimers();
+    try {
+      const cancellation = mocks.handlers.get("process:cancel")({});
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(await cancellation).toMatchObject({
+        success: false,
+        error: expect.stringMatching(/cierre/),
+      });
+      expect(runModule.hasActiveProcessing()).toBe(true);
+      expect(calls("process:finished")).toHaveLength(0);
+      mocks.proc.exitCode = 1;
+      mocks.proc.emit("close", 1);
+      expect(await pending).toMatchObject({ success: false });
+      expect(runModule.hasActiveProcessing()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each(["cancel", "failure"])(
@@ -349,22 +423,6 @@ describe("process:start with a fake job worker", () => {
       expect(fs.readdirSync(outputDir).sort()).toEqual(["done.mp4", "in.mp4", "partial.mp4"]);
     },
   );
-
-  it("a failed export leaves the previous file intact and removes its temporary output", async () => {
-    const input = path.join(outputDir, "in.mp4");
-    const output = path.join(outputDir, "out.mp4");
-    fs.writeFileSync(input, "input");
-    fs.writeFileSync(output, "previous export");
-    const pending = mocks.handlers.get("process:start")({}, [
-      { id: 0, input_path: input, output_path: output },
-    ]);
-    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
-    fs.writeFileSync(mocks.jobs[0].output_path, "truncated");
-    mocks.resolveDone({ ok: false, error: "encode failed" });
-    expect(await pending).toMatchObject({ success: false });
-    expect(fs.readFileSync(output, "utf8")).toBe("previous export");
-    expect(fs.readdirSync(outputDir).sort()).toEqual(["in.mp4", "out.mp4"]);
-  });
 
   it("does not attach a late worker after cancelling its startup", async () => {
     let releaseStartup;

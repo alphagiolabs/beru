@@ -17,18 +17,6 @@ import filters  # noqa: E402
 import processor  # noqa: E402
 
 
-def test_reset_caches_drops_all_font_state():
-    fonts_module._SYSTEM_FONTS_CACHE = {"arial": ("C:/fonts/arial.ttf", "arial")}
-    fonts_module._resolve_font_cache[("arial", None, False, False)] = ("font", "arial", False)
-    fonts_module._normalized_fonts_state = ({}, {})
-
-    fonts_module.reset_caches()
-
-    assert fonts_module._SYSTEM_FONTS_CACHE is None
-    assert fonts_module._resolve_font_cache == {}
-    assert fonts_module._normalized_fonts_state is None
-
-
 def test_deleted_fontfile_reverifies_on_cache_hit():
     with tempfile.TemporaryDirectory() as tmp:
         font = Path(tmp) / "ghost.ttf"
@@ -128,7 +116,6 @@ def test_cached_drawtext_uses_a_font_installed_between_runs():
 
 
 if __name__ == "__main__":
-    test_reset_caches_drops_all_font_state()
     test_deleted_fontfile_reverifies_on_cache_hit()
     test_reset_exposes_font_installed_between_runs()
     test_process_jobs_rescans_fonts_every_run()

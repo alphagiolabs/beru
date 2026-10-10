@@ -45,8 +45,9 @@ describe("PropertiesPanel — delogo cover method", () => {
     window.api.statImage.mockClear();
   });
 
-  it("picking an image stores the path in delogoImagePath and clears on reset", async () => {
+  it("picking an image stores its path and fingerprint, then clears both on reset", async () => {
     const root = renderPanel();
+    expect(useEditorStore.getState().delogoImageV).toBe("");
 
     const chooseBtn = Array.from(document.querySelectorAll("button")).find((b) =>
       /Elegir/.test(b.textContent || ""),
@@ -60,7 +61,9 @@ describe("PropertiesPanel — delogo cover method", () => {
     });
 
     expect(window.api.pickImage).toHaveBeenCalled();
+    expect(window.api.statImage).toHaveBeenCalledWith("C:\\imgs\\patch.png");
     expect(useEditorStore.getState().delogoImagePath).toBe("C:\\imgs\\patch.png");
+    expect(useEditorStore.getState().delogoImageV).toBe("1700000000000-4");
 
     const clearBtn = Array.from(document.querySelectorAll("button")).find(
       (b) => b.getAttribute("aria-label") === "Quitar",
@@ -70,31 +73,7 @@ describe("PropertiesPanel — delogo cover method", () => {
       clearBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
     expect(useEditorStore.getState().delogoImagePath).toBe("");
-
-    act(() => root.unmount());
-  });
-
-  it("picking a cover image records its stat fingerprint for the live preview", async () => {
-    const root = renderPanel();
-
     expect(useEditorStore.getState().delogoImageV).toBe("");
-
-    const chooseBtn = Array.from(document.querySelectorAll("button")).find((b) =>
-      /Elegir/.test(b.textContent || ""),
-    );
-
-    await act(async () => {
-      chooseBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(window.api.statImage).toHaveBeenCalledWith("C:\\imgs\\patch.png");
-    expect(useEditorStore.getState().delogoImagePath).toBe("C:\\imgs\\patch.png");
-    expect(useEditorStore.getState().delogoImageV).toBe("1700000000000-4");
 
     act(() => root.unmount());
   });

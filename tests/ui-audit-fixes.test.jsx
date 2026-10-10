@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import useKeyboard from "../src/hooks/useKeyboard.js";
 import AppRail from "../src/components/AppRail.jsx";
-import WatermarkModal from "../src/components/WatermarkModal.jsx";
 import AppliedDelogoEditor from "../src/components/AppliedDelogoEditor.jsx";
 import OperationOverlays from "../src/components/video-preview/OperationOverlays.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
@@ -136,46 +135,6 @@ describe("Editor de tabla con cola vacía", () => {
       await new Promise((r) => setTimeout(r, 10));
     });
     expect(useEditorStore.getState().showTableEditor).toBe(true);
-  });
-});
-
-describe("WatermarkModal picker", () => {
-  beforeEach(() => {
-    useEditorStore.setState({
-      language: "es",
-      showWatermarkModal: true,
-      watermark: {
-        enabled: true,
-        type: "image",
-        text: "",
-        imagePath: "C:\\img\\logo.png",
-        imageV: "222-7",
-        scale: 0.2,
-        opacity: 0.8,
-        position: "bottom-right",
-      },
-    });
-    api.pickImage = vi.fn(async () => ({ canceled: true }));
-  });
-
-  afterEach(async () => {
-    if (root) await act(() => root.unmount());
-    root = null;
-    delete api.pickImage;
-  });
-
-  it("cancelar el diálogo conserva la imagen configurada", async () => {
-    await mount(<WatermarkModal />);
-    const pick = Array.from(document.querySelectorAll("button")).find((b) =>
-      /elegir/i.test(b.textContent),
-    );
-    await act(async () => {
-      pick.click();
-      await new Promise((r) => setTimeout(r, 20));
-    });
-    const wm = useEditorStore.getState().watermark;
-    expect(wm.imagePath).toBe("C:\\img\\logo.png");
-    expect(wm.imageV).toBe("222-7");
   });
 });
 

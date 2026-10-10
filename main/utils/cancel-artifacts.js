@@ -19,7 +19,9 @@ export async function createCancelArtifacts(tempRoot) {
     markCancelled() {
       try {
         fs.writeFileSync(cancelPath, "1");
-      } catch {}
+      } catch (err) {
+        console.error("[beru] cancellation signal could not be written:", err.message);
+      }
     },
     isCancelled() {
       return fs.existsSync(cancelPath);

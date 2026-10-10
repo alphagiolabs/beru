@@ -14,9 +14,9 @@ function artifactStatMatches(filePath, expected) {
   try {
     const stat = fs.statSync(filePath);
     return (
-      stat.size === expected?.size &&
-      stat.mtimeMs === expected?.mtimeMs &&
-      stat.ctimeMs === expected?.ctimeMs
+      stat.size === expected.size &&
+      stat.mtimeMs === expected.mtimeMs &&
+      stat.ctimeMs === expected.ctimeMs
     );
   } catch {
     return false;

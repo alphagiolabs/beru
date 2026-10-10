@@ -4,8 +4,8 @@ import { runWithConcurrency } from "./concurrency.js";
 
 export async function sanitizeBatchJobMedia(jobs, pathSecurity, options) {
   const checks = new Map();
-  const key = (filePath, kind) => JSON.stringify([filePath, kind]);
-  const add = (filePath, kind) => checks.set(key(filePath, kind), { filePath, kind });
+  const key = (filePath, kind) => `${kind}\u0000${filePath}`;
+  const add = (filePath, kind) => checks.set(key(filePath, kind), [filePath, kind]);
   for (const job of jobs) {
     add(job?.input_path, "video");
     for (const op of job?.operations || []) {
@@ -18,11 +18,13 @@ export async function sanitizeBatchJobMedia(jobs, pathSecurity, options) {
       if (imagePath) add(imagePath, "image");
     }
   }
-  await runWithConcurrency([...checks.entries()], 8, async ([id, { filePath, kind }]) => {
+  await runWithConcurrency([...checks.entries()], 8, async ([id, [filePath, kind]]) => {
     checks.set(id, await pathSecurity.validateReadableFileAsync(filePath, kind));
   });
-  const validated = { validateReadableFile: (filePath, kind) => checks.get(key(filePath, kind)) };
-  return jobs.map((job) => sanitizeJobMedia(job, validated, options));
+  const cachedSecurity = {
+    validateReadableFile: (filePath, kind) => checks.get(key(filePath, kind)),
+  };
+  return jobs.map((job) => sanitizeJobMedia(job, cachedSecurity, options));
 }
 
 export function sanitizeJobMedia(job, pathSecurity, { outputDirectory } = {}) {

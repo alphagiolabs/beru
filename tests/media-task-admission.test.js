@@ -129,7 +129,7 @@ describe("media task admission during export", () => {
 });
 
 describe("media task queue depth", () => {
-  it("rejects past the cap instead of leaving the caller pending", async () => {
+  it("rejects past the cap and accepts work again once the queue drains", async () => {
     const release = [];
     const blockers = Array.from({ length: 8 }, () =>
       runMediaTask(() => new Promise((resolve) => release.push(resolve))),
@@ -148,20 +148,6 @@ describe("media task queue depth", () => {
     release.forEach((finish) => finish());
     await Promise.all([...blockers, ...queued]);
     expect(started).toEqual([]);
-  });
-
-  it("accepts work again once the queue drains", async () => {
-    const release = [];
-    const blockers = Array.from({ length: 8 }, () =>
-      runMediaTask(() => new Promise((resolve) => release.push(resolve))),
-    );
-    await Promise.resolve();
-
-    const queued = Array.from({ length: 2000 }, () => runMediaTask(() => Promise.resolve("ok")));
-    await expect(runMediaTask(() => Promise.resolve("late"))).rejects.toThrow(Error);
-
-    release.forEach((finish) => finish());
-    await Promise.all([...blockers, ...queued]);
     await expect(runMediaTask(() => Promise.resolve("after"))).resolves.toBe("after");
   });
 

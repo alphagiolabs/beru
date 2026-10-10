@@ -82,6 +82,9 @@ export function createProcessingRun(set, get) {
 
   function finish(run, outcome) {
     if (run !== current || run.outcome) return;
+    const jobFailure = [...run.results.values()].find((result) => result.kind !== "done");
+    const reportedJobFailure = outcome.success && jobFailure;
+    if (reportedJobFailure) outcome = { ...outcome, success: false, error: jobFailure.error };
     clearProgress();
     run.outcome = outcome;
     retire(run.runId);
@@ -94,7 +97,7 @@ export function createProcessingRun(set, get) {
         jobProgress: {},
       };
     });
-    if (!outcome.success && !outcome.cancelled && !outcome.superseded) {
+    if (!outcome.success && !outcome.cancelled && !outcome.superseded && !reportedJobFailure) {
       outcome.notified = true;
       notifyError(outcome.error);
     }
@@ -180,7 +183,7 @@ export function createProcessingRun(set, get) {
       const run = eventRun(msg);
       if (!run) return;
       finish(run, {
-        success: !msg?.cancelled && (msg?.code == null || msg.code === 0),
+        success: !msg?.cancelled && msg?.code === 0,
         cancelled: Boolean(msg?.cancelled),
         error: msg?.error,
       });
