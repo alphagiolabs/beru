@@ -121,6 +121,7 @@ from ffmpeg_runner import (
     _cleanup_ffmpeg_partial,
     _emit_batch_progress,
     _emit_job_complete,
+    _emit_job_failed,
     _emit_job_progress,
     _extract_error_line,
     _input_path_from_ffmpeg_cmd,
@@ -613,8 +614,12 @@ def _execute_batch(
     *,
     emit_batch_progress=True,
     copy_workers=None,
+    defer_retryable=False,
 ):
     """Run one concurrent pass; returns per-job results and failure list.
+
+    With defer_retryable, failures a retry pass will take stay unreported so
+    the renderer never sees an error that a later pass turns into success.
 
     Stream-copy jobs (no operations, watermark, or trim) run on a separate
     bounded pool: a remux is pure disk I/O, so it neither deserves an encode
@@ -697,6 +702,11 @@ def _execute_batch(
             job = jobs[job_pos] if 0 <= job_pos < total else None
             job_id = job.get("id", job_pos) if isinstance(job, dict) else job_pos
             result = _job_failed_result(job_id, str(e), max_workers=max_workers)
+
+        if result.get("status") == "failed" and not (
+            defer_retryable and _should_retry_failed_job(result, max_workers)
+        ):
+            _emit_job_failed(result)
 
         with state_lock:
             idx = result.get("index", -1)
@@ -888,11 +898,13 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
         per_job_ram_mb, _get_available_ram_mb(), ffmpeg_path,
     )
 
+    retry_enabled = _retry_failed_enabled(env=ctx.env) and max_workers > 1
     pass1 = _execute_batch(
         jobs,
         ctx,
         emit_batch_progress=True,
         copy_workers=copy_workers,
+        defer_retryable=retry_enabled,
     )
     succeeded = pass1["succeeded"]
     failed = pass1["failed"]
@@ -903,12 +915,10 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
         if _should_retry_failed_job(result, max_workers)
     ]
     retry_candidates = [job for job, _result in retry_pairs]
-    if (
-        _retry_failed_enabled(env=ctx.env)
-        and max_workers > 1
-        and retry_candidates
-        and not _check_cancelled(ctx)
-    ):
+    if retry_enabled and retry_candidates and _check_cancelled(ctx):
+        for _job, result in retry_pairs:
+            _emit_job_failed(result)
+    elif retry_enabled and retry_candidates:
         resource_retry = any(
             is_resource_pressure_error((result.get("raw_error") or result.get("error") or ""))
             for _job, result in pass1["failed_jobs"]

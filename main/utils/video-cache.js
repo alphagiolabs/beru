@@ -9,9 +9,9 @@ const VIDEO_INFO_CACHE_MAX = 500;
 
 const pendingProbes = new Map();
 
-function getVideoStatKey(filePath) {
+async function getVideoStatKey(filePath) {
   try {
-    const stat = fs.statSync(filePath);
+    const stat = await fs.promises.stat(filePath);
     if (!stat.isFile()) return null;
     const { dev, ino, size, mtimeMs, ctimeMs } = stat;
     return JSON.stringify([dev, ino, size, mtimeMs, ctimeMs]);
@@ -33,10 +33,10 @@ function setCachedVideoInfo(filePath, statKey, info) {
   trimOldest(videoInfoCache, VIDEO_INFO_CACHE_MAX);
 }
 
-function probeVideoCached(filePath, { key, timeoutMs, allowFfmpegFallback }) {
-  const statKey = getVideoStatKey(filePath);
+async function probeVideoCached(filePath, { key, timeoutMs, allowFfmpegFallback }) {
+  const statKey = await getVideoStatKey(filePath);
   const cached = getCachedVideoInfo(filePath, statKey);
-  if (cached) return Promise.resolve(cached);
+  if (cached) return cached;
 
   const probeKey = `${key}:${filePath}:${statKey}`;
   const pending = pendingProbes.get(probeKey);
@@ -48,8 +48,8 @@ function probeVideoCached(filePath, { key, timeoutMs, allowFfmpegFallback }) {
     timeoutMs,
     allowFfmpegFallback,
   })
-    .then((info) => {
-      if (statKey === getVideoStatKey(filePath)) {
+    .then(async (info) => {
+      if (statKey === (await getVideoStatKey(filePath))) {
         setCachedVideoInfo(filePath, statKey, info);
       }
       pendingProbes.delete(probeKey);
