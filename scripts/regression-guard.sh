@@ -34,6 +34,17 @@ run_verify() {
     return 1
 }
 
+# Same isolation as scripts/test-environment.mjs: a private TEMP under .tmp/.
+run_isolated_python() {
+    local dir win status=0
+    mkdir -p "$BERU_DIR/.tmp"
+    dir=$(mktemp -d "$BERU_DIR/.tmp/beru-guard-XXXXXX")
+    win=$(cygpath -w "$dir" 2>/dev/null || printf '%s' "$dir")
+    TEMP="$win" TMP="$win" TMPDIR="$win" PYTHONDONTWRITEBYTECODE=1 python "$@" || status=$?
+    rm -rf "$dir"
+    return "$status"
+}
+
 MODE="working tree"
 if [[ "${1:-}" == "--cached" ]]; then
     CHANGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null || true)
@@ -76,7 +87,7 @@ if printf '%s\n' "$CHANGED" | grep -qE '^python/'; then
     say "${MAGENTA}│${NC} Ejecutando tests de delogo..."
 
     say "\n${CYAN}├── Smoke test: delogo filter graphs${NC}"
-    if python python/test_delogo.py 2>/dev/null; then
+    if run_isolated_python python/test_delogo.py 2>/dev/null; then
         ok "test_delogo.py — todos los filtros OK"
     else
         fail "test_delogo.py — algunos filtros fallaron"
@@ -84,7 +95,7 @@ if printf '%s\n' "$CHANGED" | grep -qE '^python/'; then
 
     if [[ -f python/test_delogo_e2e.py ]]; then
         say "\n${CYAN}├── E2E visual: pipeline delogo${NC}"
-        if python python/test_delogo_e2e.py 2>/dev/null; then
+        if run_isolated_python python/test_delogo_e2e.py 2>/dev/null; then
             ok "test_delogo_e2e.py — pipeline visual OK"
         else
             fail "test_delogo_e2e.py — pipeline visual falló"
@@ -93,7 +104,7 @@ if printf '%s\n' "$CHANGED" | grep -qE '^python/'; then
 
     if [[ -f python/test_delogo_robust.py ]]; then
         say "\n${CYAN}├── Robust test: casos extremos${NC}"
-        if python python/test_delogo_robust.py 2>/dev/null; then
+        if run_isolated_python python/test_delogo_robust.py 2>/dev/null; then
             ok "test_delogo_robust.py — casos extremos OK"
         else
             fail "test_delogo_robust.py — casos extremos fallaron"

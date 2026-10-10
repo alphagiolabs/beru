@@ -28,6 +28,9 @@ RETRY_DELAYS = [2, 5]
 MAX_STDERR_LINES = 256
 MAX_STDERR_CHARS = 48_000
 STALL_TIMEOUT_SEC = 120
+# Jobs with progress tracking are guarded by STALL_TIMEOUT_SEC; the absolute
+# deadline only bounds runaway runs, so it tolerates encodes down to 0.05x.
+TRACKED_TIMEOUT_DURATION_FACTOR = 20
 _tr_print_lock = threading.Lock()
 _last_job_progress_emit = {}
 _job_progress_lock = threading.Lock()
@@ -59,15 +62,19 @@ def _emit_batch_progress(state, total, fname):
 
 
 def _job_failed_result(job_id, raw_error, *, max_workers=None):
+    """Failed result; the batch emits it once no retry pass will take the Job."""
     user_error = format_processing_error(raw_error, max_workers=max_workers)
-    payload = {"type": "error", "index": job_id, "error": user_error}
-    if raw_error and raw_error != user_error:
-        payload["raw_error"] = str(raw_error)[-1000:]
-    _safe_print(json.dumps(payload))
     result = {"index": job_id, "status": "failed", "error": user_error}
     if raw_error and raw_error != user_error:
         result["raw_error"] = str(raw_error)
     return result
+
+
+def _emit_job_failed(result):
+    payload = {"type": "error", "index": result["index"], "error": result["error"]}
+    if result.get("raw_error"):
+        payload["raw_error"] = result["raw_error"][-1000:]
+    _safe_print(json.dumps(payload))
 
 
 def _job_cancelled_result(job_id):
@@ -146,8 +153,6 @@ def _should_retry_failed_job(result, max_workers):
         return True
     if max_workers > 1 and is_resource_pressure_error(err):
         return True
-    if max_workers >= 3 and "timeout" in err.lower():
-        return True
     return False
 
 
@@ -207,10 +212,7 @@ def _cleanup_ffmpeg_partial(cmd):
 def _should_retry_ffmpeg(stderr, attempt):
     if attempt >= MAX_RETRIES:
         return False
-    text = str(stderr or "")
-    if _is_transient_error(text):
-        return True
-    return "timeout" in text.lower()
+    return _is_transient_error(str(stderr or ""))
 
 
 def _kill_ffmpeg_process(proc):
@@ -354,12 +356,13 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None
     """Run ffmpeg with retry for transient failures.
 
     The timeout scales with video duration when duration_sec is provided:
-    at least 600s (10 min) or 3x the video duration, whichever is larger.
-    This prevents false timeouts on long videos (4K, 1hr+) while keeping
-    a reasonable bound for short clips.
+    at least timeout_sec, or 3x the video duration (20x for Jobs with
+    progress tracking, which the stall check already guards). A timeout is
+    not transient, so it never triggers a retry.
     """
     if duration_sec > 0:
-        timeout_sec = max(timeout_sec, int(duration_sec * 3))
+        factor = TRACKED_TIMEOUT_DURATION_FACTOR if job_id is not None else 3
+        timeout_sec = max(timeout_sec, int(duration_sec * factor))
     for attempt in range(MAX_RETRIES + 1):
         if _check_cancelled(ctx):
             _cleanup_ffmpeg_partial(cmd)

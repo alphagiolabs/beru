@@ -27,7 +27,7 @@ class ProcessLifetimeTests(unittest.TestCase):
         kernel.CloseHandle.argtypes = [wintypes.HANDLE]
         with tempfile.TemporaryDirectory() as directory:
             ready = Path(directory) / "child.txt"
-            code = f"import os,time; from pathlib import Path; Path({str(ready)!r}).write_text(str(os.getpid())); time.sleep(60)"
+            code = f"import os,time; from pathlib import Path; Path({str(ready)!r} + '.tmp').write_text(str(os.getpid())); os.replace({str(ready)!r} + '.tmp', {str(ready)!r}); time.sleep(60)"
             owner = subprocess.Popen([str(executable), "--run-media", sys._base_executable, "-c", code], env={**os.environ, "BERU_PARENT_PID": str(os.getpid()), "TEMP": directory, "TMP": directory})
             handle = None
             try:
@@ -73,7 +73,8 @@ class ProcessLifetimeTests(unittest.TestCase):
                     "import os,sys,subprocess,time,json; from pathlib import Path; "
                     "from process_lifetime import protect_process_tree; protect_process_tree(); "
                     "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); "
-                    f"Path({ready!r}).write_text(json.dumps([os.getpid(),child.pid])); time.sleep(60)"
+                    f"Path({ready!r} + '.tmp').write_text(json.dumps([os.getpid(),child.pid])); "
+                    f"os.replace({ready!r} + '.tmp', {ready!r}); time.sleep(60)"
                 )
                 owner_code = (
                     "import os,sys,subprocess,time; "
