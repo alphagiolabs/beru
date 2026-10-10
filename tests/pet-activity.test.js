@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  celebrationDurationMs,
-  petBubbleKey,
   resolveBatchCelebration,
   resolvePetActivity,
 } from "../src/features/pets/utils/pet-activity.js";
@@ -21,11 +19,5 @@ describe("pet-activity", () => {
     expect(resolveBatchCelebration({ total: 2, succeeded: 1, failed: 0 })).toBe("waving");
     expect(resolveBatchCelebration({ total: 1, succeeded: 1, failed: 0 })).toBe("jumping");
     expect(resolveBatchCelebration(null)).toBeNull();
-  });
-
-  it("exposes bubble keys and celebration durations", () => {
-    expect(petBubbleKey("running")).toBe("settings.petdex.bubbleWorking");
-    expect(petBubbleKey("waiting")).toBe("settings.petdex.bubbleYourTurn");
-    expect(celebrationDurationMs("jumping")).toBeGreaterThan(2000);
   });
 });

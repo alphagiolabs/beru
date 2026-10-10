@@ -2,19 +2,10 @@ import { describe, it, expect } from "vitest";
 import { spawnSync } from "child_process";
 import contract from "../resources/op-active-fixtures.json" with { type: "json" };
 import { isOpActive } from "../src/utils/operation.js";
+import { describeIfPython } from "./helpers/python.js";
 
 const PY = "python";
 const PY_CODE_PREFIX = "import sys; sys.path.insert(0, 'python'); ";
-
-const hasPython = (() => {
-  try {
-    return spawnSync(PY, ["--version"], { encoding: "utf8" }).status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-const describeIfPython = hasPython ? describe : describe.skip;
 
 const toRendererOp = (c) => {
   const op = {};

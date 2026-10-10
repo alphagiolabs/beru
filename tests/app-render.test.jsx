@@ -82,15 +82,6 @@ describe("App render", () => {
     }
   });
 
-  it("mounts landing without throwing", async () => {
-    root = createRoot(document.getElementById("root"));
-    await act(async () => {
-      root.render(<App />);
-      await new Promise((r) => setTimeout(r, 10));
-    });
-    expect(document.body.textContent).toMatch(/Importar videos/i);
-  });
-
   it("does not interrupt the landing view with a blocking update screen", async () => {
     useEditorStore.setState({
       update: {

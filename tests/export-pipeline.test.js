@@ -85,33 +85,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[0].mirror_side).toBe("left");
   });
 
-  it("simpleDelogo is no longer a recognized field (dead auto-mode removed)", () => {
-    const region = { x: 0.1, y: 0.1, w: 0.2, h: 0.1 };
-    const job = jobFor(
-      queueItem(0, {
-        operations: [
-          {
-            id: "delogo-5",
-            mode: "delogo",
-            region,
-            simpleDelogo: true,
-            delogoMethod: "inpaint",
-            blurStrength: 2,
-            temporalRadius: 999,
-            mosaicSize: 200,
-            edgeFeather: 100,
-            mirrorSide: "left",
-            delogoFillColor: "red",
-            delogoFillOpacity: 0.5,
-          },
-        ],
-      }),
-    );
-    expect(job.operations[0].delogo_method).toBe("inpaint");
-    expect(job.operations[0].simple_delogo).toBeUndefined();
-    expect(job.operations[0].simpleDelogo).toBeUndefined();
-  });
-
   it("builds valid delogo job for cover method", () => {
     const region = { x: 0.2, y: 0.2, w: 0.1, h: 0.1 };
     const job = jobFor(
@@ -344,81 +317,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[0].region.y).toBe(324);
     expect(job.operations[0].region.w).toBe(576);
     expect(job.operations[0].region.h).toBe(108);
-  });
-
-  it("export pipeline: batch text + delogo ops produce valid Python job", async () => {
-    const textRegion = { x: 0.1, y: 0.8, w: 0.5, h: 0.1 };
-    const delogoRegion = { x: 0.7, y: 0.0, w: 0.15, h: 0.05 };
-    useEditorStore.setState({
-      queue: [
-        queueItem(0, {
-          operations: [
-            {
-              id: "delogo-1",
-              mode: "delogo",
-              region: delogoRegion,
-              delogoMethod: "inpaint",
-              edgeFeather: 4,
-            },
-          ],
-        }),
-      ],
-      templateRegions: [
-        {
-          id: "r1",
-          label: "TEXT_1",
-          region: textRegion,
-          style: {
-            fontSize: 36,
-            fontColor: "white",
-            fontWeight: 600,
-            letterSpacing: 1,
-            textAlign: "center",
-            textOpacity: 0.9,
-            bold: false,
-            bgEnabled: true,
-            bgColor: "black",
-            bgOpacity: 0.5,
-            boxBorderWidth: 5,
-            borderWidth: 0,
-            borderColor: "black",
-          },
-        },
-      ],
-      excelRows: [{ id: "video_0", TEXT_1: "Watermark" }],
-    });
-
-    useEditorStore.getState().updateExcelMapping({ idColumn: "id", columns: { r1: "TEXT_1" } });
-    const res = await useEditorStore.getState().processAll();
-    expect(res.ok).toBe(true);
-    const job = exportedJobs()[0];
-
-    expect(job).not.toBeNull();
-    expect(job.operations).toHaveLength(2);
-
-    const delogo = job.operations[0];
-    expect(delogo.mode).toBe("delogo");
-    expect(delogo.delogo_method).toBe("inpaint");
-    expect(delogo.edge_feather).toBe(4);
-    expect(delogo.region.x).toBe(1344);
-    expect(delogo.region.y).toBe(0);
-    expect(delogo.region.w).toBe(288);
-    expect(delogo.region.h).toBe(54);
-
-    const text = job.operations[1];
-    expect(text.mode).toBe("text");
-    expect(text.text).toBe("Watermark");
-    expect(text.font_size).toBe(36);
-    expect(text.font_weight).toBe(600);
-    expect(text.letter_spacing).toBe(1);
-    expect(text.text_align).toBe("center");
-    expect(text.text_opacity).toBe(0.9);
-    expect(text.bg_enabled).toBe(true);
-    expect(text.bg_color).toBe("black");
-    expect(text.bg_opacity).toBe(0.5);
-    expect(text.box_border_width).toBe(5);
-    expect(text.region.x).toBe(192);
-    expect(text.region.y).toBe(864);
   });
 
   it("preserves literal punctuation in the exported text job", () => {

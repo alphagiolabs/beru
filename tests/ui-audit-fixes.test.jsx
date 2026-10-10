@@ -1,5 +1,5 @@
 import React, { act } from "react";
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createRoot } from "react-dom/client";
 import useKeyboard from "../src/hooks/useKeyboard.js";
 import AppRail from "../src/components/AppRail.jsx";

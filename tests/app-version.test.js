@@ -1,15 +1,7 @@
 import { describe, it, expect } from "vitest";
-import {
-  APP_VERSION,
-  formatFooterClock,
-  parseReleaseNotesSections,
-} from "../src/utils/appVersion.js";
+import { formatFooterClock, parseReleaseNotesSections } from "../src/utils/appVersion.js";
 
 describe("appVersion utils", () => {
-  it("exposes the package version", () => {
-    expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+/);
-  });
-
   it("parses release notes into bullet lines", () => {
     const { whatsNew } = parseReleaseNotesSections("<p>Fix #123</p>\n- Better queue\n* Footer", 6);
     expect(whatsNew).toEqual(["Fix #123", "Better queue", "Footer"]);

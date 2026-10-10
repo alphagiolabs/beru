@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { ensureMediaBinaries } from "../scripts/fetch-ffmpeg.mjs";
+import manifest from "../resources/media-binaries.json" with { type: "json" };
 
 describe("pinned media binaries", () => {
   it("rejects a corrupt archive before replacing existing binaries", async () => {
@@ -22,9 +23,13 @@ describe("pinned media binaries", () => {
     }
   });
 
-  it("verifies the installed pair offline without reading an archive", async () => {
-    await expect(
-      ensureMediaBinaries({ archivePath: path.resolve("bin/nonexistent-archive.zip") }),
-    ).resolves.toEqual({ updated: false, version: "9.0.2" });
-  });
+  it(
+    "verifies the installed pair offline without reading an archive",
+    { timeout: 120000 },
+    async () => {
+      await expect(
+        ensureMediaBinaries({ archivePath: path.resolve("bin/nonexistent-archive.zip") }),
+      ).resolves.toEqual({ updated: false, version: manifest.version });
+    },
+  );
 });

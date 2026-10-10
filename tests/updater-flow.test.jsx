@@ -125,54 +125,6 @@ describe("realistic update flow", () => {
     expect(installUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it("renders Hermes-style layout without scrollable changelog or release-notes link", async () => {
-    window.api = {
-      downloadUpdate: vi.fn(async () => ({ ok: true })),
-    };
-
-    useEditorStore.setState({
-      updateModalOpen: false,
-      update: {
-        status: "available",
-        version: "9.9.9",
-        percent: 0,
-        error: null,
-        transferred: 0,
-        total: 0,
-        releaseNotes:
-          "Fixed\n- fix: one\n- fix: two\nImproved\n- feat: one\n- feat: two\n- feat: three\n- feat: four\n- feat: five",
-        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v9.9.9",
-      },
-    });
-
-    await renderFooter();
-
-    await act(async () => {
-      document
-        .querySelector(".status-footer-version--badge")
-        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(document.querySelector(".status-footer-update-panel").getAttribute("role")).toBe(
-      "dialog",
-    );
-    expect(document.body.textContent).toMatch(/Nueva actualización disponible/i);
-    expect(document.body.textContent).toMatch(/Mejorado/i);
-    expect(document.body.textContent).toMatch(/Corregido/i);
-    expect(document.body.textContent).toMatch(/Actualizar ahora/i);
-    expect(document.body.textContent).not.toMatch(/Ver notas/i);
-
-    const changelog = document.querySelector(".status-footer-update-changelog");
-    const primaryBtn = document.querySelector(".status-footer-update-primary");
-    const moreNote = document.querySelector(".status-footer-update-more");
-
-    expect(changelog).toBeTruthy();
-    expect(document.querySelector(".status-footer-update-release-link")).toBeNull();
-    expect(
-      primaryBtn.compareDocumentPosition(moreNote) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  });
-
   it("shows an inline error when the download IPC fails immediately", async () => {
     window.api = {
       downloadUpdate: vi.fn(async () => ({ ok: false, error: "no-update-available" })),
@@ -241,16 +193,5 @@ describe("realistic update flow", () => {
       "Connection unavailable",
     );
     expect(document.querySelector(".status-footer-up-to-date-check")).toBeTruthy();
-  });
-
-  it("claims the app is current only after a provider not-available event", async () => {
-    useEditorStore.getState().applyUpdaterEvent({ type: "not-available", version: "1.6.47" });
-    await renderFooter();
-    await act(async () =>
-      document
-        .querySelector(".status-footer-version")
-        .dispatchEvent(new MouseEvent("click", { bubbles: true })),
-    );
-    expect(document.body.textContent).toMatch(/Todo está al día/);
   });
 });

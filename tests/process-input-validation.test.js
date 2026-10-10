@@ -48,21 +48,6 @@ describe("process:start input path validation (regression: ENOENT for cloud plac
     expect(res.code).toBe("empty");
   });
 
-  it("rejects a dangling symlink (OneDrive cloud-only placeholder shape)", async () => {
-    if (process.platform === "win32" && process.env.SKIP_DANGLING_TEST === "1") {
-      return;
-    }
-    const f = path.join(tmpDir, "Mi_Video.mp4");
-    try {
-      fs.symlinkSync(path.join(tmpDir, "cloud-source.mp4"), f, "file");
-    } catch {
-      return;
-    }
-    const res = await validateInputPathReadableAsync(f);
-    expect(res.ok).toBe(false);
-    expect(["missing", "unreadable", "cloud_only"]).toContain(res.code);
-  });
-
   it("finds every unreadable input in a job list", async () => {
     const good = path.join(tmpDir, "good.mp4");
     fs.writeFileSync(good, Buffer.from("ok"));

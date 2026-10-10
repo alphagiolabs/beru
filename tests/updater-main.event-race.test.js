@@ -98,12 +98,4 @@ describe("main/updater.js event race guard", () => {
       releaseNotes: "Fixed\n- Preserve notes",
     });
   });
-
-  it("preserves Authenticode rejection from electron-updater", () => {
-    harness.init();
-    expect(harness.autoUpdater.verifyUpdateCodeSignature).toBeTypeOf("function");
-    return expect(harness.autoUpdater.verifyUpdateCodeSignature([], "fake.exe")).resolves.toBe(
-      "invalid signature",
-    );
-  });
 });

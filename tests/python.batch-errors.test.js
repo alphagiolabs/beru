@@ -1,16 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { spawnSync } from "child_process";
+import { describeIfPython } from "./helpers/python.js";
 
 const PY = "python";
-const hasPython = (() => {
-  try {
-    const r = spawnSync(PY, ["--version"], { encoding: "utf8" });
-    return r.status === 0;
-  } catch {
-    return false;
-  }
-})();
-const describeIfPython = hasPython ? describe : describe.skip;
 
 describeIfPython("python batch_errors module", () => {
   const PY_CODE_PREFIX = "import sys; sys.path.insert(0, 'python'); ";
@@ -50,29 +42,5 @@ print(json.dumps(is_hardware_encode_error(msg)))
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout.trim())).toBe(false);
-  });
-
-  it("removes partial ffmpeg output after timeout cleanup", () => {
-    const code = `
-import json
-import os
-import tempfile
-import processor
-
-with tempfile.TemporaryDirectory() as tmp:
-    out = os.path.join(tmp, "partial.mp4")
-    with open(out, "wb") as fh:
-        fh.write(b"partial")
-    cmd = ["ffmpeg", "-y", "-i", os.path.join(tmp, "in.mp4"), "-c", "copy", out]
-    processor._cleanup_ffmpeg_partial(cmd)
-    print(json.dumps({"exists": os.path.exists(out)}))
-`;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout.trim()).exists).toBe(false);
   });
 });

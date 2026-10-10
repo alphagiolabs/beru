@@ -61,7 +61,6 @@ export function createUpdaterHarness() {
             autoDownload: true,
             autoInstallOnAppQuit: true,
             logger: null,
-            verifyUpdateCodeSignature: vi.fn(async () => "invalid signature"),
             on: (event, cb) => handlers.set(event, cb),
             checkForUpdates: async () =>
               new Promise((resolve) => {

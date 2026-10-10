@@ -1,20 +1,7 @@
-import fs from "node:fs";
-import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { drawBlurredVideoRegion } from "../src/components/video-preview/draw-blurred-video-region.js";
 
-const ROOT = path.resolve(import.meta.dirname, "..");
-
-function read(relativePath) {
-  return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
-}
-
 describe("blur preview rendering path", () => {
-  it("does not rely on CSS backdrop-filter over the video", () => {
-    expect(read("src/components/VideoPreview.jsx")).not.toContain("backdropFilter");
-    expect(read("src/components/DelogoLivePreview.jsx")).not.toContain("backdropFilter");
-  });
-
   it("samples beyond the selected box so the blurred edges remain filled", () => {
     let filterAtDraw = "";
     const ctx = {

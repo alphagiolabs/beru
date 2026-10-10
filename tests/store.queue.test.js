@@ -22,6 +22,8 @@ describe("queueSlice", () => {
     const importing = useEditorStore
       .getState()
       .addVideos(["C:\\v\\a.mp4", "C:\\v\\b.mp4"], mockApi);
+    expect(useEditorStore.getState().queue).toHaveLength(2);
+    expect(useEditorStore.getState().queue[0].width).toBe(0);
     useEditorStore.getState().removeVideo(0);
     resolveProbe([
       { width: 640, height: 360 },

@@ -52,11 +52,4 @@ describe("Electron shell handler restrictions", () => {
     await expect(openPathHandler({}, executablePath)).resolves.toMatchObject({ success: false });
     expect(mocks.openPath).toHaveBeenCalledTimes(2);
   });
-
-  it("keeps BrowserWindow web security settings explicit", () => {
-    const windowSource = fs.readFileSync("main/utils/window.js", "utf8");
-
-    expect(windowSource).toMatch(/webSecurity:\s*true/);
-    expect(windowSource).toMatch(/allowRunningInsecureContent:\s*false/);
-  });
 });

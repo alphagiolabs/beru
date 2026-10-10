@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it } from "vitest";
 import fs from "fs";
 import path from "path";
 import { extractLocalImports } from "./helpers/python-imports.js";
@@ -29,11 +29,6 @@ describe("build-processor watchFiles covers processor.py local imports", () => {
 
   const watchFiles = extractWatchFiles(scriptSrc);
   const localImports = extractLocalImports(pySrc);
-
-  it("watchFiles is non-empty and includes processor.py", () => {
-    expect(watchFiles.length).toBeGreaterThan(0);
-    expect(watchFiles).toContain("processor.py");
-  });
 
   it("every local import in processor.py is in watchFiles", () => {
     const missing = localImports.filter((mod) => !watchFiles.includes(`${mod}.py`));

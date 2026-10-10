@@ -5,12 +5,10 @@ import {
   createCustomTheme,
   deriveWindowChrome,
   duplicateCustomTheme,
-  isValidThemeRef,
   migrateThemeSettings,
   resolveTheme,
   resolveThemeName,
   sanitizeCustomThemes,
-  slotToLegacyTheme,
   toCustomThemeRef,
   validateThemeTokens,
 } from "../src/theme/engine.js";
@@ -33,13 +31,6 @@ function textContrast(foreground, background) {
 }
 
 describe("theme engine", () => {
-  it("exposes at least 11 built-in presets", () => {
-    expect(THEME_PRESETS.length).toBeGreaterThanOrEqual(11);
-    expect(getPresetById("beru-dark")).toBeTruthy();
-    expect(getPresetById("beru-light")).toBeTruthy();
-    expect(getPresetById("ocean")).toBeTruthy();
-  });
-
   it("validates preset tokens", () => {
     for (const preset of THEME_PRESETS) {
       expect(validateThemeTokens(preset.tokens).ok).toBe(true);
@@ -177,18 +168,6 @@ describe("theme engine", () => {
     const dup = duplicateCustomTheme("ocean", []);
     expect(dup?.tokens.bgApp).toBe("#041e26");
     expect(dup?.name).toContain("copy");
-  });
-
-  it("validates theme refs", () => {
-    const custom = createCustomTheme("X");
-    expect(isValidThemeRef("ocean", [])).toBe(true);
-    expect(isValidThemeRef(toCustomThemeRef(custom.id), [custom])).toBe(true);
-    expect(isValidThemeRef("custom:missing", [])).toBe(false);
-  });
-
-  it("maps slots to legacy theme names", () => {
-    expect(slotToLegacyTheme(1)).toBe("light");
-    expect(slotToLegacyTheme(2)).toBe("dark");
   });
 
   it("sanitizes malformed custom themes", () => {

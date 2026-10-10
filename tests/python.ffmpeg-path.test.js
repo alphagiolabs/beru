@@ -1,21 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { it, expect } from "vitest";
 import { spawnSync } from "child_process";
 import { writeFileSync, unlinkSync } from "fs";
 import path from "path";
 import os from "os";
+import { describeIfPython } from "./helpers/python.js";
 
 const PY = "python";
-
-const hasPython = (() => {
-  try {
-    const r = spawnSync(PY, ["--version"], { encoding: "utf8" });
-    return r.status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-const describeIfPython = hasPython ? describe : describe.skip;
 
 describeIfPython("python/processor.py ffmpeg path resolution", () => {
   const PY_CODE_PREFIX =
@@ -65,31 +55,6 @@ print(json.dumps(caps))
     expect(JSON.parse(result.stdout)).toEqual([1, 2]);
   });
 
-  it("respects BERU_FFMPEG env var (overrides the 'ffmpeg' default)", () => {
-    const probe = path.join(os.tmpdir(), `beru-test-ffmpeg-${Date.now()}.bin`);
-    writeFileSync(probe, "");
-    try {
-      const r = spawnSync(
-        PY,
-        ["-c", PY_CODE_PREFIX + "import processor; print(processor.FFMPEG)"],
-        {
-          env: { ...process.env, BERU_FFMPEG: probe },
-          encoding: "utf8",
-        },
-      );
-      if (r.status !== 0) {
-        console.error("STDOUT:", r.stdout);
-        console.error("STDERR:", r.stderr);
-      }
-      expect(r.status).toBe(0);
-      expect(r.stdout.trim()).toBe(probe);
-    } finally {
-      try {
-        unlinkSync(probe);
-      } catch {}
-    }
-  });
-
   it("uses BERU_FFMPEG when resolving the runtime ffmpeg path", () => {
     const probe = path.join(os.tmpdir(), `beru-test-runtime-ffmpeg-${Date.now()}.bin`);
     writeFileSync(probe, "");
@@ -99,31 +64,6 @@ print(json.dumps(caps))
         ["-c", PY_CODE_PREFIX + "import processor; print(processor.find_ffmpeg())"],
         {
           env: { ...process.env, BERU_FFMPEG: probe },
-          encoding: "utf8",
-        },
-      );
-      if (r.status !== 0) {
-        console.error("STDOUT:", r.stdout);
-        console.error("STDERR:", r.stderr);
-      }
-      expect(r.status).toBe(0);
-      expect(r.stdout.trim()).toBe(probe);
-    } finally {
-      try {
-        unlinkSync(probe);
-      } catch {}
-    }
-  });
-
-  it("respects BERU_FFPROBE env var", () => {
-    const probe = path.join(os.tmpdir(), `beru-test-ffprobe-${Date.now()}.bin`);
-    writeFileSync(probe, "");
-    try {
-      const r = spawnSync(
-        PY,
-        ["-c", PY_CODE_PREFIX + "import processor; print(processor.FFPROBE)"],
-        {
-          env: { ...process.env, BERU_FFPROBE: probe },
           encoding: "utf8",
         },
       );

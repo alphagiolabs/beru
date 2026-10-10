@@ -1,16 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { spawnSync } from "child_process";
+import { describeIfPython } from "./helpers/python.js";
 
 const PY = "python";
-const hasPython = (() => {
-  try {
-    const r = spawnSync(PY, ["--version"], { encoding: "utf8" });
-    return r.status === 0;
-  } catch {
-    return false;
-  }
-})();
-const describeIfPython = hasPython ? describe : describe.skip;
 
 describeIfPython("python/processor.py ffprobe N/A handling", () => {
   const PY_CODE_PREFIX =

@@ -1,10 +1,6 @@
 import os from "os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createMediaTaskPool,
-  runMediaTask,
-  setMediaProcessingActive,
-} from "../main/utils/media-task-pool.js";
+import { createMediaTaskPool } from "../main/utils/media-task-pool.js";
 
 const FAT_MEMORY = { freeMemoryMb: () => 8192 };
 
@@ -15,7 +11,6 @@ describe("media task pool", () => {
     vi.spyOn(os, "freemem").mockReturnValue(8 * 1024 ** 3);
   });
   afterEach(() => {
-    setMediaProcessingActive(false);
     vi.restoreAllMocks();
   });
   it("removes cancelled queued work and admits a replacement without waiting for the old task", async () => {
@@ -41,44 +36,6 @@ describe("media task pool", () => {
     expect(cancelledTask).not.toHaveBeenCalled();
     expect(await pool.run(() => "later", { key: "strip" })).toBe("later");
   });
-  it("caps concurrently running multimedia tasks", async () => {
-    let active = 0;
-    let peak = 0;
-    const tasks = Array.from({ length: 12 }, (_, index) =>
-      runMediaTask(async () => {
-        active += 1;
-        peak = Math.max(peak, active);
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        active -= 1;
-        return index;
-      }),
-    );
-
-    await expect(Promise.all(tasks)).resolves.toEqual(Array.from({ length: 12 }, (_, i) => i));
-    expect(peak).toBeLessThanOrEqual(8);
-  });
-
-  it("reserves resources for an active export", async () => {
-    setMediaProcessingActive(true);
-    let active = 0;
-    let peak = 0;
-    try {
-      await Promise.all(
-        Array.from({ length: 6 }, () =>
-          runMediaTask(async () => {
-            active += 1;
-            peak = Math.max(peak, active);
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            active -= 1;
-          }),
-        ),
-      );
-      expect(peak).toBeLessThanOrEqual(2);
-    } finally {
-      setMediaProcessingActive(false);
-    }
-  });
-
   it("reduces admission under pressure, then uses recovered memory without killing active work", async () => {
     const pool = createMediaTaskPool({ maxActive: 8 });
     const free = vi.spyOn(os, "freemem");

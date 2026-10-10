@@ -108,7 +108,7 @@ describe("delogo render bridge (worker path)", () => {
     bridge.release();
   });
 
-  it("requests a fresh paused frame when a transferred frame is lost on worker failure", async () => {
+  it("reports the worker unavailable when it fails with a frame in flight", async () => {
     const { createDelogoRenderBridge } = await loadBridge();
     const onUnavailable = vi.fn();
     const bridge = createDelogoRenderBridge({ onUnavailable });

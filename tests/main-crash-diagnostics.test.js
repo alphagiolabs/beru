@@ -15,10 +15,15 @@ function startMain({
   appPath = "/beru-repo",
   pythonProcess = null,
   killProcessTree = vi.fn(),
+  hasActiveProcessing = () => false,
+  cancelRun = vi.fn(async () => ({ success: true, idle: true })),
+  quittingForUpdate = false,
 } = {}) {
   const appEvents = new Map();
   const processEvents = new Map();
   const quit = vi.fn();
+  const setAppIsQuitting = vi.fn();
+  const disposeJobWorker = vi.fn();
   let log = existingLog;
   const append = vi.fn((_file, entry) => {
     onWrite?.(processEvents);
@@ -58,12 +63,12 @@ function startMain({
     Buffer,
     Date,
     createPathSecurity: () => ({}),
-    setAppIsQuitting: vi.fn(),
+    setAppIsQuitting,
     getPythonProcess: () => pythonProcess,
-    hasActiveProcessing: () => false,
-    cancelRun: vi.fn(async () => ({ success: true, idle: true })),
+    hasActiveProcessing,
+    cancelRun,
     sweepOrphanedArtifacts: vi.fn(),
-    disposeJobWorker: vi.fn(),
+    disposeJobWorker,
     createBeruVideoResponse: vi.fn(),
     hasKnownBeruType: vi.fn(() => true),
     validateBeruRequestPath: vi.fn(),
@@ -71,7 +76,7 @@ function startMain({
     createWindow: vi.fn(),
     disposePreviewFrameWorker: vi.fn(),
     disposePetsModule: vi.fn(),
-    isQuittingForUpdate: () => false,
+    isQuittingForUpdate: () => quittingForUpdate,
   };
   for (const name of [
     "registerDialogHandlers",
@@ -89,7 +94,15 @@ function startMain({
   ])
     context[name] = vi.fn();
   vm.runInNewContext(source, context, { filename: "main/main.js" });
-  return { appEvents, processEvents, quit, append, getLog: () => log };
+  return {
+    appEvents,
+    processEvents,
+    quit,
+    append,
+    setAppIsQuitting,
+    disposeJobWorker,
+    getLog: () => log,
+  };
 }
 
 describe("main process crash diagnostics", () => {
@@ -172,5 +185,42 @@ describe("main process crash diagnostics", () => {
     expect(main.getLog()).toContain("renderer-gone");
     expect(main.getLog()).not.toContain("private-value");
     expect(Buffer.byteLength(main.getLog())).toBeLessThanOrEqual(65536);
+  });
+});
+
+describe("main process quit handling", () => {
+  it("defers quit while a run is active and disposes only after it is cancelled", async () => {
+    let finishCancel;
+    const cancelRun = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishCancel = resolve;
+        }),
+    );
+    const main = startMain({ hasActiveProcessing: () => true, cancelRun });
+    const event = { preventDefault: vi.fn() };
+
+    main.appEvents.get("before-quit")(event);
+    main.appEvents.get("before-quit")({ preventDefault: vi.fn() });
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(main.setAppIsQuitting).toHaveBeenCalledWith(true);
+    expect(cancelRun).toHaveBeenCalledTimes(1);
+    expect(main.disposeJobWorker).not.toHaveBeenCalled();
+    expect(main.quit).not.toHaveBeenCalled();
+
+    finishCancel({ success: true });
+    await vi.waitFor(() => expect(main.quit).toHaveBeenCalledTimes(1));
+    expect(main.disposeJobWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not intercept quit while the app is installing an update", () => {
+    const cancelRun = vi.fn();
+    const main = startMain({ hasActiveProcessing: () => true, cancelRun, quittingForUpdate: true });
+    const event = { preventDefault: vi.fn() };
+
+    main.appEvents.get("will-quit")(event);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(cancelRun).not.toHaveBeenCalled();
+    expect(main.disposeJobWorker).not.toHaveBeenCalled();
   });
 });

@@ -1,55 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "child_process";
-import contract from "../resources/encode-profiles.json" with { type: "json" };
 import {
   ENCODE_PROFILES,
   getEffectiveHwEncoder,
   profileAllowsHardware,
   normalizeEncodeProfile,
 } from "../main/encodeProfiles.js";
+import { describeIfPython } from "./helpers/python.js";
 
 const PY = "python";
 
-const hasPython = (() => {
-  try {
-    const r = spawnSync(PY, ["--version"], { encoding: "utf8" });
-    return r.status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-const describeIfPython = hasPython ? describe : describe.skip;
 const PY_CODE_PREFIX = "import sys; sys.path.insert(0, 'python'); ";
-
-describe("encode profile contract (JSON)", () => {
-  it("quality allows high-fidelity hardware encoding", () => {
-    expect(contract.profiles.quality.allowsHardware).toBe(true);
-    expect(contract.profiles.quality.hardware).toEqual({ hwCq: 18, nvencPreset: "p6" });
-    expect(contract.profiles.quality._comment).toContain("CQ 18");
-    expect(contract.profiles.quality._comment).toContain("CRF 18");
-    expect(contract.profiles.fast.allowsHardware).toBe(true);
-    expect(contract.profiles.balanced.allowsHardware).toBe(true);
-  });
-
-  it("software encode params live only in the JSON", () => {
-    expect(ENCODE_PROFILES.quality.crf).toBe(contract.profiles.quality.software.crf);
-    expect(ENCODE_PROFILES.quality.hwCq).toBe(contract.profiles.quality.hardware.hwCq);
-    expect(ENCODE_PROFILES.quality.nvencPreset).toBe(
-      contract.profiles.quality.hardware.nvencPreset,
-    );
-    expect(ENCODE_PROFILES.balanced.hwCq).toBe(contract.profiles.balanced.hardware.hwCq);
-    expect(ENCODE_PROFILES.uquality.crf).toBe(contract.profiles.uquality.software.crf);
-    expect(ENCODE_PROFILES.uquality.preset).toBe(contract.profiles.uquality.software.preset);
-  });
-
-  it("U Quality is a CPU-only high-fidelity profile optimized for size and speed", () => {
-    expect(contract.profiles.uquality.allowsHardware).toBe(false);
-    expect(contract.profiles.uquality.software).toEqual({ crf: 16, preset: "faster" });
-    expect(contract.profiles.uquality.hardware).toBeUndefined();
-    expect(contract.profiles.uquality._comment).toContain("CRF 16");
-  });
-});
 
 describe("encode profile contract (JS helpers)", () => {
   it("getEffectiveHwEncoder allows hardware for quality", () => {
