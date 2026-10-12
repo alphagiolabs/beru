@@ -1,6 +1,4 @@
-import { spawn } from "child_process";
-import { buildProcessorChildEnv, invalidateSystemPythonCache } from "./processor-spawn.js";
-import { validateMediaBinaries } from "./paths.js";
+import { spawnProcessor } from "./spawn-processor.js";
 import { createLineWorker } from "./line-worker.js";
 
 const STARTUP_TIMEOUT_MS = 30_000;
@@ -35,18 +33,8 @@ const lineWorker = createLineWorker({
   maxPendingLineBytes: MAX_STDOUT_BUFFER_CHARS,
   stderrTailChars: MAX_STDERR_TAIL_CHARS,
   stderrLogTag: "processor",
-  spawnProc: (spawnSpec) => {
-    const media = validateMediaBinaries();
-    const mediaOpts = media.ok
-      ? { ffmpegPath: media.ffmpegPath, ffprobePath: media.ffprobePath }
-      : {};
-    const proc = spawn(spawnSpec.command, [...spawnSpec.args, "--job-worker"], {
-      windowsHide: true,
-      env: buildProcessorChildEnv(process.env, mediaOpts),
-    });
-    proc.once("error", invalidateSystemPythonCache);
-    return proc;
-  },
+  spawnProc: (spawnSpec) =>
+    spawnProcessor({ command: spawnSpec.command, args: [...spawnSpec.args, "--job-worker"] }),
   onMessage: (msg, line, proc) => {
     if (msg && msg.type === "run_end" && activeRun?.proc === proc) {
       if (msg.id != null && msg.id !== activeRun.id) {

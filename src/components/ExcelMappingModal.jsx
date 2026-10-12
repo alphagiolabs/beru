@@ -3,7 +3,7 @@ import { X, FileSpreadsheet, ArrowRight, RotateCcw } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { rowGet, normalizeMatchId } from "../utils/video-utils";
-import { ID_COLUMN_ALIASES } from "../utils/types";
+import { autoExcelMapping } from "../utils/batch-export";
 import { useT } from "../i18n/useT";
 import { Button } from "./ui/Button";
 import { Select } from "./ui/select";
@@ -85,16 +85,7 @@ export default function ExcelMappingModal() {
   };
 
   const handleReset = () => {
-    const idColumn =
-      excelHeaders.find((h) => ID_COLUMN_ALIASES.includes(h.toLowerCase().trim())) ||
-      excelHeaders[0] ||
-      null;
-    const columns = {};
-    for (const tr of templateRegions) {
-      const labelKey = tr.label.toLowerCase().trim();
-      const match = excelHeaders.find((h) => h.toLowerCase().trim() === labelKey);
-      if (match) columns[tr.id] = match;
-    }
+    const { idColumn, columns } = autoExcelMapping(excelHeaders, templateRegions);
     setDraft({ idColumn, columns });
   };
 

@@ -22,6 +22,7 @@ import { queueCapacityInput, capacityJobsSignature } from "../utils/batch-capaci
 import { Button } from "./ui/Button";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { Select } from "./ui/select";
+import { fileName } from "../../shared/file-name.js";
 
 const api = window.api;
 const WORKER_COUNTS = [1, 2, 3, 4, 5, 6, 8];
@@ -98,7 +99,7 @@ export default function Header() {
   const handleSaveProject = async () => {
     const res = await get().saveProject();
     if (res.canceled) return;
-    if (res.ok) flashToast("ok", t("header.savedAs", { name: res.filePath.split(/[\\/]/).pop() }));
+    if (res.ok) flashToast("ok", t("header.savedAs", { name: fileName(res.filePath) }));
     else flashToast("err", res.error || t("header.couldNotSave"));
   };
 
@@ -127,8 +128,7 @@ export default function Header() {
     }
     const res = await get().loadProject();
     if (res.canceled) return;
-    if (res.ok)
-      flashToast("ok", t("header.loadedFrom", { name: res.filePath.split(/[\\/]/).pop() }));
+    if (res.ok) flashToast("ok", t("header.loadedFrom", { name: fileName(res.filePath) }));
     else flashToast("err", res.error || t("header.couldNotLoad"));
   };
 

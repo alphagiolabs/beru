@@ -1,5 +1,6 @@
 import { createOperation } from "./operation.js";
 import { normalizeMatchId, rowGet } from "./video-utils.js";
+import { ID_COLUMN_ALIASES } from "./types.js";
 import {
   findTextOpForRegion,
   getGlobalTextStyleFromState,
@@ -7,6 +8,18 @@ import {
   pickTextStyle,
   textOpMatchesRegion,
 } from "./text-style.js";
+
+export function autoExcelMapping(headers, templateRegions) {
+  const idColumn =
+    headers.find((h) => ID_COLUMN_ALIASES.includes(h.toLowerCase().trim())) || headers[0] || null;
+  const columns = {};
+  for (const tr of templateRegions) {
+    const labelKey = tr.label.toLowerCase().trim();
+    const match = headers.find((h) => h.toLowerCase().trim() === labelKey);
+    if (match) columns[tr.id] = match;
+  }
+  return { idColumn, columns };
+}
 
 function matchExcel(queue, rows, idColumn) {
   const byId = new Map();

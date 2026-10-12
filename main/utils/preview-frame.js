@@ -1,10 +1,5 @@
-import { spawn } from "child_process";
-import {
-  buildProcessorChildEnv,
-  invalidateSystemPythonCache,
-  validateProcessorAvailableAsync,
-} from "./processor-spawn.js";
-import { validateMediaBinaries } from "./paths.js";
+import { validateProcessorAvailableAsync } from "./processor-spawn.js";
+import { spawnProcessor } from "./spawn-processor.js";
 import { createLineWorker } from "./line-worker.js";
 
 const STARTUP_TIMEOUT_MS = 10_000;
@@ -54,18 +49,7 @@ const previewWorker = createLineWorker({
   overflowError: OUTPUT_LIMIT_ERROR,
   maxPendingLineBytes: MAX_RESPONSE_LINE_BYTES,
   stderrTailChars: 4000,
-  spawnProc: (spawnSpec) => {
-    const media = validateMediaBinaries();
-    const mediaOpts = media.ok
-      ? { ffmpegPath: media.ffmpegPath, ffprobePath: media.ffprobePath }
-      : {};
-    const proc = spawn(spawnSpec.command, spawnSpec.args, {
-      windowsHide: true,
-      env: buildProcessorChildEnv(process.env, mediaOpts),
-    });
-    proc.once("error", invalidateSystemPythonCache);
-    return proc;
-  },
+  spawnProc: spawnProcessor,
   onMessage: (msg) => {
     if (msg && Number.isInteger(msg.id)) {
       const { id, ...result } = msg;

@@ -3,7 +3,7 @@ import path from "path";
 import fs from "fs";
 import { writeJsonAtomic } from "./atomic-json.js";
 
-const RECENT_MAX = 8;
+export const RECENT_MAX = 8;
 
 export function readRecent() {
   try {

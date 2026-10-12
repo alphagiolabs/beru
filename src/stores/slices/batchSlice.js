@@ -1,5 +1,6 @@
-import { uid, ID_COLUMN_ALIASES } from "../../utils/types";
+import { uid } from "../../utils/types";
 import {
+  autoExcelMapping,
   reconcileBatchExport,
   batchExcelRowIndex,
   syncBatchTextToExcel,
@@ -7,6 +8,8 @@ import {
 } from "../../utils/batch-export.js";
 import { stripExt, rowGet, isRegionUsable, formatMatchIdRaw } from "../../utils/video-utils";
 import { sanitizeOperation } from "../../utils/delogo-ops";
+import { cloneOperation } from "../../utils/operation";
+import { fileName } from "../../../shared/file-name.js";
 import {
   getGlobalTextStyleFromState,
   mergeTextStyles,
@@ -209,11 +212,7 @@ export function createBatchSlice(set, get) {
         return {
           ...item,
           operations: sourceOps.map((op) =>
-            sanitizeOperation({
-              ...op,
-              id: uid(),
-              region: op.region ? { ...op.region } : null,
-            }),
+            sanitizeOperation({ ...cloneOperation(op), id: uid() }),
           ),
           status: item.status === "done" || item.status === "error" ? "idle" : item.status,
           progress: 0,
@@ -234,10 +233,7 @@ export function createBatchSlice(set, get) {
           return { ok: false, code: "excel_no_rows", error: "No Excel rows to export" };
         }
         const defaultName = excelPath
-          ? String(excelPath)
-              .split(/[\\/]/)
-              .pop()
-              .replace(/\.(xlsx|xls)$/i, "") + "-export.xlsx"
+          ? fileName(String(excelPath)).replace(/\.(xlsx|xls)$/i, "") + "-export.xlsx"
           : "beru-export.xlsx";
         const pick = await api.saveExcelDialog(defaultName);
         if (pick?.canceled || !pick?.filePath) return { ok: false, canceled: true };
@@ -291,18 +287,7 @@ export function createBatchSlice(set, get) {
         }
         const { rows, headers } = result;
 
-        const idColumn =
-          headers.find((h) => ID_COLUMN_ALIASES.includes(h.toLowerCase().trim())) ||
-          headers[0] ||
-          null;
-
-        const { templateRegions } = get();
-        const columns = {};
-        for (const tr of templateRegions) {
-          const labelKey = tr.label.toLowerCase().trim();
-          const match = headers.find((h) => h.toLowerCase().trim() === labelKey);
-          if (match) columns[tr.id] = match;
-        }
+        const { idColumn, columns } = autoExcelMapping(headers, get().templateRegions);
 
         const { patch, report } = reconcileBatchExport(
           get(),

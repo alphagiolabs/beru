@@ -6,6 +6,7 @@ import { beruLocalUrl, imageVersion } from "../utils/beru-url";
 import { WATERMARK_POSITIONS } from "../utils/watermark-position";
 import { Button } from "./ui/Button";
 import { PositionIcon } from "./ui/PositionIcon";
+import { fileName } from "../../shared/file-name.js";
 
 export default function WatermarkModal() {
   const t = useT();
@@ -158,7 +159,7 @@ export default function WatermarkModal() {
                 <div className="flex gap-1.5">
                   <input
                     type="text"
-                    value={wm.imagePath ? wm.imagePath.split(/[\\/]/).pop() : ""}
+                    value={wm.imagePath ? fileName(wm.imagePath) : ""}
                     placeholder={t("modal.watermark.imagePlaceholder")}
                     readOnly
                     className="cap-input flex-1 font-mono text-[10px] truncate"

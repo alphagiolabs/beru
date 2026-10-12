@@ -23,8 +23,6 @@ const WHATS_NEW_HEADER =
   /^(what'?s?\s*new|novedades|features?|added|mejoras?|changed|improved?|other\s+improvements?)\b/i;
 const FIXED_HEADER = /^(fixed?|fixes|corregid[oa]s?|bugs?)\b/i;
 const FIX_PREFIX = /^(fix(\([^)]+\))?:|bug:|hotfix:)/i;
-const FEAT_PREFIX =
-  /^(feat(\([^)]+\))?:|add:|new:|ui\+tests:|refactor(\([^)]+\))?:|chore(\([^)]+\))?:)/i;
 const CHANGELOG_LINE_MAX = 96;
 
 function formatChangelogLine(text) {
@@ -38,7 +36,6 @@ function classifyReleaseNoteLine(line, activeSection) {
   if (FIXED_HEADER.test(line)) return { kind: "header", section: "fixed" };
   if (activeSection) return { kind: "item", section: activeSection, text: line };
   if (FIX_PREFIX.test(line)) return { kind: "item", section: "fixed", text: line };
-  if (FEAT_PREFIX.test(line)) return { kind: "item", section: "whatsNew", text: line };
   return { kind: "item", section: "whatsNew", text: line };
 }
 

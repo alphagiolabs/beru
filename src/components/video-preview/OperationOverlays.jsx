@@ -5,6 +5,7 @@ import TextOverlay from "../TextOverlay";
 import { isOpActive } from "../../utils/operation";
 import { beruLocalUrl } from "../../utils/beru-url";
 import { useT } from "../../i18n/useT";
+import { fileName } from "../../../shared/file-name.js";
 
 function RegionHitLayer({ screen, dragging, disabled, onDragStart, title }) {
   if (!screen || disabled) return null;
@@ -145,7 +146,7 @@ export default function OperationOverlays({
         >
           <img
             src={beruLocalUrl(op.imagePath, op.imageV)}
-            alt={op.imagePath.split(/[\\/]/).pop()}
+            alt={fileName(op.imagePath)}
             className="w-full h-full"
             style={{ objectFit: "fill" }}
             draggable={false}

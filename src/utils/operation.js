@@ -25,6 +25,10 @@ export function createOperation(overrides = {}) {
   };
 }
 
+export function cloneOperation(op) {
+  return { ...op, region: op.region ? { ...op.region } : null };
+}
+
 const DECIMAL_BOUND = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 
 function timeBound(value) {
