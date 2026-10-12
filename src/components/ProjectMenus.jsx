@@ -6,6 +6,7 @@ import { useT } from "../i18n/useT";
 import useCloseOnOutsideClick from "../hooks/useCloseOnOutsideClick";
 import { Button } from "./ui/Button";
 import { Tooltip } from "./ui/tooltip";
+import { fileName } from "../../shared/file-name.js";
 
 export function PresetsMenu({ placement = "header" }) {
   const { presets, queueLength } = useEditorStore(
@@ -126,7 +127,7 @@ export function RecentMenu({ placement = "header" }) {
     if (res.ok) {
       showToast({
         kind: "ok",
-        text: t("header.loadedFrom", { name: entry.name || entry.path.split(/[\\/]/).pop() }),
+        text: t("header.loadedFrom", { name: entry.name || fileName(entry.path) }),
       });
     } else if (res.error && /no encontrad|not found|missing/i.test(res.error)) {
       showToast({ kind: "err", text: t("header.recentMissing") });
@@ -194,7 +195,7 @@ export function RecentMenu({ placement = "header" }) {
                       className="text-[11px] font-medium truncate"
                       style={{ color: "var(--text-primary)" }}
                     >
-                      {r.name || r.path.split(/[\\/]/).pop()}
+                      {r.name || fileName(r.path)}
                     </div>
                     <div
                       className="text-[9px] truncate"

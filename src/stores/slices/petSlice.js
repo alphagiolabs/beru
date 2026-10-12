@@ -1,4 +1,5 @@
 import { swallow } from "../../utils/swallow.js";
+import { saveSettingsQuietly } from "../../utils/save-settings.js";
 import { normalizePetMovement } from "../../utils/types.js";
 import { beruLocalUrl } from "../../features/pets/utils/pet-url.js";
 
@@ -25,14 +26,8 @@ function normalizePetPosition(position) {
     : null;
 }
 
-async function persistPetSettings(partial) {
-  const api = window.api;
-  if (!api?.saveSettings) return;
-  try {
-    await api.saveSettings(partial);
-  } catch (e) {
-    swallow("saveSettings(pet)", e);
-  }
+function persistPetSettings(partial) {
+  return saveSettingsQuietly(partial, "pet");
 }
 
 export function createPetSlice(set, get) {

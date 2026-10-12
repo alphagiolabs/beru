@@ -17,6 +17,7 @@ import { useT } from "../i18n/useT";
 import { importExcelFromDialog } from "../utils/import-excel.js";
 import { InspectorGroup } from "./inspector";
 import { Button } from "./ui/Button";
+import { fileName } from "../../shared/file-name.js";
 
 const api = window.api;
 
@@ -171,7 +172,7 @@ export default function BatchPanel() {
         {excelPath && (
           <div className="inspector-excel-status">
             <div className="inspector-excel-file" title={excelPath}>
-              {excelPath.split(/[\\/]/).pop()}
+              {fileName(excelPath)}
             </div>
             <div className="inspector-excel-meta">
               <span>

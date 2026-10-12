@@ -1,8 +1,9 @@
 import { buildIdTextOutputName } from "./batch-process.js";
 import { stripExt } from "./video-utils.js";
+import { fileName } from "../../shared/file-name.js";
 
 function itemStem(item) {
-  return stripExt(item.path.split(/[\\/]/).pop());
+  return stripExt(fileName(item.path));
 }
 
 function namingIndexOf(queue, item) {

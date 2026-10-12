@@ -1,6 +1,12 @@
 import { swallow } from "../../utils/swallow.js";
 import { migrateThemeSettings } from "../../theme/engine.js";
 import { persistThemeSettings } from "./themeSlice.js";
+import { saveSettingsQuietly } from "../../utils/save-settings.js";
+import {
+  normalizeBatchWorkers,
+  normalizeBatchWorkersMode,
+  normalizeEncodeProfile,
+} from "../../utils/processing-settings.js";
 
 export function createSettingsSlice(set, get) {
   return {
@@ -10,14 +16,7 @@ export function createSettingsSlice(set, get) {
     setLanguage: async (language) => {
       const next = language === "en" ? "en" : "es";
       set({ language: next });
-      const api = window.api;
-      if (api?.saveSettings) {
-        try {
-          await api.saveSettings({ language: next });
-        } catch (e) {
-          swallow("saveSettings(language)", e);
-        }
-      }
+      await saveSettingsQuietly({ language: next }, "language");
     },
 
     loadSettings: async () => {
@@ -27,17 +26,9 @@ export function createSettingsSlice(set, get) {
         const settings = await api.loadSettings();
         const migrated = migrateThemeSettings(settings);
         const language = settings?.language === "en" ? "en" : "es";
-        const encodeProfile =
-          settings?.encodeProfile === "fast" ||
-          settings?.encodeProfile === "quality" ||
-          settings?.encodeProfile === "uquality"
-            ? settings.encodeProfile
-            : "balanced";
-        const batchWorkers = Number.isFinite(Number(settings?.batchWorkers))
-          ? Math.max(0, Math.min(16, Math.floor(Number(settings.batchWorkers))))
-          : 0;
-        const batchWorkersMode =
-          settings?.batchWorkersMode === "conservative" ? "conservative" : "balanced";
+        const encodeProfile = normalizeEncodeProfile(settings?.encodeProfile);
+        const batchWorkers = normalizeBatchWorkers(settings?.batchWorkers);
+        const batchWorkersMode = normalizeBatchWorkersMode(settings?.batchWorkersMode);
         const batchRetryFailed = settings?.batchRetryFailed !== false;
 
         set({

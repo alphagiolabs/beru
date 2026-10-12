@@ -7,6 +7,11 @@ import { buildExportJob } from "../../utils/export-pipeline.js";
 import { createProcessingRun } from "../../utils/processing-run.js";
 import { prepareRun } from "../../utils/export-run.js";
 import { stampJobTimestamp } from "../../utils/job-signature.js";
+import {
+  normalizeBatchWorkers,
+  normalizeBatchWorkersMode,
+  normalizeEncodeProfile,
+} from "../../utils/processing-settings.js";
 
 async function persistProcessingSetting(partial, label) {
   const api = window.api;
@@ -52,7 +57,6 @@ export function createProcessingSlice(set, get) {
         swallow("refreshMissingVideoInfo-batch", e);
         return get().queue;
       }
-      if (!Array.isArray(infos)) infos = [];
 
       if (api.getVideoInfo) {
         await Promise.all(
@@ -176,20 +180,19 @@ export function createProcessingSlice(set, get) {
     },
 
     setEncodeProfile: async (val) => {
-      const profile = val === "fast" || val === "quality" || val === "uquality" ? val : "balanced";
+      const profile = normalizeEncodeProfile(val);
       set({ encodeProfile: profile });
       await persistProcessingSetting({ encodeProfile: profile }, "encode profile");
     },
 
     setBatchWorkers: async (val) => {
-      const n = Number(val);
-      const workers = Number.isFinite(n) && n >= 0 ? Math.min(16, Math.floor(n)) : 0;
+      const workers = normalizeBatchWorkers(val);
       set({ batchWorkers: workers });
       await persistProcessingSetting({ batchWorkers: workers }, "batch workers");
     },
 
     setBatchWorkersMode: async (val) => {
-      const batchWorkersMode = val === "conservative" ? "conservative" : "balanced";
+      const batchWorkersMode = normalizeBatchWorkersMode(val);
       set({ batchWorkersMode });
       await persistProcessingSetting({ batchWorkersMode }, "batch workers mode");
     },

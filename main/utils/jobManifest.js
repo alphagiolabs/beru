@@ -1,8 +1,5 @@
-import {
-  JOB_MANIFEST_TYPE,
-  JOB_MANIFEST_VERSION,
-  normalizeManifest,
-} from "../../shared/job-manifest.js";
+import { normalizeManifest } from "../../shared/job-manifest.js";
+import { buildJobManifest } from "../../shared/build-job-manifest.js";
 
 export function unwrapJobManifest(payload) {
   try {
@@ -13,10 +10,5 @@ export function unwrapJobManifest(payload) {
 }
 
 export function createProcessorManifest(manifest, jobs) {
-  return normalizeManifest({
-    type: JOB_MANIFEST_TYPE,
-    version: JOB_MANIFEST_VERSION,
-    createdAt: manifest?.createdAt || new Date().toISOString(),
-    jobs: Array.isArray(jobs) ? jobs : [],
-  }).manifest;
+  return buildJobManifest(jobs, manifest?.createdAt);
 }

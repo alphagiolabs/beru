@@ -9,6 +9,7 @@ import TableEditorPreview from "./table-editor/TableEditorPreview";
 import TableEditorFocusPanel from "./table-editor/TableEditorFocusPanel";
 import TableEditorGrid from "./table-editor/TableEditorGrid";
 import { resolvedDuration } from "./video-preview/utils";
+import { fileName } from "../../shared/file-name.js";
 
 export default function TableEditor() {
   const t = useT();
@@ -241,7 +242,7 @@ export default function TableEditor() {
     const res = await get().exportExcel();
     if (res?.canceled) return;
     if (res?.ok) {
-      const name = (res.filePath || "").split(/[\\/]/).pop() || "export.xlsx";
+      const name = fileName(res.filePath || "") || "export.xlsx";
       showToast({ kind: "ok", text: t("table.exportExcelOk", { name }) });
     } else {
       showToast({

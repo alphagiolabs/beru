@@ -1,4 +1,4 @@
-import { createOperation } from "./operation.js";
+import { cloneOperation, createOperation } from "./operation.js";
 import { findTextOpForRegion, getGlobalTextStyleFromState, mergeTextStyles } from "./text-style.js";
 
 export function applyBatchTextOperations(
@@ -8,10 +8,7 @@ export function applyBatchTextOperations(
   resolveText,
   videoIdx,
 ) {
-  let ops = item.operations.map((op) => ({
-    ...op,
-    region: op.region ? { ...op.region } : null,
-  }));
+  let ops = item.operations.map(cloneOperation);
   if (!templateRegions?.length) return ops;
 
   for (const tr of templateRegions) {

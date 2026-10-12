@@ -6,27 +6,6 @@ import { getFfmpegPath } from "./paths.js";
 import { runCapturedProcess } from "./run-captured.js";
 import { pickHwEncoderFromEncodersText } from "../workerPolicy.js";
 
-export const ALLOWED_SETTINGS_KEYS = new Set([
-  "theme",
-  "themeActiveSlot",
-  "themeSlot1",
-  "themeSlot2",
-  "customThemes",
-  "language",
-  "encodeProfile",
-  "batchWorkers",
-  "batchWorkersMode",
-  "batchRetryFailed",
-  "petEnabled",
-  "petActiveSlug",
-  "petPosition",
-  "petPopoutPosition",
-  "petPoppedOut",
-  "petScale",
-  "petOpacity",
-  "petMovement",
-]);
-
 const SETTINGS_DEFAULTS = {
   theme: "dark",
   themeActiveSlot: 2,
@@ -47,6 +26,8 @@ const SETTINGS_DEFAULTS = {
   petOpacity: 1.0,
   petMovement: "fixed",
 };
+
+export const ALLOWED_SETTINGS_KEYS = new Set(Object.keys(SETTINGS_DEFAULTS));
 
 let cachedHwEncoder = null;
 let hwEncoderPromise = null;

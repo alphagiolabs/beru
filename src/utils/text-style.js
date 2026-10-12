@@ -4,48 +4,8 @@ export const LETTER_SPACING_MIN = -20;
 export const LETTER_SPACING_MAX = 80;
 
 export function letterSpacingToPx(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return 0;
-  return Math.min(LETTER_SPACING_MAX, Math.max(LETTER_SPACING_MIN, n));
+  return clampNum(value, LETTER_SPACING_MIN, LETTER_SPACING_MAX, 0);
 }
-
-const TEXT_STYLE_KEYS = [
-  "fontSize",
-  "fontColor",
-  "fontFamily",
-  "fontWeight",
-  "letterSpacing",
-  "textAlign",
-  "textOpacity",
-  "bold",
-  "italic",
-  "bgEnabled",
-  "bgColor",
-  "bgOpacity",
-  "boxBorderWidth",
-  "borderWidth",
-  "borderColor",
-  "textShadowEnabled",
-  "textShadowColor",
-  "textShadowOffsetX",
-  "textShadowOffsetY",
-  "autoFit",
-  "lineHeight",
-  "verticalAlign",
-  "textWrap",
-  "safeMargin",
-  "truncate",
-];
-
-const GLOBAL_KEY_MAP = {
-  fontSize: "textFontSize",
-  fontColor: "textFontColor",
-};
-
-const GLOBAL_TEXT_STYLE_KEYS = new Set([
-  "textInput",
-  ...TEXT_STYLE_KEYS.map((k) => GLOBAL_KEY_MAP[k] || k),
-]);
 
 export const TEXT_STYLE_DEFAULTS = Object.freeze({
   fontSize: 32,
@@ -74,6 +34,18 @@ export const TEXT_STYLE_DEFAULTS = Object.freeze({
   safeMargin: 4,
   truncate: "none",
 });
+
+const TEXT_STYLE_KEYS = Object.keys(TEXT_STYLE_DEFAULTS);
+
+const GLOBAL_KEY_MAP = {
+  fontSize: "textFontSize",
+  fontColor: "textFontColor",
+};
+
+const GLOBAL_TEXT_STYLE_KEYS = new Set([
+  "textInput",
+  ...TEXT_STYLE_KEYS.map((k) => GLOBAL_KEY_MAP[k] || k),
+]);
 
 export const GLOBAL_TEXT_STYLE_DEFAULTS = Object.freeze({
   textInput: "Sample Text",

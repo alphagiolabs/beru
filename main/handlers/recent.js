@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import path from "path";
 import fs from "fs";
-import { readRecent, writeRecent } from "../utils/recent.js";
+import { RECENT_MAX, readRecent, writeRecent } from "../utils/recent.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 import { handleIpc } from "../utils/ipc.js";
 
@@ -24,7 +24,7 @@ export function registerRecentHandlers() {
         savedAt: new Date().toISOString(),
       },
       ...list,
-    ].slice(0, 8);
+    ].slice(0, RECENT_MAX);
     writeRecent(next);
     return { success: true, recent: next };
   });

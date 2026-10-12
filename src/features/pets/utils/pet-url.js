@@ -1,4 +1,5 @@
+import { beruLocalUrl as localUrl } from "../../../utils/beru-url.js";
+
 export function beruLocalUrl(filePath) {
-  if (!filePath) return null;
-  return `beru://local/${encodeURIComponent(filePath)}`;
+  return filePath ? localUrl(filePath) : null;
 }

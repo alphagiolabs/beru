@@ -1,4 +1,5 @@
 import { swallow } from "../../utils/swallow.js";
+import { saveSettingsQuietly } from "../../utils/save-settings.js";
 import {
   applyThemeTokens,
   createCustomTheme,
@@ -22,14 +23,8 @@ async function syncWindowChrome(tokens) {
   }
 }
 
-export async function persistThemeSettings(partial) {
-  const api = window.api;
-  if (!api?.saveSettings) return;
-  try {
-    await api.saveSettings(partial);
-  } catch (e) {
-    swallow("saveSettings(theme)", e);
-  }
+export function persistThemeSettings(partial) {
+  return saveSettingsQuietly(partial, "theme");
 }
 
 export function createThemeSlice(set, get) {
