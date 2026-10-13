@@ -58,6 +58,7 @@
   --accent-brand: #00a8a4;
   --accent-brand-dim: #0077b3;
   --amber: #b45309;
+  --focus-ring: #006664;
   --rose: #e11d48;
   --purple: #7c3aed;
   --border: #d4d4d4;
@@ -296,7 +297,12 @@ input:focus-visible,
 textarea:focus-visible,
 a:focus-visible,
 [role="button"]:focus-visible {
-  outline: 2px solid var(--accent-brand);
+  outline: 2px solid var(--focus-ring, var(--accent-brand));
+  outline-offset: 2px;
+}
+
+.text-region-frame:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent-brand));
   outline-offset: 2px;
 }
 
@@ -1876,6 +1882,16 @@ a:focus-visible,
 
 .ui-tooltip-anchor {
   display: inline-flex;
+}
+
+.delogo-method-grid .ui-tooltip-anchor {
+  display: flex;
+  min-width: 0;
+}
+
+.delogo-method-grid .ui-tooltip-anchor > * {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .ui-tooltip-anchor > :disabled {
@@ -3508,6 +3524,18 @@ a:focus-visible,
   margin: 0;
 }
 
+/* Narrow numeric fields step with the keyboard; the native spinner would hide the digits. */
+.inspector-number-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.inspector-number-input::-webkit-outer-spin-button,
+.inspector-number-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
 .inspector-region-cell-input::selection {
   background: color-mix(in srgb, var(--accent) 35%, transparent);
 }
@@ -4220,7 +4248,7 @@ a:focus-visible,
 }
 
 .inspector-chip:focus-visible {
-  outline: 2px solid var(--accent-brand);
+  outline: 2px solid var(--focus-ring, var(--accent-brand));
   outline-offset: 1px;
 }
 
@@ -7124,7 +7152,7 @@ a:focus-visible,
 }
 
 button:focus-visible {
-  outline: 2px solid var(--accent-brand);
+  outline: 2px solid var(--focus-ring, var(--accent-brand));
   outline-offset: 2px;
   box-shadow: var(--button-focus-shadow);
 }

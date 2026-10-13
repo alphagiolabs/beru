@@ -48,6 +48,7 @@ export default function ShortcutsModal() {
       titleKey: "modal.shortcuts.region",
       items: [
         ["N", t("modal.shortcuts.newRegion")],
+        ["←  ↑  →  ↓", t("modal.shortcuts.nudgeRegion")],
         [t("modal.shortcuts.keyDelete"), t("modal.shortcuts.cancelRegion")],
         ["Esc", t("modal.shortcuts.cancelRegion")],
       ],

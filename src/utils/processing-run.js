@@ -1,11 +1,4 @@
-import {
-  abortProcessingQueue,
-  applyJobDone,
-  applyJobError,
-  applyJobCancelled,
-  applyJobProgressBatch,
-} from "./export-pipeline.js";
-import { PERF_FLAGS } from "./perf-flags.js";
+import { createQueueResults, createArtifactResults } from "./processing-results.js";
 import { tStatic } from "./format-message.js";
 
 export function createProcessingRun(set, get) {
@@ -30,26 +23,28 @@ export function createProcessingRun(set, get) {
     scheduledFlush = null;
   }
 
-  function makeRun(runId = null, jobs = null) {
+  function makeRun(runId = null, jobs = null, artifact = null) {
+    const state = get();
+    if (!jobs && state.activeProcessingKind) artifact = state.mediaExport;
+    const paths = new Map(
+      jobs
+        ? jobs.map((job) => [job.id, job.input_path])
+        : artifact
+          ? [[artifact.jobId, null]]
+          : state.queue.map((item, index) => [index, item.path]),
+    );
     return {
       runId,
       started: Boolean(runId),
-      jobs: new Map(
-        jobs
-          ? jobs.map((job) => [job.id, job.input_path])
-          : get().queue.map((item, index) => [index, item.path]),
-      ),
+      jobs: paths,
+      target: artifact ? createArtifactResults(artifact) : createQueueResults(paths),
       results: new Map(),
       outcome: null,
     };
   }
 
   function isJob(run, index) {
-    return (
-      Number.isInteger(index) &&
-      run.jobs.has(index) &&
-      get().queue[index]?.path === run.jobs.get(index)
-    );
+    return Number.isInteger(index) && run.jobs.has(index) && run.target.accepts(get(), index);
   }
 
   function flushProgress() {
@@ -57,15 +52,7 @@ export function createProcessingRun(set, get) {
     if (!current || current.outcome || pendingProgress.size === 0) return;
     const messages = [...pendingProgress.values()].filter((msg) => isJob(current, msg.index));
     pendingProgress.clear();
-    set((state) => {
-      const { queue, jobProgress } = applyJobProgressBatch({
-        ...state,
-        messages,
-        progressMap: PERF_FLAGS.progressMap,
-      });
-      if (queue === state.queue && jobProgress === state.jobProgress) return state;
-      return { queue, jobProgress };
-    });
+    set((state) => current.target.jobProgress(state, messages));
   }
 
   function notifyError(error) {
@@ -88,15 +75,12 @@ export function createProcessingRun(set, get) {
     clearProgress();
     run.outcome = outcome;
     retire(run.runId);
-    set((state) => {
-      const { queue, queueChanged } = abortProcessingQueue(state.queue);
-      return {
-        ...(queueChanged ? { queue } : {}),
-        isProcessing: false,
-        activeProcessRunId: null,
-        jobProgress: {},
-      };
-    });
+    set((state) => ({
+      ...run.target.finish(state, outcome),
+      isProcessing: false,
+      activeProcessRunId: null,
+      activeProcessingKind: null,
+    }));
     if (!outcome.success && !outcome.cancelled && !outcome.superseded && !reportedJobFailure) {
       outcome.notified = true;
       notifyError(outcome.error);
@@ -128,13 +112,7 @@ export function createProcessingRun(set, get) {
     if (kind === "cancelled" && previous) return;
     pendingProgress.delete(index);
     run.results.set(index, { ...msg, kind });
-    const apply =
-      kind === "done" ? applyJobDone : kind === "error" ? applyJobError : applyJobCancelled;
-    set((state) => {
-      const patch = apply({ ...state, msg, progressMap: PERF_FLAGS.progressMap });
-      if (previous) patch.progressDone = state.progressDone;
-      return patch;
-    });
+    set((state) => run.target.result(state, kind, msg, previous));
   }
 
   const handlers = {
@@ -156,11 +134,8 @@ export function createProcessingRun(set, get) {
       set({ activeProcessRunId: runId, isProcessing: true });
     },
     onProgress: (msg) => {
-      if (!eventRun(msg)) return;
-      set((state) => ({
-        progressDone: msg.current ?? msg.done ?? state.progressDone,
-        progressTotal: msg.total > 0 ? msg.total : state.progressTotal,
-      }));
+      const run = eventRun(msg);
+      if (run) set((state) => run.target.progress(state, msg));
     },
     onJobProgress: (msg) => {
       const run = eventRun(msg);
@@ -177,7 +152,8 @@ export function createProcessingRun(set, get) {
     onJobError: (msg) => jobResult("error", msg),
     onJobCancelled: (msg) => jobResult("cancelled", msg),
     onSummary: (msg) => {
-      if (eventRun(msg)) set({ batchSummary: msg });
+      const run = eventRun(msg);
+      if (run) set((state) => run.target.summary(state, msg));
     },
     onFinished: (msg) => {
       const run = eventRun(msg);
@@ -235,9 +211,13 @@ export function createProcessingRun(set, get) {
     clearProgress();
     retire(current?.runId);
     const before = get();
-    const run = makeRun(null, prepared.jobs);
+    const run = makeRun(null, prepared.jobs, prepared.startPatch.mediaExport);
     current = run;
-    set({ ...prepared.startPatch, activeProcessRunId: null });
+    set({
+      ...prepared.startPatch,
+      activeProcessRunId: null,
+      activeProcessingKind: run.target.kind,
+    });
     try {
       const response = await api.startProcessing(prepared.manifest);
       if (run !== current) return resultFor(run, prepared, videoIdx);
@@ -250,6 +230,7 @@ export function createProcessingRun(set, get) {
             jobProgress: before.jobProgress,
             batchSummary: before.batchSummary,
             activeProcessRunId: before.activeProcessRunId,
+            activeProcessingKind: before.activeProcessingKind,
           });
           current = makeRun(before.activeProcessRunId);
         }

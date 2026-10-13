@@ -93,7 +93,18 @@ export function validateBeruRequestPath(pathSecurity, requestUrl) {
 
 function contentTypeFor(filePath) {
   const ext = path.extname(filePath).toLowerCase();
-  return IMAGE_CONTENT_TYPES[ext] || VIDEO_CONTENT_TYPES[ext] || null;
+  const audio = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".flac": "audio/flac",
+    ".ogg": "audio/ogg",
+    ".opus": "audio/ogg",
+    ".aiff": "audio/aiff",
+    ".aif": "audio/aiff",
+  };
+  return IMAGE_CONTENT_TYPES[ext] || VIDEO_CONTENT_TYPES[ext] || audio[ext] || null;
 }
 
 export function hasKnownBeruType(filePath) {

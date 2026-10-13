@@ -35,11 +35,17 @@ function collectValidVideoFiles(filePaths, pathSecurity) {
 
 export function registerVideoHandlers(pathSecurity) {
   const filmstripRequests = new Map();
-  ipcMain.handle(IPC_INVOKE.releaseVideoPaths, (_event, filePaths) => {
+  ipcMain.handle(IPC_INVOKE.releaseVideoPaths, (_event, filePaths, retainedPaths) => {
     if (!Array.isArray(filePaths)) return false;
     if (filePaths.length > MAX_BATCH_PATHS)
       throw new Error("Demasiados videos en una sola solicitud");
-    pathSecurity.releaseVideoPaths(filePaths);
+    if (
+      retainedPaths !== undefined &&
+      (!Array.isArray(retainedPaths) || retainedPaths.length > 10000)
+    )
+      return false;
+    if (retainedPaths === undefined) pathSecurity.releaseVideoPaths(filePaths);
+    else pathSecurity.releaseVideoPaths(filePaths, retainedPaths);
     return true;
   });
   ipcMain.handle(IPC_INVOKE.getVideoInfo, async (_event, filePath) => {

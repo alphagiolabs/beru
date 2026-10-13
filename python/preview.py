@@ -10,6 +10,7 @@ import threading
 
 import media_probe
 from filters import build_filter_complex
+from frame_geometry import is_identity_transform, normalize_transform
 from media_paths import _validated_job_media
 from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 from op_shared import (
@@ -287,9 +288,11 @@ def _render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
                 frame_limit=math.ceil(target_rel * (frame_rate or 25)) + radius + 3,
                 timeout=max(0.1, preparation_deadline - time.monotonic()),
             )
+        transform = normalize_transform(payload)
+        transform_kwargs = {} if is_identity_transform(transform) else {"transform": transform}
         filter_complex, output_label, image_paths = filter_fn(
             graph_ops, vw, vh, watermark=watermark,
-            source_pix_fmt=info.get("pix_fmt"), **temporal_kwargs,
+            source_pix_fmt=info.get("pix_fmt"), **temporal_kwargs, **transform_kwargs,
         )
 
         cmd = [

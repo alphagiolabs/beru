@@ -82,13 +82,14 @@ describe("exact preview frame cache", () => {
     expect(mocks.render).toHaveBeenCalledTimes(2);
   });
 
-  it.each(["source", "overlay", "delogo image", "watermark image"])(
+  it.each(["source", "overlay", "delogo image", "watermark image", "external audio"])(
     "invalidates the frame when the %s file changes",
     async (kind) => {
       const payload = {
         ...job,
         operations: [{ mode: "image", image_path: image, delogo_image_path: image }],
         watermark: { enabled: true, type: "image", imagePath: image },
+        ...(kind === "external audio" ? { external_audio: { path: image } } : {}),
       };
       if (kind !== "overlay") delete payload.operations[0].image_path;
       if (kind !== "delogo image") delete payload.operations[0].delogo_image_path;

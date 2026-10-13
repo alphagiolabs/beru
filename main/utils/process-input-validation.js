@@ -1,5 +1,6 @@
 import fs from "fs";
 import { runWithConcurrency } from "./concurrency.js";
+import { jobInputClips } from "../../shared/job-manifest.js";
 
 function missingInput() {
   return { ok: false, code: "missing", message: "Archivo no encontrado" };
@@ -69,7 +70,7 @@ export async function validateInputPathReadableAsync(inputPath) {
 
 export async function findUnreadableInputsAsync(jobs, limit = 8) {
   const checks = new Map();
-  const results = await runWithConcurrency(jobs, limit, async (job) => {
+  const results = await runWithConcurrency(jobs.flatMap(jobInputClips), limit, async (job) => {
     const inputPath = job?.input_path;
     if (!inputPath) return null;
     if (!checks.has(inputPath)) checks.set(inputPath, validateInputPathReadableAsync(inputPath));

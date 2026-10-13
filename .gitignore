@@ -82,6 +82,7 @@ nul
 # Ignore untracked junk under scripts/ (tracked tooling stays tracked).
 # Use /scripts/* (not /scripts) so specific new modules can be un-ignored.
 /scripts/*
+!/scripts/make-media-fixtures.mjs
 !/scripts/benchmark-batch.ps1
 !/scripts/benchmark-render.ps1
 !/scripts/build-processor.hook.cjs

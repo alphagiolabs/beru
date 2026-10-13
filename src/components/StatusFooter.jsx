@@ -59,11 +59,13 @@ export default function StatusFooter() {
   const [runStartedAt, setRunStartedAt] = useState(null);
   const [sessionStartedAt] = useState(() => Date.now());
 
+  const mediaExport = useEditorStore((s) => (s.activeProcessingKind ? s.mediaExport : null));
   const { completed, total, percent } = getBatchProgress({
     queue: get().queue,
     progressDone,
     progressTotal,
     jobProgress,
+    mediaExport,
   });
   const showProgress = isProcessing || completed > 0 || percent > 0;
 

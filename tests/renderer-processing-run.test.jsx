@@ -221,9 +221,11 @@ describe("renderer Processing Run through the store and IPC adapter", () => {
     });
 
     expect(showToast).toHaveBeenCalledOnce();
+    expect(showToast.mock.calls[0][0].kind).toBe("err");
     expect(get().queue[0].status).toBe("done");
     expect(get().queue[1]).toMatchObject({ status: "idle", progress: 0, error: null });
     expect(get().isProcessing).toBe(false);
+    expect(get().jobProgress).toEqual({});
   });
 
   it("counts a retried job once and rejects duplicate or contradictory terminal messages", async () => {

@@ -1,88 +1,21 @@
 import { Upload, X } from "lucide-react";
-import { clampRegionToVideo } from "../utils/video-utils";
 import { imageVersion } from "../utils/beru-url";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
 import { storeErrorText } from "../utils/store-errors";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import { Button } from "./ui/Button";
+import RegionFields from "./RegionFields";
+import TimeRangeFields from "./TimeRangeFields";
+import CropRatioPresets from "./CropRatioPresets";
+import DelogoMethodHelp from "./DelogoMethodHelp";
+import { Tooltip, TooltipProvider } from "./ui/tooltip";
 
 const TITLE_KEYS = {
   blur: "props.appliedBlur",
   delogo: "props.appliedDelogo",
   crop: "props.appliedCrop",
 };
-
-function RegionFields({ region, dims, onPatchRegion }) {
-  const dimFor = (key) => (key === "x" || key === "w" ? dims.w : dims.h);
-  return (
-    <div className="grid grid-cols-4 gap-1.5">
-      {[
-        ["X", "x"],
-        ["Y", "y"],
-        ["W", "w"],
-        ["H", "h"],
-      ].map(([label, key]) => (
-        <label key={key}>
-          <span className="cap-input-label">{label}</span>
-          <input
-            type="number"
-            aria-label={label}
-            value={Math.round((region[key] || 0) * (dimFor(key) || 1))}
-            onChange={(e) => {
-              const px = Number(e.target.value);
-              const dim = dimFor(key);
-              if (!Number.isFinite(px) || !dim) return;
-              const next = clampRegionToVideo({ ...region, [key]: px / dim });
-              if (next) onPatchRegion(next);
-            }}
-            className="cap-input font-mono text-[11px]"
-            min={0}
-          />
-        </label>
-      ))}
-    </div>
-  );
-}
-
-function TemporalFields({ op, onPatch }) {
-  const t = useT();
-  return (
-    <div>
-      <span className="cap-input-label">{t("logo.timeRange")}</span>
-      <div className="grid grid-cols-2 gap-2">
-        <label>
-          <span className="cap-input-label">{t("props.startSec")}</span>
-          <input
-            type="number"
-            value={op.startTime ?? ""}
-            onChange={(e) => onPatch({ startTime: e.target.value ? Number(e.target.value) : null })}
-            placeholder="0"
-            className="cap-input font-mono text-[11px]"
-          />
-        </label>
-        <label>
-          <span className="cap-input-label">{t("props.endSec")}</span>
-          <input
-            type="number"
-            value={op.endTime ?? ""}
-            onChange={(e) => onPatch({ endTime: e.target.value ? Number(e.target.value) : null })}
-            placeholder={t("logo.endPlaceholder")}
-            className="cap-input font-mono text-[11px]"
-          />
-        </label>
-      </div>
-      {op.startTime != null && op.endTime != null && op.endTime <= op.startTime && (
-        <div
-          className="cap-card text-[11px] leading-relaxed mt-1"
-          style={{ color: "var(--text-rose)", borderColor: "rgba(239,68,68,0.3)" }}
-        >
-          {t("logo.rangeInvalid")}
-        </div>
-      )}
-    </div>
-  );
-}
 
 function CoverPicker({ op, onPatch }) {
   const t = useT();
@@ -146,34 +79,34 @@ function DelogoFields({ op, onPatch }) {
   return (
     <div className="space-y-2">
       <span className="cap-input-label">{t("props.method")}</span>
-      <div className="grid grid-cols-3 gap-1">
-        {DELOGO_METHODS.map((m) => {
-          const active = method === m.id;
-          return (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => onPatch({ delogoMethod: m.id })}
-              className={`inspector-chip !min-h-[32px]${active ? " is-selected" : ""}`}
-              style={
-                active
-                  ? {
-                      background: "var(--rose)",
-                      color: "var(--text-on-rose)",
-                      borderColor: "var(--rose)",
-                    }
-                  : undefined
-              }
-              title={t(m.descriptionKey)}
-            >
-              <span className="text-[10px]">{t(m.labelKey)}</span>
-            </button>
-          );
-        })}
-      </div>
-      <p className="inspector-helper">
-        {t(DELOGO_METHODS.find((m) => m.id === method)?.descriptionKey || "")}
-      </p>
+      <TooltipProvider>
+        <div className="delogo-method-grid grid grid-cols-3 gap-1">
+          {DELOGO_METHODS.map((m) => {
+            const active = method === m.id;
+            return (
+              <Tooltip key={m.id} label={t(m.labelKey)} description={t(m.descriptionKey)}>
+                <button
+                  type="button"
+                  onClick={() => onPatch({ delogoMethod: m.id })}
+                  className={`inspector-chip !min-h-[32px]${active ? " is-selected" : ""}`}
+                  style={
+                    active
+                      ? {
+                          background: "var(--rose)",
+                          color: "var(--text-on-rose)",
+                          borderColor: "var(--rose)",
+                        }
+                      : undefined
+                  }
+                >
+                  <span className="text-[10px]">{t(m.labelKey)}</span>
+                </button>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
+      <DelogoMethodHelp methodId={method} />
 
       {method === "blur" && (
         <div
@@ -393,21 +326,36 @@ export default function AppliedDelogoEditor({ op, videoIdx, opIdx, video }) {
   const t = useT();
   if (!op || !["blur", "delogo", "crop", "image"].includes(op.mode)) return null;
   const get = useEditorStore.getState;
-  const dims = { w: video?.width || 1920, h: video?.height || 1080 };
+  const dims = { w: video?.width || 0, h: video?.height || 0 };
   const region = op.region || { x: 0, y: 0, w: 0.2, h: 0.2 };
-  const onPatch = (patch) => get().updateOperation(videoIdx, opIdx, patch);
-  const onPatchRegion = (next) => get().updateOperation(videoIdx, opIdx, { region: next });
+  const onPatch = (patch, options) => get().updateOperation(videoIdx, opIdx, patch, options);
+  const onPatchRegion = (next, options) =>
+    get().updateOperation(videoIdx, opIdx, { region: next }, options);
 
   return (
     <div className="space-y-2.5" data-applied-region-editor={op.mode}>
-      <div>
-        <div className="cap-section-title">
-          {TITLE_KEYS[op.mode] ? t(TITLE_KEYS[op.mode]) : t("props.appliedImage")}
-        </div>
-        <p className="inspector-helper">{t("props.regionHint")}</p>
+      <div className="cap-section-title">
+        {TITLE_KEYS[op.mode] ? t(TITLE_KEYS[op.mode]) : t("props.appliedImage")}
       </div>
 
-      <RegionFields region={region} dims={dims} onPatchRegion={onPatchRegion} />
+      <div className="grid grid-cols-4 gap-1.5">
+        <RegionFields
+          region={region}
+          dims={dims}
+          variant="applied"
+          onRegionChange={onPatchRegion}
+        />
+      </div>
+
+      {op.mode === "crop" && (
+        <CropRatioPresets
+          region={region}
+          dims={dims}
+          timed={op.startTime != null || op.endTime != null}
+          operations={video?.operations?.slice(0, opIdx + 1) ?? []}
+          onRegionChange={onPatchRegion}
+        />
+      )}
 
       {op.mode === "blur" && (
         <div
@@ -434,7 +382,15 @@ export default function AppliedDelogoEditor({ op, videoIdx, opIdx, video }) {
 
       {op.mode === "image" && <ImageFields op={op} onPatch={onPatch} />}
 
-      <TemporalFields op={op} onPatch={onPatch} />
+      <div>
+        <span className="cap-input-label">{t("logo.timeRange")}</span>
+        <TimeRangeFields
+          start={op.startTime}
+          end={op.endTime}
+          onStart={(value, options) => onPatch({ startTime: value }, options)}
+          onEnd={(value, options) => onPatch({ endTime: value }, options)}
+        />
+      </div>
 
       <div className="flex gap-1.5">
         <Button

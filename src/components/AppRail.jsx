@@ -10,6 +10,8 @@ import {
   Table2,
   FileSpreadsheet,
   LogOut,
+  Combine,
+  Focus,
 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { isSupabaseConfigured } from "../lib/supabaseClient";
@@ -29,7 +31,14 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { PresetsMenu, RecentMenu } from "./ProjectMenus";
-import { TableEditor, ExcelMappingModal, WatermarkModal, SettingsModal } from "./modal-panels";
+import {
+  TableEditor,
+  ExcelMappingModal,
+  WatermarkModal,
+  SettingsModal,
+  CompositionModal,
+  StabilizationModal,
+} from "./modal-panels";
 import { preloadEditorPanels } from "./editor-panels";
 import { AppearancePanel, UserManagementPanel, PetdexPanel } from "./settings/settings-panels";
 
@@ -136,6 +145,20 @@ export default function AppRail() {
         <div className="app-rail-sep" role="separator" aria-hidden />
 
         <div className="app-rail-group">
+          <RailItem
+            label={t("composition.title")}
+            icon={Combine}
+            disabled={isProcessing}
+            onIntent={CompositionModal.preload}
+            onClick={() => get().setShowCompositionModal(true)}
+          />
+          <RailItem
+            label={t("stabilization.title")}
+            icon={Focus}
+            disabled={isProcessing}
+            onIntent={StabilizationModal.preload}
+            onClick={() => get().setShowStabilizationModal(true)}
+          />
           <RailItem
             label={t("batch.tableEditor")}
             onIntent={() => {

@@ -28,9 +28,7 @@ import concurrent.futures
 import json
 import logging
 import logging.handlers
-import math
 import shutil
-import tempfile
 import threading
 from collections import deque
 from dataclasses import replace
@@ -70,8 +68,16 @@ from media_paths import (
     _validated_job_media,
     validate_media_path,
 )
+from frame_geometry import normalize_transform
+from audio_settings import audio_filter, normalize_audio
+from clip_timing import playback_rate, tempo_filter, repeat_count, cycle_duration
+from composition import process_composition
+from clip_render import ClipRenderer
+from stabilization import process_stabilization
+from external_audio import build_external_audio_graph
 from job_classify import (
     _job_dimensions,
+    _job_processing_stages,
     _job_requires_encode,
     _job_takes_copy_path,
     _jobs_allow_hardware,
@@ -267,13 +273,14 @@ def _build_watermark_filter(watermark, video_w, video_h):
 
 
 def build_filter_complex(operations, video_w, video_h, watermark=None, _ffmpeg_path=None,
-                         source_pix_fmt=None, temporal_resolver=None):
+                         source_pix_fmt=None, temporal_resolver=None, transform=None):
     """Compatibility wrapper: keeps filters' ffmpeg probe on the active binary."""
     if _ffmpeg_path is None:
         _sync_probe_binaries()
     return filters.build_filter_complex(
         operations, video_w, video_h, watermark=watermark, ffmpeg_path=_ffmpeg_path,
         source_pix_fmt=source_pix_fmt, temporal_resolver=temporal_resolver,
+        transform=transform,
     )
 
 
@@ -343,269 +350,35 @@ def build_encode_args(ffmpeg_path, profile_name, job, force_software=False,
 
 
 def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None):
-    temporal = isinstance(job, dict) and any(
-        isinstance(op, dict) and str(op.get("mode") or "").lower() == "delogo"
-        and str(op.get("delogo_method") or op.get("delogoMethod") or "").lower() in {"temporal", "inpaint"}
-        for op in job.get("operations", []) or []
-    )
-    if not temporal:
-        return _process_one_impl(idx, job, ffmpeg_path, hw_encoder=hw_encoder, ctx=ctx)
-    try:
-        with tempfile.TemporaryDirectory(prefix="beru-temporal-") as directory:
-            return _process_one_impl(
-                idx, job, ffmpeg_path, hw_encoder=hw_encoder, ctx=ctx,
-                temporal_directory=directory,
-            )
-    except Exception as exc:
-        job_id = job.get("id", idx)
-        if _check_cancelled(ctx):
-            return _job_cancelled_result(job_id)
-        return _job_failed_result(
-            job_id, str(exc), max_workers=ctx.max_workers if ctx else _BATCH_ACTIVE_WORKERS,
-        )
-
-
-def _process_one_impl(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
-                      temporal_directory=None):
-    """Process a single job. Thread-safe.
-
-    If hw_encoder is provided (from the batch pre-flight), it is used
-    directly instead of re-detecting. This avoids per-job detection overhead
-    and lets the batch-level pre-flight skip a broken GPU encoder for all jobs.
-
-    ``ctx`` is the batch-scoped ``BatchContext``; when absent (direct calls,
-    older tests) the module-level fallbacks are used.
-    """
-    active_workers = ctx.max_workers if ctx is not None else _BATCH_ACTIVE_WORKERS
-    if ctx is not None:
-        ffmpeg_path = ctx.ffmpeg_path
-    if not isinstance(job, dict):
-        logger.error("Job %d: invalid payload (expected object, got %s)", idx, type(job).__name__)
-        return _job_failed_result(idx, "Invalid job payload", max_workers=active_workers)
-
-    raw_job = job
-    try:
-        job = _validated_job_media(job, require_output=True)
-    except ValueError as exc:
-        logger.error("Job %d: rejected unsafe media path: %s", idx, exc)
-        return _job_failed_result(
-            job.get("id", idx), str(exc), max_workers=active_workers
-        )
-
-    input_path = job.get("input_path")
-    output_path = job.get("output_path")
-    fname = os.path.basename(input_path) if input_path else "unknown"
-    job_id = job.get("id", idx)
-
+    """Execute one Job attempt; intermediate renders never emit terminal events."""
+    job_id = job.get("id", idx) if isinstance(job, dict) else idx
+    workers = ctx.max_workers if ctx else _BATCH_ACTIVE_WORKERS
     if _check_cancelled(ctx):
-        return {"index": job_id, "status": "cancelled"}
-
-    if not input_path or not os.path.exists(input_path):
-        raw_err = f"Input not found: {input_path}"
-        logger.error("Job %d: %s", idx, raw_err)
-        return _job_failed_result(job_id, raw_err, max_workers=active_workers)
-
-    if os.path.abspath(input_path) == os.path.abspath(output_path):
-        raw_err = "Output would overwrite input file"
-        logger.error("Job %d: output path equals input, skipping: %s", idx, input_path)
-        return _job_failed_result(job_id, raw_err, max_workers=active_workers)
-
-    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    raw_operations = job.get("operations", []) or []
-    watermark = job.get("watermark")
-    wm_enabled = isinstance(watermark, dict) and bool(watermark.get("enabled"))
-
-    try:
-        trim_start, trim_end = _parse_trim_window(job)
-        if not math.isfinite(trim_start) or trim_start < 0:
-            raise ValueError("invalid start")
-        if trim_end is not None and (not math.isfinite(trim_end) or trim_end <= trim_start):
-            raise ValueError("invalid end")
-    except (TypeError, ValueError) as exc:
-        return _job_failed_result(job_id, f"Invalid trim range: {exc}", max_workers=active_workers)
-    trimmed = trim_start > 0 or trim_end is not None
-
-    if _job_takes_copy_path(job):
-        out_ext = os.path.splitext(output_path)[1].lower()
-        src_audio_codec = (job.get("audio_codec") or "").lower()
-        if _native_copy_eligible(input_path, output_path, ctx=ctx):
-            ok, err = _native_stream_copy(input_path, output_path, ctx=ctx, job_id=job_id)
-            if ok:
-                logger.info("Job %d: native copy -> %s", idx, os.path.basename(output_path))
-                _emit_job_complete(job_id, output_path)
-                return {"index": job_id, "status": "succeeded"}
-            remove_partial_output(output_path, input_path, logger=logger)
-            if err == "Cancelled":
-                return _job_cancelled_result(job_id)
-            logger.warning("Job %d: native copy failed, remuxing instead: %s", idx, err)
-        logger.debug("Job %d: no operations, copying stream", idx)
-        copy_args = [ffmpeg_path, "-nostdin", "-xerror", "-y", "-loglevel", "error", "-progress", "pipe:2", "-nostats", "-i", input_path]
-        if src_audio_codec and src_audio_codec not in _AUDIO_COPY_CODECS.get(out_ext, frozenset()):
-            # Container cannot hold the source audio: re-encode audio, keep video copy.
-            copy_args += ["-map", "0:v:0?", "-c:v", "copy"]
-            copy_args += build_audio_args(output_path, src_audio_codec, job.get("audio_channels"))
-        else:
-            copy_args += ["-c", "copy"]
-        if out_ext in _FASTSTART_EXTS:
-            copy_args += ["-movflags", "+faststart"]
-        copy_args += ["-max_muxing_queue_size", "1024"]
-        copy_args.append(output_path)
-        try:
-            input_bytes = os.path.getsize(input_path)
-        except OSError:
-            input_bytes = 0
-        copy_timeout = max(300, min(7200, int(input_bytes / (25 * 1024 * 1024))))
-        ok, err = _run_ffmpeg(
-            copy_args, timeout_sec=copy_timeout, job_id=job_id,
-            duration_sec=float(job.get("video_duration") or 0), ctx=ctx,
-        )
-        if ok:
-            logger.info("Job %d: copied -> %s", idx, os.path.basename(output_path))
-            _emit_job_complete(job_id, output_path)
-            return {"index": job_id, "status": "succeeded"}
-        logger.error("Job %d: copy failed: %s", idx, err)
-        remove_partial_output(output_path, input_path, logger=logger)
-        if err == "Cancelled":
-            return _job_cancelled_result(job_id)
-        return _job_failed_result(job_id, err, max_workers=active_workers)
-
-    info = job_video_info(job, input_path, ctx=ctx)
-    vw, vh = _job_dimensions(job, info)
-    duration = float(info.get("duration") or 0)
-    output_duration = duration
-    if vw <= 0 or vh <= 0:
-        probe_path = ctx.ffprobe_path if ctx is not None else FFPROBE
-        ffprobe_status = f"ffprobe={probe_path}" if probe_path else "ffprobe no configurado"
-        err = (
-            "No se pudo leer la resolución del video: ffprobe no encontró dimensiones válidas "
-            f"para '{fname}' ({ffprobe_status})."
-        )
-        logger.error("Job %d: invalid dimensions %dx%d for %s", idx, vw, vh, fname)
-        return _job_failed_result(job_id, err, max_workers=active_workers)
-
-    operations = [_normalize_operation(op) for op in raw_operations]
-    temporal_fps = float(info.get("frame_rate") or 0)
-    if temporal_directory and temporal_fps <= 0:
-        temporal_fps = float(media_probe.ffprobe(
-            input_path, ffmpeg_bin=ffmpeg_path,
-            ffprobe_bin=ctx.ffprobe_path if ctx else find_ffprobe(ffmpeg_path),
-        ).get("frame_rate") or 0)
-    temporal_resolver = TemporalPatchResolver(
-        input_path, temporal_directory, ffmpeg_path, temporal_fps,
-        source_format=info.get("pix_fmt"), ctx=ctx,
-    ) if temporal_directory else None
-
-    filter_complex, output_label, image_paths = build_filter_complex(
-        operations, vw, vh, watermark=watermark, _ffmpeg_path=ffmpeg_path,
-        source_pix_fmt=info.get("pix_fmt"), temporal_resolver=temporal_resolver,
-    )
-
-    if not filter_complex and (operations or wm_enabled):
-        err = (
-            "Las operaciones no generaron un filtro válido. "
-            "Comprueba que cada región tenga tamaño suficiente y esté dentro del video."
-        )
-        logger.error("Job %d: empty filter graph with %d ops", idx, len(operations))
-        return _job_failed_result(job_id, err, max_workers=active_workers)
-
-    if trimmed:
-        trim_window = f"start={trim_start:.6f}"
-        if trim_end is not None:
-            trim_window += f":end={trim_end:.6f}"
-        trim_filter = f"trim={trim_window},setpts=PTS-STARTPTS[trimmed]"
-        filter_complex = (
-            f"{filter_complex};{output_label}{trim_filter}"
-            if filter_complex else f"[0:v]{trim_filter}"
-        )
-        output_label = "[trimmed]"
-        output_duration = (trim_end if trim_end is not None else duration) - trim_start
-
-    src_pix_fmt = info.get("pix_fmt") or job.get("pix_fmt", "yuv420p")
-    src_audio_codec = info.get("audio_codec") or job.get("audio_codec", "")
-    encode_profile = job.get("encode_profile", "balanced")
-    hw_failed = bool(raw_job.get("_hw_failed"))
-    if hw_failed or not profile_allows_hardware(encode_profile):
-        local_hw_encoder = None
-    elif ctx is not None:
-        local_hw_encoder = ctx.hw_encoder
-    elif hw_encoder is not None:
-        local_hw_encoder = hw_encoder
-    else:
-        local_hw_encoder = detect_hw_encoder(ffmpeg_path)
-
-    def _build_cmd(force_software=False):
-        loglevel = "info" if duration > 0 else "error"
-        cmd = [ffmpeg_path, "-nostdin", "-xerror", "-y", "-loglevel", loglevel, "-progress", "pipe:2", "-nostats"]
-        cmd += ["-i", input_path]
-        for img_path in image_paths:
-            cmd += extra_media_input_args(img_path, duration=duration, image_fps=1)
-        cmd += build_filter_thread_args(active_workers)
-        cmd += ["-filter_complex", filter_complex, "-map", output_label]
-        if image_paths:
-            cmd += ["-shortest"]
-        cmd += build_encode_args(
-            ffmpeg_path, encode_profile, job, force_software=force_software,
-            hw_encoder=local_hw_encoder, active_workers=active_workers,
-        )
-        cmd += ["-pix_fmt", src_pix_fmt or "yuv420p"]
-        if trimmed:
-            cmd += ["-af", f"atrim={trim_window},asetpts=PTS-STARTPTS"]
-        cmd += build_audio_args(
-            output_path, src_audio_codec, info.get("audio_channels") or job.get("audio_channels"),
-            force_encode=trimmed,
-        )
-        out_ext = os.path.splitext(output_path)[1].lower()
-        if out_ext in _FASTSTART_EXTS:
-            cmd += ["-movflags", "+faststart"]
-        cmd += ["-max_muxing_queue_size", "1024"]
-        cmd.append(output_path)
-        return cmd
-
-    logger.info(
-        "Job %d: processing '%s' [%dx%d, %d ops, profile=%s, encoder=%s]",
-        idx, fname, vw, vh, len(operations), encode_profile,
-        local_hw_encoder or "libx264",
-    )
-
-    estimated_timeout = max(600, min(7200, int(duration * 2 + 300)))
-
-    ok, err = _run_ffmpeg(
-        _build_cmd(force_software=local_hw_encoder is None),
-        timeout_sec=estimated_timeout,
-        job_id=job_id,
-        duration_sec=output_duration,
-        ctx=ctx,
-    )
-
-    if not ok and local_hw_encoder is not None and is_hardware_encode_error(err):
-        logger.warning("Job %d: hardware path failed, retrying with libx264", idx)
-        raw_job["_hw_failed"] = True
-        admission = (
-            ctx.sw_fallback_admission if ctx is not None else _SOFTWARE_FALLBACK_ADMISSION
-        )
-        if admission is not None and not admission.acquire():
-            return _job_cancelled_result(job_id)
-        try:
-            ok, err = _run_ffmpeg(
-                _build_cmd(force_software=True),
-                timeout_sec=estimated_timeout,
-                job_id=job_id,
-                duration_sec=output_duration,
-                ctx=ctx,
-            )
-        finally:
-            if admission is not None:
-                admission.release()
-
-    if ok:
-        logger.info("Job %d: completed -> %s", idx, os.path.basename(output_path))
-        _emit_job_complete(job_id, output_path)
-        return {"index": job_id, "status": "succeeded"}
-    logger.error("Job %d: ffmpeg failed: %s", idx, err[:200] if err else "")
-    remove_partial_output(output_path, input_path, logger=logger)
-    if err == "Cancelled":
         return _job_cancelled_result(job_id)
-    return _job_failed_result(job_id, err or "Unknown error", max_workers=active_workers)
+    try:
+        if not isinstance(job, dict):
+            raise ValueError("Invalid job payload")
+        if job.get("kind") == "stabilization":
+            process_stabilization(job, ctx.ffmpeg_path if ctx else ffmpeg_path,
+                ctx=ctx, run_ffmpeg=_run_ffmpeg, encode_args=build_encode_args)
+        else:
+            renderer = ClipRenderer(ffmpeg_path, retry_job=job, ctx=ctx, hw_encoder=hw_encoder,
+                active_workers=workers, admission=_SOFTWARE_FALLBACK_ADMISSION,
+                run_ffmpeg=_run_ffmpeg, encode_args=build_encode_args,
+                filter_args=build_filter_thread_args, build_filters=build_filter_complex,
+                video_info=job_video_info, native_copy_eligible=_native_copy_eligible,
+                native_copy=_native_stream_copy, detect_encoder=detect_hw_encoder)
+            if job.get("kind") == "composition":
+                process_composition(job, renderer.ffmpeg_path, ctx=ctx,
+                    render_clip=renderer.render, run_ffmpeg=_run_ffmpeg, encode_args=build_encode_args)
+            else:
+                renderer.render({**job, "id": job_id} if "id" not in job else job)
+        _emit_job_complete(job_id, job["output_path"])
+        return {"index": job_id, "status": "succeeded"}
+    except Exception as exc:
+        if str(exc) == "Cancelled" or _check_cancelled(ctx):
+            return _job_cancelled_result(job_id)
+        return _job_failed_result(job_id, str(exc), max_workers=workers)
 
 
 def _execute_batch(
@@ -827,14 +600,14 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
     max_pixels = 0
     has_video_filters = False
     encode_profiles = set()
-    for job in jobs:
+    for job in [stage for value in jobs if isinstance(value, dict) for stage in _job_processing_stages(value)]:
         if not isinstance(job, dict):
             continue
         w = int(job.get("source_width") or job.get("width") or 0)
         h = int(job.get("source_height") or job.get("height") or 0)
         if w > 0 and h > 0:
             max_pixels = max(max_pixels, w * h)
-        if job.get("operations"):
+        if _job_requires_encode(job):
             has_video_filters = True
         profile = (job.get("encode_profile") or "").strip().lower()
         if profile:

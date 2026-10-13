@@ -12,6 +12,7 @@ VIDEO_INPUT_EXTENSIONS = frozenset(
 VIDEO_OUTPUT_EXTENSIONS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".webm"})
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"})
 FONT_EXTENSIONS = frozenset({".ttf", ".otf", ".ttc"})
+AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".aiff", ".aif"})
 
 
 def validate_media_path(path, allowed_root, allowed_extensions):
@@ -57,11 +58,12 @@ def _path_parent(path):
 def _validated_job_media(job, *, require_output):
     """Validate and canonicalize every renderer-controlled media path in a job."""
     validated = dict(job)
-    input_path = job.get("input_path")
-    input_root = job.get("input_root") or (_path_parent(input_path) if input_path else None)
-    validated["input_path"] = validate_media_path(
-        input_path, input_root, VIDEO_INPUT_EXTENSIONS
-    )
+    if job.get("kind") == "composition":
+        validated["clips"] = [_validated_job_media(clip, require_output=False) for clip in job["clips"]]
+    else:
+        input_path = job.get("input_path")
+        input_root = job.get("input_root") or (_path_parent(input_path) if input_path else None)
+        validated["input_path"] = validate_media_path(input_path, input_root, VIDEO_INPUT_EXTENSIONS)
 
     if require_output:
         output_path = job.get("output_path")
@@ -70,7 +72,19 @@ def _validated_job_media(job, *, require_output):
             output_path, output_root, VIDEO_OUTPUT_EXTENSIONS
         )
 
+    if job.get("kind") == "composition":
+        return validated
+
     asset_roots = job.get("asset_roots")
+    external = job.get("external_audio")
+    if external is not None:
+        if not isinstance(external, dict) or not asset_roots:
+            raise ValueError("asset_roots required for external audio")
+        external = dict(external)
+        external["path"] = validate_media_path(external.get("path"), asset_roots, AUDIO_EXTENSIONS)
+        if not os.path.isfile(external["path"]):
+            raise ValueError("External audio file not found")
+        validated["external_audio"] = external
     operations = []
     for raw_operation in job.get("operations", []) or []:
         operation = dict(_normalize_operation(raw_operation))

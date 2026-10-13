@@ -1,6 +1,8 @@
 import { reconcileBatchExport } from "./batch-export.js";
 import { persistWatermark, restoreWatermark } from "./sanitize-preset.js";
 import { swallow } from "./swallow.js";
+import { normalizeVideoSettings } from "../../shared/video-settings.js";
+import { parseCompositionDocument } from "../../shared/composition-document.js";
 
 export const SESSION_PERSIST_KEY = "beru-queue-session";
 const SESSION_PERSIST_VERSION = 1;
@@ -25,12 +27,14 @@ function sanitizeQueueItem(item) {
     trimEnd: item.trimEnd ?? null,
     operations: item.operations || [],
     customOutputName: item.customOutputName || "",
+    ...normalizeVideoSettings(item),
   };
 }
 
 function restoreQueueItem(item) {
   return {
     ...item,
+    ...normalizeVideoSettings(item),
     status: "idle",
     progress: 0,
     error: null,
@@ -42,6 +46,7 @@ const asArray = (value) => (Array.isArray(value) ? value : []);
 const symmetric = (normalize) => ({ save: normalize, restore: normalize });
 
 const SESSION_PERSIST_FIELDS = {
+  composition: symmetric(parseCompositionDocument),
   queue: {
     save: (items) => (Array.isArray(items) ? items : []).map(sanitizeQueueItem).filter(Boolean),
     restore: (items) =>
@@ -69,7 +74,7 @@ export function buildSessionSnapshot(state) {
   for (const key of SESSION_PERSIST_KEYS) {
     snapshot[key] = SESSION_PERSIST_FIELDS[key].save(state?.[key]);
   }
-  return snapshot.queue.length === 0 ? null : snapshot;
+  return snapshot.queue.length === 0 && !snapshot.composition?.entries.length ? null : snapshot;
 }
 
 /**
@@ -80,9 +85,10 @@ export function parseSessionSnapshot(raw) {
   const legacy = Array.isArray(raw);
   const source = legacy ? {} : raw;
   const queue = SESSION_PERSIST_FIELDS.queue.restore(legacy ? raw : source?.queue);
-  if (queue.length === 0) return null;
+  if (queue.length === 0 && !parseCompositionDocument(source?.composition)?.entries.length)
+    return null;
 
-  const restored = { queue, selectedIdx: 0 };
+  const restored = { queue, selectedIdx: queue.length ? 0 : -1 };
   for (const key of SESSION_PERSIST_KEYS) {
     if (key === "queue") continue;
     const field = SESSION_PERSIST_FIELDS[key];

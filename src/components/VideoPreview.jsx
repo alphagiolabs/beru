@@ -25,6 +25,7 @@ import VideoErrorOverlay from "./video-preview/VideoErrorOverlay";
 import SplitComparePane from "./video-preview/SplitComparePane";
 import PreviewCompareBar from "./video-preview/PreviewCompareBar";
 import ZoomControls from "./video-preview/ZoomControls";
+import PreviewTimingClock from "./video-preview/PreviewTimingClock";
 
 export default function VideoPreview() {
   const t = useT();
@@ -279,6 +280,8 @@ export default function VideoPreview() {
               onError={videoHandlers.onError}
             />
 
+            <PreviewTimingClock videoRef={videoRef} item={sel} />
+
             {showFfmpegOverlay && (
               <FfmpegOverlay
                 url={ffmpegPreviewUrl}
@@ -409,6 +412,8 @@ export default function VideoPreview() {
             <PreviewCompareBar
               sidebarMode={sidebarMode}
               compareMode={previewCompareMode}
+              loading={ffmpegPreviewLoading}
+              stale={ffmpegPreviewStale}
               onSelectMode={setPreviewCompareMode}
               onDismiss={dismissFfmpegPreview}
             />

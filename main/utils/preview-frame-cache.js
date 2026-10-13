@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
+import { jobMediaSources } from "../../shared/job-manifest.js";
 import {
   renderPreviewFrame as renderWorkerFrame,
   renderSourceFrame as renderWorkerSourceFrame,
@@ -20,15 +21,11 @@ async function frameKey(payload) {
   try {
     const signature = JSON.stringify(payload);
     if (Buffer.byteLength(signature) > MAX_REQUEST_BYTES) return null;
-    const paths = new Set([payload.input_path]);
-    for (const operation of payload.operations || []) {
-      if (operation.image_path) paths.add(operation.image_path);
-      if (operation.delogo_image_path) paths.add(operation.delogo_image_path);
-    }
-    if (payload.watermark?.type === "image") {
-      const image = payload.watermark.imagePath || payload.watermark.watermark_image;
-      if (image) paths.add(image);
-    }
+    const paths = new Set(
+      jobMediaSources(payload)
+        .map((source) => source.path)
+        .filter(Boolean),
+    );
     const files = await Promise.all(
       [...paths].map(async (filePath) => {
         const info = await stat(filePath);

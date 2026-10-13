@@ -16,6 +16,8 @@ from unittest.mock import patch
 
 import ffmpeg_runner
 import encoders
+import media_probe
+import capacity
 import processor
 from batch_context import BatchContext
 
@@ -38,6 +40,58 @@ def make_job(folder, *, encode=True):
 
 
 class ProcessorContextTests(unittest.TestCase):
+    def test_composition_capacity_accounts_for_later_sources_and_output_canvas(self):
+        small={"width":64,"height":64,"encode_profile":"fast"}
+        large={"width":3840,"height":2160,"video_codec":"hevc","pix_fmt":"yuv420p10le","encode_profile":"fast"}
+        for clips,canvas in (([small,large],{"width":64,"height":64}),
+                             ([small,small],{"width":3840,"height":2160})):
+            job={"kind":"composition","clips":clips,"canvas":canvas,"encode_profile":"fast"}
+            with self.subTest(canvas=canvas), patch.object(capacity,"_get_available_ram_mb",return_value=2000):
+                workers=capacity._memory_cap_workers(None,0,4,True,"fast",jobs=[job])
+                self.assertEqual(workers,1,"A composition must not schedule concurrent stages beyond its RAM budget")
+
+    def test_intermediate_clip_failure_emits_only_the_parent_job_terminal(self):
+        info = {"width": 64, "height": 64, "duration": 1, "frame_rate": 30, "pix_fmt": "yuv420p"}
+        for kind, phase in (("video", "cycle"), ("video", "output"),
+                            ("composition", "cycle"), ("composition", "edited"), ("composition", "normalized")):
+            for cancelled in (False, True):
+                with self.subTest(kind=kind, phase=phase, cancelled=cancelled), tempfile.TemporaryDirectory() as tmp:
+                    folder = Path(tmp)
+                    clip = {**make_job(folder), "repeat_count": 2}
+                    job = clip if kind == "video" else {
+                        **clip, "id": -1, "kind": kind, "clips": [clip, clip],
+                        "canvas": {"width": 64, "height": 64, "fit": "contain"}, "composition_fps": 30,
+                    }
+                    ctx = BatchContext(ffmpeg_path="ffmpeg", jobs_file=str(folder / "jobs.json"),
+                                       env={"BERU_RETRY_FAILED": "0"})
+                    attempted = []
+
+                    def run(cmd, **kwargs):
+                        output = Path(cmd[-1])
+                        attempted.append(output.name)
+                        output.write_bytes(b"partial")
+                        should_fail = output.name.startswith(phase) if phase != "output" else str(output) == job["output_path"]
+                        if should_fail:
+                            if cancelled:
+                                ctx.cancel_event.set()
+                            return False, "Cancelled" if cancelled else "fixture encoder failure"
+                        return True, None
+
+                    stdout = io.StringIO()
+                    with patch.object(media_probe, "ffprobe", return_value=info), patch.object(
+                        processor, "_run_ffmpeg", side_effect=run
+                    ), redirect_stdout(stdout):
+                        result = processor.process_jobs([job], ctx.ffmpeg_path, ctx=ctx)
+                    events = [json.loads(line) for line in stdout.getvalue().splitlines()]
+                    terminals = [event for event in events if event["type"] in ("complete", "error", "cancelled")]
+                    self.assertEqual([(event["type"], event["index"]) for event in terminals],
+                                     [("cancelled" if cancelled else "error", job["id"])], events)
+                    self.assertEqual(result["cancelled" if cancelled else "failed"], 1, result)
+                    self.assertTrue(attempted, "The failure must occur during rendering")
+                    self.assertFalse(Path(job["output_path"]).exists())
+                    self.assertFalse(list(folder.glob("beru-loop-*")))
+                    self.assertFalse(list(folder.glob("beru-composition-*")))
+
     def test_mixed_profiles_keep_the_preflight_encoder_for_hardware_jobs(self):
         with tempfile.TemporaryDirectory() as tmp:
             folder = Path(tmp)

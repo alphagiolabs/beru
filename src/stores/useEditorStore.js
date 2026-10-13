@@ -11,6 +11,8 @@ import { createProjectSlice } from "./slices/projectSlice.js";
 import { createWatermarkSlice } from "./slices/watermarkSlice.js";
 import { createAuthSlice } from "./slices/authSlice.js";
 import { createPetSlice } from "./slices/petSlice.js";
+import { createCompositionSlice } from "./slices/compositionSlice.js";
+import { createStabilizationSlice } from "./slices/stabilizationSlice.js";
 import {
   hasPersistedFieldChanged,
   readSessionSnapshotFromStorage,
@@ -53,6 +55,8 @@ const useEditorStore = createWithEqualityFn(
     ...createWatermarkSlice(set, get),
     ...createAuthSlice(set, get),
     ...createPetSlice(set, get),
+    ...createCompositionSlice(set, get),
+    ...createStabilizationSlice(set, get),
     ...(_restoredSession || {}),
   }),
   Object.is,

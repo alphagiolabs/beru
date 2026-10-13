@@ -20,7 +20,7 @@ _COPY_SAFE_STREAM_TYPES = frozenset({"video", "audio"})
 _ANIMATED_IMAGE_EXTS = frozenset({".gif", ".webp", ".apng", ".avif", ".mng"})
 
 
-def build_audio_args(output_path, src_audio_codec, src_audio_channels=0, force_encode=False):
+def build_audio_args(output_path, src_audio_codec, src_audio_channels=0, force_encode=False, audio_map="0:a?"):
     """Copy audio when the container supports the source codec; else AAC.
 
     When re-encoding to AAC, preserve the source channel layout (mono -> mono,
@@ -29,8 +29,8 @@ def build_audio_args(output_path, src_audio_codec, src_audio_channels=0, force_e
     ext = os.path.splitext(output_path)[1].lower()
     codec = (src_audio_codec or "").lower()
     if not force_encode and codec and codec in _AUDIO_COPY_CODECS.get(ext, frozenset()):
-        return ["-map", "0:a?", "-c:a", "copy"]
-    args = ["-map", "0:a?", "-c:a", "aac", "-b:a", "192k"]
+        return ["-map", audio_map, "-c:a", "copy"]
+    args = ["-map", audio_map, "-c:a", "aac", "-b:a", "192k"]
     channels = int(src_audio_channels or 0)
     if 1 <= channels <= 16:
         args += ["-ac", str(channels)]

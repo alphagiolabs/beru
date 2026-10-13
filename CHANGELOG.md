@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Ediciones por video de giro, flips, tamaño, ganancia, silencio, audio externo, velocidad y repeticiones, con historial y restauración de Session.
+- Composición de videos con documento propio, orden de clips, canvas y FPS; estabilización con muestra previa y exportación como medio derivado.
+
 ### Changed
 
 - Processing Run concentra eventos, respuesta IPC y cancelación; Batch Export reconstruye coincidencias de Excel sin perder las ediciones por video.
 - El procesador usa un contexto por ejecución y la preview exacta concentra vigencia, temporizadores y comparación.
 - Electron, electron-builder, Vite y Vitest se actualizan para corregir las vulnerabilidades de dependencias. El desarrollo requiere Node.js 22.12 o posterior.
 - **`isOpActive` movido al módulo Operation** — La semántica "op activa en t" vive ahora en `src/utils/operation.js` (antes `video-preview/utils.js`) y se fija con `resources/op-active-fixtures.json`, un contrato compartido que consumen Vitest y `python/test_op_active_fixtures.py`. Los bounds no numéricos se ignoran igual que `float()` en Python.
+
+### Fixed
+
+- Los errores por Job de composición y estabilización conservan la ejecución activa hasta su cierre; las respuestas de preview obsoletas y los cambios que exceden el límite de duración se descartan.
 
 ## [1.6.47] - 2026-10-02
 

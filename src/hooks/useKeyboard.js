@@ -17,6 +17,7 @@ export default function useKeyboard() {
       const { key, ctrlKey, metaKey, shiftKey, altKey } = e;
       const cmd = ctrlKey || metaKey;
 
+      if (store.showCompositionModal || store.showStabilizationModal) return;
       if (key === "Escape") {
         if (store.confirmDialog || store.showPetPalette) return;
         if (store.showSettings) {

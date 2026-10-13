@@ -12,6 +12,7 @@ import {
   normalizeBatchWorkersMode,
   normalizeEncodeProfile,
 } from "../../utils/processing-settings.js";
+import { createJobManifest } from "../../utils/job-manifest.js";
 
 async function persistProcessingSetting(partial, label) {
   const api = window.api;
@@ -23,11 +24,53 @@ async function persistProcessingSetting(partial, label) {
   }
 }
 
+const MEDIA_START_BY_KIND = {
+  composition: "startComposition",
+  stabilization: "startStabilization",
+};
+
 export function createProcessingSlice(set, get) {
   const processingRun = createProcessingRun(set, get);
   return {
     isProcessing: false,
+    mediaExport: null,
+    exportMediaArtifact: async (job, { signature = null } = {}) => {
+      if (!job) return { ok: false, code: "no_job" };
+      const state = get(),
+        api = window.api;
+      const start = api?.[MEDIA_START_BY_KIND[job.kind]];
+      if (!start) return { ok: false, code: "api_unavailable" };
+      const previous = state.mediaExport?.kind === job.kind ? state.mediaExport : null;
+      const prepared = {
+        ok: true,
+        jobs: [job],
+        manifest: createJobManifest([job]),
+        startPatch: {
+          queue: state.queue,
+          exportSignatures: state.exportSignatures,
+          isProcessing: true,
+          mediaExport: {
+            kind: job.kind,
+            jobId: job.id,
+            status: "processing",
+            progress: 0,
+            outputPath: null,
+            error: null,
+            signature,
+            sourcePath: job.input_path || null,
+            variant: job.kind === "stabilization" && job.sample_seconds != null ? "sample" : "full",
+            confirmedOutputPath: previous ? previous.confirmedOutputPath : null,
+            confirmedSignature: previous ? previous.confirmedSignature : null,
+            confirmedAt: previous ? previous.confirmedAt : null,
+            confirmedVariant: previous ? previous.confirmedVariant : null,
+            confirmedSourcePath: previous ? previous.confirmedSourcePath : null,
+          },
+        },
+      };
+      return processingRun.start({ ...api, startProcessing: start }, prepared, job.id);
+    },
     activeProcessRunId: null,
+    activeProcessingKind: null,
     encodeProfile: "balanced",
     batchWorkers: 0,
     batchWorkersMode: "balanced",

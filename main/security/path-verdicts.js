@@ -4,6 +4,7 @@ import path from "path";
 const EXT_BY_KIND = {
   excel: new Set([".xlsx", ".xls", ".xlsm"]),
   image: new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]),
+  audio: new Set([".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".aiff", ".aif"]),
   video: new Set([
     ".mp4",
     ".mov",
@@ -22,6 +23,7 @@ const EXT_BY_KIND = {
 const MAX_BYTES_BY_KIND = {
   excel: 25 * 1024 * 1024,
   image: 15 * 1024 * 1024,
+  audio: 1024 * 1024 * 1024,
   video: 8 * 1024 * 1024 * 1024,
   project: 8 * 1024 * 1024,
 };
@@ -142,7 +144,11 @@ export function createPathVerdicts({
 
   function inspectProtocolFile(filePath) {
     const ext = path.extname(filePath || "").toLowerCase();
-    const kind = EXT_BY_KIND.image.has(ext) ? "image" : "video";
+    const kind = EXT_BY_KIND.image.has(ext)
+      ? "image"
+      : EXT_BY_KIND.audio.has(ext)
+        ? "audio"
+        : "video";
     return inspectReadableFile(filePath, kind);
   }
 

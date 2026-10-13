@@ -1,6 +1,10 @@
 import { normalizeJob } from "../../shared/job-manifest.js";
 import { getLockedDimensions } from "./video-dimensions.js";
 import { operationsToJobPayload } from "./operation.js";
+import { transformJobFields } from "./output-geometry.js";
+import { audioJobFields } from "./audio-settings.js";
+import { audioAssetJob } from "../../shared/audio-asset.js";
+import { normalizeTiming } from "../../shared/clip-timeline.js";
 import { getGlobalTextStyleFromState } from "./text-style.js";
 
 export function namingInputs(s) {
@@ -128,6 +132,11 @@ export function buildExportJob(item, index, ctx) {
       audio_channels: item.audioChannels,
       encode_profile: ctx?.encodeProfile,
       watermark: ctx?.watermark,
+      ...transformJobFields(item.transform),
+      ...audioJobFields(item.audio),
+      external_audio: audioAssetJob(item.externalAudio),
+      playback_rate: normalizeTiming(item.timing).rate,
+      repeat_count: normalizeTiming(item.timing).repeatCount,
     },
     index,
   );

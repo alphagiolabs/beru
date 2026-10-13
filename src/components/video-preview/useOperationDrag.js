@@ -132,6 +132,9 @@ export default function useOperationDrag({
     onCommit: patchSelectedRegionOp,
   });
 
+  // Undo stack identity and nudged operation after this keyboard session's snapshot;
+  // undo, redo or selecting another operation starts a new one.
+  const keyboardSnapshot = useRef(null);
   const selectedRegionOpGestureWrapped = useMemo(
     () => ({
       ...selectedRegionOpGesture,
@@ -142,6 +145,20 @@ export default function useOperationDrag({
       beginResize: (e, region, handle) => {
         useEditorStore.getState()._saveUndo?.();
         selectedRegionOpGesture.beginResize(e, region, handle);
+      },
+      nudge: (region, dxPx, dyPx) => {
+        const st = useEditorStore.getState();
+        const opId = st.queue[st.selectedIdx]?.operations?.[st.selectedOperationIdx]?.id;
+        const owner = `${st.selectedIdx}:${opId}`;
+        const snap = keyboardSnapshot.current;
+        if (snap?.stack !== st.undoStack || snap.owner !== owner) {
+          st._saveUndo?.();
+          keyboardSnapshot.current = { stack: useEditorStore.getState().undoStack, owner };
+        }
+        selectedRegionOpGesture.nudge(region, dxPx, dyPx);
+      },
+      endNudge: () => {
+        keyboardSnapshot.current = null;
       },
     }),
     [selectedRegionOpGesture],

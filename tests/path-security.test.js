@@ -155,6 +155,13 @@ describe("pathSecurity", () => {
       expect(
         narrow.validateReadableFile(path.join(outsideRoot, "unselected.mp4"), "video").ok,
       ).toBe(false);
+      fs.mkdirSync(path.join(outsideRoot, "sub"));
+      const alias = `${outsideRoot}/sub/../a.mp4`;
+      narrow.releaseVideoPaths([files[0]], [alias, path.join(outsideRoot, "unselected.mp4")]);
+      expect(narrow.validateReadableFile(files[0], "video").ok).toBe(true);
+      expect(
+        narrow.validateReadableFile(path.join(outsideRoot, "unselected.mp4"), "video").ok,
+      ).toBe(false);
       narrow.releaseVideoPaths([files[0]]);
       expect(narrow.validateReadableFile(files[0], "video").ok).toBe(false);
       expect(narrow.validateReadableFile(files[1], "video").ok).toBe(true);

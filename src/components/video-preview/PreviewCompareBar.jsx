@@ -2,8 +2,16 @@ import { X } from "lucide-react";
 import { Button } from "../ui/Button";
 import { useT } from "../../i18n/useT";
 
-export default function PreviewCompareBar({ sidebarMode, compareMode, onSelectMode, onDismiss }) {
+export default function PreviewCompareBar({
+  sidebarMode,
+  compareMode,
+  loading,
+  stale,
+  onSelectMode,
+  onDismiss,
+}) {
   const t = useT();
+  const status = loading ? t("preview.rendering") : stale ? t("preview.stale") : null;
   return (
     <div
       className="video-preview-media-controls absolute top-2 left-1/2 -translate-x-1/2 z-[35] flex items-center gap-0.5 px-1 py-1 rounded"
@@ -31,6 +39,15 @@ export default function PreviewCompareBar({ sidebarMode, compareMode, onSelectMo
           {label}
         </Button>
       ))}
+      {status && (
+        <span
+          role="status"
+          className="px-1.5 text-[10px] whitespace-nowrap"
+          style={{ color: stale && !loading ? "var(--text-rose)" : "var(--text-dim)" }}
+        >
+          {status}
+        </span>
+      )}
       <Button
         type="button"
         variant="tertiary"

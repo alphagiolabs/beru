@@ -30,6 +30,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "fetch:ffmpeg": "node scripts/fetch-ffmpeg.mjs",
+    "fixtures:media": "node scripts/make-media-fixtures.mjs",
     "postinstall": "node scripts/fetch-ffmpeg.mjs"
   },
   "dependencies": {

@@ -253,6 +253,10 @@ def ffprobe(path, *, ffprobe_bin=None, ffmpeg_bin=None):
                 audio_stream = stream
 
         if not video_stream:
+            if audio_stream:
+                return {**empty, "duration": _safe_float(fmt.get("duration") or audio_stream.get("duration", 0)),
+                        "audio_codec": audio_stream.get("codec_name", ""),
+                        "audio_channels": _safe_int(audio_stream.get("channels", 0))}
             return _ffprobe_via_ffmpeg(path, ffmpeg_bin=ffmpeg_bin)
 
         rotation = next((data["rotation"] for data in video_stream.get("side_data_list", [])
@@ -264,12 +268,14 @@ def ffprobe(path, *, ffprobe_bin=None, ffmpeg_bin=None):
         return {
             "width": width,
             "height": height,
+            **({"source_rotation": _safe_float(rotation)} if _safe_float(rotation) else {}),
             "duration": _safe_float(fmt.get("duration", 0)),
             "video_end": _video_stream_end(video_stream),
             "video_codec": video_stream.get("codec_name", ""),
             "pix_fmt": video_stream.get("pix_fmt", "yuv420p"),
             "bit_rate": _safe_int(fmt.get("bit_rate", 0)) or _safe_int(video_stream.get("bit_rate", 0)),
             "frame_rate": _parse_frame_rate(video_stream.get("r_frame_rate") or video_stream.get("avg_frame_rate", "")),
+            **{key: video_stream[key] for key in ("color_space", "color_transfer", "color_primaries", "color_range", "sample_aspect_ratio") if key in video_stream},
             "audio_codec": audio_stream.get("codec_name", "") if audio_stream else "",
             "audio_channels": _safe_int(audio_stream.get("channels", 0)) if audio_stream else 0,
         }

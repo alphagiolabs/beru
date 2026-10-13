@@ -15,11 +15,26 @@ import {
 } from "../../utils/text-style";
 import { tStatic } from "../../utils/format-message.js";
 import { swallow } from "../../utils/swallow.js";
+import { normalizeTransform, transformsEqual } from "../../utils/output-geometry.js";
+import { audioSettingsEqual, normalizeAudio } from "../../utils/audio-settings.js";
+import { normalizeAudioAsset } from "../../../shared/audio-asset.js";
+import { releaseUnownedVideoPaths } from "../../utils/video-path-ownership.js";
+import { normalizeVideoSettings } from "../../../shared/video-settings.js";
+import {
+  normalizeTiming,
+  clipTimeline,
+  MAX_OUTPUT_DURATION,
+} from "../../../shared/clip-timeline.js";
 
 const MAX_UNDO_STACK = 50;
 const THUMBNAILS_BY_PATH_MAX = 2000;
 
 let outputPathsCache = { key: null, paths: null };
+
+function timingWithinLimit(item) {
+  const { rate, repeatCount, totalDuration } = clipTimeline(item);
+  return (rate === 1 && repeatCount === 1) || totalDuration <= MAX_OUTPUT_DURATION;
+}
 
 const namingContext = (s) => ({
   templateRegions: s.templateRegions,
@@ -64,13 +79,7 @@ export function createQueueSlice(set, get) {
   let thumbnailFlushQueued = false;
 
   const releaseVideoPaths = (paths) => {
-    const api = window.api;
-    if (!api?.releaseVideoPaths) return;
-    for (let offset = 0; offset < paths.length; offset += 500) {
-      void api
-        .releaseVideoPaths(paths.slice(offset, offset + 500))
-        .catch((error) => swallow("releaseVideoPaths", error));
-    }
+    releaseUnownedVideoPaths(paths, get());
   };
 
   const flushPendingThumbnails = () => {
@@ -105,17 +114,24 @@ export function createQueueSlice(set, get) {
     }
   };
 
+  const snapshotItem = (item) => ({
+    operations: get()._cloneOps(item.operations),
+    ...normalizeVideoSettings(item),
+  });
+
   const restoreHistory = (sourceStack, targetStack) => {
     const { [sourceStack]: history, queue, selectedIdx } = get();
     if (history.length === 0 || selectedIdx < 0) return;
-    const operations = history[history.length - 1];
-    const current = get()._cloneOps(queue[selectedIdx].operations);
+    const entry = history[history.length - 1];
+    const restored = {
+      ...queue[selectedIdx],
+      ...snapshotItem(entry),
+    };
+    if (!timingWithinLimit(restored)) return;
+    const current = snapshotItem(queue[selectedIdx]);
     set((s) => {
       const updated = [...s.queue];
-      updated[selectedIdx] = {
-        ...updated[selectedIdx],
-        operations: get()._cloneOps(operations),
-      };
+      updated[selectedIdx] = restored;
       return {
         queue: updated,
         [sourceStack]: s[sourceStack].slice(0, -1),
@@ -127,6 +143,11 @@ export function createQueueSlice(set, get) {
   return {
     queue: [],
     selectedIdx: -1,
+    previewCycle: 0,
+    setPreviewCycle: (cycle) => {
+      const count = normalizeTiming(get().queue[get().selectedIdx]?.timing).repeatCount;
+      if (Number.isInteger(cycle) && cycle >= 0 && cycle < count) set({ previewCycle: cycle });
+    },
     selectedOperationIdx: null,
     currentRegion: null,
     undoStack: [],
@@ -375,6 +396,7 @@ export function createQueueSlice(set, get) {
     selectVideo: (idx) => {
       set({
         selectedIdx: idx,
+        previewCycle: 0,
         selectedOperationIdx: null,
         currentRegion: null,
         undoStack: [],
@@ -396,8 +418,10 @@ export function createQueueSlice(set, get) {
         const trimStart = nextStart > 0 ? nextStart : null;
         const trimEnd = nextEnd < duration ? nextEnd : null;
         if (item.trimStart === trimStart && item.trimEnd === trimEnd) return s;
+        const trimmed = { ...item, duration, trimStart, trimEnd };
+        if (!timingWithinLimit(trimmed)) return s;
         const queue = [...s.queue];
-        queue[videoIdx] = { ...item, duration, trimStart, trimEnd };
+        queue[videoIdx] = trimmed;
         return { queue };
       });
     },
@@ -433,21 +457,6 @@ export function createQueueSlice(set, get) {
       set({ currentRegion: clamped, selectedOperationIdx: null });
     },
 
-    updateRegionValue: (key, value) => {
-      const r = get().currentRegion;
-      if (!r) return;
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed)) return;
-      const next = clampRegionToVideo({ ...r, [key]: parsed });
-      if (!next) return;
-
-      const { sidebarMode, selectedTemplateRegionId } = get();
-      if (sidebarMode === "batch" && selectedTemplateRegionId != null) {
-        get().updateTemplateRegion(selectedTemplateRegionId, { region: next });
-      }
-      set({ currentRegion: next });
-    },
-
     selectOperation: (opIdx) => {
       const { queue, selectedIdx } = get();
       const ops =
@@ -462,14 +471,70 @@ export function createQueueSlice(set, get) {
     _saveUndo: () => {
       const { queue, selectedIdx, undoStack } = get();
       if (selectedIdx < 0 || selectedIdx >= queue.length) return;
-      const ops = queue[selectedIdx].operations.map((op) => ({
-        ...op,
-        region: op.region ? { ...op.region } : null,
-      }));
       set({
-        undoStack: [...undoStack.slice(-(MAX_UNDO_STACK - 1)), ops],
+        undoStack: [...undoStack.slice(-(MAX_UNDO_STACK - 1)), snapshotItem(queue[selectedIdx])],
         redoStack: [],
       });
+    },
+
+    setVideoTransform: (patch) => {
+      const { queue, selectedIdx, isProcessing } = get();
+      if (isProcessing || selectedIdx < 0 || selectedIdx >= queue.length) return;
+      const current = normalizeTransform(queue[selectedIdx].transform);
+      const next = normalizeTransform({ ...current, ...patch });
+      if (transformsEqual(current, next)) return;
+      get()._saveUndo();
+      const updated = [...queue];
+      updated[selectedIdx] = { ...updated[selectedIdx], transform: next };
+      set({ queue: updated });
+    },
+
+    setVideoAudio: (patch, { recordHistory = true } = {}) => {
+      const { queue, selectedIdx, isProcessing } = get();
+      if (isProcessing || selectedIdx < 0 || selectedIdx >= queue.length) return false;
+      const current = normalizeAudio(queue[selectedIdx].audio);
+      const next = normalizeAudio({ ...current, ...patch });
+      if (audioSettingsEqual(current, next)) return false;
+      if (recordHistory) get()._saveUndo();
+      const updated = [...queue];
+      updated[selectedIdx] = { ...updated[selectedIdx], audio: next };
+      set({ queue: updated });
+      return true;
+    },
+
+    setVideoTiming: (patch) => {
+      const { queue, selectedIdx, isProcessing } = get();
+      if (isProcessing || !queue[selectedIdx]) return false;
+      const current = normalizeTiming(queue[selectedIdx].timing);
+      const proposal = { ...current, ...patch };
+      const next = normalizeTiming(proposal);
+      if (
+        next.rate !== proposal.rate ||
+        next.repeatCount !== proposal.repeatCount ||
+        (next.rate === current.rate && next.repeatCount === current.repeatCount)
+      )
+        return false;
+      const item = { ...queue[selectedIdx], timing: next };
+      if (!timingWithinLimit(item)) return false;
+      get()._saveUndo();
+      const updated = [...queue];
+      updated[selectedIdx] = item;
+      set({ queue: updated });
+      return true;
+    },
+
+    setExternalAudio: (patch, { recordHistory = true } = {}) => {
+      const { queue, selectedIdx, isProcessing } = get();
+      if (isProcessing || selectedIdx < 0 || selectedIdx >= queue.length) return false;
+      const current = normalizeAudioAsset(queue[selectedIdx].externalAudio);
+      const next = patch === null ? null : normalizeAudioAsset({ ...current, ...patch });
+      if ((patch !== null && !next) || JSON.stringify(current) === JSON.stringify(next))
+        return false;
+      if (recordHistory) get()._saveUndo();
+      const updated = [...queue];
+      updated[selectedIdx] = { ...updated[selectedIdx], externalAudio: next };
+      set({ queue: updated });
+      return true;
     },
 
     _cloneOps: (ops) =>

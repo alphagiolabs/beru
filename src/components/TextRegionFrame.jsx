@@ -3,6 +3,12 @@ import { useT } from "../i18n/useT";
 
 const HANDLE_VISUAL = 8;
 const HANDLE_HIT = 18;
+const NUDGE_DIRECTIONS = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
 
 function handleStyle(id, accent) {
   const half = HANDLE_HIT / 2;
@@ -55,7 +61,10 @@ export default function TextRegionFrame({
   return (
     <div
       data-text-region-frame="true"
-      className="absolute"
+      role="group"
+      aria-label={label || t("props.regionLabel")}
+      tabIndex={0}
+      className="absolute text-region-frame"
       style={{
         left: screen.x,
         top: screen.y,
@@ -77,8 +86,18 @@ export default function TextRegionFrame({
       }}
       onPointerDown={(e) => {
         if (e.target?.dataset?.handle) return;
+        e.currentTarget.focus({ preventScroll: true });
         gesture.beginMove(e, region);
       }}
+      onKeyDown={(e) => {
+        const direction = NUDGE_DIRECTIONS[e.key];
+        if (!direction || e.ctrlKey || e.metaKey || e.altKey) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const step = e.shiftKey ? 10 : 1;
+        gesture.nudge?.(region, direction[0] * step, direction[1] * step);
+      }}
+      onBlur={() => gesture.endNudge?.()}
     >
       {label ? (
         <div

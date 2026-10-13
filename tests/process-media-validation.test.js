@@ -103,6 +103,37 @@ describe.each(["preview", "batch"])("process-media-validation (%s)", (mode) => {
   });
 
   if (mode === "batch") {
+    it("validates every composition source and protects a later clip without a parent input", async () => {
+      const restricted = createPathSecurity({
+        getPath: () => path.join(tmpDir, "trusted"),
+        getAppPath: () => path.join(tmpDir, "trusted"),
+        isPackaged: false,
+      });
+      const later = path.join(tmpDir, "later.mp4");
+      fs.writeFileSync(later, "video");
+      restricted.registerSelectedPath(later, "video");
+      restricted.registerSelectedPath(videoFile, "video");
+      restricted.registerSelectedPath(imageFile, "image");
+      const job = {
+        kind: "composition",
+        output_path: "out.mp4",
+        clips: [
+          { input_path: videoFile },
+          { input_path: later, operations: [{ mode: "image", image_path: imageFile }] },
+        ],
+      };
+      const [safe] = await sanitizeBatchJobMedia([job], restricted, { outputDirectory: tmpDir });
+      expect(safe).not.toHaveProperty("input_path");
+      expect(safe.clips[1].input_root).toBe(tmpDir);
+      expect(safe.clips[1].asset_roots).toContain(tmpDir);
+      await expect(validateBatchOutputPaths([{ ...safe, output_path: later }])).rejects.toThrow(
+        /coincide con una entrada/,
+      );
+      restricted.releaseVideoPaths([later]);
+      await expect(sanitizeBatchJobMedia([job], restricted)).rejects.toThrow(
+        /Entrada no permitida/,
+      );
+    });
     it("rejects output aliases to inputs and duplicate outputs after canonicalization", async () => {
       const input = { input_path: videoFile, operations: [] };
       await expect(
