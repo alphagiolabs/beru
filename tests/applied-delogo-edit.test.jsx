@@ -136,7 +136,6 @@ describe("AppliedDelogoEditor — seguir editando zonas aplicadas", () => {
     const editor = document.querySelector("[data-applied-region-editor='blur']");
     expect(editor).toBeTruthy();
     expect(editor.textContent).toMatch(/Desenfoque aplicado/);
-    expect(editor.textContent).toMatch(/Arrástrala para moverla/);
     act(() => root.unmount());
   });
 
@@ -155,25 +154,6 @@ describe("AppliedDelogoEditor — seguir editando zonas aplicadas", () => {
       slider.dispatchEvent(new Event("input", { bubbles: true }));
     });
     expect(useEditorStore.getState().queue[0].operations[0].blurStrength).toBe(42);
-    act(() => root.unmount());
-  });
-
-  it("el campo X actualiza la región de la operación", () => {
-    const root = renderPanel();
-    const xInput = document.querySelector(
-      "[data-applied-region-editor='blur'] input[aria-label='X']",
-    );
-    expect(xInput).toBeTruthy();
-    act(() => {
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        "value",
-      ).set;
-      nativeSetter.call(xInput, "384");
-      xInput.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    const region = useEditorStore.getState().queue[0].operations[0].region;
-    expect(region.x).toBeCloseTo(384 / 1920, 5);
     act(() => root.unmount());
   });
 

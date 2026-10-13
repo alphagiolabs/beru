@@ -109,5 +109,17 @@ export default function useRegionGesture({ videoEl, onChange, onCommit, enabled 
     [beginSession],
   );
 
-  return { active, beginMove, beginResize };
+  const nudge = useCallback(
+    (region, dxPx, dyPx) => {
+      const video = videoEl?.current;
+      const width = video?.videoWidth;
+      const height = video?.videoHeight;
+      if (!enabled || !region || !(width > 0 && height > 0)) return;
+      const next = applyMove(region, dxPx / width, dyPx / height);
+      if (next) onCommitRef.current?.(next);
+    },
+    [enabled, videoEl],
+  );
+
+  return { active, beginMove, beginResize, nudge };
 }

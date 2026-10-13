@@ -181,7 +181,7 @@ def _extract_error_line(stderr_text):
 
 def _output_path_from_ffmpeg_cmd(cmd):
     """Last non-flag argv token is typically the output file."""
-    if not cmd:
+    if not cmd or str(cmd[-1]) == "-":
         return None
     for token in reversed(cmd):
         s = str(token)
@@ -230,7 +230,7 @@ def _kill_ffmpeg_process(proc):
         proc.wait(timeout=2)
 
 
-def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=None):
+def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=None, progress_range=(0, 100)):
     """Run FFmpeg with bounded stderr capture, optional progress parsing, and cancel polling."""
     proc = subprocess.Popen(
         cmd,
@@ -283,7 +283,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=N
                 pct = min(99.0, (cur / duration_sec) * 100.0) if duration_sec > 0 else 0
                 sm = _FFMPEG_SPEED_RE.search(line)
                 speed = float(sm.group(1)) if sm else progress_state["speed"]
-                _emit_job_progress(job_id, pct, speed, ctx=ctx)
+                _emit_job_progress(job_id, progress_range[0] + pct * (progress_range[1] - progress_range[0]) / 100, speed, ctx=ctx)
         except Exception as exc:
             with stderr_lock:
                 progress_state["reader_error"] = f"FFmpeg progress reader failed: {exc}"
@@ -346,13 +346,13 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=N
         if output and (not os.path.isfile(output) or os.path.getsize(output) == 0):
             return False, "FFmpeg exited with code 0 but produced no valid output file"
         if job_id is not None:
-            _emit_job_progress(job_id, 100.0, None, ctx=ctx)
+            _emit_job_progress(job_id, progress_range[1], None, ctx=ctx)
         return True, None
     detail = _extract_error_line(stderr)
     return False, f"FFmpeg exited with code {returncode}" + (f": {detail}" if detail else "")
 
 
-def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
+def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None, progress_range=None):
     """Run ffmpeg with retry for transient failures.
 
     The timeout scales with video duration when duration_sec is provided:
@@ -370,7 +370,8 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None
         try:
             logger.debug("FFmpeg cmd: %s", " ".join(str(x) for x in cmd)[:500])
             t0 = time.perf_counter()
-            ok, err = _run_ffmpeg_stream(cmd, timeout_sec, job_id, duration_sec, ctx=ctx)
+            progress_kwargs = {"progress_range": progress_range} if progress_range is not None else {}
+            ok, err = _run_ffmpeg_stream(cmd, timeout_sec, job_id, duration_sec, ctx=ctx, **progress_kwargs)
             elapsed = time.perf_counter() - t0
             if ok:
                 logger.info("FFmpeg finished in %.1fs (job=%s)", elapsed, job_id)

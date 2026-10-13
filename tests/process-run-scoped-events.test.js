@@ -4,6 +4,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { IPC_EVENTS, IPC_INVOKE, emitRunEvent } from "../shared/ipc-channels.js";
+import { createProcessingRun } from "../src/utils/processing-run.js";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
@@ -109,7 +110,7 @@ beforeEach(() => {
     mocks.resolveDone = resolve;
   });
   mocks.emitLine = null;
-  mocks.sendToRenderer.mockClear();
+  mocks.sendToRenderer.mockReset();
   registerProcessHandlers({ getOutputDirectory: () => tmpDir() });
 });
 
@@ -124,6 +125,87 @@ afterEach(async () => {
 });
 
 describe("run-scoped process events", () => {
+  it.each([
+    ["composition", -1],
+    ["stabilization", -2],
+  ])("keeps the renderer busy until a failed %s worker finishes", async (kind, id) => {
+    const outputDirectory = tmpDir(),
+      job = { kind, id, output_path: "out.mp4", video_info_probed: true };
+    let state = {
+      queue: [],
+      isProcessing: false,
+      jobProgress: {},
+      exportSignatures: {},
+      showToast: vi.fn(),
+    };
+    const events = new Map(),
+      set = (patch) => {
+        state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
+      };
+    const renderer = createProcessingRun(set, () => state);
+    const api = {
+      ...Object.fromEntries(
+        Object.entries(IPC_EVENTS).map(([name, channel]) => [
+          name,
+          (handler) => {
+            events.set(channel, handler);
+            return () => events.delete(channel);
+          },
+        ]),
+      ),
+      startProcessing: (manifest) =>
+        runModule.executeProcessingRun({
+          manifest,
+          jobs: manifest.jobs,
+          outputDirectory,
+          spawnSpec: { command: "noop", args: [] },
+        }),
+    };
+    const prepare = () => ({
+      ok: true,
+      jobs: [job],
+      manifest: { jobs: [job] },
+      startPatch: {
+        queue: state.queue,
+        isProcessing: true,
+        mediaExport: { kind, jobId: id, status: "processing", progress: 0 },
+      },
+    });
+    mocks.sendToRenderer.mockImplementation((channel, payload) => events.get(channel)?.(payload));
+    const disconnect = renderer.connect(api),
+      pending = renderer.start(api, prepare(), id);
+    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
+    try {
+      mocks.emitLine(JSON.stringify({ type: "error", index: id, error: "Invalid media" }));
+      expect(state.mediaExport).toMatchObject({ status: "error", error: "Invalid media" });
+      expect(state.isProcessing).toBe(true);
+      expect(calls(IPC_EVENTS.onError)).toHaveLength(0);
+      expect(await renderer.start(api, prepare(), id)).toMatchObject({
+        ok: false,
+        code: "already_processing",
+      });
+    } finally {
+      mocks.proc.exitCode = 1;
+      mocks.resolveDone({ ok: false });
+      await pending;
+    }
+    expect(state.isProcessing).toBe(false);
+    expect(state.activeProcessingKind).toBeNull();
+    expect(state.mediaExport.summary).toMatchObject({ total: 1, failed: 1 });
+    mocks.proc = fakeProc(9101);
+    mocks.done = new Promise((resolve) => {
+      mocks.resolveDone = resolve;
+    });
+    const next = renderer.start(api, prepare(), id);
+    await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
+    fs.writeFileSync(mocks.jobs[0].output_path, "exported");
+    mocks.emitLine(JSON.stringify({ type: "complete", index: id }));
+    mocks.resolveDone({ ok: true });
+    expect(await next).toMatchObject({ ok: true });
+    expect(state.isProcessing).toBe(false);
+    disconnect();
+  });
+
   it("emitRunEvent stamps runId onto the payload", () => {
     const send = vi.fn();
     emitRunEvent(send, IPC_EVENTS.onProgress, "run-1", { percent: 50 });

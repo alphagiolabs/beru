@@ -27,13 +27,8 @@ export async function createCancelArtifacts(tempRoot) {
       return fs.existsSync(cancelPath);
     },
     dispose() {
-      for (const file of [manifestPath, cancelPath]) {
-        try {
-          fs.unlinkSync(file);
-        } catch {}
-      }
       try {
-        fs.rmdirSync(dir);
+        fs.rmSync(dir, { recursive: true, force: true });
       } catch {}
     },
   };

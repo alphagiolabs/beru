@@ -155,7 +155,7 @@ function dispatchProcessorLine(run, line) {
       emit(run, IPC_EVENTS.onJobCancelled, msg);
     } else if (msg.type === "error") {
       const error = msg.error || "Unknown error";
-      if (Number.isInteger(msg.index) && msg.index >= 0) {
+      if (Number.isInteger(msg.index)) {
         run.jobs.set(msg.index, { status: error === "Cancelled" ? "cancelled" : "failed", error });
         if (error === "Cancelled")
           emit(run, IPC_EVENTS.onJobCancelled, { type: "cancelled", index: msg.index });

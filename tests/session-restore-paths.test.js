@@ -24,6 +24,13 @@ vi.mock("electron", () => ({
 vi.mock("../main/shared-state.js", () => ({
   getMainWindow: vi.fn(() => null),
 }));
+vi.mock("../main/utils/dialog-history.js", () => ({
+  showOpenDialog: vi.fn(),
+  showSaveDialog: vi.fn(),
+}));
+vi.mock("../main/utils/processor-spawn.js", () => ({ validateProcessorAvailableAsync: vi.fn() }));
+vi.mock("../main/utils/paths.js", () => ({ validateMediaBinaries: vi.fn() }));
+vi.mock("../main/processing-run.js", () => ({ executeProcessingRun: vi.fn() }));
 
 function makeNarrowApp(trustedRoot) {
   return {
@@ -75,5 +82,50 @@ describe("session:restorePaths", () => {
     const result = await restore({}, { videoPaths: [outsideFile] });
     expect(result.videos).toBe(0);
     expect(result.errors).toContain("Archivo fuera de ubicaciones permitidas");
+  });
+
+  it("loads a composition with its real authorization results in one response, including a moved source", async () => {
+    const folder = path.join(trustedRoot, "home", "Videos");
+    fs.mkdirSync(folder, { recursive: true });
+    const source = path.join(folder, "a.mp4"),
+      image = path.join(folder, "a.png"),
+      missing = path.join(folder, "moved.mp4"),
+      outside = path.join(outsideRoot, "outside.mp4");
+    for (const file of [source, image, outside]) fs.writeFileSync(file, "fixture");
+    const selected = path.join(folder, "saved.json");
+    const value = {
+      type: "beru-composition",
+      version: 1,
+      canvas: { width: 64, height: 64, fit: "contain" },
+      fps: 30,
+      entries: [source, missing, outside].map((video, i) => ({
+        id: String(i),
+        item: {
+          path: video,
+          width: 64,
+          height: 64,
+          duration: 1,
+          operations: [{ mode: "image", imagePath: image }],
+        },
+      })),
+    };
+    fs.writeFileSync(selected, JSON.stringify(value));
+    const security = createPathSecurity(makeNarrowApp(trustedRoot));
+    const { showOpenDialog } = await import("../main/utils/dialog-history.js");
+    showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [selected] });
+    const { registerCompositionHandlers } = await import("../main/handlers/composition.js");
+    registerCompositionHandlers(security);
+    const result = await mocks.handlers.get("composition:load")({}, {});
+    expect(result.success).toBe(true);
+    expect(result.document.entries.map((entry) => entry.item.path)).toEqual([
+      source,
+      missing,
+      outside,
+    ]);
+    expect(result.paths.videos).toBe(1);
+    expect(result.paths.errors).toHaveLength(2);
+    expect(security.validateReadableFile(source, "video").ok).toBe(true);
+    expect(security.validateReadableFile(image, "image").ok).toBe(true);
+    expect(security.validateReadableFile(outside, "video").ok).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 export const RAW_JOB = {
+  kind: "video",
   id: 3,
   input_path: "C:\\videos\\a.mp4",
   output_path: "C:\\out\\a.mp4",
@@ -17,6 +18,15 @@ export const RAW_JOB = {
   audio_channels: 2,
   encode_profile: "quality",
   watermark: { enabled: true, type: "text", text: "beru" },
+  rotation: 90,
+  flip_h: true,
+  flip_v: false,
+  output_height: 720,
+  audio_gain: 0.5,
+  audio_muted: true,
+  external_audio: null,
+  playback_rate: 1,
+  repeat_count: 1,
   video_info_probed: true,
 };
 
@@ -27,6 +37,7 @@ export const MINIMAL_JOB = {
 
 export const MINIMAL_JOB_NORMALIZED = {
   ...MINIMAL_JOB,
+  kind: "video",
   id: 0,
   width: 0,
   height: 0,
@@ -43,5 +54,14 @@ export const MINIMAL_JOB_NORMALIZED = {
   audio_channels: 0,
   encode_profile: "balanced",
   watermark: null,
+  rotation: 0,
+  flip_h: false,
+  flip_v: false,
+  output_height: null,
+  audio_gain: 1,
+  audio_muted: false,
+  external_audio: null,
+  playback_rate: 1,
+  repeat_count: 1,
   video_info_probed: false,
 };

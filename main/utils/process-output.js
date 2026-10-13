@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { OUTPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
 import { invalidateBeruStatCache } from "./beru-protocol.js";
+import { jobMediaSources } from "../../shared/job-manifest.js";
 const CONTROL_CHARACTERS = /[\x00-\x1f\x7f]/;
 const EXPORT_DIR_PREFIX = ".beru-export-";
 
@@ -63,14 +64,7 @@ export async function validateBatchOutputPaths(jobs) {
   };
   const inputPaths = new Set();
   for (const job of jobs) {
-    inputPaths.add(job.input_path);
-    for (const op of job.operations || []) {
-      for (const imagePath of [op.image_path, op.delogo_image_path]) {
-        if (imagePath) inputPaths.add(imagePath);
-      }
-    }
-    const imagePath = job.watermark?.imagePath || job.watermark?.watermark_image;
-    if (imagePath) inputPaths.add(imagePath);
+    for (const source of jobMediaSources(job)) if (source.path) inputPaths.add(source.path);
   }
   const paths = new Set(inputPaths);
   for (const job of jobs) {

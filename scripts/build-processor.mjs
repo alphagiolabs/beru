@@ -151,6 +151,12 @@ function prepareEnvironment(basePython) {
 
 const watchFiles = [
   join(pythonDir, "processor.py"),
+  join(pythonDir, "audio_settings.py"),
+  join(pythonDir, "external_audio.py"),
+  join(pythonDir, "clip_timing.py"),
+  join(pythonDir, "clip_render.py"),
+  join(pythonDir, "composition.py"),
+  join(pythonDir, "stabilization.py"),
   join(pythonDir, "encode_profiles.py"),
   join(pythonDir, "batch_errors.py"),
   join(pythonDir, "batch_context.py"),
@@ -160,6 +166,7 @@ const watchFiles = [
   join(pythonDir, "ffmpeg_runner.py"),
   join(pythonDir, "filters.py"),
   join(pythonDir, "fonts.py"),
+  join(pythonDir, "frame_geometry.py"),
   join(pythonDir, "job_classify.py"),
   join(pythonDir, "media_paths.py"),
   join(pythonDir, "media_probe.py"),

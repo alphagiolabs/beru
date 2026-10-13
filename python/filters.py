@@ -12,6 +12,7 @@ import threading
 
 import media_probe
 from color_validation import _validate_drawtext_color
+from frame_geometry import is_identity_transform, transform_filters
 from delogo_chains import _build_delogo_chain
 from fonts import _resolve_font
 from op_shared import (
@@ -393,7 +394,7 @@ def _build_watermark_filter(watermark, video_w, video_h):
 
 
 def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg_path=None,
-                         source_pix_fmt=None, temporal_resolver=None):
+                         source_pix_fmt=None, temporal_resolver=None, transform=None):
     """Build ffmpeg -filter_complex argument for all operations.
 
     Returns (filter_str, output_label, extra_media_paths). Image inputs loop;
@@ -538,6 +539,13 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
                     f"{prev}[wm{n}]overlay={overlay_pos}[tmp{n}]"
                 )
                 n += 1
+
+    if transform is not None and not is_identity_transform(transform):
+        chain, _ = transform_filters(transform, video_w, video_h)
+        if chain:
+            prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
+            filters.append(f"{prev}{','.join(chain)}[tmp{n}]")
+            n += 1
 
     if n == 0:
         return None, None, []

@@ -14,3 +14,4 @@ package-lock.json
 /.tmp-job-audit-*/
 /beru_*/
 /beru-*/
+/tests/fixtures/export-baseline/

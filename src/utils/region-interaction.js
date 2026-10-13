@@ -96,6 +96,60 @@ export function applyResize(start, handle, dx, dy, minSize = MIN_SIZE) {
   return clampRegionToVideo(next, 1, 1, minSize);
 }
 
+/**
+ * Region after typing a source-pixel value into one of X/Y/W/H. Values are
+ * rounded to whole pixels and kept inside the frame; non-finite input yields null.
+ *
+ * @param {Region} region
+ * @param {"x"|"y"|"w"|"h"} key
+ * @param {number} px
+ * @param {{ w: number, h: number }} dims source presentation size in pixels
+ */
+export function regionFromFieldPixels(region, key, px, dims) {
+  const dim = key === "x" || key === "w" ? dims?.w : dims?.h;
+  if (!Number.isFinite(px) || !(dim > 0)) return null;
+  return clampRegionToVideo({ ...region, [key]: Math.round(px) / dim });
+}
+
+/**
+ * Re-proportions a region to `aspect` (width / height in source pixels).
+ * Keeps the region's width when the frame allows it, otherwise shrinks to fit,
+ * and stays centred on the original region inside the frame.
+ *
+ * @param {Region} region
+ * @param {number} aspect
+ * @param {{ w: number, h: number }} dims source presentation size in pixels
+ */
+export function fitRegionToAspect(region, aspect, dims) {
+  if (!region || !(aspect > 0) || !(dims?.w > 0) || !(dims?.h > 0)) return null;
+  const W = dims.w;
+  const H = dims.h;
+  const cx = (region.x + region.w / 2) * W;
+  const cy = (region.y + region.h / 2) * H;
+  let w = region.w * W;
+  let h = w / aspect;
+  // The minimum size applies to the pair, so a tiny region keeps its proportion.
+  if (h < MIN_SIZE * H) {
+    h = MIN_SIZE * H;
+    w = h * aspect;
+  }
+  if (w < MIN_SIZE * W) {
+    w = MIN_SIZE * W;
+    h = w / aspect;
+  }
+  if (h > H) {
+    h = H;
+    w = H * aspect;
+  }
+  if (w > W) {
+    w = W;
+    h = W / aspect;
+  }
+  const x = Math.min(Math.max(0, cx - w / 2), W - w);
+  const y = Math.min(Math.max(0, cy - h / 2), H - h);
+  return clampRegionToVideo({ x: x / W, y: y / H, w: w / W, h: h / H });
+}
+
 // Uses getBoundingClientRect so CSS scale on ancestors is included.
 export function getContentPx(videoEl) {
   if (!videoEl) return null;

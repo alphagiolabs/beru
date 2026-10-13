@@ -1,6 +1,13 @@
 const TERMINAL = new Set(["done", "error"]);
 
-export function getBatchProgress({ queue, progressDone, progressTotal, jobProgress }) {
+export function getBatchProgress({ queue, progressDone, progressTotal, jobProgress, mediaExport }) {
+  if (mediaExport) {
+    return {
+      completed: mediaExport.status === "done" ? 1 : 0,
+      total: 1,
+      percent: mediaExport.progress || 0,
+    };
+  }
   const total = progressTotal > 0 ? progressTotal : queue.length;
   if (total <= 0) {
     return { completed: 0, total: 0, percent: 0 };

@@ -106,6 +106,9 @@ describe("cancel artifacts (interface)", () => {
     fs.writeFileSync(artifacts.manifestPath, "{}");
     artifacts.markCancelled();
 
+    const scratch = path.join(dir, "beru-loop-interrupted");
+    fs.mkdirSync(scratch);
+    fs.writeFileSync(path.join(scratch, "cycle.mp4"), "owned scratch after hard termination");
     artifacts.dispose();
     artifacts.dispose();
 

@@ -187,16 +187,18 @@ describe("undo / redo", () => {
     const history = useEditorStore.getState().undoStack;
     const live = useEditorStore.getState().queue[0].operations;
 
-    expect(history[history.length - 1]).not.toBe(live);
-    expect(history[history.length - 1][0].region).not.toBe(live[0].region);
+    expect(history[history.length - 1].operations).not.toBe(live);
+    expect(history[history.length - 1].operations[0].region).not.toBe(live[0].region);
   });
 
   it("clears undo and redo stacks when selecting a different video", () => {
     useEditorStore.setState({
       queue: [queueItem({ path: "a.mp4" }), queueItem({ path: "b.mp4" })],
       selectedIdx: 0,
-      undoStack: [[{ id: "op-1", mode: "blur", region: null }]],
-      redoStack: [[{ id: "op-2", mode: "text", region: null, text: "x" }]],
+      undoStack: [{ operations: [{ id: "op-1", mode: "blur", region: null }], transform: {} }],
+      redoStack: [
+        { operations: [{ id: "op-2", mode: "text", region: null, text: "x" }], transform: {} },
+      ],
     });
 
     useEditorStore.getState().selectVideo(1);
@@ -210,8 +212,10 @@ describe("undo / redo", () => {
     useEditorStore.setState({
       queue: [queueItem({ path: "a.mp4" }), queueItem({ path: "b.mp4" })],
       selectedIdx: 0,
-      undoStack: [[{ id: "op-1", mode: "blur", region: null }]],
-      redoStack: [[{ id: "op-2", mode: "text", region: null, text: "x" }]],
+      undoStack: [{ operations: [{ id: "op-1", mode: "blur", region: null }], transform: {} }],
+      redoStack: [
+        { operations: [{ id: "op-2", mode: "text", region: null, text: "x" }], transform: {} },
+      ],
       currentRegion: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
     });
 

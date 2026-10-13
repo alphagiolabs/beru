@@ -93,7 +93,7 @@ describe("queueSlice", () => {
     try {
       useEditorStore.setState({ queue: paths.map((path) => makeQueueItem({ path })) });
       useEditorStore.getState().removeVideo(0);
-      expect(releaseVideoPaths.mock.calls).toEqual([[paths.slice(0, 1)]]);
+      expect(releaseVideoPaths.mock.calls).toEqual([[paths.slice(0, 1), paths.slice(1)]]);
       useEditorStore.getState().clearQueue();
       expect(releaseVideoPaths.mock.calls.map(([batch]) => batch.length)).toEqual([1, 500, 500, 1]);
       expect(releaseVideoPaths.mock.calls.flatMap(([batch]) => batch)).toEqual(paths);
@@ -280,8 +280,8 @@ describe("queueSlice", () => {
       selectedIdx: 1,
       selectedOperationIdx: 0,
       currentRegion: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 },
-      undoStack: [[{ id: "op-1", mode: "blur", region: null }]],
-      redoStack: [[{ id: "op-2", mode: "blur", region: null }]],
+      undoStack: [{ operations: [{ id: "op-1", mode: "blur", region: null }], transform: {} }],
+      redoStack: [{ operations: [{ id: "op-2", mode: "blur", region: null }], transform: {} }],
       excelMatchStatus: { 0: "matched", 1: "unmatched" },
       batchSummary: { total: 2, succeeded: 1, failed: 1 },
       templateIdx: 0,

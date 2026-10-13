@@ -4,7 +4,7 @@ import { createConsentStore } from "./security/consent.js";
 import { createWriteCapabilities } from "./security/write-capability.js";
 import { createPathVerdicts } from "./security/path-verdicts.js";
 
-/** @typedef {'excel' | 'image' | 'video' | 'project'} ReadKind */
+/** @typedef {'excel' | 'image' | 'audio' | 'video' | 'project'} ReadKind */
 
 export function createPathSecurity(app) {
   const { resolveSafe, resolveSafeAsync, normalizeKey } = createPathResolver();
@@ -50,10 +50,11 @@ export function createPathSecurity(app) {
     return check;
   }
 
-  function releaseVideoPaths(paths) {
+  function releaseVideoPaths(paths, retainedPaths = []) {
+    const retained = new Set(retainedPaths.map(resolveSafe).filter(Boolean).map(normalizeKey));
     for (const filePath of paths) {
       const resolved = resolveSafe(filePath);
-      if (resolved) consent.revokeRead(resolved, "video");
+      if (resolved && !retained.has(normalizeKey(resolved))) consent.revokeRead(resolved, "video");
     }
   }
 

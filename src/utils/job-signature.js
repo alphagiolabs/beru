@@ -10,7 +10,13 @@ export function stampJobTimestamp(job, timestamp) {
 }
 
 export function previewJobInputSnapshot(state, videoIdx, draft) {
-  return [videoIdx, state.queue[videoIdx], ...jobInputs(state, videoIdx), draft];
+  return [
+    videoIdx,
+    state.queue[videoIdx],
+    ...jobInputs(state, videoIdx),
+    draft,
+    state.previewCycle,
+  ];
 }
 
 function timestampTail(ts) {

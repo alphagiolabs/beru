@@ -10,6 +10,39 @@ import { createProcessorManifest, unwrapJobManifest } from "../main/utils/jobMan
 import { MINIMAL_JOB, MINIMAL_JOB_NORMALIZED, RAW_JOB } from "./fixtures/job-manifest.js";
 
 describe("normalizeJob", () => {
+  it("normalizes each composition clip and keeps parent settings separate from the first source", () => {
+    const input = {
+      kind: "composition",
+      id: -1,
+      output_path: "C:/out/c.mp4",
+      canvas: { width: 1280, height: 720, fit: "contain" },
+      composition_fps: 30,
+      input_path: "C:/old.mp4",
+      rotation: 90,
+      audio_gain: 0.1,
+      extension: "preserved",
+      clips: [
+        { input_path: "C:/a.mp4", playback_rate: Infinity, repeat_count: 0 },
+        { input_path: "C:/a.mp4", playback_rate: 2, repeat_count: 3 },
+      ],
+    };
+    const manifest = createProcessorManifest(createJobManifest([input]), [input]);
+    const job = manifest.jobs[0];
+    expect(job).not.toHaveProperty("input_path");
+    expect(job).not.toHaveProperty("rotation");
+    expect(job).not.toHaveProperty("audio_gain");
+    expect(job.extension).toBe("preserved");
+    expect(job.clips.map((clip) => [clip.kind, clip.playback_rate, clip.repeat_count])).toEqual([
+      ["video", 1, 1],
+      ["video", 2, 3],
+    ]);
+    expect(job.clips[0]).not.toBe(input.clips[0]);
+    expect(input.clips[0].playback_rate).toBe(Infinity);
+    expect(normalizeJob(job)).toEqual(job);
+    expect(() => normalizeJob({ ...input, clips: [{ kind: "stabilization" }] })).toThrow(
+      "Entrada de composición inválida",
+    );
+  });
   it("fills every field default on a minimal job", () => {
     expect(normalizeJob(MINIMAL_JOB)).toEqual(MINIMAL_JOB_NORMALIZED);
   });

@@ -7,11 +7,15 @@ import { handleIpc } from "../utils/ipc.js";
 import { findUnreadableInputsAsync } from "../utils/process-input-validation.js";
 import { sanitizeBatchJobMedia } from "../utils/process-media-validation.js";
 import { validateBatchOutputPaths } from "../utils/process-output.js";
+import {
+  captureProcessingPreparation,
+  isProcessingPreparationCurrent,
+  cancelProcessingPreparation,
+} from "../utils/process-preparation.js";
 
 export function registerProcessHandlers(pathSecurity) {
-  let validationGeneration = 0;
   handleIpc(IPC_INVOKE.startProcessing, async (_event, payload) => {
-    const generation = validationGeneration;
+    const generation = captureProcessingPreparation();
     const { jobs, manifest, error } = unwrapJobManifest(payload);
     if (error) {
       return { success: false, error };
@@ -19,6 +23,8 @@ export function registerProcessHandlers(pathSecurity) {
     if (!Array.isArray(jobs) || jobs.length === 0) {
       return { success: false, error: "No hay videos para procesar" };
     }
+    if (jobs.some((job) => job.kind && job.kind !== "video"))
+      return { success: false, error: "Unsupported batch job kind" };
 
     const processorCheck = await validateProcessorAvailableAsync();
     if (!processorCheck.ok) {
@@ -44,7 +50,7 @@ export function registerProcessHandlers(pathSecurity) {
     }
 
     const unreadable = await findUnreadableInputsAsync(safeJobs);
-    if (generation !== validationGeneration) {
+    if (!isProcessingPreparationCurrent(generation)) {
       return { success: false, cancelled: true, error: "Procesamiento cancelado" };
     }
     if (unreadable.length > 0) {
@@ -68,7 +74,7 @@ export function registerProcessHandlers(pathSecurity) {
   });
 
   handleIpc(IPC_INVOKE.cancelProcessing, async () => {
-    validationGeneration++;
+    cancelProcessingPreparation();
     const result = await cancelRun();
     return { ...result, idle: !!result?.idle };
   });

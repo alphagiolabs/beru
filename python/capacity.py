@@ -8,7 +8,7 @@ from encode_profiles import (
     effective_hw_encoder as resolve_effective_hw_encoder,
     profile_allows_hardware,
 )
-from job_classify import _job_dimensions
+from job_classify import _job_dimensions, _job_processing_stages
 from op_shared import _env_int
 
 logger = logging.getLogger("beru")
@@ -92,6 +92,12 @@ _HIGH_BIT_DEPTH_PIX_TOKENS = ("p10", "p12", "p16", "10le", "10be", "12le", "12be
 
 def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, source_pixels=0):
     """Estimate peak RAM (MB) for one job, using job metadata when available."""
+    if isinstance(job, dict) and job.get("kind") == "composition":
+        return max(_estimate_job_ram_mb(stage, hw_encoder, True,
+            stage.get("encode_profile", encode_profile), source_pixels)
+            for stage in _job_processing_stages(job))
+    if isinstance(job, dict) and job.get("kind") == "canvas":
+        hw_encoder = None
     profile = (encode_profile or "balanced").strip().lower()
     key = "software" if (has_video_filters and not profile_allows_hardware(profile)) else \
           "nvenc" if hw_encoder == "h264_nvenc" else \

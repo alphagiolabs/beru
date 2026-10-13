@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import useEditorStore from "../../stores/useEditorStore";
 import { activeOpsBitmask, resolvedDuration } from "./utils";
+import { normalizeTiming } from "../../../shared/clip-timeline.js";
 
 export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode }) {
   const [timeEpoch, setTimeEpoch] = useState(0);
@@ -11,6 +12,14 @@ export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode })
   const [layoutTick, setLayoutTick] = useState(0);
   const trimStart = Math.max(0, Math.min(duration, sel?.trimStart ?? 0));
   const trimEnd = Math.max(trimStart, Math.min(duration, sel?.trimEnd ?? duration));
+  const rate = normalizeTiming(sel?.timing).rate;
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video) {
+      video.playbackRate = rate;
+      video.preservesPitch = true;
+    }
+  }, [videoRef, sel?.path, rate]);
 
   useEffect(() => {
     const v = videoRef.current;

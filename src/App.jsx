@@ -17,6 +17,8 @@ import {
   TableEditor,
   ExcelMappingModal,
   WatermarkModal,
+  CompositionModal,
+  StabilizationModal,
 } from "./components/modal-panels";
 
 const api = window.api;
@@ -42,10 +44,12 @@ export default function App() {
 
   useEffect(() => {
     if (!api?.restoreSessionPaths) return;
-    const { outputDir, queue, excelPath, watermark } = useEditorStore.getState();
-    const videoPaths = (queue || []).map((item) => item?.path).filter(Boolean);
+    const { outputDir, queue, excelPath, watermark, composition } = useEditorStore.getState();
+    const items = [...(queue || []), ...(composition?.entries || []).map((entry) => entry.item)];
+    const videoPaths = items.map((item) => item?.path).filter(Boolean);
     const imagePaths = [];
-    for (const item of queue || []) {
+    const audioPaths = items.map((item) => item.externalAudio?.path).filter(Boolean);
+    for (const item of items) {
       for (const op of item?.operations || []) {
         if (op?.imagePath) imagePaths.push(op.imagePath);
         if (op?.delogoImagePath) imagePaths.push(op.delogoImagePath);
@@ -53,7 +57,7 @@ export default function App() {
     }
     if (watermark?.imagePath) imagePaths.push(watermark.imagePath);
     if (!outputDir && videoPaths.length === 0 && !excelPath) return;
-    void api.restoreSessionPaths({ outputDir, videoPaths, imagePaths, excelPath });
+    void api.restoreSessionPaths({ outputDir, videoPaths, imagePaths, audioPaths, excelPath });
   }, []);
 
   useEffect(() => {
@@ -226,6 +230,20 @@ export default function App() {
         onClose={() => useEditorStore.getState().setShowWatermarkModal(false)}
       >
         <WatermarkModal />
+      </DeferredPanel>
+      <DeferredPanel
+        when={(s) => s.showCompositionModal}
+        label={t("composition.title")}
+        onClose={() => useEditorStore.getState().setShowCompositionModal(false)}
+      >
+        <CompositionModal />
+      </DeferredPanel>
+      <DeferredPanel
+        when={(s) => s.showStabilizationModal}
+        label={t("stabilization.title")}
+        onClose={() => useEditorStore.getState().setShowStabilizationModal(false)}
+      >
+        <StabilizationModal />
       </DeferredPanel>
     </div>
   );

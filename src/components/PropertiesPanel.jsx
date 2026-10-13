@@ -6,11 +6,20 @@ import PresetManager from "./PresetManager";
 import BatchPanel from "./BatchPanel";
 import AppliedTextEditor from "./AppliedTextEditor";
 import AppliedDelogoEditor from "./AppliedDelogoEditor";
+import RegionFields from "./RegionFields";
+import VideoTransformControls from "./VideoTransformControls";
+import VideoAudioControls from "./VideoAudioControls";
+import ExternalAudioControls from "./ExternalAudioControls";
+import VideoTimingControls from "./VideoTimingControls";
+import DelogoMethodHelp from "./DelogoMethodHelp";
+import TimeRangeFields from "./TimeRangeFields";
+import CropRatioPresets from "./CropRatioPresets";
 import { isRegionUsable } from "../utils/video-utils";
 import { beruLocalUrl, imageVersion } from "../utils/beru-url";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
 import { storeErrorText } from "../utils/store-errors";
 import { InspectorGroup } from "./inspector";
+import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import {
   Timer,
   FlipHorizontal2,
@@ -147,6 +156,10 @@ export default function PropertiesPanel() {
       </div>
 
       <div className="inspector-body">
+        {sel && <VideoTransformControls />}
+        {sel && <VideoAudioControls />}
+        {sel && <VideoTimingControls key={`timing:${selectedIdx}:${sel.path}`} />}
+        {sel && <ExternalAudioControls key={`${selectedIdx}:${sel.path}`} />}
         {!currentRegion &&
           sidebarMode === "logo" &&
           !selectedOperation &&
@@ -173,33 +186,12 @@ export default function PropertiesPanel() {
                 <span className="inspector-region-strip-title">{t("props.regionLabel")}</span>
               </div>
               <div className="inspector-region-strip-fields" role="group">
-                {(() => {
-                  const vw = sel?.width || 0;
-                  const vh = sel?.height || 0;
-                  const dimFor = (k) => (k === "x" || k === "w" ? vw : vh);
-                  return [
-                    ["X", "x"],
-                    ["Y", "y"],
-                    ["W", "w"],
-                    ["H", "h"],
-                  ].map(([label, key]) => (
-                    <label key={key} className="inspector-region-cell">
-                      <span className="inspector-region-cell-key">{label}</span>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        aria-label={label}
-                        value={Math.round((currentRegion[key] || 0) * (dimFor(key) || 1))}
-                        onChange={(e) => {
-                          const px = Number(e.target.value);
-                          if (!Number.isFinite(px) || !dimFor(key)) return;
-                          get().updateRegionValue(key, px / dimFor(key));
-                        }}
-                        className="inspector-region-cell-input"
-                      />
-                    </label>
-                  ));
-                })()}
+                <RegionFields
+                  region={currentRegion}
+                  dims={{ w: sel?.width || 0, h: sel?.height || 0 }}
+                  variant="strip"
+                  onRegionChange={(next) => get().setCurrentRegion(next)}
+                />
               </div>
             </section>
 
@@ -221,6 +213,19 @@ export default function PropertiesPanel() {
                   </button>
                 ))}
               </div>
+            )}
+
+            {sidebarMode === "logo" && activeTool === "crop" && (
+              <CropRatioPresets
+                region={currentRegion}
+                dims={{ w: sel?.width || 0, h: sel?.height || 0 }}
+                timed={tempStart != null || tempEnd != null}
+                operations={[
+                  ...(sel?.operations ?? []),
+                  { mode: "crop", region: currentRegion, startTime: tempStart, endTime: tempEnd },
+                ]}
+                onRegionChange={(next) => get().setCurrentRegion(next)}
+              />
             )}
 
             {sidebarMode === "batch" && (
@@ -441,36 +446,41 @@ export default function PropertiesPanel() {
                   <summary className="inspector-helper cursor-pointer">
                     {t("logo.advancedMethods")}
                   </summary>
-                  <div className="grid grid-cols-3 gap-1 mt-2">
-                    {DELOGO_METHODS.map((m) => {
-                      const Icon = DELOGO_ICONS[m.id];
-                      const active = delogoMethod === m.id;
-                      return (
-                        <button
-                          key={m.id}
-                          onClick={() => get().setDelogoMethod(m.id)}
-                          className={`inspector-chip flex-col gap-0.5 !min-h-[40px]${active ? " is-selected" : ""}`}
-                          style={
-                            active
-                              ? {
-                                  background: "var(--rose)",
-                                  color: "var(--text-on-rose)",
-                                  borderColor: "var(--rose)",
-                                }
-                              : undefined
-                          }
-                          title={t(m.descriptionKey)}
-                        >
-                          {Icon && <Icon size={11} />}
-                          <span className="text-[10px]">{t(m.labelKey)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <TooltipProvider>
+                    <div className="delogo-method-grid grid grid-cols-3 gap-1 mt-2">
+                      {DELOGO_METHODS.map((m) => {
+                        const Icon = DELOGO_ICONS[m.id];
+                        const active = delogoMethod === m.id;
+                        return (
+                          <Tooltip
+                            key={m.id}
+                            label={t(m.labelKey)}
+                            description={t(m.descriptionKey)}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => get().setDelogoMethod(m.id)}
+                              className={`inspector-chip flex-col gap-0.5 !min-h-[40px]${active ? " is-selected" : ""}`}
+                              style={
+                                active
+                                  ? {
+                                      background: "var(--rose)",
+                                      color: "var(--text-on-rose)",
+                                      borderColor: "var(--rose)",
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {Icon && <Icon size={11} />}
+                              <span className="text-[10px]">{t(m.labelKey)}</span>
+                            </button>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  </TooltipProvider>
                 </details>
-                <p className="inspector-helper">
-                  {t(DELOGO_METHODS.find((m) => m.id === delogoMethod)?.descriptionKey || "")}
-                </p>
+                <DelogoMethodHelp methodId={delogoMethod} />
 
                 {delogoMethod === "temporal" && (
                   <div
@@ -731,40 +741,12 @@ export default function PropertiesPanel() {
 
             {sidebarMode === "logo" && (
               <InspectorGroup title={t("logo.timeRange")}>
-                <div className="grid grid-cols-2 gap-2">
-                  <label>
-                    <span className="cap-input-label">{t("props.startSec")}</span>
-                    <input
-                      type="number"
-                      value={tempStart ?? ""}
-                      onChange={(e) =>
-                        get().setTempStart(e.target.value ? Number(e.target.value) : null)
-                      }
-                      placeholder="0"
-                      className="cap-input font-mono text-[11px]"
-                    />
-                  </label>
-                  <label>
-                    <span className="cap-input-label">{t("props.endSec")}</span>
-                    <input
-                      type="number"
-                      value={tempEnd ?? ""}
-                      onChange={(e) =>
-                        get().setTempEnd(e.target.value ? Number(e.target.value) : null)
-                      }
-                      placeholder={t("logo.endPlaceholder")}
-                      className="cap-input font-mono text-[11px]"
-                    />
-                  </label>
-                </div>
-                {tempStart != null && tempEnd != null && tempEnd <= tempStart && (
-                  <div
-                    className="cap-card text-[11px] leading-relaxed"
-                    style={{ color: "var(--text-rose)", borderColor: "rgba(239,68,68,0.3)" }}
-                  >
-                    {t("logo.rangeInvalid")} {t("logo.rangeInvalidHint")}
-                  </div>
-                )}
+                <TimeRangeFields
+                  start={tempStart}
+                  end={tempEnd}
+                  onStart={(value) => get().setTempStart(value)}
+                  onEnd={(value) => get().setTempEnd(value)}
+                />
               </InspectorGroup>
             )}
 
@@ -806,6 +788,7 @@ export default function PropertiesPanel() {
             selectedOperation?.mode === "crop" ||
             selectedOperation?.mode === "image") && (
             <AppliedDelogoEditor
+              key={selectedOperation.id ?? selectedOperationIdx}
               op={selectedOperation}
               videoIdx={selectedIdx}
               opIdx={selectedOperationIdx}

@@ -1,5 +1,7 @@
 // @ts-check
 import { DEFAULT_PIX_FMT } from "../../shared/job-manifest.js";
+import { IDENTITY_TRANSFORM } from "./output-geometry.js";
+import { IDENTITY_AUDIO } from "./audio-settings.js";
 
 export function normalizeRegion(region, videoWidth, videoHeight) {
   if (!region) return null;
@@ -116,36 +118,43 @@ export const DELOGO_METHODS = [
     id: "blur",
     labelKey: "catalog.delogoMethod.blur",
     descriptionKey: "catalog.delogoMethod.blur.desc",
+    groupKey: "catalog.delogoGroup.hide",
   },
   {
     id: "temporal",
     labelKey: "catalog.delogoMethod.temporal",
     descriptionKey: "catalog.delogoMethod.temporal.desc",
+    groupKey: "catalog.delogoGroup.estimate",
   },
   {
     id: "mirror",
     labelKey: "catalog.delogoMethod.mirror",
     descriptionKey: "catalog.delogoMethod.mirror.desc",
+    groupKey: "catalog.delogoGroup.mirror",
   },
   {
     id: "mosaic",
     labelKey: "catalog.delogoMethod.mosaic",
     descriptionKey: "catalog.delogoMethod.mosaic.desc",
+    groupKey: "catalog.delogoGroup.hide",
   },
   {
     id: "inpaint",
     labelKey: "catalog.delogoMethod.inpaint",
     descriptionKey: "catalog.delogoMethod.inpaint.desc",
+    groupKey: "catalog.delogoGroup.estimate",
   },
   {
     id: "fill",
     labelKey: "catalog.delogoMethod.fill",
     descriptionKey: "catalog.delogoMethod.fill.desc",
+    groupKey: "catalog.delogoGroup.cover",
   },
   {
     id: "cover",
     labelKey: "catalog.delogoMethod.cover",
     descriptionKey: "catalog.delogoMethod.cover.desc",
+    groupKey: "catalog.delogoGroup.cover",
   },
 ];
 
@@ -517,6 +526,10 @@ export function createQueueItem(overrides = {}) {
     audioCodec: "",
     audioChannels: 0,
     operations: [],
+    transform: { ...IDENTITY_TRANSFORM },
+    audio: { ...IDENTITY_AUDIO },
+    externalAudio: null,
+    timing: { rate: 1, repeatCount: 1 },
     status: "idle",
     progress: 0,
     eta: null,

@@ -1,6 +1,7 @@
 import useEditorStore from "../../stores/useEditorStore";
 import { buildLogoPreviewJob } from "../../utils/delogo-ops";
 import { isRegionUsable } from "../../utils/video-utils";
+import { clipTimeline } from "../../../shared/clip-timeline.js";
 import {
   createJobSignatureCache,
   jobInputEntriesEqual,
@@ -25,6 +26,17 @@ function logoDraft(state) {
     startTime: state.tempStart,
     endTime: state.tempEnd,
   };
+}
+
+function withPreviewCycle(job, state, item) {
+  if (!job) return job;
+  const { repeatCount } = clipTimeline(item);
+  return repeatCount > 1
+    ? {
+        ...job,
+        preview_cycle: Math.min(state.previewCycle ?? 0, repeatCount - 1),
+      }
+    : job;
 }
 
 export function createExactPreview({ videoRef, onChange, t }) {
@@ -91,7 +103,11 @@ export function createExactPreview({ videoRef, onChange, t }) {
     const draft = logoDraft(editor);
     const timestamp = videoRef.current?.currentTime ?? 0;
     return jobSignature(previewJobInputSnapshot(editor, editor.selectedIdx, draft), timestamp, () =>
-      buildLogoPreviewJob(editor.buildPreviewFrameJob(editor.selectedIdx, timestamp), draft),
+      withPreviewCycle(
+        buildLogoPreviewJob(editor.buildPreviewFrameJob(editor.selectedIdx, timestamp), draft),
+        editor,
+        editor.queue[editor.selectedIdx],
+      ),
     );
   }
 
@@ -207,7 +223,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
       const live = useEditorStore.getState();
       const draft = logoDraft(live);
       const baseJob = live.buildPreviewFrameJob(idx, video?.currentTime ?? 0);
-      const job = buildLogoPreviewJob(baseJob, draft);
+      const job = withPreviewCycle(buildLogoPreviewJob(baseJob, draft), live, live.queue[idx]);
       if (!job) {
         fail(t("logo.jobError"));
         return;
@@ -218,8 +234,11 @@ export function createExactPreview({ videoRef, onChange, t }) {
       const valid = () => current() && signature() === sig;
       const { timestamp: _timestamp, ...exportShape } = baseJob;
       const liveItem = live.queue[idx];
+      const timeline = clipTimeline(liveItem);
       const artifactPath =
         !draft &&
+        (timeline.sourceToOutput(job.timestamp) != null ||
+          (timeline.rate === 1 && timeline.repeatCount === 1)) &&
         liveItem?.exportSignature === JSON.stringify(exportShape) &&
         liveItem.exportedOutputStat
           ? liveItem.exportedOutputPath
@@ -227,15 +246,18 @@ export function createExactPreview({ videoRef, onChange, t }) {
       let result;
       let artifact = false;
       if (artifactPath && api.renderSourceFrame) {
-        const trimStart = Math.max(0, Number(job.trim_start) || 0);
-        const end = Number(job.trim_end ?? job.video_duration);
-        const lastFrame =
-          end > trimStart
-            ? Math.max(0, end - trimStart - 1 / (Number(job.frame_rate) || 30))
-            : Infinity;
+        const cycle = Math.min(live.previewCycle ?? 0, timeline.repeatCount - 1);
+        const lastFrame = Math.max(
+          0,
+          (cycle + 1) * timeline.cycleDuration - 1 / (Number(job.frame_rate) || 30),
+        );
         result = await api.renderSourceFrame({
           input_path: artifactPath,
-          timestamp: Math.min(lastFrame, Math.max(0, job.timestamp - trimStart)),
+          timestamp: Math.min(
+            lastFrame,
+            timeline.sourceToOutput(job.timestamp, cycle) ??
+              Math.max(0, job.timestamp - timeline.start),
+          ),
           expected_stat: liveItem.exportedOutputStat,
         });
         if (!valid()) return;

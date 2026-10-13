@@ -9,6 +9,8 @@ import { handleIpc } from "../utils/ipc.js";
 import { invalidateBeruStatCache } from "../utils/beru-protocol.js";
 import { parseExcelBuffer } from "../utils/excel.js";
 
+import { restoreSessionPaths } from "../utils/restore-session-paths.js";
+
 export function registerFileHandlers(pathSecurity) {
   handleIpc(IPC_INVOKE.readExcel, async (_event, filePath) => {
     const check = pathSecurity.validateReadableFile(filePath, "excel");
@@ -96,43 +98,7 @@ export function registerFileHandlers(pathSecurity) {
     return { success: true };
   });
 
-  ipcMain.handle(IPC_INVOKE.restoreSessionPaths, async (_event, payload = {}) => {
-    const result = { ok: true, outputDir: null, videos: 0, images: 0, excel: false, errors: [] };
-    const outputDir = payload?.outputDir;
-    if (outputDir) {
-      const check = pathSecurity.registerOutputDirectory(outputDir);
-      if (check.ok) {
-        result.outputDir = check.resolvedPath;
-      } else {
-        result.errors.push(check.error || "outputDir");
-      }
-    }
-    const videoPaths = Array.isArray(payload?.videoPaths) ? payload.videoPaths : [];
-    for (const videoPath of videoPaths) {
-      const check = pathSecurity.registerAllowedPath(videoPath, "video");
-      if (check.ok) {
-        result.videos += 1;
-      } else {
-        result.errors.push(check.error || videoPath);
-      }
-    }
-    const imagePaths = Array.isArray(payload?.imagePaths) ? payload.imagePaths : [];
-    for (const imagePath of imagePaths) {
-      const check = pathSecurity.registerAllowedPath(imagePath, "image");
-      if (check.ok) {
-        result.images += 1;
-      } else {
-        result.errors.push(check.error || imagePath);
-      }
-    }
-    if (payload?.excelPath) {
-      const check = pathSecurity.registerAllowedPath(payload.excelPath, "excel");
-      if (check.ok) {
-        result.excel = true;
-      } else {
-        result.errors.push(check.error || "excel");
-      }
-    }
-    return result;
-  });
+  ipcMain.handle(IPC_INVOKE.restoreSessionPaths, (_event, payload) =>
+    restoreSessionPaths(pathSecurity, payload),
+  );
 }
