@@ -13,7 +13,12 @@ vi.mock("electron", () => ({
     constructor(options) {
       this.options = options;
       this.handlers = new Map();
-      this.webContents = { on: vi.fn(), once: vi.fn() };
+      this.webContents = {
+        on: vi.fn(),
+        once: vi.fn(),
+        getURL: vi.fn(() => ""),
+        setWindowOpenHandler: vi.fn(),
+      };
       this.close = vi.fn();
       this.setMenu = vi.fn();
       this.loadURL = vi.fn();

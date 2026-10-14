@@ -2,6 +2,7 @@ import { BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getMainWindow, isDev, DEV_URL } from "../shared-state.js";
+import { attachNavigationGuards } from "./window.js";
 import { IPC_EVENTS } from "../../shared/ipc-channels.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -73,6 +74,7 @@ export function createPetOverlayWindow(position) {
     },
   });
 
+  attachNavigationGuards(overlayWindow);
   overlayWindow.setAlwaysOnTop(true, "floating");
   overlayWindow.setMenu(null);
   loadOverlayUrl(overlayWindow);
