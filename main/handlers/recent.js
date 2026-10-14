@@ -3,10 +3,11 @@ import path from "path";
 import fs from "fs";
 import { RECENT_MAX, readRecent, writeRecent } from "../utils/recent.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
-import { handleIpc } from "../utils/ipc.js";
+import { handleIpc, isTrustedSender } from "../utils/ipc.js";
 
 export function registerRecentHandlers() {
-  ipcMain.handle(IPC_INVOKE.listRecent, async () => {
+  ipcMain.handle(IPC_INVOKE.listRecent, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const list = readRecent();
     return list.map((r) => ({ ...r, exists: fs.existsSync(r.path) }));
   });
