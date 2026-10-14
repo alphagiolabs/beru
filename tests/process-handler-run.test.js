@@ -3,6 +3,7 @@ import { EventEmitter } from "events";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 import { IPC_EVENTS } from "../shared/ipc-channels.js";
 
 const mocks = vi.hoisted(() => ({
@@ -20,12 +21,20 @@ const mocks = vi.hoisted(() => ({
   validation: null,
 }));
 
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
+
 vi.mock("electron", () => ({
   ipcMain: { handle: (channel, handler) => mocks.handlers.set(channel, handler) },
   app: { isPackaged: false, getPath: () => mocks.tempRoot },
 }));
 
-vi.mock("../main/shared-state.js", () => ({ getAppIsQuitting: () => false }));
+vi.mock("../main/shared-state.js", () => ({
+  getAppIsQuitting: () => false,
+  isDev: false,
+  DEV_URL: "http://localhost:5173",
+}));
 
 vi.mock("../main/utils/paths.js", () => ({
   validateMediaBinaries: () => ({ ok: true }),
@@ -152,7 +161,9 @@ describe("process:start with a fake job worker", () => {
   it.each(["missing", "empty", "failed", "exit-zero"])(
     "rejects a false successful worker outcome after %s output",
     async (failure) => {
-      const pending = mocks.handlers.get("process:start")({}, [{ id: 0, input_path: "clip.mp4" }]);
+      const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+        { id: 0, input_path: "clip.mp4" },
+      ]);
       await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
       if (failure === "empty") {
         fs.writeFileSync(mocks.jobs[0].output_path, "");
@@ -176,7 +187,7 @@ describe("process:start with a fake job worker", () => {
   );
 
   it("preserves a healthy later job after an earlier failure and fails the batch", async () => {
-    const pending = mocks.handlers.get("process:start")({}, [
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
       { id: 0, input_path: "bad.mp4", output_path: path.join(outputDir, "bad.mp4") },
       { id: 1, input_path: "good.mp4", output_path: path.join(outputDir, "good.mp4") },
     ]);
@@ -202,7 +213,7 @@ describe("process:start with a fake job worker", () => {
         releaseValidation = resolve;
         enteredValidation();
       });
-    const pending = mocks.handlers.get("process:start")({}, [
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
       {
         input_path: "clip.mp4",
         operations: [],
@@ -210,7 +221,7 @@ describe("process:start with a fake job worker", () => {
       },
     ]);
     await entered;
-    await mocks.handlers.get("process:cancel")({});
+    await mocks.handlers.get("process:cancel")(trustedSenderEvent);
     releaseValidation();
     expect(await pending).toMatchObject({ success: false, cancelled: true });
     expect(
@@ -239,7 +250,7 @@ describe("process:start with a fake job worker", () => {
       onLine('{"type":"complete","index":0}');
       return { proc: mocks.proc, done: Promise.resolve({ ok: true }), stderrTail: () => "" };
     });
-    const result = await mocks.handlers.get("process:start")({}, [
+    const result = await mocks.handlers.get("process:start")(trustedSenderEvent, [
       {
         id: 0,
         input_path: "hdr.mp4",
@@ -270,7 +281,7 @@ describe("process:start with a fake job worker", () => {
     fs.writeFileSync(otherInput, "second source");
     mocks.resolveDone({ ok: true });
 
-    const result = await mocks.handlers.get("process:start")({}, [
+    const result = await mocks.handlers.get("process:start")(trustedSenderEvent, [
       { id: 0, input_path: input, output_path: otherInput },
       { id: 1, input_path: otherInput, output_path: path.join(outputDir, "second.mp4") },
     ]);
@@ -282,7 +293,7 @@ describe("process:start with a fake job worker", () => {
 
   it("rejects duplicate output paths before starting a worker", async () => {
     mocks.resolveDone({ ok: true });
-    const result = await mocks.handlers.get("process:start")({}, [
+    const result = await mocks.handlers.get("process:start")(trustedSenderEvent, [
       { id: 0, input_path: "a.mp4", output_path: path.join(outputDir, "same.mp4") },
       { id: 1, input_path: "b.mp4", output_path: path.join(outputDir, "SAME.mp4") },
     ]);
@@ -295,7 +306,7 @@ describe("process:start with a fake job worker", () => {
     fs.writeFileSync(input, "in");
     const output = path.join(outputDir, "done.mp4");
 
-    const pending = mocks.handlers.get("process:start")({}, [
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
       { id: 7, input_path: input, output_path: output },
     ]);
 
@@ -328,7 +339,9 @@ describe("process:start with a fake job worker", () => {
       proc.exitCode = 1;
       proc.emit("close", 1);
     });
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
 
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     mocks.proc.emit("error", new Error("spawn failed"));
@@ -346,12 +359,14 @@ describe("process:start with a fake job worker", () => {
   });
 
   it("cancel mid-run emits process:finished exactly once", async () => {
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
 
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     artifactsDir = artifactsDirOf();
 
-    const cancelResult = mocks.handlers.get("process:cancel")({});
+    const cancelResult = mocks.handlers.get("process:cancel")(trustedSenderEvent);
     expect(fs.readFileSync(path.join(artifactsDir, "manifest.cancel"), "utf8")).toBe("1");
     mocks.proc.emit("close", 0);
     const [cancel, start] = await Promise.all([cancelResult, pending]);
@@ -367,11 +382,13 @@ describe("process:start with a fake job worker", () => {
   });
 
   it("reports a failed cancellation and keeps the run owned until the child dies", async () => {
-    const pending = mocks.handlers.get("process:start")({}, [{ id: 0, input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { id: 0, input_path: "clip.mp4" },
+    ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     vi.useFakeTimers();
     try {
-      const cancellation = mocks.handlers.get("process:cancel")({});
+      const cancellation = mocks.handlers.get("process:cancel")(trustedSenderEvent);
       await vi.advanceTimersByTimeAsync(10_000);
       expect(await cancellation).toMatchObject({
         success: false,
@@ -398,7 +415,7 @@ describe("process:start with a fake job worker", () => {
       fs.writeFileSync(done, "previous done");
       fs.writeFileSync(partial, "previous partial");
 
-      const pending = mocks.handlers.get("process:start")({}, [
+      const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
         { id: 3, input_path: input, output_path: done },
         { id: 4, input_path: input, output_path: partial },
       ]);
@@ -409,7 +426,7 @@ describe("process:start with a fake job worker", () => {
       mocks.emitLine('{"type":"complete","index":3}');
 
       if (ending === "cancel") {
-        const cancelResult = mocks.handlers.get("process:cancel")({});
+        const cancelResult = mocks.handlers.get("process:cancel")(trustedSenderEvent);
         mocks.proc.emit("close", 0);
         await Promise.all([cancelResult, pending]);
       } else {
@@ -440,9 +457,11 @@ describe("process:start with a fake job worker", () => {
       await ready;
       return { proc: mocks.proc, done: mocks.done, stderrTail: () => "" };
     });
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     await entered;
-    await mocks.handlers.get("process:cancel")({});
+    await mocks.handlers.get("process:cancel")(trustedSenderEvent);
     expect(signal.aborted).toBe(true);
     releaseStartup();
     expect(await pending).toMatchObject({ cancelled: true });
@@ -455,7 +474,7 @@ describe("process:start with a fake job worker", () => {
   it("reports a promotion failure without deleting the destination", async () => {
     const output = path.join(outputDir, "existing-directory.mp4");
     fs.mkdirSync(output);
-    const pending = mocks.handlers.get("process:start")({}, [
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
       { id: 0, input_path: "clip.mp4", output_path: output },
     ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
@@ -470,10 +489,14 @@ describe("process:start with a fake job worker", () => {
   });
 
   it("refuses a second run while one is active", async () => {
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "a.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "a.mp4" },
+    ]);
     await vi.waitFor(() => expect(runModule.hasActiveProcessing()).toBe(true));
 
-    const second = await mocks.handlers.get("process:start")({}, [{ input_path: "b.mp4" }]);
+    const second = await mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "b.mp4" },
+    ]);
     expect(second).toMatchObject({ success: false, error: "Ya hay un proceso en ejecución" });
 
     mocks.resolveDone({ ok: true });
@@ -481,7 +504,9 @@ describe("process:start with a fake job worker", () => {
   });
 
   it("settles a dead worker response even when no child event follows", async () => {
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     let result;
     pending.then((value) => {
       result = value;
@@ -503,10 +528,12 @@ describe("process:start with a fake job worker", () => {
   });
 
   it("coalesces concurrent cancellation and ignores a late worker result", async () => {
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
-    const first = mocks.handlers.get("process:cancel")({});
-    const second = mocks.handlers.get("process:cancel")({});
+    const first = mocks.handlers.get("process:cancel")(trustedSenderEvent);
+    const second = mocks.handlers.get("process:cancel")(trustedSenderEvent);
     mocks.proc.emit("close", 0);
     await Promise.all([first, second, pending]);
     mocks.resolveDone({ ok: true });
@@ -521,14 +548,18 @@ describe("process:start with a fake job worker", () => {
       releaseKill = resolve;
     });
     mocks.killProcessTree.mockImplementationOnce(() => killed);
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
-    const cancellation = mocks.handlers.get("process:cancel")({});
+    const cancellation = mocks.handlers.get("process:cancel")(trustedSenderEvent);
     mocks.proc.emit("close", 0);
     await vi.waitFor(() => expect(mocks.killProcessTree).toHaveBeenCalled());
     try {
       expect(runModule.hasActiveProcessing()).toBe(true);
-      const second = await mocks.handlers.get("process:start")({}, [{ input_path: "other.mp4" }]);
+      const second = await mocks.handlers.get("process:start")(trustedSenderEvent, [
+        { input_path: "other.mp4" },
+      ]);
       expect(second).toMatchObject({ code: "already_processing" });
     } finally {
       releaseKill();
@@ -540,7 +571,9 @@ describe("process:start with a fake job worker", () => {
 
   it("the watchdog resolves the invocation as well as releasing a dead worker lock", async () => {
     vi.useFakeTimers();
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     let result;
     pending.then((value) => {
       result = value;
@@ -566,7 +599,9 @@ describe("process:start with a fake job worker", () => {
       mocks.drain = new Promise((resolve) => {
         releaseDrain = resolve;
       });
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     await vi.waitFor(() =>
       expect(phase === "running" ? runModule.getPythonProcess() : artifactsDirOf()).toBeTruthy(),
     );
@@ -577,7 +612,7 @@ describe("process:start with a fake job worker", () => {
       mocks.resolveDone({ ok: true });
       await pending;
     } else {
-      await mocks.handlers.get("process:cancel")({});
+      await mocks.handlers.get("process:cancel")(trustedSenderEvent);
       releaseDrain();
       await pending;
     }
@@ -587,13 +622,15 @@ describe("process:start with a fake job worker", () => {
   });
 
   it("allows cooperative cancellation for 1500ms before terminating the tree", async () => {
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     vi.useFakeTimers();
     mocks.killProcessTree.mockImplementationOnce(async (proc) => {
       proc.emit("close", 0);
     });
-    const cancellation = mocks.handlers.get("process:cancel")({});
+    const cancellation = mocks.handlers.get("process:cancel")(trustedSenderEvent);
     await vi.advanceTimersByTimeAsync(1499);
     expect(mocks.killProcessTree).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
@@ -603,12 +640,14 @@ describe("process:start with a fake job worker", () => {
   });
 
   it("ignores old callbacks without touching the next run or its files", async () => {
-    const first = mocks.handlers.get("process:start")({}, [{ input_path: "first.mp4" }]);
+    const first = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "first.mp4" },
+    ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     const oldLine = mocks.emitLine;
     const oldDone = mocks.resolveDone;
     const oldRunId = calls("process:runStarted")[0][1].runId;
-    const cancellation = mocks.handlers.get("process:cancel")({});
+    const cancellation = mocks.handlers.get("process:cancel")(trustedSenderEvent);
     mocks.proc.emit("close", 0);
     await Promise.all([cancellation, first]);
 
@@ -616,7 +655,9 @@ describe("process:start with a fake job worker", () => {
     mocks.done = new Promise((resolve) => {
       mocks.resolveDone = resolve;
     });
-    const second = mocks.handlers.get("process:start")({}, [{ input_path: "second.mp4" }]);
+    const second = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "second.mp4" },
+    ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     const nextRunId = calls("process:runStarted")[1][1].runId;
     expect(nextRunId).not.toBe(oldRunId);
@@ -647,11 +688,13 @@ describe("process:start with a fake job worker", () => {
       proc.exitCode = 1;
       proc.emit("close", 1);
     });
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     mocks.resolveDone({ died: true, error: "worker stopped" });
     await vi.waitFor(() => expect(mocks.killProcessTree).toHaveBeenCalled());
-    const cancellation = mocks.handlers.get("process:cancel")({});
+    const cancellation = mocks.handlers.get("process:cancel")(trustedSenderEvent);
     expect(runModule.hasActiveProcessing()).toBe(true);
     releaseKill();
     await cancellation;
@@ -668,7 +711,9 @@ describe("process:start with a fake job worker", () => {
       mocks.proc.emit("close", 1);
       return true;
     });
-    const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     let result;
     pending.then((value) => {
       result = value;
@@ -709,9 +754,11 @@ describe("process:start with a fake job worker", () => {
       return manifestDir;
     });
     try {
-      const pending = mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+      const pending = mocks.handlers.get("process:start")(trustedSenderEvent, [
+        { input_path: "clip.mp4" },
+      ]);
       await entered;
-      await mocks.handlers.get("process:cancel")({});
+      await mocks.handlers.get("process:cancel")(trustedSenderEvent);
       expect(await pending).toMatchObject({ cancelled: true });
       releaseArtifacts();
       await vi.waitFor(() => expect(fs.existsSync(manifestDir)).toBe(false));

@@ -3,6 +3,7 @@ import { EventEmitter } from "events";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 import { IPC_EVENTS, IPC_INVOKE, emitRunEvent } from "../shared/ipc-channels.js";
 import { createProcessingRun } from "../src/utils/processing-run.js";
 
@@ -18,12 +19,20 @@ const mocks = vi.hoisted(() => ({
   jobs: [],
 }));
 
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
+
 vi.mock("electron", () => ({
   ipcMain: { handle: (channel, handler) => mocks.handlers.set(channel, handler) },
   app: { isPackaged: false, getPath: () => mocks.tempRoot },
 }));
 
-vi.mock("../main/shared-state.js", () => ({ getAppIsQuitting: () => false }));
+vi.mock("../main/shared-state.js", () => ({
+  getAppIsQuitting: () => false,
+  isDev: false,
+  DEV_URL: "http://localhost:5173",
+}));
 vi.mock("../main/utils/paths.js", () => ({ validateMediaBinaries: () => ({ ok: true }) }));
 vi.mock("../main/utils/processor-spawn.js", () => ({
   validateProcessorAvailableAsync: async () => ({ ok: true, command: "noop", args: [] }),
@@ -216,7 +225,7 @@ describe("run-scoped process events", () => {
 
   it("every event a run emits is run-scoped and carries that run's runId", async () => {
     const outputDir = tmpDir();
-    const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)({}, [
+    const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)(trustedSenderEvent, [
       { input_path: "a.mp4", output_path: path.join(outputDir, "a.mp4") },
     ]);
 
@@ -247,7 +256,7 @@ describe("run-scoped process events", () => {
     { type: "cancelled", index: 7 },
     { type: "error", index: 7, error: "Cancelled" },
   ])("forwards $type job cancellation through its run-scoped IPC channel", async (message) => {
-    const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)({}, [
+    const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)(trustedSenderEvent, [
       { id: 7, input_path: "clip.mp4" },
     ]);
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));

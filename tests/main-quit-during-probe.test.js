@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
@@ -15,6 +16,10 @@ const mocks = vi.hoisted(() => ({
     interrupt: async () => {},
   },
 }));
+
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
 
 vi.mock("electron", () => ({
   ipcMain: { handle: (channel, handler) => mocks.handlers.set(channel, handler) },
@@ -158,7 +163,9 @@ describe("cancel mid-flight", () => {
             });
           };
 
-    const result = await mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const result = await mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
 
     expect(result).toMatchObject({
       success: false,
@@ -185,7 +192,9 @@ describe("cancel mid-flight", () => {
 
   it("refuses to begin a processing run while app is quitting", async () => {
     mocks.state.quitting = true;
-    const result = await mocks.handlers.get("process:start")({}, [{ input_path: "clip.mp4" }]);
+    const result = await mocks.handlers.get("process:start")(trustedSenderEvent, [
+      { input_path: "clip.mp4" },
+    ]);
     expect(result).toMatchObject({ success: false, cancelled: true });
     expect(hasActiveProcessing()).toBe(false);
     expect(mocks.sendToRenderer).not.toHaveBeenCalled();
