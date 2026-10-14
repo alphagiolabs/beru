@@ -142,9 +142,11 @@ export default function PropertiesPanel() {
   return (
     <div className="inspector-panel">
       <div className="inspector-sticky-chrome">
-        <div className="inspector-chrome-title" data-testid="inspector-mode-title">
-          {sidebarMode === "batch" ? t("props.modeBatch") : t("props.modeLogo")}
-        </div>
+        {sidebarMode === "batch" && (
+          <div className="inspector-chrome-title" data-testid="inspector-mode-title">
+            {t("props.modeBatch")}
+          </div>
+        )}
         {sel?.filename && (
           <div className="inspector-chrome-meta">
             <span className="inspector-chrome-meta-key">{t("props.video")}</span>
@@ -401,7 +403,6 @@ export default function PropertiesPanel() {
                     ))}
                   </div>
                 </div>
-                <p className="inspector-helper text-center">{t("props.dragImageHint")}</p>
               </InspectorGroup>
             )}
 
