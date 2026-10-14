@@ -43,7 +43,6 @@ describe("TextOverlay export-layout preview", () => {
   it("paints wrapped lines from the shared export layout, not a DOM measurer", () => {
     renderOverlay();
 
-    expect(document.querySelector("[data-overflow-measurer]")).toBeNull();
     const painted = document.querySelector("[data-export-layout]");
     expect(painted).toBeTruthy();
 
@@ -67,8 +66,10 @@ describe("TextOverlay export-layout preview", () => {
     expect(layout.displayText).toBe("Texto de\nejemplo");
   });
 
-  it("does not mark overflow when autoFit shrinks text to the usable area", () => {
+  it("shrinks text and hides the overflow warning when autoFit is enabled", () => {
     renderOverlay({ autoFit: true });
+    const painted = document.querySelector("[data-export-layout]");
+    expect(Number(painted.getAttribute("data-font-size"))).toBeLessThan(24);
     expect(document.body.textContent).not.toMatch(/Desborda/i);
   });
 

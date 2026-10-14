@@ -124,10 +124,6 @@ export default function TextLayoutControls({
           }))}
         />
       </div>
-
-      {autoFit ? (
-        <p className="inspector-helper inspector-paragraph-hint">{t("logo.blurDurationHint")}</p>
-      ) : null}
     </div>
   );
 }

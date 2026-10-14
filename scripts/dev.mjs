@@ -1,5 +1,5 @@
 import { requireWindows } from "../shared/platform.js";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import http from "http";
 import net from "net";
 import fs from "fs";
@@ -91,6 +91,7 @@ const env = {
   BERU_DEV_PORT: String(port),
   BERU_DEV_URL: devUrl,
 };
+delete env.ELECTRON_RUN_AS_NODE;
 const processorPython = path.join(root, ".venv-processor", "Scripts", "python.exe");
 if (!env.BERU_PYTHON && fs.existsSync(processorPython)) {
   env.BERU_PYTHON = processorPython;
@@ -102,6 +103,16 @@ if (port !== preferredPort) {
 
 const viteBin = path.join(root, "node_modules", "vite", "bin", "vite.js");
 const electronBin = path.join(root, "node_modules", "electron", "cli.js");
+// Solo desarrollo: en una sesion elevada Chromium aborta al iniciar su sandbox.
+const elevationProbe = spawnSync("reg", ["query", "HKU\\S-1-5-19"], {
+  stdio: "ignore",
+  windowsHide: true,
+});
+const electronArgs = [electronBin, "."];
+if (elevationProbe.status === 0) {
+  console.warn("[dev] Elevated session detected; starting Chromium without sandbox.");
+  electronArgs.push("--no-sandbox");
+}
 const vite = spawnLocal(
   process.execPath,
   [viteBin, "--host", "localhost", "--port", String(port), "--strictPort"],
@@ -130,7 +141,7 @@ process.on("SIGTERM", () => shutdown(0));
 
 try {
   await waitForHttp(devUrl);
-  electron = spawnLocal(process.execPath, [electronBin, "."], env);
+  electron = spawnLocal(process.execPath, electronArgs, env);
   prefixOutput("electron", electron.stdout);
   prefixOutput("electron", electron.stderr);
   let electronExitHandler = (code) => shutdown(code ?? 0);
@@ -150,7 +161,7 @@ try {
         const oldHandler = electronExitHandler;
         if (oldProc) oldProc.removeListener("exit", oldHandler);
         killTree(oldProc);
-        electron = spawnLocal(process.execPath, [electronBin, "."], env);
+        electron = spawnLocal(process.execPath, electronArgs, env);
         prefixOutput("electron", electron.stdout);
         prefixOutput("electron", electron.stderr);
         electronExitHandler = (code) => shutdown(code ?? 0);

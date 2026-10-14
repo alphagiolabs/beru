@@ -18,8 +18,6 @@ describe("i18n dictionaries", () => {
   it("exposes the same key set in both dictionaries", () => {
     const esKeys = Object.keys(esFlat).sort();
     const enKeys = Object.keys(enFlat).sort();
-    expect(esKeys.filter((k) => !enFlat[k] && !(k in enFlat))).toEqual([]);
-    expect(enKeys.filter((k) => !esFlat[k] && !(k in esFlat))).toEqual([]);
     expect(enKeys).toEqual(esKeys);
   });
 

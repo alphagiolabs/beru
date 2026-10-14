@@ -124,6 +124,7 @@ export default function LayerList() {
       <InspectorGroup
         title={t("props.layers")}
         className="inspector-group--flat"
+        collapsible
         headerAccessory={<span className="inspector-region-count">{ops.length}</span>}
       >
         <div className="inspector-layer-list">

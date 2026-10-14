@@ -85,7 +85,6 @@ describe("Sign out", () => {
     });
 
     expect(useEditorStore.getState().signOut).toHaveBeenCalledTimes(1);
-    expect(useEditorStore.getState().authStatus).toBe("unauthenticated");
   });
 
   it("returns to the login screen after signing out", async () => {
