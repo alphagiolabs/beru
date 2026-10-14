@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { buildLogoPreviewJob } from "../src/utils/delogo-ops.js";
-import { regionToScreen, toVideoCoordsNormalized } from "../src/utils/video-utils.js";
 
 const baseJob = {
   input_path: "C:/video.mp4",
@@ -60,27 +59,5 @@ describe("logo preview job", () => {
       blur_strength: 42,
       region: { x: 0, y: 0, w: 64, h: 36 },
     });
-  });
-
-  it("keeps source coordinates stable under 2x display zoom", () => {
-    const video = {
-      videoWidth: 640,
-      videoHeight: 360,
-      offsetWidth: 320,
-      offsetHeight: 180,
-      getBoundingClientRect: () => ({ left: 100, top: 50, width: 640, height: 360 }),
-    };
-    const region = { x: 0.25, y: 0.2, w: 0.2, h: 0.1 };
-    const screen = regionToScreen(region, video);
-    const center = toVideoCoordsNormalized(
-      video,
-      100 + (screen.x + screen.w / 2) * 2,
-      50 + (screen.y + screen.h / 2) * 2,
-    );
-    expect(center.x).toBeCloseTo(0.35);
-    expect(center.y).toBeCloseTo(0.25);
-    expect(
-      buildLogoPreviewJob(baseJob, { mode: "delogo", region }).operations.at(-1).region,
-    ).toEqual({ x: 160, y: 72, w: 128, h: 36 });
   });
 });

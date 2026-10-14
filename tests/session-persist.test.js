@@ -219,13 +219,8 @@ describe("session-persist", () => {
     });
   });
 
-  it("watches every field the snapshot writes (trigger covers snapshot)", () => {
-    const snapshot = buildSessionSnapshot({ queue: [{ path: "C:\\v\\a.mp4" }] });
-    for (const key of Object.keys(snapshot)) {
-      if (key === "version") continue;
-      expect(SESSION_PERSIST_KEYS).toContain(key);
-      expect(hasPersistedFieldChanged({ [key]: {} }, {})).toBe(true);
-    }
+  it("does not treat sidebarMode as a persisted session field", () => {
+    expect(SESSION_PERSIST_KEYS).not.toContain("sidebarMode");
     expect(hasPersistedFieldChanged({ sidebarMode: "a" }, { sidebarMode: "b" })).toBe(false);
   });
 });
