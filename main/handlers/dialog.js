@@ -2,9 +2,11 @@ import { ipcMain } from "electron";
 import { showOpenDialog, showSaveDialog } from "../utils/dialog-history.js";
 import { getMainWindow } from "../shared-state.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
+import { isTrustedSender } from "../utils/ipc.js";
 
 export function registerDialogHandlers(pathSecurity) {
-  ipcMain.handle(IPC_INVOKE.openVideos, async () => {
+  ipcMain.handle(IPC_INVOKE.openVideos, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const win = getMainWindow();
     const { canceled, filePaths } = await showOpenDialog(win, {
       title: "Seleccionar videos",
@@ -15,7 +17,8 @@ export function registerDialogHandlers(pathSecurity) {
     return pathSecurity.registerSelectedPaths(filePaths, "video");
   });
 
-  ipcMain.handle(IPC_INVOKE.openExcel, async () => {
+  ipcMain.handle(IPC_INVOKE.openExcel, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const win = getMainWindow();
     const { canceled, filePaths } = await showOpenDialog(win, {
       title: "Seleccionar archivo Excel",
@@ -27,7 +30,8 @@ export function registerDialogHandlers(pathSecurity) {
     return check.ok ? check.resolvedPath : null;
   });
 
-  ipcMain.handle(IPC_INVOKE.selectOutputDir, async () => {
+  ipcMain.handle(IPC_INVOKE.selectOutputDir, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const win = getMainWindow();
     try {
       const { canceled, filePaths } = await showOpenDialog(win, {
@@ -47,7 +51,8 @@ export function registerDialogHandlers(pathSecurity) {
     }
   });
 
-  ipcMain.handle(IPC_INVOKE.saveExcelDialog, async (_event, defaultName = "beru-export.xlsx") => {
+  ipcMain.handle(IPC_INVOKE.saveExcelDialog, async (event, defaultName = "beru-export.xlsx") => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const win = getMainWindow();
     const safeName =
       typeof defaultName === "string" && defaultName.trim()

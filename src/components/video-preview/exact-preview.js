@@ -8,6 +8,9 @@ import {
   previewJobInputSnapshot,
 } from "../../utils/job-signature";
 
+const prefersLive = (editor) =>
+  editor.sidebarMode === "logo" && editor.editorWorkspace !== "datetime";
+
 function logoDraft(state) {
   if (state.sidebarMode !== "logo" || !isRegionUsable(state.currentRegion)) return null;
   if (!["blur", "delogo", "crop"].includes(state.activeTool)) return null;
@@ -94,7 +97,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
       error: null,
       artifact: false,
       stale: false,
-      compareMode: useEditorStore.getState().sidebarMode === "logo" ? "live" : "ffmpeg",
+      compareMode: prefersLive(useEditorStore.getState()) ? "live" : "ffmpeg",
     });
   }
 
@@ -142,7 +145,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
     ];
     if (!jobInputEntriesEqual(editingInputs, nextEditing)) {
       editingInputs = nextEditing;
-      if (editor.sidebarMode === "logo") publish({ compareMode: "live" });
+      if (prefersLive(editor)) publish({ compareMode: "live" });
     }
     if (!item?.path) return;
     if (!enabled && editor.sidebarMode !== "logo") return;
@@ -274,7 +277,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
           url: result.data_url,
           artifact,
           stale: false,
-          compareMode: live.sidebarMode === "logo" ? state.compareMode : "ffmpeg",
+          compareMode: prefersLive(live) ? state.compareMode : "ffmpeg",
         });
       } else if (!result?.cancelled) fail(result?.error || t("logo.renderError"));
     } catch (error) {

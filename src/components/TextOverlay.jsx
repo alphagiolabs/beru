@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { useT } from "../i18n/useT";
-import { letterSpacingToPx } from "../utils/text-style";
+import { letterSpacingToPx, textScaleLayoutWidth } from "../utils/text-style";
 import {
   drawtextLineSpacingPx,
   exportTextOverflows,
@@ -27,6 +27,7 @@ function TextOverlay({
   onMouseDown,
   zIndex,
   showOverflowWarning = true,
+  overflowOutline = true,
 }) {
   const t = useT();
   const rawText = text != null ? String(text).trim() : "";
@@ -47,10 +48,12 @@ function TextOverlay({
   const boxPadY = boxPad * scaleY;
   const bounds = textLayoutBounds({ x: 0, y: 0, w: nativeW, h: nativeH }, style.safeMargin, boxPad);
   const lineHeight = style.lineHeight ?? 1.2;
+  const layoutW = textScaleLayoutWidth(bounds.w, style.textScaleX);
+  const stretch = bounds.w > 0 ? bounds.w / layoutW : 1;
   const layout = displaySource
     ? layoutExportText({
         text: displaySource,
-        regionW: bounds.w,
+        regionW: layoutW,
         regionH: bounds.h,
         fontSize: style.fontSize ?? 32,
         lineHeight,
@@ -64,9 +67,10 @@ function TextOverlay({
     ? fontSizePx + drawtextLineSpacingPx(layout.fontSize, lineHeight) * scaleY
     : fontSizePx;
   const hasOverflow =
+    overflowOutline &&
     !!layout &&
     !style.autoFit &&
-    exportTextOverflows(layout.displayText, layout.fontSize, lineHeight, bounds.w, bounds.h);
+    exportTextOverflows(layout.displayText, layout.fontSize, lineHeight, layoutW, bounds.h);
   const lines = layout ? String(layout.displayText).split("\n") : [];
 
   const baseWeight = style.fontWeight ?? (style.bold ? 700 : 400);
@@ -180,8 +184,10 @@ function TextOverlay({
             data-display-text={layout.displayText}
             data-font-size={String(layout.fontSize)}
             style={{
-              width: "100%",
-              maxWidth: "100%",
+              width: `${100 / stretch}%`,
+              maxWidth: `${100 / stretch}%`,
+              transform: stretch === 1 ? undefined : `scaleX(${stretch})`,
+              transformOrigin: "0 0",
               margin: 0,
               color: style.fontColor || "white",
               opacity: textOpacity,

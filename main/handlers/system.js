@@ -3,9 +3,11 @@ import { recommendBatchWorkers } from "../workerPolicy.js";
 import { normalizeEncodeProfile } from "../encodeProfiles.js";
 import { readSettings, detectHwEncoderCached } from "../utils/settings.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
+import { isTrustedSender } from "../utils/ipc.js";
 
 export function registerSystemHandlers() {
-  ipcMain.handle(IPC_INVOKE.getBatchCapacity, async (_event, opts = {}) => {
+  ipcMain.handle(IPC_INVOKE.getBatchCapacity, async (event, opts = {}) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const settings = readSettings();
     const mode = settings.batchWorkersMode === "conservative" ? "conservative" : "balanced";
     const jobCount = Math.max(1, Number(opts.jobCount) || 1);

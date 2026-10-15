@@ -1,6 +1,7 @@
 import { uid, denormalizeRegion } from "./types.js";
 import { TEXT_STYLE_DEFAULTS, textStyleToPythonPayload } from "./text-style.js";
 import { sanitizeOperation } from "./delogo-ops.js";
+import { clockToJobPayload, parseClockStart } from "./datetime-stamp.js";
 
 export function createOperation(overrides = {}) {
   return {
@@ -21,6 +22,10 @@ export function createOperation(overrides = {}) {
     imagePath: "",
     imageV: "",
     imageOpacity: 1,
+    clockStart: "",
+    clockFormat: "datetime",
+    clockLayout: "single",
+    clockDateStyle: "dmy",
     ...overrides,
   };
 }
@@ -54,6 +59,7 @@ export function filterOperationsForExport(operations) {
   return operations.filter((op) => {
     if (op?.mode === "text") return String(op.text ?? "").trim().length > 0;
     if (op?.mode === "image") return String(op.imagePath ?? "").trim().length > 0;
+    if (op?.mode === "datetime") return parseClockStart(op.clockStart) != null;
     return true;
   });
 }
@@ -63,7 +69,7 @@ export function operationToJobPayload(op, width, height) {
   return {
     mode: safe.mode,
     region:
-      safe.region && width > 0 && height > 0
+      safe.region && width > 0 && height > 0 && safe.mode !== "datetime"
         ? denormalizeRegion(safe.region, width, height)
         : safe.region,
     blur_strength: safe.blurStrength,
@@ -79,6 +85,7 @@ export function operationToJobPayload(op, width, height) {
     ...textStyleToPythonPayload(safe),
     image_path: safe.imagePath,
     image_opacity: safe.imageOpacity,
+    ...(safe.mode === "datetime" ? clockToJobPayload(safe) : {}),
     start_time: safe.startTime,
     end_time: safe.endTime,
   };

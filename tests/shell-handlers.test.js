@@ -2,11 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
   openPath: vi.fn(),
 }));
+
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
 
 vi.mock("electron", () => ({
   app: { isPackaged: false },
@@ -47,9 +52,15 @@ describe("Electron shell handler restrictions", () => {
     });
     const openPathHandler = mocks.handlers.get("shell:openPath");
 
-    await expect(openPathHandler({}, videoPath)).resolves.toEqual({ success: true });
-    await expect(openPathHandler({}, tempDirectory)).resolves.toEqual({ success: true });
-    await expect(openPathHandler({}, executablePath)).resolves.toMatchObject({ success: false });
+    await expect(openPathHandler(trustedSenderEvent, videoPath)).resolves.toEqual({
+      success: true,
+    });
+    await expect(openPathHandler(trustedSenderEvent, tempDirectory)).resolves.toEqual({
+      success: true,
+    });
+    await expect(openPathHandler(trustedSenderEvent, executablePath)).resolves.toMatchObject({
+      success: false,
+    });
     expect(mocks.openPath).toHaveBeenCalledTimes(2);
   });
 });

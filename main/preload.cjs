@@ -97,5 +97,6 @@ contextBridge.exposeInMainWorld("api", {
   onJobCancelled: (cb) => subscribe("process:jobCancelled", cb),
   onFinished: (cb) => subscribe("process:finished", cb),
   onRunStarted: (cb) => subscribe("process:runStarted", cb),
+  onRunWarning: (cb) => subscribe("process:runWarning", cb),
   onError: (cb) => subscribe("process:error", cb),
 });

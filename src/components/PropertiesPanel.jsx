@@ -6,6 +6,8 @@ import PresetManager from "./PresetManager";
 import BatchPanel from "./BatchPanel";
 import AppliedTextEditor from "./AppliedTextEditor";
 import AppliedDelogoEditor from "./AppliedDelogoEditor";
+import DateTimeFields from "./DateTimeFields";
+import AppliedDateTimeEditor from "./AppliedDateTimeEditor";
 import RegionFields from "./RegionFields";
 import VideoTransformControls from "./VideoTransformControls";
 import VideoAudioControls from "./VideoAudioControls";
@@ -15,6 +17,7 @@ import DelogoMethodHelp from "./DelogoMethodHelp";
 import TimeRangeFields from "./TimeRangeFields";
 import CropRatioPresets from "./CropRatioPresets";
 import { isRegionUsable } from "../utils/video-utils";
+import { parseClockStart } from "../utils/datetime-stamp";
 import { beruLocalUrl, imageVersion } from "../utils/beru-url";
 import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
 import { storeErrorText } from "../utils/store-errors";
@@ -121,9 +124,10 @@ export default function PropertiesPanel() {
     }),
     shallow,
   );
-  const { textInput, tempStart, tempEnd } = useEditorStore(
+  const { textInput, tempClock, tempStart, tempEnd } = useEditorStore(
     (s) => ({
       textInput: s.textInput,
+      tempClock: s.tempClock,
       tempStart: s.tempStart,
       tempEnd: s.tempEnd,
     }),
@@ -142,9 +146,11 @@ export default function PropertiesPanel() {
   return (
     <div className="inspector-panel">
       <div className="inspector-sticky-chrome">
-        <div className="inspector-chrome-title" data-testid="inspector-mode-title">
-          {sidebarMode === "batch" ? t("props.modeBatch") : t("props.modeLogo")}
-        </div>
+        {sidebarMode === "batch" && (
+          <div className="inspector-chrome-title" data-testid="inspector-mode-title">
+            {t("props.modeBatch")}
+          </div>
+        )}
         {sel?.filename && (
           <div className="inspector-chrome-meta">
             <span className="inspector-chrome-meta-key">{t("props.video")}</span>
@@ -156,6 +162,15 @@ export default function PropertiesPanel() {
       </div>
 
       <div className="inspector-body">
+        {!currentRegion && sidebarMode === "logo" && selectedOperation?.mode === "datetime" && (
+          <AppliedDateTimeEditor
+            op={selectedOperation}
+            video={sel}
+            onPatch={(patch) => get().updateOperation(selectedIdx, selectedOperationIdx, patch)}
+            onRemove={() => get().removeOperation(selectedOperationIdx)}
+            onDone={() => get().selectOperation(null)}
+          />
+        )}
         {sel && <VideoTransformControls />}
         {sel && <VideoAudioControls />}
         {sel && <VideoTimingControls key={`timing:${selectedIdx}:${sel.path}`} />}
@@ -174,10 +189,32 @@ export default function PropertiesPanel() {
                 {t(sel ? "props.empty.drawTitle" : "props.empty.noVideoTitle")}
               </p>
               <p className="inspector-empty-hint">
-                {t(sel ? "props.empty.drawHint" : "props.empty.noVideoHint")}
+                {t(
+                  !sel
+                    ? "props.empty.noVideoHint"
+                    : activeTool === "datetime"
+                      ? "datetime.drawHint"
+                      : "props.empty.drawHint",
+                )}
               </p>
             </div>
           ))}
+
+        {!currentRegion &&
+          sidebarMode === "logo" &&
+          activeTool === "datetime" &&
+          sel &&
+          !selectedOperation && (
+            <Button
+              type="button"
+              variant="primary"
+              className="w-full"
+              onClick={() => get().applyDvrStampStyle()}
+              title={t("datetime.dvrStyleHint")}
+            >
+              {t("datetime.dvrStyle")}
+            </Button>
+          )}
 
         {currentRegion && (
           <>
@@ -401,7 +438,6 @@ export default function PropertiesPanel() {
                     ))}
                   </div>
                 </div>
-                <p className="inspector-helper text-center">{t("props.dragImageHint")}</p>
               </InspectorGroup>
             )}
 
@@ -692,9 +728,16 @@ export default function PropertiesPanel() {
               </InspectorGroup>
             )}
 
-            {(activeTool === "text" || sidebarMode === "batch") && (
+            {(activeTool === "text" || activeTool === "datetime" || sidebarMode === "batch") && (
               <div className="space-y-2.5">
-                {sidebarMode === "logo" && (
+                {sidebarMode === "logo" && activeTool === "datetime" && (
+                  <DateTimeFields
+                    value={tempClock}
+                    onPatch={(patch) => get().setTempClock(patch)}
+                    onApplyDvrStyle={() => get().applyDvrStampStyle()}
+                  />
+                )}
+                {sidebarMode === "logo" && activeTool === "text" && (
                   <InspectorGroup title={t("props.content")}>
                     <input
                       type="text"
@@ -755,6 +798,9 @@ export default function PropertiesPanel() {
                 <Button
                   type="button"
                   onClick={() => get().addOperation(activeTool)}
+                  disabled={
+                    activeTool === "datetime" && parseClockStart(tempClock.clockStart) == null
+                  }
                   variant="primary"
                   className="w-full"
                 >

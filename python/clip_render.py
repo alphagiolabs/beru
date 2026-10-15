@@ -22,6 +22,18 @@ from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 
 logger = logging.getLogger("beru")
 
+_TEMPORAL_PATCH_SPAN = 0.2
+_TEMPORAL_BUDGET_S_DEFAULT = 1800
+
+
+def _temporal_budget_seconds(env=None):
+    raw = (env or os.environ).get("BERU_TEMPORAL_BUDGET_S")
+    try:
+        seconds = int(float(raw))
+    except (TypeError, ValueError):
+        return _TEMPORAL_BUDGET_S_DEFAULT
+    return max(30, min(7200, seconds))
+
 
 @dataclass
 class VideoPlan:
@@ -91,13 +103,15 @@ class ClipRenderer:
             for op in job.get("operations", []) or []
         )
         if temporal:
+            start, end = progress_range if progress_range is not None else (0, 100)
+            span = (end - start) * _TEMPORAL_PATCH_SPAN
             with tempfile.TemporaryDirectory(prefix="beru-temporal-", dir=self.run_directory) as directory:
-                plan = self._plan(job, directory, force_video_encode)
-                self._execute(plan, progress_range)
+                plan = self._plan(job, directory, force_video_encode, patch_range=(start, start + span))
+                self._execute(plan, (start + span, end))
         else:
             self._execute(self._plan(job, None, force_video_encode), progress_range)
 
-    def _plan(self, job, temporal_directory, force_video_encode):
+    def _plan(self, job, temporal_directory, force_video_encode, *, patch_range=None):
         try:
             trim_start, trim_end = _parse_trim_window(job)
             if not math.isfinite(trim_start) or trim_start < 0:
@@ -115,7 +129,8 @@ class ClipRenderer:
         external_info = self._probe(external["path"]) if external else None
         if not force_video_encode and _job_takes_copy_path(media_job):
             return self._copy_plan(media_job, source_info, external_info)
-        return self._encode_plan(job, media_job, source_info, external_info, trim_start, trim_end, rate, temporal_directory)
+        return self._encode_plan(job, media_job, source_info, external_info, trim_start, trim_end, rate, temporal_directory,
+                                 patch_range=patch_range)
 
     def _external_plan(self, job, index, source_info, external_info):
         target = cycle_duration(job, float(source_info.get("duration") or job.get("video_duration") or 0))
@@ -157,7 +172,8 @@ class ClipRenderer:
                          max(300, min(7200, int(input_bytes / (25 * 1024 * 1024)))),
                          native_copy=audio_af is None and not job.get("external_audio"))
 
-    def _encode_plan(self, raw_job, job, source_info, external_info, trim_start, trim_end, rate, temporal_directory):
+    def _encode_plan(self, raw_job, job, source_info, external_info, trim_start, trim_end, rate, temporal_directory,
+                     *, patch_range=None):
         info = self.video_info(job, job["input_path"], ctx=self.ctx)
         if rate != 1:
             info = {**info, **source_info}
@@ -171,8 +187,11 @@ class ClipRenderer:
         temporal_fps = float(info.get("frame_rate") or 0)
         if temporal_directory and temporal_fps <= 0:
             temporal_fps = float(self._probe(job["input_path"]).get("frame_rate") or 0)
+        total_frames = math.ceil(duration * temporal_fps) if duration > 0 and temporal_fps > 0 else None
         resolver = TemporalPatchResolver(job["input_path"], temporal_directory, self.ffmpeg_path,
-            temporal_fps, source_format=info.get("pix_fmt"), ctx=self.ctx) if temporal_directory else None
+            temporal_fps, source_format=info.get("pix_fmt"), ctx=self.ctx,
+            job_id=raw_job.get("id"), progress_range=patch_range, total_frames=total_frames,
+            timeout=_temporal_budget_seconds(self.ctx.env if self.ctx else None)) if temporal_directory else None
         graph, label, image_paths = self.build_filters(operations, width, height,
             watermark=job.get("watermark"), _ffmpeg_path=self.ffmpeg_path, source_pix_fmt=info.get("pix_fmt"),
             temporal_resolver=resolver, transform=normalize_transform(job))

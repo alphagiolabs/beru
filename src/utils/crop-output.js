@@ -28,6 +28,11 @@ function sourcePixels(region, dims) {
  * @returns {{ width: number, height: number }}
  */
 export function frameAfterCrops(operations, dims) {
+  const { width, height } = frameRectAfterCrops(operations, dims);
+  return { width, height };
+}
+
+export function frameRectAfterCrops(operations, dims) {
   let width = dims.w;
   let height = dims.h;
   let cropX = 0;
@@ -49,5 +54,5 @@ export function frameAfterCrops(operations, dims) {
     cropX += left;
     cropY += top;
   }
-  return { width, height };
+  return { x: cropX, y: cropY, width, height };
 }

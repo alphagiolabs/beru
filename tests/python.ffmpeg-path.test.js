@@ -161,7 +161,7 @@ print(graph is not None and "drawtext" in graph and "Hola" in graph)
     expect(r.stdout.trim()).toBe("True");
   });
 
-  it("fills the full text region with drawbox when bg is enabled (matches CSS preview)", () => {
+  it("fills the full text region with a translucent box layer when bg is enabled (matches CSS preview)", () => {
     const code = `
 import processor
 processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
@@ -187,8 +187,9 @@ print(graph)
     }
     expect(r.status).toBe(0);
     const graph = r.stdout.trim();
-    expect(graph).toContain("drawbox=x=192:y=842:w=1536:h=130");
-    expect(graph).toContain("color=black@0.650:t=fill");
+    expect(graph).toContain("scale=1536:130,format=rgba,drawbox=x=0:y=0:w=1536:h=130");
+    expect(graph).toContain("color=black@0.650:t=fill:replace=1");
+    expect(graph).toContain("overlay=192:842");
     expect(graph).toContain("text='OT  89898990'");
     expect(graph).not.toContain("box=1");
   });
@@ -200,7 +201,7 @@ processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\aria
 graph, last, imgs = processor.build_filter_complex([
     {"mode": "text", "text": "Hola", "font_family": "Arial", "region": {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.1}},
 ], 1920, 1080)
-print("x=192" in graph and "y=216" in graph)
+print("overlay=192:216" in graph and "x=196" in graph and "y=220" in graph)
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
     if (r.status !== 0) {

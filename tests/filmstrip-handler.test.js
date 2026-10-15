@@ -1,9 +1,16 @@
 import { EventEmitter } from "events";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IPC_INVOKE, IPC_EVENTS } from "../shared/ipc-channels.js";
+import path from "path";
+import { pathToFileURL } from "url";
 
 const mocks = vi.hoisted(() => ({ handlers: new Map(), extractFilmstrip: vi.fn() }));
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
+
 vi.mock("electron", () => ({
+  app: { isPackaged: true },
   ipcMain: { handle: (channel, handler) => mocks.handlers.set(channel, handler) },
 }));
 vi.mock("../main/utils/thumbnail.js", () => ({
@@ -39,11 +46,14 @@ describe("filmstrip request ownership", () => {
   });
   const get = (contents, requestId) =>
     mocks.handlers.get(IPC_INVOKE.getFilmstrip)(
-      { sender: contents },
+      { ...trustedSenderEvent, sender: contents },
       { path: "video.mp4", duration: 12, requestId },
     );
   const cancel = (contents, requestId) =>
-    mocks.handlers.get(IPC_INVOKE.cancelFilmstrip)({ sender: contents }, requestId);
+    mocks.handlers.get(IPC_INVOKE.cancelFilmstrip)(
+      { ...trustedSenderEvent, sender: contents },
+      requestId,
+    );
 
   it("replaces only the same window's request and prevents stale progress or cleanup from cancelling its replacement", async () => {
     const firstWindow = sender(1);
@@ -74,7 +84,7 @@ describe("filmstrip request ownership", () => {
     const contents = sender(1);
     const call = (requestId, owner) =>
       mocks.handlers.get(IPC_INVOKE.getFilmstrip)(
-        { sender: contents },
+        { ...trustedSenderEvent, sender: contents },
         { path: "video.mp4", duration: 4, start: 1, owner, requestId },
       );
     const clipA = call("a", "clip:a");

@@ -80,8 +80,7 @@ def _job_cancelled_result(job_id):
     return {"index": job_id, "status": "cancelled"}
 
 
-def _emit_job_progress(job_id, percent, speed, *, ctx=None):
-    """Per-video encode progress (0-100) for the renderer (throttled ~1 Hz per job)."""
+def _emit_job_progress(job_id, percent, speed, *, ctx=None, fields=None):
     if job_id is None:
         return
     pct = round(max(0.0, min(100.0, percent)), 1)
@@ -98,7 +97,14 @@ def _emit_job_progress(job_id, percent, speed, *, ctx=None):
         "index": job_id,
         "percent": pct,
         "speed": speed,
+        **(fields or {}),
     }))
+
+
+def _emit_warning(index, code, message):
+    if index is None:
+        return
+    _safe_print(json.dumps({"type": "warning", "index": index, "code": code, "message": message}))
 
 
 def _is_transient_error(stderr_text):

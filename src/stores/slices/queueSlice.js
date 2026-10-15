@@ -1,6 +1,7 @@
 import { fetchVideoInfos } from "../../utils/video-info.js";
 import { createQueueItem, uid, ensureNormalized } from "../../utils/types";
 import { createOperation } from "../../utils/operation";
+import { normalizeClockFields, parseClockStart } from "../../utils/datetime-stamp";
 import { clampRegionToVideo, isRegionUsable } from "../../utils/video-utils";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
 import { sanitizeOperation } from "../../utils/delogo-ops";
@@ -16,6 +17,11 @@ import {
 import { tStatic } from "../../utils/format-message.js";
 import { swallow } from "../../utils/swallow.js";
 import { normalizeTransform, transformsEqual } from "../../utils/output-geometry.js";
+import {
+  fitStampsToOutput,
+  itemOutputGeometry,
+  sourceRegionToOutput,
+} from "../../utils/stamp-geometry.js";
 import { audioSettingsEqual, normalizeAudio } from "../../utils/audio-settings.js";
 import { normalizeAudioAsset } from "../../../shared/audio-asset.js";
 import { releaseUnownedVideoPaths } from "../../utils/video-path-ownership.js";
@@ -484,8 +490,14 @@ export function createQueueSlice(set, get) {
       const next = normalizeTransform({ ...current, ...patch });
       if (transformsEqual(current, next)) return;
       get()._saveUndo();
+      const item = queue[selectedIdx];
+      const operations = fitStampsToOutput(
+        item.operations,
+        itemOutputGeometry(item, current)?.output,
+        itemOutputGeometry(item, next)?.output,
+      );
       const updated = [...queue];
-      updated[selectedIdx] = { ...updated[selectedIdx], transform: next };
+      updated[selectedIdx] = { ...item, transform: next, operations };
       set({ queue: updated });
     },
 
@@ -548,12 +560,15 @@ export function createQueueSlice(set, get) {
       if (selectedIdx < 0 || !currentRegion || !isRegionUsable(currentRegion)) return;
       if (mode === "image" && !String(get().tempImagePath ?? "").trim()) return;
       if (mode === "text" && !String(get().textInput ?? "").trim()) return;
+      if (mode === "datetime" && parseClockStart(get().tempClock.clockStart) == null) return;
+      const geometry = mode === "datetime" ? itemOutputGeometry(queue[selectedIdx]) : null;
+      const stampRegion = geometry ? sourceRegionToOutput(currentRegion, geometry) : null;
       get()._saveUndo();
 
       const op = sanitizeOperation(
         createOperation({
           mode,
-          region: { ...currentRegion },
+          region: stampRegion ?? { ...currentRegion },
           blurStrength: get().blurStrength,
           delogoMethod: get().delogoMethod,
           delogoFillColor: get().delogoFillColor,
@@ -571,6 +586,7 @@ export function createQueueSlice(set, get) {
           imageOpacity: get().tempImageOpacity,
           startTime: get().tempStart,
           endTime: get().tempEnd,
+          ...(mode === "datetime" ? normalizeClockFields(get().tempClock) : {}),
         }),
       );
 

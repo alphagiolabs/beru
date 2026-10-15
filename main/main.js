@@ -12,6 +12,7 @@ import {
   hasKnownBeruType,
   validateBeruRequestPath,
 } from "./utils/beru-protocol.js";
+import { isTrustedDocumentUrl } from "./utils/ipc.js";
 
 import { killProcessTree } from "./utils/kill-process-tree.js";
 import { createWindow } from "./utils/window.js";
@@ -187,6 +188,12 @@ protocol.registerSchemesAsPrivileged([
 function registerBeruProtocol() {
   protocol.handle("beru", async (request) => {
     try {
+      for (const header of ["origin", "referer"]) {
+        const source = request.headers.get(header);
+        if (source && !isTrustedDocumentUrl(source)) {
+          return new Response("Origen no permitido", { status: 403 });
+        }
+      }
       const check = validateBeruRequestPath(pathSecurity, request.url);
       if (!check.ok) {
         const status = check.error === "Archivo no encontrado" ? 404 : 403;

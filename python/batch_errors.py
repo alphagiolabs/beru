@@ -19,6 +19,8 @@ def is_hardware_encode_error(stderr_text):
         "h264_mf",
         "hwaccel",
         "error code: -22",
+        "return code -22",
+        "terminating thread",
         "no capable devices",
         "cannot create cuda",
         "encoder init",

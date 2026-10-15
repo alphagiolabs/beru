@@ -104,7 +104,7 @@ export default function useKeyboard() {
       }
 
       if (!cmd && !shiftKey && !altKey && TOOL_KEYS[key]) {
-        if (store.sidebarMode === "logo") {
+        if (store.sidebarMode === "logo" && store.editorWorkspace === "logo") {
           e.preventDefault();
           store.setActiveTool(TOOL_KEYS[key]);
           return;
@@ -182,7 +182,8 @@ export default function useKeyboard() {
           (selOp.mode === "blur" ||
             selOp.mode === "delogo" ||
             selOp.mode === "crop" ||
-            selOp.mode === "image")
+            selOp.mode === "image" ||
+            selOp.mode === "datetime")
         ) {
           e.preventDefault();
           store.removeOperation(selOpIdx);

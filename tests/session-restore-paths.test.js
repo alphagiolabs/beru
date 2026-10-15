@@ -2,11 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 import { createPathSecurity } from "../main/pathSecurity.js";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
 }));
+
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
 
 vi.mock("electron", () => ({
   dialog: { showOpenDialog: vi.fn() },
@@ -23,6 +28,8 @@ vi.mock("electron", () => ({
 
 vi.mock("../main/shared-state.js", () => ({
   getMainWindow: vi.fn(() => null),
+  isDev: false,
+  DEV_URL: "http://localhost:5173",
 }));
 vi.mock("../main/utils/dialog-history.js", () => ({
   showOpenDialog: vi.fn(),
@@ -79,7 +86,7 @@ describe("session:restorePaths", () => {
     registerFileHandlers(pathSecurity);
     const restore = mocks.handlers.get("session:restorePaths");
 
-    const result = await restore({}, { videoPaths: [outsideFile] });
+    const result = await restore(trustedSenderEvent, { videoPaths: [outsideFile] });
     expect(result.videos).toBe(0);
     expect(result.errors).toContain("Archivo fuera de ubicaciones permitidas");
   });
@@ -115,7 +122,7 @@ describe("session:restorePaths", () => {
     showOpenDialog.mockResolvedValue({ canceled: false, filePaths: [selected] });
     const { registerCompositionHandlers } = await import("../main/handlers/composition.js");
     registerCompositionHandlers(security);
-    const result = await mocks.handlers.get("composition:load")({}, {});
+    const result = await mocks.handlers.get("composition:load")(trustedSenderEvent, {});
     expect(result.success).toBe(true);
     expect(result.document.entries.map((entry) => entry.item.path)).toEqual([
       source,

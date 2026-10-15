@@ -3,9 +3,11 @@ import fs from "fs";
 import { collectVideoFiles } from "../utils/drop-resolver.js";
 import { VIDEO_EXT } from "../../shared/video-extensions.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
+import { isTrustedSender } from "../utils/ipc.js";
 
 export function registerDropHandlers(pathSecurity) {
-  ipcMain.handle(IPC_INVOKE.resolveDroppedPaths, async (_event, inputPaths) => {
+  ipcMain.handle(IPC_INVOKE.resolveDroppedPaths, async (event, inputPaths) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     if (!Array.isArray(inputPaths) || inputPaths.length === 0) {
       return { videoPaths: [], ignoredCount: 0 };
     }

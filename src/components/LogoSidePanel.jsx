@@ -1,51 +1,62 @@
 import { Suspense, useEffect, useState } from "react";
 import { shallow } from "zustand/shallow";
-import { FolderOpen, Eraser } from "lucide-react";
+import { FolderOpen, Eraser, CalendarClock } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import QueueSidebar from "./QueueSidebar";
 import { PropertiesPanel, LayerList, preloadEditorPanels } from "./editor-panels";
 import PanelLoading from "./PanelLoading";
+import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { EDITOR_TOOLS, TOOL_COLORS } from "../utils/editor-tools";
 
 function ToolGrid({ activeTool, enabled }) {
   const t = useT();
   return (
-    <div className="logo-tool-grid" role="toolbar" aria-label={t("toolbar.label")}>
-      {EDITOR_TOOLS.map(({ id, icon: Icon, labelKey }) => {
-        const active = activeTool === id;
-        return (
-          <button
-            key={id}
-            type="button"
-            className={`logo-tool${active ? " is-active" : ""}`}
-            style={active ? { "--logo-tool-color": TOOL_COLORS[id] } : undefined}
-            disabled={!enabled}
-            aria-pressed={active}
-            onClick={() => useEditorStore.getState().setActiveTool(id)}
-          >
-            <Icon size={16} strokeWidth={1.6} aria-hidden />
-            <span>{t(labelKey)}</span>
-          </button>
-        );
-      })}
-    </div>
+    <TooltipProvider>
+      <div className="logo-tool-grid" role="toolbar" aria-label={t("toolbar.label")}>
+        {EDITOR_TOOLS.map(({ id, icon: Icon, labelKey }) => {
+          const active = activeTool === id;
+          return (
+            <Tooltip key={id} label={t(labelKey)}>
+              <button
+                type="button"
+                className={`logo-tool${active ? " is-active" : ""}`}
+                style={active ? { "--logo-tool-color": TOOL_COLORS[id] } : undefined}
+                disabled={!enabled}
+                aria-pressed={active}
+                aria-label={t(labelKey)}
+                onClick={() => useEditorStore.getState().setActiveTool(id)}
+              >
+                <Icon size={16} strokeWidth={1.6} aria-hidden />
+              </button>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </TooltipProvider>
   );
 }
 
 export default function LogoSidePanel() {
   const t = useT();
-  const { hasSelection, queueCount, activeTool, currentRegion, selectedOperationIdx } =
-    useEditorStore(
-      (s) => ({
-        hasSelection: s.selectedIdx >= 0 && s.selectedIdx < s.queue.length,
-        queueCount: s.queue.length,
-        activeTool: s.activeTool,
-        currentRegion: s.currentRegion,
-        selectedOperationIdx: s.selectedOperationIdx,
-      }),
-      shallow,
-    );
+  const {
+    hasSelection,
+    queueCount,
+    activeTool,
+    currentRegion,
+    selectedOperationIdx,
+    editorWorkspace,
+  } = useEditorStore(
+    (s) => ({
+      editorWorkspace: s.editorWorkspace,
+      hasSelection: s.selectedIdx >= 0 && s.selectedIdx < s.queue.length,
+      queueCount: s.queue.length,
+      activeTool: s.activeTool,
+      currentRegion: s.currentRegion,
+      selectedOperationIdx: s.selectedOperationIdx,
+    }),
+    shallow,
+  );
   const [tab, setTab] = useState(hasSelection ? "tools" : "files");
 
   useEffect(() => {
@@ -56,9 +67,17 @@ export default function LogoSidePanel() {
     if (!hasSelection) setTab("files");
   }, [hasSelection]);
 
+  const isStampWorkspace = editorWorkspace === "datetime";
+
+  useEffect(() => {
+    if (isStampWorkspace && hasSelection) setTab("tools");
+  }, [isStampWorkspace, hasSelection]);
+
   const tabs = [
     { id: "files", icon: FolderOpen, label: t("logoWorkspace.files"), count: queueCount },
-    { id: "tools", icon: Eraser, label: t("props.modeLogo") },
+    isStampWorkspace
+      ? { id: "tools", icon: CalendarClock, label: t("datetime.title") }
+      : { id: "tools", icon: Eraser, label: t("props.modeLogo") },
   ];
 
   return (
@@ -86,10 +105,11 @@ export default function LogoSidePanel() {
           <QueueSidebar />
         ) : (
           <>
-            <div className="logo-side-section">
-              <span className="logo-side-section-title">{t("logoWorkspace.tools")}</span>
-              <ToolGrid activeTool={activeTool} enabled={hasSelection} />
-            </div>
+            {!isStampWorkspace && (
+              <div className="logo-side-section">
+                <ToolGrid activeTool={activeTool} enabled={hasSelection} />
+              </div>
+            )}
             <Suspense fallback={<PanelLoading label={t("workspace.properties")} />}>
               <PropertiesPanel />
               <LayerList />

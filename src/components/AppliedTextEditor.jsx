@@ -66,6 +66,18 @@ export default function AppliedTextEditor({ op, video, onPatch, title, showConte
             step={0.5}
           />
         </label>
+        <label>
+          <span className="cap-input-label">{t("props.textScaleX")}</span>
+          <input
+            type="number"
+            value={Math.round((op.textScaleX ?? 1) * 100)}
+            onChange={(e) => onPatch({ textScaleX: Number(e.target.value) / 100 })}
+            className="cap-input font-mono text-[11px]"
+            min={50}
+            max={300}
+            step={5}
+          />
+        </label>
       </div>
 
       <div>

@@ -3,10 +3,11 @@ import { getMainWindow } from "../shared-state.js";
 import { readSettings, writeSettings, ALLOWED_SETTINGS_KEYS } from "../utils/settings.js";
 import { applyWindowTheme } from "../utils/windowTheme.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
-import { handleIpc } from "../utils/ipc.js";
+import { handleIpc, isTrustedSender } from "../utils/ipc.js";
 
 export function registerSettingsHandlers() {
-  ipcMain.handle(IPC_INVOKE.loadSettings, async () => {
+  ipcMain.handle(IPC_INVOKE.loadSettings, async (event) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     return readSettings();
   });
 

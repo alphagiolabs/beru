@@ -88,6 +88,36 @@ describe("AppRail", () => {
     expect(findRailButton("Quitar logo").className).not.toMatch(/is-active/);
   });
 
+  it("opens the Fechero workspace from its own item right below the watermark", async () => {
+    useEditorStore.setState({ editorWorkspace: "logo" });
+    await renderRail();
+    const labels = Array.from(document.querySelectorAll(".app-rail button")).map((b) =>
+      b.getAttribute("aria-label"),
+    );
+    expect(labels.indexOf("Fechero")).toBe(labels.indexOf("Marca de agua") + 1);
+
+    await act(async () => {
+      findRailButton("Fechero").click();
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(useEditorStore.getState()).toMatchObject({
+      sidebarMode: "logo",
+      editorWorkspace: "datetime",
+      activeTool: "datetime",
+    });
+    expect(findRailButton("Fechero").className).toMatch(/is-active/);
+    expect(findRailButton("Quitar logo").className).not.toMatch(/is-active/);
+
+    await act(async () => {
+      findRailButton("Quitar logo").click();
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    expect(useEditorStore.getState()).toMatchObject({
+      editorWorkspace: "logo",
+      activeTool: "blur",
+    });
+  });
+
   it("switches back to the logo mode from the rail", async () => {
     useEditorStore.setState({ sidebarMode: "batch" });
     await renderRail();

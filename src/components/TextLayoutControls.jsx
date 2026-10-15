@@ -8,6 +8,7 @@ export default function TextLayoutControls({
   onPatch,
   showTextAlign = false,
   textAlignOptions = null,
+  showFlowControls = true,
 }) {
   const t = useT();
   const autoFit = !!values.autoFit;
@@ -66,20 +67,22 @@ export default function TextLayoutControls({
         role="group"
         aria-label={t("props.paragraphMetrics")}
       >
-        <label className="inspector-paragraph-metric">
-          <span className="inspector-paragraph-metric-key">{t("props.lineAbbr")}</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            aria-label={t("props.lineHeight")}
-            value={lineHeight}
-            onChange={(e) => patch({ lineHeight: Number(e.target.value) })}
-            className="inspector-paragraph-metric-input"
-            min={0.8}
-            max={3}
-            step={0.05}
-          />
-        </label>
+        {showFlowControls && (
+          <label className="inspector-paragraph-metric">
+            <span className="inspector-paragraph-metric-key">{t("props.lineAbbr")}</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              aria-label={t("props.lineHeight")}
+              value={lineHeight}
+              onChange={(e) => patch({ lineHeight: Number(e.target.value) })}
+              className="inspector-paragraph-metric-input"
+              min={0.8}
+              max={3}
+              step={0.05}
+            />
+          </label>
+        )}
         <label className="inspector-paragraph-metric">
           <span className="inspector-paragraph-metric-key">{t("props.marginAbbr")}</span>
           <input
@@ -95,39 +98,39 @@ export default function TextLayoutControls({
         </label>
       </div>
 
-      <div className="inspector-paragraph-list">
-        <ToggleSwitch
-          label={t("props.autoFit")}
-          checked={autoFit}
-          onChange={(next) => patch({ autoFit: next })}
-        />
-        <ToggleSwitch
-          label={t("props.lineWrap")}
-          checked={textWrap}
-          onChange={(next) => patch({ textWrap: next })}
-        />
-      </div>
+      {showFlowControls && (
+        <>
+          <div className="inspector-paragraph-list">
+            <ToggleSwitch
+              label={t("props.autoFit")}
+              checked={autoFit}
+              onChange={(next) => patch({ autoFit: next })}
+            />
+            <ToggleSwitch
+              label={t("props.lineWrap")}
+              checked={textWrap}
+              onChange={(next) => patch({ textWrap: next })}
+            />
+          </div>
 
-      <div className={`inspector-paragraph-truncate${autoFit ? " is-disabled" : ""}`}>
-        <span className="inspector-paragraph-micro">{t("props.truncate")}</span>
-        <SegmentedToolbar
-          ariaLabel={t("props.truncate")}
-          columns={3}
-          value={truncate}
-          disabled={autoFit}
-          onChange={(value) => patch({ truncate: value })}
-          options={TRUNCATE_MODES.map((m) => ({
-            value: m.value,
-            label: t(m.labelKey),
-            title: t(m.titleKey),
-            ariaLabel: t(m.titleKey),
-          }))}
-        />
-      </div>
-
-      {autoFit ? (
-        <p className="inspector-helper inspector-paragraph-hint">{t("logo.blurDurationHint")}</p>
-      ) : null}
+          <div className={`inspector-paragraph-truncate${autoFit ? " is-disabled" : ""}`}>
+            <span className="inspector-paragraph-micro">{t("props.truncate")}</span>
+            <SegmentedToolbar
+              ariaLabel={t("props.truncate")}
+              columns={3}
+              value={truncate}
+              disabled={autoFit}
+              onChange={(value) => patch({ truncate: value })}
+              options={TRUNCATE_MODES.map((m) => ({
+                value: m.value,
+                label: t(m.labelKey),
+                title: t(m.titleKey),
+                ariaLabel: t(m.titleKey),
+              }))}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

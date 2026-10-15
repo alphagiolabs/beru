@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import path from "path";
+import { pathToFileURL } from "url";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
@@ -9,7 +10,12 @@ const mocks = vi.hoisted(() => ({
   renderPreviewFrame: vi.fn(),
 }));
 
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
+
 vi.mock("electron", () => ({
+  app: { isPackaged: true },
   ipcMain: {
     handle: vi.fn((channel, handler) => {
       mocks.handlers.set(channel, handler);
@@ -60,7 +66,7 @@ describe("video IPC handlers", () => {
     registerVideoHandlers(pathSecurity);
 
     const handleBatch = mocks.handlers.get("fs:getVideoInfoBatch");
-    const results = await handleBatch({}, ["good.mp4", "bad.mp4"]);
+    const results = await handleBatch(trustedSenderEvent, ["good.mp4", "bad.mp4"]);
 
     expect(pathSecurity.validateReadableFile).toHaveBeenCalledTimes(2);
     expect(mocks.probeVideoFast).toHaveBeenCalledTimes(1);
@@ -77,10 +83,12 @@ describe("video IPC handlers", () => {
     const pathSecurity = { releaseVideoPaths: vi.fn() };
     registerVideoHandlers(pathSecurity);
     const release = mocks.handlers.get("video:releasePaths");
-    expect(release({}, ["selected.mp4"])).toBe(true);
+    expect(release(trustedSenderEvent, ["selected.mp4"])).toBe(true);
     expect(pathSecurity.releaseVideoPaths).toHaveBeenCalledWith(["selected.mp4"]);
-    expect(release({}, null)).toBe(false);
-    expect(() => release({}, Array(501).fill("a.mp4"))).toThrow("Demasiados videos");
+    expect(release(trustedSenderEvent, null)).toBe(false);
+    expect(() => release(trustedSenderEvent, Array(501).fill("a.mp4"))).toThrow(
+      "Demasiados videos",
+    );
     expect(pathSecurity.releaseVideoPaths).toHaveBeenCalledTimes(1);
   });
 
@@ -99,7 +107,7 @@ describe("video IPC handlers", () => {
     registerVideoHandlers(pathSecurity);
 
     const handleBatch = mocks.handlers.get("video:thumbnailBatch");
-    const results = await handleBatch({}, ["bad.mp4", "good.mp4"]);
+    const results = await handleBatch(trustedSenderEvent, ["bad.mp4", "good.mp4"]);
 
     expect(pathSecurity.validateReadableFile).toHaveBeenCalledTimes(2);
     expect(mocks.extractThumbnail).toHaveBeenCalledTimes(1);
@@ -123,13 +131,10 @@ describe("video IPC handlers", () => {
 
     registerVideoHandlers(pathSecurity);
     const handle = mocks.handlers.get("video:renderPreviewFrame");
-    const result = await handle(
-      {},
-      {
-        input_path: "good.mp4",
-        operations: [{ mode: "image", image_path: evilImage }],
-      },
-    );
+    const result = await handle(trustedSenderEvent, {
+      input_path: "good.mp4",
+      operations: [{ mode: "image", image_path: evilImage }],
+    });
 
     expect(result).toEqual({ ok: false, error: "Imagen no permitida: Ruta no permitida" });
     expect(mocks.renderPreviewFrame).not.toHaveBeenCalled();
@@ -152,13 +157,10 @@ describe("video IPC handlers", () => {
     mocks.renderPreviewFrame.mockResolvedValue({ ok: true, dataUrl: "data:image/jpeg;base64,x" });
     registerVideoHandlers(pathSecurity);
     const handle = mocks.handlers.get("video:renderPreviewFrame");
-    const result = await handle(
-      {},
-      {
-        input_path: "good.mp4",
-        operations: [{ mode: "image", image_path: resolvedImage }],
-      },
-    );
+    const result = await handle(trustedSenderEvent, {
+      input_path: "good.mp4",
+      operations: [{ mode: "image", image_path: resolvedImage }],
+    });
 
     expect(result).toEqual({ ok: true, dataUrl: "data:image/jpeg;base64,x" });
     expect(mocks.renderPreviewFrame).toHaveBeenCalledTimes(1);

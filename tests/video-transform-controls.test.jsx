@@ -55,12 +55,75 @@ describe("VideoTransformControls", () => {
     expect(useEditorStore.getState().queue[0].transform.rotation).toBe(90);
   });
 
-  it("shows the effective output and sets a height that never upscales", () => {
-    act(() => button("720p").click());
-    expect(useEditorStore.getState().queue[0].transform.outputHeight).toBe(720);
-    expect(document.body.textContent).toMatch(/Salida 1280×720 px/);
+  it("sets a resolution keeping the output aspect", () => {
     act(() => button("480p").click());
-    expect(document.body.textContent).toMatch(/Salida 852×480 px/);
+    expect(useEditorStore.getState().queue[0].transform).toMatchObject({
+      outputWidth: 854,
+      outputHeight: 480,
+    });
+    expect(document.body.textContent).toMatch(/Salida 854×480 px/);
+  });
+
+  const setSource = (width, height, operations = []) =>
+    useEditorStore.setState({
+      queue: [{ ...useEditorStore.getState().queue[0], width, height, operations }],
+    });
+
+  it("upscales a near-16:9 source to a clean 1920x1080 without bars", () => {
+    act(() => setSource(848, 478));
+    act(() => button("1080p").click());
+    expect(useEditorStore.getState().queue[0].transform).toMatchObject({
+      outputWidth: 1920,
+      outputHeight: 1080,
+      fitMode: "pad",
+    });
+    expect(document.body.textContent).toMatch(/Salida 1920×1080 px/);
+    expect(button("16:9").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  const typeSize = (label, value) => {
+    const input = document.querySelector(`input[aria-label="${label}"]`);
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    act(() => {
+      setter.call(input, String(value));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const pending = useEditorStore.getState().queue[0].transform;
+    act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    return pending;
+  };
+  const transform = () => useEditorStore.getState().queue[0].transform;
+
+  it("types an exact size, keeping the aspect while linked", () => {
+    expect(typeSize("Ancho", 1920).outputWidth).toBeNull();
+    expect(transform()).toMatchObject({ outputWidth: 1920, outputHeight: 1080, fitMode: "pad" });
+    expect(document.body.textContent).toMatch(/Salida 1920×1080 px/);
+
+    act(() => button("Cambiar ancho y alto por separado").click());
+    typeSize("Alto", 1440);
+    expect(transform()).toMatchObject({ outputWidth: 1920, outputHeight: 1440 });
+    act(() => button("Estirar").click());
+    expect(transform().fitMode).toBe("stretch");
+  });
+
+  it("stretches a 4:3 source to 16:9 and keeps the Fechero undistorted", () => {
+    act(() =>
+      setSource(960, 720, [
+        {
+          id: "s",
+          mode: "datetime",
+          region: { x: 0.1, y: 0.05, w: 0.6, h: 0.1 },
+          fontSize: 40,
+          textScaleX: 2,
+        },
+      ]),
+    );
+    act(() => button("16:9").click());
+    act(() => button("Estirar").click());
+    expect(transform()).toMatchObject({ outputWidth: 1280, outputHeight: 720, fitMode: "stretch" });
+    const [stamp] = useEditorStore.getState().queue[0].operations;
+    expect(stamp).toMatchObject({ fontSize: 40, textScaleX: 2 });
+    expect(stamp.region.w * 1280).toBeCloseTo(0.6 * 960, 5);
   });
 
   it("is locked while a run is processing", () => {

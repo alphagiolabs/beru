@@ -1,5 +1,6 @@
 import { audioAssetJob } from "./audio-asset.js";
 import { normalizeTiming } from "./clip-timeline.js";
+import { transformJobFields } from "./video-transform.js";
 
 export const JOB_MANIFEST_TYPE = "beru-job-manifest";
 export const JOB_MANIFEST_VERSION = 1;
@@ -24,6 +25,8 @@ const VIDEO_EDIT_FIELDS = [
   "flip_h",
   "flip_v",
   "output_height",
+  "output_width",
+  "fit_mode",
   "audio_gain",
   "audio_muted",
   "external_audio",
@@ -118,11 +121,14 @@ export function normalizeJob(job, index = 0) {
     pix_fmt: pixFmt || DEFAULT_PIX_FMT,
     audio_codec: typeof job.audio_codec === "string" ? job.audio_codec : "",
     audio_channels: Math.trunc(toFiniteNumber(job.audio_channels, 0)),
-    rotation: [0, 90, 180, 270].includes(Number(job.rotation)) ? Number(job.rotation) : 0,
-    flip_h: job.flip_h === true,
-    flip_v: job.flip_v === true,
-    output_height:
-      Number.isInteger(job.output_height) && job.output_height > 0 ? job.output_height : null,
+    ...transformJobFields({
+      rotation: job.rotation,
+      flipH: job.flip_h,
+      flipV: job.flip_v,
+      outputHeight: job.output_height,
+      outputWidth: job.output_width,
+      fitMode: job.fit_mode,
+    }),
     audio_gain: Math.min(1, Math.max(0, audioGain)),
     audio_muted: job.audio_muted === true,
     external_audio: externalAudio,

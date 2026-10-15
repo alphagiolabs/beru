@@ -84,6 +84,7 @@ export const IPC_EVENTS = {
   onJobCancelled: "process:jobCancelled",
   onFinished: "process:finished",
   onRunStarted: "process:runStarted",
+  onRunWarning: "process:runWarning",
   onError: "process:error",
   onEditorExportProgress: "editor:exportProgress",
 };

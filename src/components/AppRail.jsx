@@ -13,6 +13,7 @@ import {
   LogOut,
   Combine,
   Focus,
+  CalendarClock,
 } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { isSupabaseConfigured } from "../lib/supabaseClient";
@@ -102,24 +103,33 @@ function AccountMenu() {
 }
 
 export default function AppRail() {
-  const { sidebarMode, isProcessing, language, themeActiveSlot, themeSlot1, themeSlot2 } =
-    useEditorStore(
-      (s) => ({
-        sidebarMode: s.sidebarMode,
-        isProcessing: s.isProcessing,
-        language: s.language,
-        themeActiveSlot: s.themeActiveSlot,
-        themeSlot1: s.themeSlot1,
-        themeSlot2: s.themeSlot2,
-      }),
-      shallow,
-    );
+  const {
+    sidebarMode,
+    editorWorkspace,
+    isProcessing,
+    language,
+    themeActiveSlot,
+    themeSlot1,
+    themeSlot2,
+  } = useEditorStore(
+    (s) => ({
+      sidebarMode: s.sidebarMode,
+      editorWorkspace: s.editorWorkspace,
+      isProcessing: s.isProcessing,
+      language: s.language,
+      themeActiveSlot: s.themeActiveSlot,
+      themeSlot1: s.themeSlot1,
+      themeSlot2: s.themeSlot2,
+    }),
+    shallow,
+  );
   const customThemes = useEditorStore((s) => s.customThemes);
   const get = useEditorStore.getState;
   const showToast = useEditorStore((s) => s.showToast);
   const t = useT();
   const isLogoMode = sidebarMode === "logo";
   const isEditorMode = sidebarMode === "editor";
+  const isStampWorkspace = isLogoMode && editorWorkspace === "datetime";
   const api = window.api;
   const themeSwitchLabel = t("header.themeSwitchTo", {
     name: resolveThemeName(themeActiveSlot === 1 ? themeSlot2 : themeSlot1, customThemes, t),
@@ -132,7 +142,7 @@ export default function AppRail() {
           <RailItem
             label={t("props.modeLogo")}
             icon={Eraser}
-            active={isLogoMode}
+            active={isLogoMode && !isStampWorkspace}
             onClick={() => get().setSidebarMode("logo")}
           />
           <RailItem
@@ -198,6 +208,13 @@ export default function AppRail() {
                 icon={Droplets}
                 disabled={isProcessing}
                 onClick={() => get().setShowWatermarkModal(true)}
+              />
+              <RailItem
+                label={t("toolbar.datetime")}
+                onIntent={preloadEditorPanels}
+                icon={CalendarClock}
+                active={isStampWorkspace}
+                onClick={() => get().openDateTimeWorkspace()}
               />
             </div>
 

@@ -6,6 +6,7 @@ import { extractThumbnail, extractFilmstrip } from "../utils/thumbnail.js";
 import { renderPreviewFrame, renderSourceFrame } from "../utils/preview-frame-cache.js";
 import { sanitizeJobMedia } from "../utils/process-media-validation.js";
 import { runMediaTask } from "../utils/media-task-pool.js";
+import { isTrustedSender } from "../utils/ipc.js";
 
 const MAX_BATCH_PATHS = 500;
 
@@ -35,7 +36,8 @@ function collectValidVideoFiles(filePaths, pathSecurity) {
 
 export function registerVideoHandlers(pathSecurity) {
   const filmstripRequests = new Map();
-  ipcMain.handle(IPC_INVOKE.releaseVideoPaths, (_event, filePaths, retainedPaths) => {
+  ipcMain.handle(IPC_INVOKE.releaseVideoPaths, (event, filePaths, retainedPaths) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     if (!Array.isArray(filePaths)) return false;
     if (filePaths.length > MAX_BATCH_PATHS)
       throw new Error("Demasiados videos en una sola solicitud");
@@ -48,7 +50,8 @@ export function registerVideoHandlers(pathSecurity) {
     else pathSecurity.releaseVideoPaths(filePaths, retainedPaths);
     return true;
   });
-  ipcMain.handle(IPC_INVOKE.getVideoInfo, async (_event, filePath) => {
+  ipcMain.handle(IPC_INVOKE.getVideoInfo, async (event, filePath) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const check = pathSecurity.validateReadableFile(filePath, "video");
     if (!check.ok) return { exists: false, width: 0, height: 0, duration: 0, error: check.error };
     try {
@@ -58,7 +61,8 @@ export function registerVideoHandlers(pathSecurity) {
     }
   });
 
-  ipcMain.handle(IPC_INVOKE.getVideoInfoBatch, async (_event, filePaths) => {
+  ipcMain.handle(IPC_INVOKE.getVideoInfoBatch, async (event, filePaths) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
     if (filePaths.length > MAX_BATCH_PATHS) {
       throw new Error("Demasiados videos en una sola solicitud");
@@ -88,7 +92,8 @@ export function registerVideoHandlers(pathSecurity) {
     return results;
   });
 
-  ipcMain.handle(IPC_INVOKE.getThumbnail, (_event, filePath, options) => {
+  ipcMain.handle(IPC_INVOKE.getThumbnail, (event, filePath, options) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const check = pathSecurity.validateReadableFile(filePath, "video");
     if (!check.ok) return null;
     return extractThumbnail(check.resolvedPath, 80, {
@@ -97,7 +102,8 @@ export function registerVideoHandlers(pathSecurity) {
     });
   });
 
-  ipcMain.handle(IPC_INVOKE.getThumbnailBatch, async (_event, filePaths) => {
+  ipcMain.handle(IPC_INVOKE.getThumbnailBatch, async (event, filePaths) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     if (!Array.isArray(filePaths) || filePaths.length === 0) return [];
     if (filePaths.length > MAX_BATCH_PATHS) {
       throw new Error("Demasiados videos en una sola solicitud");
@@ -115,6 +121,7 @@ export function registerVideoHandlers(pathSecurity) {
   });
 
   ipcMain.handle(IPC_INVOKE.getFilmstrip, async (event, payload) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const check = pathSecurity.validateReadableFile(payload?.path, "video");
     if (!check.ok) return null;
     const count = Math.max(1, Math.min(60, Math.floor(Number(payload?.count) || 20)));
@@ -175,6 +182,7 @@ export function registerVideoHandlers(pathSecurity) {
   });
 
   ipcMain.handle(IPC_INVOKE.cancelFilmstrip, (event, requestId) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     for (const request of filmstripRequests.values()) {
       if (request.senderId === event.sender.id && request.requestId === requestId) {
         request.controller.abort();
@@ -184,7 +192,8 @@ export function registerVideoHandlers(pathSecurity) {
     return false;
   });
 
-  ipcMain.handle(IPC_INVOKE.renderPreviewFrame, (_event, payload) => {
+  ipcMain.handle(IPC_INVOKE.renderPreviewFrame, (event, payload) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     if (!payload || typeof payload !== "object") {
       return { ok: false, error: "Payload de preview inválido" };
     }
@@ -197,7 +206,8 @@ export function registerVideoHandlers(pathSecurity) {
     return renderPreviewFrame(safePayload);
   });
 
-  ipcMain.handle(IPC_INVOKE.renderSourceFrame, (_event, payload) => {
+  ipcMain.handle(IPC_INVOKE.renderSourceFrame, (event, payload) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
     const filePath = payload?.input_path;
     const check = pathSecurity.validateReadableFile(filePath, "video");
     if (!check.ok) {
