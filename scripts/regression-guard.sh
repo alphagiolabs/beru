@@ -10,7 +10,9 @@ else
     RED=''; GREEN=''; YELLOW=''; CYAN=''; MAGENTA=''; BOLD=''; NC=''
 fi
 
-BERU_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Validate the checkout the hook was invoked from: in a git worktree that is
+# the worktree itself, not the checkout that happens to hold this script.
+BERU_DIR="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "$0")/.." && pwd))"
 cd "$BERU_DIR"
 
 PASS=0; FAIL=0; ERRORS=""
