@@ -50,10 +50,10 @@ class ProcessorContextTests(unittest.TestCase):
                 workers=capacity._memory_cap_workers(None,0,4,True,"fast",jobs=[job])
                 self.assertEqual(workers,1,"A composition must not schedule concurrent stages beyond its RAM budget")
 
-    def test_intermediate_clip_failure_emits_only_the_parent_job_terminal(self):
+    def test_render_failure_emits_only_the_parent_job_terminal(self):
         info = {"width": 64, "height": 64, "duration": 1, "frame_rate": 30, "pix_fmt": "yuv420p"}
         for kind, phase in (("video", "cycle"), ("video", "output"),
-                            ("composition", "cycle"), ("composition", "edited"), ("composition", "normalized")):
+                            ("composition", "cycle"), ("composition", "edited"), ("composition", "output")):
             for cancelled in (False, True):
                 with self.subTest(kind=kind, phase=phase, cancelled=cancelled), tempfile.TemporaryDirectory() as tmp:
                     folder = Path(tmp)

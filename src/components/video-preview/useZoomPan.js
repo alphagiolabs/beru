@@ -24,28 +24,31 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     setPan(p);
   }, []);
 
-  const clampPan = useCallback((px, py, z) => {
-    const v = videoRef.current;
-    const outer = outerRef.current;
-    if (!v || !outer || z <= 1) return { x: 0, y: 0 };
-    const baseW = v.offsetWidth || 1;
-    const baseH = v.offsetHeight || 1;
+  const clampPan = useCallback(
+    (px, py, z) => {
+      const v = videoRef.current;
+      const outer = outerRef.current;
+      if (!v || !outer || z <= 1) return { x: 0, y: 0 };
+      const baseW = v.offsetWidth || 1;
+      const baseH = v.offsetHeight || 1;
 
-    const centerPanX = (baseW * (1 - z)) / 2;
-    const halfRangeX = (baseW * z - outer.clientWidth) / 2;
-    const minX = centerPanX - Math.max(0, halfRangeX);
-    const maxX = centerPanX + Math.max(0, halfRangeX);
+      const centerPanX = (baseW * (1 - z)) / 2;
+      const halfRangeX = (baseW * z - outer.clientWidth) / 2;
+      const minX = centerPanX - Math.max(0, halfRangeX);
+      const maxX = centerPanX + Math.max(0, halfRangeX);
 
-    const centerPanY = (baseH * (1 - z)) / 2;
-    const halfRangeY = (baseH * z - outer.clientHeight) / 2;
-    const minY = centerPanY - Math.max(0, halfRangeY);
-    const maxY = centerPanY + Math.max(0, halfRangeY);
+      const centerPanY = (baseH * (1 - z)) / 2;
+      const halfRangeY = (baseH * z - outer.clientHeight) / 2;
+      const minY = centerPanY - Math.max(0, halfRangeY);
+      const maxY = centerPanY + Math.max(0, halfRangeY);
 
-    return {
-      x: Math.round(Math.max(minX, Math.min(maxX, px)) * 10000) / 10000,
-      y: Math.round(Math.max(minY, Math.min(maxY, py)) * 10000) / 10000,
-    };
-  }, []);
+      return {
+        x: Math.round(Math.max(minX, Math.min(maxX, px)) * 10000) / 10000,
+        y: Math.round(Math.max(minY, Math.min(maxY, py)) * 10000) / 10000,
+      };
+    },
+    [videoRef],
+  );
 
   const applyZoom = useCallback(
     (nextZ, screenPoint) => {
@@ -70,7 +73,7 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
       setZoomBoth(z1);
       setPanBoth(clamped);
     },
-    [clampPan, setZoomBoth, setPanBoth],
+    [videoRef, clampPan, setZoomBoth, setPanBoth],
   );
 
   const zoomIn = useCallback(() => {

@@ -1,4 +1,5 @@
 import os from "os";
+import policy from "../resources/worker-policy.json" with { type: "json" };
 import {
   ENCODE_PROFILES,
   normalizeEncodeProfile,
@@ -6,32 +7,12 @@ import {
   getEffectiveHwEncoder,
 } from "./encodeProfiles.js";
 
-const MAX_BATCH_WORKERS = 16;
-
-// Keep RAM estimates and worker caps in sync with python/capacity.py.
-const RAM_PER_JOB_MB = {
-  software: 512,
-  nvenc: 256,
-  qsv: 192,
-  amf: 128,
-  mf: 64,
-};
-
-const X264_PRESET_RAM_MULT = {
-  ultrafast: 0.6,
-  superfast: 0.7,
-  veryfast: 0.8,
-  faster: 0.9,
-  fast: 1.0,
-  medium: 1.3,
-  slow: 1.6,
-  slower: 1.9,
-  veryslow: 2.2,
-};
-
-const HEAVY_DECODE_CODECS = new Set(["hevc", "h265", "av1", "vp9", "prores", "wmv3"]);
-
-const HIGH_BIT_DEPTH_TOKENS = ["p10", "p12", "p16", "10le", "10be", "12le", "12be", "16le", "16be"];
+const MAX_BATCH_WORKERS = policy.maxWorkers;
+const RAM_PER_JOB_MB = policy.ramPerJobMb;
+const X264_PRESET_RAM_MULT = policy.x264PresetRamMultiplier;
+const HEAVY_DECODE_CODECS = new Set(policy.heavyDecodeCodecs);
+const HIGH_BIT_DEPTH_TOKENS = policy.highBitDepthTokens;
+const ENCODER_CAPS = policy.encoderCaps;
 
 function getAvailableRamMb() {
   try {
@@ -114,21 +95,6 @@ export function memoryCapWorkers({
   const cap = Math.max(1, Math.floor((avail * 0.8) / perJob));
   return Math.max(1, Math.min(cap, desiredWorkers, MAX_BATCH_WORKERS));
 }
-
-const ENCODER_CAPS = {
-  conservative: {
-    h264_mf: 1,
-    h264_nvenc: 2,
-    h264_qsv: 2,
-    h264_amf: 2,
-  },
-  balanced: {
-    h264_mf: 1,
-    h264_nvenc: 5,
-    h264_qsv: 5,
-    h264_amf: 4,
-  },
-};
 
 export function resolveBatchWorkers({
   hwEncoder = null,

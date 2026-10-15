@@ -150,9 +150,15 @@ export function jobInputClips(job) {
 }
 
 export function jobMediaSources(job) {
-  return jobInputClips(job).flatMap((clip) => {
-    const sources = [{ path: clip?.input_path, kind: "video" }];
-    if (clip?.kind === "stabilization") return sources;
+  const sources =
+    job?.kind === "composition"
+      ? (job.overlays ?? [])
+          .filter((o) => o.kind === "image")
+          .map((o) => ({ path: o.source?.path, kind: "image" }))
+      : [];
+  for (const clip of jobInputClips(job)) {
+    sources.push({ path: clip?.input_path, kind: "video" });
+    if (clip?.kind === "stabilization") continue;
     if (clip?.external_audio) sources.push({ path: clip.external_audio.path, kind: "audio" });
     for (const op of clip?.operations || []) {
       for (const imagePath of [op.image_path, op.delogo_image_path])
@@ -162,8 +168,8 @@ export function jobMediaSources(job) {
       const imagePath = clip.watermark.imagePath || clip.watermark.watermark_image;
       if (imagePath) sources.push({ path: imagePath, kind: "image" });
     }
-    return sources;
-  });
+  }
+  return sources;
 }
 
 export function normalizeManifest(payload) {

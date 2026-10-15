@@ -24,9 +24,25 @@ export function sanitizeJobMedia(job, pathSecurity, { outputDirectory } = {}) {
     return {
       ...job,
       clips: job.clips.map((clip) => sanitizeJobMedia(clip, pathSecurity)),
+      ...(job.overlays
+        ? {
+            overlays: job.overlays.map((overlay) => {
+              if (overlay.kind !== "image") return overlay;
+              const check = pathSecurity.validateReadableFile(overlay.source.path, "image");
+              if (!check.ok) throw new Error(`Imagen no permitida: ${check.error}`);
+              return {
+                ...overlay,
+                source: { ...overlay.source, path: check.resolvedPath },
+                source_root: path.dirname(check.resolvedPath),
+              };
+            }),
+          }
+        : {}),
       ...(outputDirectory != null
         ? {
-            output_path: deriveOutputPath(outputDirectory, job.output_path),
+            output_path: deriveOutputPath(outputDirectory, job.output_path, {
+              frame: job.frame != null,
+            }),
             output_root: outputDirectory,
           }
         : {}),

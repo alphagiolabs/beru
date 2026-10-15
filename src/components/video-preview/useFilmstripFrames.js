@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 const FRAME_HEIGHT = 64;
 const EMPTY = { frames: [], aspect: 16 / 9 };
 
-export default function useFilmstripFrames(path, duration, count = 20) {
-  const source = JSON.stringify([path, duration, count]);
+export default function useFilmstripFrames(path, duration, count = 20, { start = 0, owner } = {}) {
+  const source = JSON.stringify([path, duration, count, start]);
   const [state, setState] = useState(EMPTY);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ export default function useFilmstripFrames(path, duration, count = 20) {
       });
     });
     window.api
-      .getFilmstrip({ path, duration, count, height: FRAME_HEIGHT, requestId })
+      .getFilmstrip({ path, duration, count, start, owner, height: FRAME_HEIGHT, requestId })
       .then((result) => {
         if (active && result?.frames?.length) {
           setState({ source, frames: result.frames, aspect: result.aspect || 16 / 9 });
@@ -54,7 +54,7 @@ export default function useFilmstripFrames(path, duration, count = 20) {
       unsubscribe?.();
       if (pending) window.api.cancelFilmstrip?.(requestId)?.catch(() => {});
     };
-  }, [path, duration, count, source]);
+  }, [path, duration, count, start, owner, source]);
 
   return state.source === source ? state : EMPTY;
 }

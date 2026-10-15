@@ -158,7 +158,6 @@ def test_motion_cuts_and_preview(folder):
         preview = decode(None, data=image)[0]
         difference = float(np.abs(preview.astype(float) - actual[index]).mean())
         assert difference < 1, ("preview/export misalignment", index, difference)
-    # Independent cut oracle: rendering each scene alone must give the same repair.
     for start, end in ((0, 11), (11, 21)):
         segment = source(folder, f"scene-{start}", marked[start:end])
         segment_out = decode(export(segment, folder, f"scene-out-{start}", [OP]))

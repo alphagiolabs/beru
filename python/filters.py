@@ -33,7 +33,7 @@ from op_shared import (
     _region_to_pixels,
 )
 from text_layout_helpers import (
-    _apply_letter_spacing_fallback,
+    _approximate_letter_spacing_with_hair_spaces,
     _build_region_bg_drawbox,
     _layout_export_text,
     _text_bg_enabled,
@@ -197,7 +197,7 @@ def build_drawtext(op, *, ffmpeg_path=None, expansions=None):
     native_letter_spacing = spacing_px != 0 and _drawtext_supports("spacing", ffmpeg_path)
     tight_glyph_layout = False
     if spacing_px > 0 and not native_letter_spacing:
-        text = _apply_letter_spacing_fallback(text, spacing_px, font_size)
+        text = _approximate_letter_spacing_with_hair_spaces(text, spacing_px, font_size)
     elif spacing_px < 0 and not native_letter_spacing:
         tight_glyph_layout = True
 

@@ -5,12 +5,20 @@ import unittest
 from pathlib import Path
 
 import clip_timing
+from composition_limits import LIMITS as COMPOSITION_LIMITS
 
 ROOT = Path(__file__).resolve().parents[1]
 LIMITS = json.loads((ROOT / "resources" / "processing-limits.json").read_text(encoding="utf-8"))
 
 
 class ProcessingLimitsTest(unittest.TestCase):
+    def test_compositions_share_processing_timing_limits(self):
+        self.assertEqual(COMPOSITION_LIMITS["minRate"], LIMITS["min_rate"])
+        self.assertEqual(COMPOSITION_LIMITS["maxRate"], LIMITS["max_rate"])
+        self.assertEqual(COMPOSITION_LIMITS["minRepeatCount"], LIMITS["min_repeat_count"])
+        self.assertEqual(COMPOSITION_LIMITS["maxRepeatCount"], LIMITS["max_repeat_count"])
+        self.assertEqual(COMPOSITION_LIMITS["maxDurationSeconds"], LIMITS["max_output_duration_seconds"])
+
     def test_constants_match_json(self):
         self.assertEqual(clip_timing.MIN_RATE, LIMITS["min_rate"])
         self.assertEqual(clip_timing.MAX_RATE, LIMITS["max_rate"])

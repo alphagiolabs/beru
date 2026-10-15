@@ -1,5 +1,13 @@
+import {
+  COMPOSITION_LIMITS,
+  validateCompositionCanvas,
+  validateCompositionFraming,
+  validateCompositionOverlay,
+} from "./composition-settings.js";
+
 import { normalizeVideoSettings } from "./video-settings.js";
 import { clipTimeline } from "./clip-timeline.js";
+import { OVERLAY_MAX_COUNT } from "./overlay-style.js";
 
 export const COMPOSITION_TYPE = "beru-composition";
 export const COMPOSITION_VERSION = 1;
@@ -20,9 +28,9 @@ const ITEM_FIELDS = [
   "audioCodec",
   "audioChannels",
   "operations",
+  "framing",
+  "sourceIdentity",
 ];
-const canvasSize = (value) =>
-  Number.isInteger(value) && value >= 16 && value <= 4096 && value % 2 === 0;
 
 export function compositionItem(value) {
   if (
@@ -48,6 +56,7 @@ export function compositionItem(value) {
       end = item.trimEnd ?? item.duration;
     if (![start, end].every(Number.isFinite) || start < 0 || end > item.duration || end <= start)
       return null;
+    if (item.framing != null && validateCompositionFraming(item.framing)) return null;
     Object.assign(item, normalizeVideoSettings(value));
     const timeline = clipTimeline(item);
     return timeline.cycleDuration > 0 ? item : null;
@@ -61,14 +70,12 @@ export function parseCompositionDocument(value) {
     !value ||
     value.type !== COMPOSITION_TYPE ||
     value.version !== COMPOSITION_VERSION ||
-    !canvasSize(value.canvas?.width) ||
-    !canvasSize(value.canvas?.height) ||
-    !["contain", "cover"].includes(value.canvas?.fit) ||
+    validateCompositionCanvas(value.canvas) ||
     !Number.isFinite(value.fps) ||
-    value.fps < 1 ||
-    value.fps > 120 ||
+    value.fps < COMPOSITION_LIMITS.minFps ||
+    value.fps > COMPOSITION_LIMITS.maxFps ||
     !Array.isArray(value.entries) ||
-    value.entries.length > 50
+    value.entries.length > COMPOSITION_LIMITS.maxClips
   )
     return null;
   const entries = value.entries.map((entry) => ({
@@ -80,27 +87,42 @@ export function parseCompositionDocument(value) {
     new Set(entries.map((entry) => entry.id)).size !== entries.length
   )
     return null;
-  const duration = compositionDuration({ entries, fps: value.fps });
-  if (duration > 7200) return null;
+  const overlays = value.overlays ?? [];
+  if (
+    !Array.isArray(overlays) ||
+    overlays.length > OVERLAY_MAX_COUNT ||
+    overlays.some(validateCompositionOverlay)
+  )
+    return null;
+  const duration = compositionDuration({ entries, fps: value.fps, overlays });
+  if (duration > COMPOSITION_LIMITS.maxDurationSeconds) return null;
   return {
     type: COMPOSITION_TYPE,
     version: COMPOSITION_VERSION,
-    canvas: { width: value.canvas.width, height: value.canvas.height, fit: value.canvas.fit },
+    canvas: {
+      width: value.canvas.width,
+      height: value.canvas.height,
+      fit: value.canvas.fit ?? "contain",
+      ...(value.canvas.background != null ? { background: value.canvas.background } : {}),
+    },
     fps: value.fps,
     outputName:
       typeof value.outputName === "string" ? value.outputName.slice(0, 150) : "composition",
     entries,
+    ...(value.overlays != null ? { overlays: JSON.parse(JSON.stringify(overlays)) } : {}),
   };
 }
 
 export function compositionDuration(document) {
-  return (
+  return Math.max(
+    0,
+    ...(document?.overlays ?? []).map((overlay) => overlay.endUs / 1e6),
     document?.entries.reduce(
       (sum, entry) =>
         sum +
         Math.ceil(clipTimeline(entry.item).totalDuration * document.fps - 1e-8) / document.fps,
       0,
-    ) || 0
+    ) || 0,
   );
 }
 
@@ -109,8 +131,11 @@ export function compositionMediaPaths(document) {
   return {
     videoPaths: items.map((item) => item.path),
     audioPaths: items.map((item) => item.externalAudio?.path).filter(Boolean),
-    imagePaths: items.flatMap((item) =>
-      item.operations.flatMap((op) => [op.imagePath, op.delogoImagePath].filter(Boolean)),
-    ),
+    imagePaths: [
+      ...(document.overlays ?? []).filter((o) => o.kind === "image").map((o) => o.source.path),
+      ...items.flatMap((item) =>
+        item.operations.flatMap((op) => [op.imagePath, op.delogoImagePath].filter(Boolean)),
+      ),
+    ],
   };
 }

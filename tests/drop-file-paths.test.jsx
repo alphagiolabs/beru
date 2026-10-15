@@ -125,6 +125,44 @@ describe("drop file paths", () => {
     expect(resolveDroppedPaths).toHaveBeenCalledWith(["C:\\videos\\legacy.mp4"]);
   });
 
+  it("imports into the video editor and reports the ignored files there too", async () => {
+    resolveDroppedPaths.mockResolvedValueOnce({
+      videoPaths: ["C:\\videos\\a.mp4"],
+      ignoredCount: 2,
+    });
+    window.api.importEditorVideos = vi.fn(async () => ({
+      success: true,
+      sources: [
+        {
+          path: "C:\\videos\\a.mp4",
+          filename: "a.mp4",
+          sizeBytes: 1,
+          mtimeMs: 1,
+          metadata: { durationUs: 1_000_000, width: 640, height: 360, hasAudio: false },
+        },
+      ],
+      errors: [],
+    }));
+    const file = new File(["x"], "a.mp4", { type: "video/mp4" });
+    file.__dropPath = "C:\\videos\\a.mp4";
+
+    await act(async () => {
+      useEditorStore.setState({ sidebarMode: "editor" });
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    await act(async () => {
+      dispatchDrop([file]);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    await vi.waitFor(() =>
+      expect(useEditorStore.getState().appToast?.text).toBe(
+        "1 video(s) agregado(s) · 2 ignorado(s)",
+      ),
+    );
+    expect(window.api.importEditorVideos).toHaveBeenCalledWith({ paths: ["C:\\videos\\a.mp4"] });
+  });
+
   it("warns instead of calling main when no path can be resolved", async () => {
     const file = new File(["x"], "ghost.mp4", { type: "video/mp4" });
 

@@ -57,6 +57,18 @@ export const IPC_INVOKE = {
   cancelFilmstrip: "video:cancelFilmstrip",
   renderPreviewFrame: "video:renderPreviewFrame",
   renderSourceFrame: "video:renderSourceFrame",
+  openEditorProject: "editor:openProject",
+  saveEditorProject: "editor:saveProject",
+  pickEditorReplacement: "editor:pickReplacement",
+  writeEditorAutosave: "editor:writeAutosave",
+  readEditorAutosave: "editor:readAutosave",
+  clearEditorAutosave: "editor:clearAutosave",
+  importEditorVideos: "editor:importVideos",
+  importEditorImage: "editor:importImage",
+  exportEditorComposition: "editor:exportComposition",
+  cancelEditorExport: "editor:cancelExport",
+  createEditorPreviewProxy: "editor:createPreviewProxy",
+  renderEditorExactFrame: "editor:renderExactFrame",
 };
 
 export const IPC_EVENTS = {
@@ -74,6 +86,7 @@ export const IPC_EVENTS = {
   onRunStarted: "process:runStarted",
   onRunWarning: "process:runWarning",
   onError: "process:error",
+  onEditorExportProgress: "editor:exportProgress",
 };
 
 export function emitRunEvent(send, channel, runId, payload = {}) {

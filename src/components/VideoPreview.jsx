@@ -81,60 +81,32 @@ export default function VideoPreview() {
   const getBatchPreviewPayload = useEditorStore((s) => s.getBatchPreviewPayload);
   const globalTextStyle = useEditorStore(getGlobalTextStyleFromState, shallow);
   const videoRef = useRef(null);
-  const {
-    timeEpoch,
-    currentTimeRef,
-    duration,
-    trimStart,
-    trimEnd,
-    videoError,
-    layoutTick,
-    videoHandlers,
-  } = useVideoPreviewLifecycle({ videoRef, sel, sidebarMode });
+  const { currentTimeRef, duration, trimStart, trimEnd, videoError, videoHandlers } =
+    useVideoPreviewLifecycle({ videoRef, sel, sidebarMode });
 
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef, sel?.path);
 
   const stampGeometry = useMemo(() => (sel ? itemOutputGeometry(sel) : null), [sel]);
-
-  const opsWithScreen = useMemo(() => {
-    if (!sel?.operations) return [];
-    const videoEl = videoRef.current;
-    return sel.operations.map((op, opIdx) => {
+  const opsWithScreen =
+    sel?.operations?.map((op, opIdx) => {
       if (op.mode !== "datetime") {
-        return { op, opIdx, screen: regionToScreen(op.region, videoEl) };
+        return { op, opIdx, screen: regionToScreen(op.region, videoRef.current) };
       }
-      const placement = stampPlacement(op.region, stampGeometry, videoEl);
+      const placement = stampPlacement(op.region, stampGeometry, videoRef.current);
       return { op, opIdx, screen: placement?.screen, cssTransform: placement?.cssTransform };
-    });
-  }, [sel?.operations, stampGeometry, layoutTick]);
-
-  const activeOpsWithScreen = useMemo(
-    () =>
-      opsWithScreen.filter(({ op }) => isPreviewOpActive(op, currentTimeRef.current, sidebarMode)),
-    [opsWithScreen, timeEpoch, sidebarMode, currentTimeRef],
+    }) ?? [];
+  const activeOpsWithScreen = opsWithScreen.filter(({ op }) =>
+    isPreviewOpActive(op, currentTimeRef.current, sidebarMode),
   );
-
-  const batchRegionPreviews = useMemo(() => {
-    if (sidebarMode !== "batch" || selectedIdx < 0 || !templateRegions?.length) return [];
-    const videoEl = videoRef.current;
-    const out = [];
-    for (let i = 0; i < templateRegions.length; i++) {
-      const tr = templateRegions[i];
-      const payload = getBatchPreviewPayload(selectedIdx, tr.id);
-      if (!payload) continue;
-      const screen = regionToScreen(payload.region, videoEl);
-      out.push({ tr, payload, screen });
-    }
-    return out;
-  }, [
-    sidebarMode,
-    selectedIdx,
-    templateRegions,
-    sel,
-    globalTextStyle,
-    layoutTick,
-    getBatchPreviewPayload,
-  ]);
+  const batchRegionPreviews =
+    sidebarMode === "batch" && selectedIdx >= 0
+      ? (templateRegions ?? []).flatMap((tr) => {
+          const payload = getBatchPreviewPayload(selectedIdx, tr.id);
+          return payload
+            ? [{ tr, payload, screen: regionToScreen(payload.region, videoRef.current) }]
+            : [];
+        })
+      : [];
 
   const {
     ffmpegPreviewUrl,
@@ -185,10 +157,9 @@ export default function VideoPreview() {
     onChange: previewTextRegion,
     onCommit: commitTextRegion,
   });
-  const textSelectionScreen = useMemo(() => {
-    if (!textSelectionActive) return null;
-    return regionToScreen(currentRegion, videoRef.current);
-  }, [textSelectionActive, currentRegion, layoutTick]);
+  const textSelectionScreen = textSelectionActive
+    ? regionToScreen(currentRegion, videoRef.current)
+    : null;
   const textSelectionLabel =
     sidebarMode === "batch" && selectedTemplateRegionId != null
       ? templateRegions?.find((tr) => tr.id === selectedTemplateRegionId)?.label
@@ -212,7 +183,6 @@ export default function VideoPreview() {
     selectedOperationIdx,
     showFfmpegPreview,
     showFfmpegOverlay,
-    layoutTick,
   });
 
   const hasSelection = !!sel;

@@ -5,6 +5,22 @@ import { invalidateBeruStatCache } from "./beru-protocol.js";
 import { jobMediaSources } from "../../shared/job-manifest.js";
 const CONTROL_CHARACTERS = /[\x00-\x1f\x7f]/;
 const EXPORT_DIR_PREFIX = ".beru-export-";
+const TRANSIENT_RENAME_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+const RENAME_RETRY_WAITS_MS = [20, 40, 80, 160, 300];
+
+function renameWithRetry(from, to) {
+  const pause = new Int32Array(new SharedArrayBuffer(4));
+  for (let attempt = 0; ; attempt++) {
+    try {
+      fs.renameSync(from, to);
+      return;
+    } catch (err) {
+      const wait = RENAME_RETRY_WAITS_MS[attempt];
+      if (!TRANSIENT_RENAME_CODES.has(err.code) || wait === undefined) throw err;
+      Atomics.wait(pause, 0, 0, wait);
+    }
+  }
+}
 
 function isPathInsideRoot(candidatePath, rootPath) {
   const root = path.resolve(rootPath);
@@ -13,7 +29,7 @@ function isPathInsideRoot(candidatePath, rootPath) {
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-export function deriveOutputPath(selectedDirectory, rendererOutputPath) {
+export function deriveOutputPath(selectedDirectory, rendererOutputPath, { frame = false } = {}) {
   if (typeof selectedDirectory !== "string" || !selectedDirectory.trim()) {
     throw new Error("No hay una carpeta de salida seleccionada");
   }
@@ -31,7 +47,11 @@ export function deriveOutputPath(selectedDirectory, rendererOutputPath) {
 
   const filename = pathSegments.at(-1);
   const extension = path.extname(filename).toLowerCase();
-  if (!filename || filename === "." || !OUTPUT_VIDEO_EXTENSIONS.has(extension)) {
+  if (
+    !filename ||
+    filename === "." ||
+    !(OUTPUT_VIDEO_EXTENSIONS.has(extension) || (frame && extension === ".png"))
+  ) {
     throw new Error(`Extensión de salida no permitida: ${extension || "(sin extensión)"}`);
   }
 
@@ -92,7 +112,9 @@ export async function validateBatchOutputPaths(jobs) {
 
 export function createRunOutputFiles(jobs, outputRoot) {
   const targets = jobs.map((job, index) => {
-    const outputPath = deriveOutputPath(outputRoot, job.output_path);
+    const outputPath = deriveOutputPath(outputRoot, job.output_path, {
+      frame: job.kind === "composition" && job.frame != null,
+    });
     return { key: Number.isInteger(job.id) ? job.id : index, outputPath };
   });
   if (new Set(targets.map((job) => job.key)).size !== targets.length) {
@@ -116,7 +138,7 @@ export function createRunOutputFiles(jobs, outputRoot) {
         if (!stat.isFile() || stat.size === 0) {
           throw new Error("FFmpeg no produjo un archivo de salida válido");
         }
-        fs.renameSync(stagedJobs[position].output_path, targets[position].outputPath);
+        renameWithRetry(stagedJobs[position].output_path, targets[position].outputPath);
         invalidateBeruStatCache(targets[position].outputPath);
         completed.add(index);
       }

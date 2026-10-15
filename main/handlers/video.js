@@ -127,20 +127,24 @@ export function registerVideoHandlers(pathSecurity) {
     const count = Math.max(1, Math.min(60, Math.floor(Number(payload?.count) || 20)));
     const height = Math.max(16, Math.min(256, Math.floor(Number(payload?.height) || 64)));
     const duration = Math.max(0, Number(payload?.duration) || 0);
+    const start = Math.max(0, Number(payload?.start) || 0);
     const requestId = payload?.requestId;
     if (requestId === undefined) {
       return extractFilmstrip(
         check.resolvedPath,
-        { count, height, duration },
+        { count, height, duration, start },
         { interactive: true },
       );
     }
     if (typeof requestId !== "string" || !requestId.length || requestId.length > 128) return null;
+    const owner =
+      typeof payload?.owner === "string" && payload.owner.length <= 128 ? payload.owner : "";
     const sender = event.sender;
-    filmstripRequests.get(sender.id)?.controller.abort();
+    const slot = `${sender.id}\u0000${owner}`;
+    filmstripRequests.get(slot)?.controller.abort();
     const controller = new AbortController();
-    const request = { requestId, controller };
-    filmstripRequests.set(sender.id, request);
+    const request = { requestId, senderId: sender.id, controller };
+    filmstripRequests.set(slot, request);
     const cancel = () => controller.abort();
     const navigate = (_event, _url, inPlace, mainFrame) => {
       if (mainFrame && !inPlace) cancel();
@@ -155,12 +159,13 @@ export function registerVideoHandlers(pathSecurity) {
           count,
           height,
           duration,
+          start,
           signal: controller.signal,
           onFrame: (frame) => {
             if (
               !controller.signal.aborted &&
               !sender.isDestroyed() &&
-              filmstripRequests.get(sender.id) === request
+              filmstripRequests.get(slot) === request
             ) {
               sender.send(IPC_EVENTS.onFilmstripProgress, { ...frame, requestId });
             }
@@ -172,16 +177,19 @@ export function registerVideoHandlers(pathSecurity) {
       sender.removeListener("destroyed", cancel);
       sender.removeListener("render-process-gone", cancel);
       sender.removeListener("did-start-navigation", navigate);
-      if (filmstripRequests.get(sender.id) === request) filmstripRequests.delete(sender.id);
+      if (filmstripRequests.get(slot) === request) filmstripRequests.delete(slot);
     }
   });
 
   ipcMain.handle(IPC_INVOKE.cancelFilmstrip, (event, requestId) => {
     if (!isTrustedSender(event)) throw new Error("untrusted sender");
-    const request = filmstripRequests.get(event.sender.id);
-    if (!request || request.requestId !== requestId) return false;
-    request.controller.abort();
-    return true;
+    for (const request of filmstripRequests.values()) {
+      if (request.senderId === event.sender.id && request.requestId === requestId) {
+        request.controller.abort();
+        return true;
+      }
+    }
+    return false;
   });
 
   ipcMain.handle(IPC_INVOKE.renderPreviewFrame, (event, payload) => {

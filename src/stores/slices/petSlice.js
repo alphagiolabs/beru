@@ -3,7 +3,7 @@ import { saveSettingsQuietly } from "../../utils/save-settings.js";
 import { normalizePetMovement } from "../../utils/types.js";
 import { beruLocalUrl } from "../../features/pets/utils/pet-url.js";
 
-const FEATURED_SLUGS = ["boba", "doraemon", "wangcai", "eve", "mallow", "noir-webling"];
+const FEATURED_SLUGS = new Set(["boba", "doraemon", "wangcai", "eve", "mallow", "noir-webling"]);
 const EMPTY_MANIFEST = { total: 0, pets: [] };
 export const PET_SCALE_MIN = 0.1;
 export const PET_SCALE_MAX = 3;
@@ -28,6 +28,29 @@ function normalizePetPosition(position) {
 
 function persistPetSettings(partial) {
   return saveSettingsQuietly(partial, "pet");
+}
+
+export function getGalleryPets(manifest, installed) {
+  const bySlug = new Map((manifest?.pets ?? []).map((pet) => [pet.slug, pet]));
+  const installedSlugs = new Set(installed.map((pet) => pet.slug));
+  for (const pet of installed) {
+    if (!bySlug.has(pet.slug)) {
+      bySlug.set(pet.slug, {
+        slug: pet.slug,
+        displayName: pet.displayName,
+        spritesheetUrl: pet.spritesheetUrl || "",
+        kind: pet.kind || "creature",
+        submittedBy: pet.submittedBy || "",
+        source: pet.source,
+      });
+    }
+  }
+  return [...bySlug.values()].sort((a, b) => {
+    const installedOrder = Number(installedSlugs.has(b.slug)) - Number(installedSlugs.has(a.slug));
+    if (installedOrder) return installedOrder;
+    const featuredOrder = Number(FEATURED_SLUGS.has(b.slug)) - Number(FEATURED_SLUGS.has(a.slug));
+    return featuredOrder || (a.displayName || a.slug).localeCompare(b.displayName || b.slug);
+  });
 }
 
 export function createPetSlice(set, get) {
@@ -366,36 +389,6 @@ export function createPetSlice(set, get) {
         set({ petInstallingSlug: null });
         return { ok: false, error: e?.message || String(e) };
       }
-    },
-
-    getGalleryPets: () => {
-      const manifestPets = get().petManifest?.pets || [];
-      const installed = get().petInstalled;
-      const featured = new Set(FEATURED_SLUGS);
-      const bySlug = new Map(manifestPets.map((pet) => [pet.slug, pet]));
-
-      for (const pet of installed) {
-        if (!bySlug.has(pet.slug)) {
-          bySlug.set(pet.slug, {
-            slug: pet.slug,
-            displayName: pet.displayName,
-            spritesheetUrl: pet.spritesheetUrl || "",
-            kind: pet.kind || "creature",
-            submittedBy: pet.submittedBy || "",
-            source: pet.source,
-          });
-        }
-      }
-
-      return [...bySlug.values()].sort((a, b) => {
-        const aInstalled = installed.some((pet) => pet.slug === a.slug) ? 0 : 1;
-        const bInstalled = installed.some((pet) => pet.slug === b.slug) ? 0 : 1;
-        if (aInstalled !== bInstalled) return aInstalled - bInstalled;
-        const aFeatured = featured.has(a.slug) ? 0 : 1;
-        const bFeatured = featured.has(b.slug) ? 0 : 1;
-        if (aFeatured !== bFeatured) return aFeatured - bFeatured;
-        return (a.displayName || a.slug).localeCompare(b.displayName || b.slug);
-      });
     },
   };
 }

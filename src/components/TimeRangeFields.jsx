@@ -1,8 +1,6 @@
 import DraftNumberInput from "./DraftNumberInput";
 import { useT } from "../i18n/useT";
 
-// Start/end in source seconds. Empty clears the bound; an end at or before the start
-// stays visible as invalid and is excluded from export.
 export default function TimeRangeFields({ start, end, onStart, onEnd }) {
   const t = useT();
   return (

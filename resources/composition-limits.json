@@ -1,0 +1,7 @@
+{
+  "maxClips": 50,
+  "minCanvasDimension": 16,
+  "maxCanvasDimension": 4096,
+  "minFps": 1,
+  "maxFps": 120
+}

@@ -63,7 +63,7 @@ describe("main/updater.js cancel before quitAndInstall", () => {
     const result = harness.updater.install();
     expect(result.ok).toBe(true);
 
-    await vi.advanceTimersByTimeAsync(0); // flush setImmediate only
+    await vi.advanceTimersByTimeAsync(0);
 
     expect(harness.setAppIsQuitting).toHaveBeenCalledWith(true);
     expect(harness.setAppIsQuitting).toHaveBeenCalledWith(false);

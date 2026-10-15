@@ -3,6 +3,7 @@ import { getMainWindow } from "../shared-state.js";
 import { showOpenDialog, showSaveDialog } from "../utils/dialog-history.js";
 import { handleIpc } from "../utils/ipc.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
+import { validateCompositionJob } from "../../shared/composition-settings.js";
 import {
   parseCompositionDocument,
   COMPOSITION_JOB_ID,
@@ -23,10 +24,6 @@ import {
 
 const label = (labels, key) =>
   typeof labels?.[key] === "string" ? labels[key].slice(0, 100) : "Composition";
-const validCanvas = (canvas) =>
-  [canvas?.width, canvas?.height].every(
-    (value) => Number.isInteger(value) && value >= 16 && value <= 4096 && value % 2 === 0,
-  ) && ["contain", "cover"].includes(canvas.fit);
 
 export function registerCompositionHandlers(pathSecurity) {
   handleIpc(IPC_INVOKE.startComposition, async (_event, payload) => {
@@ -38,14 +35,7 @@ export function registerCompositionHandlers(pathSecurity) {
       jobs?.length !== 1 ||
       job?.kind !== "composition" ||
       job.id !== COMPOSITION_JOB_ID ||
-      !validCanvas(job.canvas) ||
-      !Number.isFinite(job.composition_fps) ||
-      job.composition_fps < 1 ||
-      job.composition_fps > 120 ||
-      !Array.isArray(job.clips) ||
-      job.clips.length < 2 ||
-      job.clips.length > 50 ||
-      job.clips.some((clip) => !clip || (clip.kind && clip.kind !== "video"))
+      validateCompositionJob(job)
     )
       return { success: false, errorCode: "COMPOSITION_INVALID" };
     const spawnSpec = await validateProcessorAvailableAsync();

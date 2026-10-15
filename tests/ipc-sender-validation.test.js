@@ -82,6 +82,7 @@ async function startBeruHandler() {
     "registerAudioHandlers",
     "registerProcessHandlers",
     "registerCompositionHandlers",
+    "registerEditorHandlers",
     "registerStabilizationHandlers",
     "registerProjectHandlers",
     "registerPresetHandlers",

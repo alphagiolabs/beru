@@ -21,7 +21,6 @@ const VARIANTS = {
   },
 };
 
-// X/Y/W/H in source pixels for both the draft strip and applied regions.
 export default function RegionFields({ region, dims, variant, onRegionChange }) {
   const classes = VARIANTS[variant];
   const ready = dims.w > 0 && dims.h > 0;

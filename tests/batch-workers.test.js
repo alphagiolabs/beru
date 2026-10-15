@@ -204,7 +204,7 @@ describe("workerPolicy", () => {
         encodeProfile: "quality",
         sourcePixels: 3840 * 2160,
       }),
-    ).toBe(3362); // Floor after each multiplier, as the processor does.
+    ).toBe(3362);
     expect(
       memoryCapWorkers({
         hwEncoder: null,

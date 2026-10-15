@@ -68,11 +68,22 @@ def _validated_job_media(job, *, require_output):
     if require_output:
         output_path = job.get("output_path")
         output_root = job.get("output_root") or (_path_parent(output_path) if output_path else None)
+        is_frame = job.get("kind") == "composition" and job.get("frame") is not None
         validated["output_path"] = validate_media_path(
-            output_path, output_root, VIDEO_OUTPUT_EXTENSIONS
+            output_path, output_root, IMAGE_EXTENSIONS if is_frame else VIDEO_OUTPUT_EXTENSIONS
         )
 
     if job.get("kind") == "composition":
+        overlays = []
+        for layer in job.get("overlays", []):
+            if layer.get("kind") == "image":
+                source = dict(layer["source"])
+                source["path"] = validate_media_path(
+                    source["path"], layer.get("source_root") or _path_parent(source["path"]), IMAGE_EXTENSIONS
+                )
+                layer = {**layer, "source": source}
+            overlays.append(layer)
+        validated["overlays"] = overlays
         return validated
 
     asset_roots = job.get("asset_roots")

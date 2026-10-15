@@ -113,7 +113,7 @@ const jobs = matrix.scenarios.map((scenario) => {
   };
 });
 const worker = spawn(
-  packaged ? path.join(root, "bin", "beru-processor.exe") : python,
+  packaged ? path.join(root, "bin", "beru-processor", "beru-processor.exe") : python,
   packaged ? ["--job-worker"] : [path.join(root, "scripts", "performance", "job-audit-worker.py")],
   {
     cwd: root,
@@ -170,7 +170,9 @@ try {
   if (packaged && !ready.ok) throw new Error("Packaged processor initialization failed");
   report.environment.python = ready.python;
   if (packaged)
-    report.environment.packagedSha256 = hash(path.join(root, "bin", "beru-processor.exe"));
+    report.environment.packagedSha256 = hash(
+      path.join(root, "bin", "beru-processor", "beru-processor.exe"),
+    );
   sampler = spawn(
     "powershell.exe",
     [

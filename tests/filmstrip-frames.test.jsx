@@ -52,6 +52,7 @@ describe("filmstrip frames", () => {
       path,
       duration: 10,
       count: 5,
+      start: 0,
       height: 64,
       requestId: expect.any(String),
     });

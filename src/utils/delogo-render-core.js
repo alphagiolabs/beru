@@ -112,7 +112,6 @@ function boxBlurRGBA(data, width, height, radius, passes) {
   const sums = new Int32Array(width * 4);
   const stride = width * 4;
   const divisor = 2 * r + 1;
-  // The vertical window is odd and the sums are integers, so `+ r` rounds exactly.
   const reflect = (index, size) =>
     index < 0 ? -index - 1 : index >= size ? 2 * size - index - 1 : index;
   let passOutput = output;

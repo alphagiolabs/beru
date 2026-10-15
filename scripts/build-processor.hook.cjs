@@ -1,5 +1,3 @@
-// electron-builder expects a hook function; the ESM script runs on import.
-
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 

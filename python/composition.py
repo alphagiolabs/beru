@@ -1,101 +1,123 @@
-"""Ordered clip composition with explicit SDR canvas, cadence and audio."""
+"""The canonical composition processor, used by Batch and Editor jobs."""
 import math
 import os
 import tempfile
+from fractions import Fraction
+
 import media_probe
-from audio_settings import normalize_audio
-from job_classify import _job_takes_copy_path
-from media_paths import _validated_job_media
-from clip_timing import MAX_OUTPUT_DURATION_SECONDS, cycle_duration, repeat_count
 from batch_context import _check_cancelled
+from batch_errors import is_hardware_encode_error, remove_partial_output
+from clip_timing import MAX_OUTPUT_DURATION_SECONDS, cycle_duration, repeat_count, playback_rate
+from composition_graph import build_filter_graph, seek_args
+from composition_limits import validate_composition_job
+from composition_overlays import image_input_args, overlays_at_frame, prepare_overlay_workdir
+from media_paths import _validated_job_media
+
+
+def _needs_intermediate(clip):
+    return bool(
+        clip.get("operations") or clip.get("watermark") or clip.get("external_audio")
+        or repeat_count(clip) > 1 or clip.get("output_height")
+    )
+
+
+def _frame_clips(clips, infos, durations, at_us, fps):
+    offset = at_us / 1e6
+    for clip, info, duration in zip(clips, infos, durations):
+        if offset < duration - 1e-9:
+            rate = playback_rate(clip)
+            start = (clip.get("trim_start") or 0) + min(offset, cycle_duration(clip, info["duration"])) * rate
+            end = clip.get("trim_end") if clip.get("trim_end") is not None else info["duration"]
+            start = min(start, end - min(1 / fps, end / 2))
+            single = {
+                **clip, "trim_start": start,
+                "trim_end": min(end, start + max(1, rate) / fps), "playback_rate": 1,
+            }
+            return [single], [info], [1 / fps]
+        offset -= duration
+    return [], [], []
 
 
 def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encode_args):
-    clips = job.get('clips')
-    canvas = job.get('canvas') or {}
-    width, height, fit = canvas.get('width'), canvas.get('height'), canvas.get('fit')
-    fps = float(job.get('composition_fps') or 0)
-    if not isinstance(clips, list) or not 2 <= len(clips) <= 50 or any(clip.get('kind') not in (None, 'video') for clip in clips):
-        raise ValueError('Composition requires 2–50 video entries')
-    if not all(isinstance(n, int) and 16 <= n <= 4096 and n % 2 == 0 for n in (width, height)) or fit not in ('contain', 'cover') or not math.isfinite(fps) or not 1 <= fps <= 120:
-        raise ValueError('Invalid composition canvas or FPS')
+    validate_composition_job(job)
     job = _validated_job_media(job, require_output=True)
-    clips = job['clips']
-    if any(os.path.normcase(clip['input_path']) == os.path.normcase(job['output_path']) for clip in clips):
-        raise ValueError('Composition output would overwrite a source')
-    infos, durations = [], []
-    for clip in clips:
-        if _check_cancelled(ctx):
-            raise RuntimeError('Cancelled')
-        info = media_probe.ffprobe(clip['input_path'], ffmpeg_bin=ffmpeg_path,
-                                  ffprobe_bin=ctx.ffprobe_path if ctx else media_probe.find_ffprobe(ffmpeg_path))
-        if not info.get('width') or not info.get('height') or info.get('color_transfer') in ('smpte2084', 'arib-std-b67'):
-            raise ValueError('Composition supports readable SDR video only')
-        duration = cycle_duration(clip, float(info.get('duration') or 0)) * repeat_count(clip)
-        if not math.isfinite(duration) or duration <= 0:
-            raise ValueError('Invalid composition entry duration')
-        infos.append(info)
-        durations.append(math.ceil(duration * fps - 1e-8) / fps)
-    total = sum(durations)
-    if total > MAX_OUTPUT_DURATION_SECONDS:
-        raise ValueError(f'Composition exceeds {MAX_OUTPUT_DURATION_SECONDS} seconds')
-    workers = ctx.max_workers if ctx else 1
+    fps = job["composition_fps"]
+    frame = job.get("frame")
+    overlays = job.get("overlays", [])
+    job_id = job.get("id", -1)
+    clips, infos, durations = [], [], []
     run_directory = os.path.dirname(os.path.abspath(ctx.jobs_file)) if ctx and ctx.jobs_file else None
-    os.makedirs(os.path.dirname(job['output_path']) or '.', exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='beru-composition-', dir=run_directory) as directory:
-        progress, normalized = 0, []
-        for index, (clip, info, duration) in enumerate(zip(clips, infos, durations)):
-            start = progress
-            progress += 90 * duration / total
-            middle = (start + progress) / 2
-            source = os.path.join(directory, f'edited-{index}.mkv')
-            stage_job = {**clip, 'id': job.get('id', -1), 'output_path': source, 'output_root': directory}
-            audio = normalize_audio(clip)
-            needs_edit = not _job_takes_copy_path(clip) or clip.get('external_audio') or audio['muted'] or audio['gain'] != 1
-            if needs_edit:
-                render_clip(stage_job, progress_range=(start, middle), force_video_encode=True)
-            else:
-                source = clip['input_path']
-                middle = start
+    probe_bin = ctx.ffprobe_path if ctx else media_probe.find_ffprobe(ffmpeg_path)
+    output = job["output_path"]
+    output_key = os.path.normcase(os.path.realpath(output))
+    sources = [clip["input_path"] for clip in job["clips"]]
+    sources += [overlay["source"]["path"] for overlay in overlays if overlay["kind"] == "image"]
+    if any(os.path.normcase(os.path.realpath(source)) == output_key for source in sources):
+        raise ValueError("Composition output would overwrite a source")
+    os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="beru-composition-", dir=run_directory) as directory:
+        for index, original in enumerate(job["clips"]):
             if _check_cancelled(ctx):
-                raise RuntimeError('Cancelled')
-            edited_info = media_probe.ffprobe(source, ffmpeg_bin=ffmpeg_path,
-                                            ffprobe_bin=ctx.ffprobe_path if ctx else media_probe.find_ffprobe(ffmpeg_path))
-            destination = os.path.join(directory, f'normalized-{index}.mkv')
-            aspect = 'decrease' if fit == 'contain' else 'increase'
-            frame = f"scale={width}:{height}:force_original_aspect_ratio={aspect}:force_divisible_by=2:reset_sar=1"
-            frame += f",pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black" if fit == 'contain' else f",crop={width}:{height}"
-            color = 'colorspace=all=bt709'
-            if not all(info.get(key) and info[key] != 'unknown' for key in ('color_space', 'color_transfer', 'color_primaries')):
-                color += ':iall=bt709'
-            color += ':irange=pc' if info.get('color_range') == 'pc' else ':irange=tv'
-            frame += f",{color},setsar=1,fps={fps:.6f},tpad=stop_mode=clone:stop_duration={duration:.9f},trim=duration={duration:.9f},setpts=PTS-STARTPTS"
-            cmd = [ffmpeg_path, '-nostdin', '-xerror', '-y', '-loglevel', 'error', '-progress', 'pipe:2', '-nostats', '-i', source]
-            if not edited_info.get('audio_codec'):
-                cmd += ['-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=stereo']
-            cmd += ['-map', '0:v:0', '-vf', frame, '-map', '0:a:0' if edited_info.get('audio_codec') else '1:a:0',
-                    '-af', f'aformat=sample_rates=48000:channel_layouts=stereo,aresample=async=1:first_pts=0,apad=whole_dur={duration:.9f},atrim=duration={duration:.9f}',
-                    '-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-ar', '48000', '-t', f'{duration:.9f}', '-pix_fmt', 'yuv420p',
-                    '-colorspace', 'bt709', '-color_trc', 'bt709', '-color_primaries', 'bt709', '-color_range', 'tv']
-            cmd += encode_args(ffmpeg_path, job.get('encode_profile', 'balanced'), job, force_software=True, active_workers=workers)
-            cmd.append(destination)
-            ok, error = run_ffmpeg(cmd, job_id=job.get('id', -1), duration_sec=duration, ctx=ctx, progress_range=(middle, progress))
-            if not ok:
-                raise RuntimeError(error)
-            normalized.append(os.path.basename(destination))
-        playlist = os.path.join(directory, 'composition.ffconcat')
-        with open(playlist, 'w', encoding='utf8') as handle:
-            handle.write('ffconcat version 1.0\n')
-            for filename, duration in zip(normalized, durations):
-                handle.write(f"file '{filename}'\nduration {duration:.9f}\n")
-        cmd = [ffmpeg_path, '-nostdin', '-xerror', '-y', '-loglevel', 'error', '-progress', 'pipe:2', '-nostats',
-               '-f', 'concat', '-safe', '1', '-i', playlist, '-map', '0:v:0', '-c:v', 'copy', '-map', '0:a:0',
-               '-af', f'aresample=async=1:first_pts=0,apad=whole_dur={total:.9f},atrim=duration={total:.9f}',
-               '-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-ar', '48000', '-t', f'{total:.9f}']
-        if os.path.splitext(job['output_path'])[1].lower() in ('.mp4', '.mov'):
-            cmd += ['-movflags', '+faststart']
-        cmd.append(job['output_path'])
-        ok, error = run_ffmpeg(cmd, job_id=job.get('id', -1), duration_sec=total, ctx=ctx, progress_range=(90, 100))
+                raise RuntimeError("Cancelled")
+            clip = original
+            info = media_probe.ffprobe(clip["input_path"], ffmpeg_bin=ffmpeg_path, ffprobe_bin=probe_bin)
+            if not info.get("width") or not info.get("height") or info.get("color_transfer") in ("smpte2084", "arib-std-b67"):
+                raise ValueError("Composition supports readable SDR video only")
+            duration = cycle_duration(clip, info["duration"]) * repeat_count(clip)
+            if not math.isfinite(duration) or duration <= 0:
+                raise ValueError("Invalid composition entry duration")
+            duration = math.ceil(duration * fps - 1e-8) / fps
+            if _needs_intermediate(clip):
+                destination = os.path.join(directory, f"edited-{index}.mkv")
+                render_clip({**clip, "id": job_id, "output_path": destination, "output_root": directory,
+                             "rotation": 0, "flip_h": False, "flip_v": False},
+                            progress_range=(0, 10), force_video_encode=True)
+                clip = {**clip, "input_path": destination, "input_root": directory, "trim_start": 0,
+                        "trim_end": duration, "video_duration": duration, "playback_rate": 1,
+                        "repeat_count": 1, "audio_gain": 1, "audio_muted": False}
+                info = media_probe.ffprobe(destination, ffmpeg_bin=ffmpeg_path, ffprobe_bin=probe_bin)
+            clips.append(clip)
+            infos.append(info)
+            durations.append(duration)
+        total = max(sum(durations), max((overlay["endUs"] / 1e6 for overlay in overlays), default=0))
+        if total > MAX_OUTPUT_DURATION_SECONDS:
+            raise ValueError("Composition exceeds maximum duration")
+        if frame:
+            clips, infos, durations = _frame_clips(clips, infos, durations, frame["atUs"], fps)
+            overlays = overlays_at_frame(overlays, frame["atUs"])
+        workdir = prepare_overlay_workdir(overlays, directory)
+        graph = build_filter_graph(clips, infos, durations, canvas=job["canvas"], fps=fps,
+                                   overlays=overlays, with_audio=not frame, total=None if frame else total)
+        graph_path = os.path.join(directory, "composition.graph")
+        with open(graph_path, "w", encoding="utf-8") as handle:
+            handle.write(graph)
+        cmd = [ffmpeg_path, "-nostdin", "-xerror", "-y", "-loglevel", "error", "-progress", "pipe:2", "-nostats"]
+        for clip in clips:
+            cmd += seek_args(clip) + ["-i", clip["input_path"]]
+        cmd += image_input_args(overlays)
+        cmd += ["-filter_complex_threads", "1", "-/filter_complex", graph_path, "-map", "[vout]"]
+        if frame:
+            cmd += ["-frames:v", "1", "-f", "image2", "-c:v", "png", output]
+            ok, error = run_ffmpeg(cmd, job_id=job_id, duration_sec=1 / fps, ctx=ctx, cwd=workdir)
+        else:
+            cmd += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000",
+                    "-pix_fmt", "yuv420p", "-r", str(Fraction(fps).limit_denominator(1_000_000)), "-t", f"{total:.9f}",
+                    "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-color_range", "tv"]
+            if os.path.splitext(output)[1].lower() in (".mp4", ".mov"):
+                cmd += ["-movflags", "+faststart"]
+            force_software = bool(job.get("_hw_failed"))
+            options = encode_args(ffmpeg_path, job.get("encode_profile", "balanced"), job,
+                                  force_software=force_software, hw_encoder=ctx.hw_encoder if ctx else None,
+                                  active_workers=ctx.max_workers if ctx else 1)
+            ok, error = run_ffmpeg(cmd + options + [output], job_id=job_id, duration_sec=total,
+                                  ctx=ctx, progress_range=(10 if any(_needs_intermediate(c) for c in job["clips"]) else 0, 100), cwd=workdir)
+            if not ok and not _check_cancelled(ctx) and is_hardware_encode_error(error or ""):
+                options = encode_args(ffmpeg_path, job.get("encode_profile", "balanced"), job,
+                                      force_software=True, active_workers=ctx.max_workers if ctx else 1)
+                ok, error = run_ffmpeg(cmd + options + [output], job_id=job_id, duration_sec=total, ctx=ctx, cwd=workdir)
         if not ok:
+            remove_partial_output(output)
+            if "No space left on device" in (error or ""):
+                error = "No hay espacio suficiente en el disco para exportar."
             raise RuntimeError(error)
-    return {'index': job.get('id', -1), 'status': 'succeeded'}
+    return {"index": job_id, "status": "succeeded"}

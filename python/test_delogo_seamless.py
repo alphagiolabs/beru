@@ -34,7 +34,6 @@ VW, VH = 320, 180
 BOX = {"x": 220, "y": 15, "w": 80, "h": 35}
 FPS = 30
 DUR = 1
-# Metrics and the baseline must use the builder's effective box.
 _FX, _FY, _FW, _FH = _fit_delogo_rect(BOX["x"], BOX["y"], BOX["w"], BOX["h"], VW, VH)
 EFF = {"x": _FX, "y": _FY, "w": _FW, "h": _FH}
 
@@ -241,9 +240,6 @@ def test_seamless_inpaint_beats_halo_baseline():
     print(f"  new interior={new[0]:.1f} halo={new[1]:.1f} seam={new[2]:.1f}")
     assert new[1] <= floor[1] * 1.5, f"halo above input floor: {floor[1]:.1f} -> {new[1]:.1f}"
     assert new[1] < old[1] * 0.5, f"halo not reduced: {old[1]:.1f} -> {new[1]:.1f}"
-    # Heavy blur can lower MSE by flattening texture. Limit that tradeoff to
-    # 10% here; static flicker and blur context have independent pixel guards
-    # in test_delogo_quality.py and the benchmark reports detail error.
     assert new[0] <= old[0] * 1.10, f"interior regressed: {old[0]:.1f} -> {new[0]:.1f}"
     assert new[2] <= old[2] * 1.15, f"seam regressed: {old[2]:.1f} -> {new[2]:.1f}"
 

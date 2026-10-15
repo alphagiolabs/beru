@@ -83,7 +83,6 @@ def _compensate(target, neighbors, box, guard):
         return filled
     height, width = gray[0].shape
     x, y, w, h = box
-    # Tiles bound the temporary stack independently of the selected logo size.
     result = filled.copy()
     motions = []
     for donor in neighbors:

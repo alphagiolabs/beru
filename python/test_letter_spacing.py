@@ -1,13 +1,13 @@
 """Unit tests for letter-spacing layout helpers (positive + negative)."""
 
 from text_layout_helpers import (
-    _apply_letter_spacing_fallback,
+    _approximate_letter_spacing_with_hair_spaces,
     _text_glyph_positions,
 )
 
 
 def test_negative_fallback_is_noop_on_text():
-    assert _apply_letter_spacing_fallback("AB", -2, 32) == "AB"
+    assert _approximate_letter_spacing_with_hair_spaces("AB", -2, 32) == "AB"
 
 
 def test_glyph_positions_tighten_with_negative_spacing():

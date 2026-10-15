@@ -193,7 +193,6 @@ def evaluate(folder, name, clean, box, feather=0, radius=4):
             ],
             panels[index].tobytes(),
         )
-    # Full frames for the production React/Worker visual harness.
     for index in range(len(clean)):
         run(
             [

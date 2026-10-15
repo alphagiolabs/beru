@@ -28,8 +28,6 @@ RETRY_DELAYS = [2, 5]
 MAX_STDERR_LINES = 256
 MAX_STDERR_CHARS = 48_000
 STALL_TIMEOUT_SEC = 120
-# Jobs with progress tracking are guarded by STALL_TIMEOUT_SEC; the absolute
-# deadline only bounds runaway runs, so it tolerates encodes down to 0.05x.
 TRACKED_TIMEOUT_DURATION_FACTOR = 20
 _tr_print_lock = threading.Lock()
 _last_job_progress_emit = {}
@@ -236,7 +234,7 @@ def _kill_ffmpeg_process(proc):
         proc.wait(timeout=2)
 
 
-def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=None, progress_range=(0, 100)):
+def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=None, progress_range=(0, 100), cwd=None):
     """Run FFmpeg with bounded stderr capture, optional progress parsing, and cancel polling."""
     proc = subprocess.Popen(
         cmd,
@@ -248,6 +246,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=N
         errors="replace",
         bufsize=1,
         env=dict(ctx.env) if ctx is not None else None,
+        cwd=cwd,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
     stderr_lines = StderrBuffer()
@@ -358,7 +357,7 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=N
     return False, f"FFmpeg exited with code {returncode}" + (f": {detail}" if detail else "")
 
 
-def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None, progress_range=None):
+def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None, progress_range=None, cwd=None):
     """Run ffmpeg with retry for transient failures.
 
     The timeout scales with video duration when duration_sec is provided:
@@ -377,6 +376,8 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None
             logger.debug("FFmpeg cmd: %s", " ".join(str(x) for x in cmd)[:500])
             t0 = time.perf_counter()
             progress_kwargs = {"progress_range": progress_range} if progress_range is not None else {}
+            if cwd is not None:
+                progress_kwargs["cwd"] = cwd
             ok, err = _run_ffmpeg_stream(cmd, timeout_sec, job_id, duration_sec, ctx=ctx, **progress_kwargs)
             elapsed = time.perf_counter() - t0
             if ok:

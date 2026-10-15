@@ -31,7 +31,7 @@ it("seeks the selected output cycle and discards the old artifact after a speed 
     undoStack: [],
     redoStack: [],
   });
-  const { timestamp, ...shape } = useEditorStore
+  const { timestamp: _timestamp, ...shape } = useEditorStore
     .getState()
     .buildPreviewFrameJob(0, video.currentTime);
   useEditorStore.setState({

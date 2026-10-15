@@ -1,5 +1,6 @@
 build
 dist-installer
+dist-installer-*
 dist-electron
 node_modules
 .venv-processor

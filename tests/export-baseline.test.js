@@ -2,9 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { parseSessionSnapshot } from "../src/utils/session-persist.js";
 
-// Integrated baseline: a restored session (operations, Excel mapping and a template text slot)
-// exported through the real processAll path. Only the processor manifest is captured.
-
 const MEDIA = "C:\\qa-baseline\\media";
 const OUT = "C:\\qa-baseline\\out";
 

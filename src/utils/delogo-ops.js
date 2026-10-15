@@ -1,5 +1,5 @@
-import { clampNum } from "./clamp";
-import { DELOGO_METHODS, MIRROR_SIDES as MIRROR_SIDES_UI, denormalizeRegion } from "./types";
+import { clampNum } from "./clamp.js";
+import { DELOGO_METHODS, MIRROR_SIDES as MIRROR_SIDES_UI, denormalizeRegion } from "./types.js";
 
 export const VALID_DELOGO_METHODS = new Set(DELOGO_METHODS.map((m) => m.id));
 

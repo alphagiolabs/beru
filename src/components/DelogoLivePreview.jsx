@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useEditorStore from "../stores/useEditorStore";
 import { regionToScreen } from "../utils/video-utils";
 import { createDelogoRenderBridge } from "../utils/delogo-render-bridge.js";
@@ -422,13 +422,16 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   const [drawRevision, setDrawRevision] = useState(0);
   const bridgeRef = useRef(null);
   const drawTokenRef = useRef(0);
-  const getBridge = () => {
+  const getBridge = useCallback(() => {
     if (!bridgeRef.current)
       bridgeRef.current = createDelogoRenderBridge({
         onUnavailable: () => setDrawRevision((value) => value + 1),
       });
     return bridgeRef.current;
-  };
+  }, []);
+  const invalidateDraw = useCallback(() => {
+    drawTokenRef.current++;
+  }, []);
 
   const visible = !!(
     operation ||
@@ -471,7 +474,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
     const video = videoRef.current;
     if (!video) return;
     const clearFrames = () => {
-      drawTokenRef.current++;
+      invalidateDraw();
       bridgeRef.current?.reset();
       const canvas = canvasRef.current;
       if (canvas) {
@@ -485,26 +488,22 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
     video.addEventListener("seeked", clearFrames);
     video.addEventListener("emptied", clearFrames);
     return () => {
-      drawTokenRef.current++;
+      invalidateDraw();
       video.removeEventListener("seeking", clearFrames);
       video.removeEventListener("seeked", clearFrames);
       video.removeEventListener("emptied", clearFrames);
     };
-  }, [isCanvas, videoRef, videoSrc]);
+  }, [isCanvas, videoRef, videoSrc, invalidateDraw]);
 
-  useThrottledVideoDraw({
-    enabled: isCanvas,
-    syncFrames: ["inpaint", "temporal", "blur"].includes(delogoMethod),
-    videoRef,
-    canvasRef,
-    getRegion: () => {
-      const region = operation?.region ?? useEditorStore.getState().currentRegion;
-      const video = videoRef.current;
-      return region && video && ["inpaint", "blur", "temporal"].includes(delogoMethod)
-        ? logoPreviewGeometry(region, video, feather, delogoMethod).region
-        : region;
-    },
-    paint: (ctx, video, region, screen, frame) => {
+  const getRegion = useCallback(() => {
+    const video = videoRef.current;
+    return currentRegion && video && ["inpaint", "blur", "temporal"].includes(delogoMethod)
+      ? logoPreviewGeometry(currentRegion, video, feather, delogoMethod).region
+      : currentRegion;
+  }, [videoRef, currentRegion, feather, delogoMethod]);
+
+  const paint = useCallback(
+    (ctx, video, region, screen, frame) => {
       const token = ++drawTokenRef.current;
       const clock = video.currentTime;
       const source = video.currentSrc || video.src;
@@ -523,8 +522,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
       }
       const ws = getPreviewWorkspace(video);
       const bridge = getBridge();
-      const selectedRegion = operation?.region ?? useEditorStore.getState().currentRegion;
-      const geometry = logoPreviewGeometry(selectedRegion, video, feather, delogoMethod);
+      const geometry = logoPreviewGeometry(currentRegion, video, feather, delogoMethod);
       if (delogoMethod === "mosaic")
         submitMosaic(bridge, ws, video, region, screen, mosaicSize, ctx, isCurrent);
       else if (delogoMethod === "mirror") renderMirror(ctx, video, region, screen, mirrorSide);
@@ -571,25 +569,36 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
           !frame?.skipWorker,
         );
     },
-    afterDraw: (screen) => {
-      const label = labelRef.current;
-      if (label) {
-        label.style.left = screen.x + "px";
-        label.style.top = Math.max(0, screen.y - 18) + "px";
-      }
-    },
-    deps: [
-      drawRevision,
+    [
       currentRegion,
+      feather,
       delogoMethod,
       mosaicSize,
       mirrorSide,
       temporalRadius,
       blurStrength,
-      feather,
       startTime,
       endTime,
+      getBridge,
     ],
+  );
+  const afterDraw = useCallback((screen) => {
+    const label = labelRef.current;
+    if (label) {
+      label.style.left = screen.x + "px";
+      label.style.top = Math.max(0, screen.y - 18) + "px";
+    }
+  }, []);
+
+  useThrottledVideoDraw({
+    enabled: isCanvas,
+    syncFrames: ["inpaint", "temporal", "blur"].includes(delogoMethod),
+    videoRef,
+    canvasRef,
+    getRegion,
+    paint,
+    afterDraw,
+    redrawRevision: drawRevision,
   });
 
   useEffect(() => {

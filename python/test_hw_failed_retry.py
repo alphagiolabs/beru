@@ -143,11 +143,54 @@ def test_unexpected_job_exception_reports_its_error():
         assert "boom" in errors[0].get("raw_error", errors[0]["error"]), events
 
 
+def test_retry_preserves_implicit_job_identity():
+    with tempfile.TemporaryDirectory(prefix="beru_retry_identity_") as tmp:
+        folder = Path(tmp)
+        jobs = [_make_job(folder, i) for i in range(3)]
+        for job in jobs:
+            del job["id"]
+        retried_output = jobs[1]["output_path"]
+        identities = []
+
+        def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
+            if str(cmd[-1]) == retried_output:
+                identities.append(job_id)
+                if len(identities) == 1:
+                    return False, "x264 [error]: out of memory"
+            return True, None
+
+        result, events = _run_batch(jobs, fake_run, max_workers=2)
+        assert identities == [1, 1], identities
+        assert result["succeeded"] == 3 and result["failed"] == 0, result
+        assert sorted(e["index"] for e in events if e["type"] == "complete") == [0, 1, 2], events
+
+
+def test_explicit_id_does_not_hide_another_jobs_failure():
+    with tempfile.TemporaryDirectory(prefix="beru_retry_mixed_ids_") as tmp:
+        jobs = [_make_job(Path(tmp), i) for i in range(2)]
+        jobs[0]["id"] = 1
+        del jobs[1]["id"]
+        attempts = {}
+
+        def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
+            output = str(cmd[-1])
+            attempts[output] = attempts.get(output, 0) + 1
+            if output == jobs[0]["output_path"] and attempts[output] == 1:
+                return False, "x264 [error]: out of memory"
+            return True, None
+
+        result, _events = _run_batch(jobs, fake_run, max_workers=2)
+        assert result["succeeded"] == 2 and result["failed"] == 0, result
+        assert attempts == {jobs[0]["output_path"]: 2, jobs[1]["output_path"]: 1}, attempts
+
+
 def main():
     test_pass2_runs_software_directly_for_hw_failed_jobs()
     test_retried_job_reports_only_its_final_outcome()
     test_timeout_is_not_retried()
     test_unexpected_job_exception_reports_its_error()
+    test_explicit_id_does_not_hide_another_jobs_failure()
+    test_retry_preserves_implicit_job_identity()
     print("ALL PASSED")
 
 

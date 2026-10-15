@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { drawBlurredVideoRegion } from "./draw-blurred-video-region.js";
 import { useThrottledVideoDraw } from "./use-throttled-video-draw.js";
 import { isOpActive } from "../../utils/operation.js";
@@ -13,19 +13,22 @@ export default function RegionBlurPreview({
   zIndex = 10,
 }) {
   const canvasRef = useRef(null);
-
-  useThrottledVideoDraw({
-    videoRef,
-    canvasRef,
-    getRegion: () => region,
-    paint: (ctx, video, opRegion, screen) => {
+  const getRegion = useCallback(() => region, [region]);
+  const paint = useCallback(
+    (ctx, video, opRegion, screen) => {
       const active = isOpActive({ startTime, endTime }, video.currentTime);
       canvasRef.current.style.visibility = active ? "visible" : "hidden";
       if (active) drawBlurredVideoRegion(ctx, video, opRegion, screen, blurStrength);
       else ctx.clearRect(0, 0, screen.w, screen.h);
     },
-    resumeEvents: ["play", "seeked", "loadeddata"],
-    deps: [region, blurStrength, startTime, endTime],
+    [blurStrength, startTime, endTime],
+  );
+
+  useThrottledVideoDraw({
+    videoRef,
+    canvasRef,
+    getRegion,
+    paint,
   });
 
   return (

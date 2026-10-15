@@ -60,7 +60,6 @@ def test_inpaint_replaces_tight_odd_logo(folder):
 
 def test_blur_has_full_kernel_context(folder):
     path = source(folder, "texture", "testsrc2=s=320x180:r=12")
-    # A whole-frame blur has all the context a local implementation must sample.
     data = run(FFMPEG, "-v", "error", "-i", path, "-vf",
                "boxblur=luma_radius=20:luma_power=3:chroma_radius=10:chroma_power=3",
                "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1")

@@ -11,12 +11,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ediciones por video de giro, flips, tamaño, ganancia, silencio, audio externo, velocidad y repeticiones, con historial y restauración de Session.
 - Composición de videos con documento propio, orden de clips, canvas y FPS; estabilización con muestra previa y exportación como medio derivado.
+- **Editor de video (beta)** — Espacio «Editor de video» para montar varios videos: biblioteca con importación, clips con recorte, velocidad de 0,25× a 4×, silencio por clip, rotación, volteo, ajuste, zoom y desplazamiento; títulos e imágenes con intervalo temporal; lienzo 16:9, 9:16, 1:1 o personalizado con color de fondo; guardado, autoguardado y recuperación; exportación a MP4 con el procesador de Beru. Guía en `docs/editor-guia-de-uso.md`.
+- **Editor: estilos de título de Beru** — Fuente (Arial o Segoe UI), negrita, cursiva, alineación (también en varias líneas), opacidad, contorno, sombra y fondo. Los títulos guardados antes siguen abriéndose con los valores por defecto.
+- **Editor: la vista en vivo dibuja el clip como la exportación** — Recorte, rotación, volteo, ajuste, zoom y desplazamiento se ven en la vista previa con la misma geometría que el render.
+- **Editor: perfil de calidad al exportar** — El panel de exportación elige el perfil (Rápido, Balanceado, Calidad o U Quality), con los mismos nombres que en Batch.
+- **Editor: la línea de tiempo sigue al cabezal** durante la reproducción; al buscar a mano no se desplaza.
+- **Editor: proxy automático cuando la búsqueda es lenta** — Si buscar dentro de un video original supera 150 ms (percentil 90 de las últimas 12 búsquedas), el Editor pide su proxy por su cuenta, una vez por documento abierto, y la vista previa pasa a esa copia cuando está lista. La exportación sigue usando el original.
 - **Fechero** — Nuevo espacio de trabajo en la barra lateral, debajo de Marca de agua, con su propia capa de fecha y hora que avanza con el video, en una o dos cajas y con orden de fecha configurable. "Estilo y posición DVR" reproduce el sello de cámara de referencia: Segoe UI estirada al 206 %, caja negra al 43 % y tamaño según el alto del video. La preview en vivo, la preview exacta y la exportación muestran la misma hora.
 - Un Fechero aplicado se puede editar por completo: hora, formato, estilo (presets, fuente, colores, caja, borde y sombra), estilo DVR y posición. Al hacer clic sobre una capa de texto, imagen o Fechero en el video, la capa queda seleccionada.
 - El Fechero se redimensiona con manijas en el video o con W/H en el panel, y el texto escala con la caja: el alto cambia el tamaño de fuente (con margen, espaciado, borde y sombra) y el ancho, el ancho de letra.
 - **Tamaño de salida libre** — Ancho y alto exactos por video (también para agrandar), con candado de proporción, presets de proporción (Original, 16:9, 4:3, 1:1, 9:16) y de resolución (1080p, 720p, 480p) y modos Barras / Estirar / Recortar. Una proporción que difiere hasta un 1 % llena el cuadro sin barras finas (848×478 → 1920×1080). El Fechero se dibuja sobre el cuadro final: no se deforma, no rota ni se voltea, y acompaña los cambios de tamaño.
 - La vista en vivo muestra el cuadro de salida (tamaño, barras, estirado, recorte, rotación y volteo) fuera de las herramientas de logo, y las regiones se dibujan y arrastran sobre él.
 - **Ancho de letra** — Las capas de texto y el Fechero pueden estirarse en horizontal (50–300 %) sin cambiar su altura, en la preview y en la exportación.
+
+### Fixed
+
+- **Exportación ya renderizada en Windows** — Si el antivirus retiene el archivo recién escrito, el paso que lo mueve a su nombre final reintenta unas décimas de segundo antes de dar error. Afecta a Batch y al Editor; antes una exportación completa podía marcarse como fallida.
+- **Títulos del Editor de varias líneas** — Cada línea se alinea dentro del bloque según la alineación elegida, igual que en la vista previa.
+- **Recorte del Editor con clips al final de la fuente** — El recorte entra por el inicio del clip en lugar de decodificar la fuente desde su primer fotograma.
+- **Importación de videos** — Importar 20 videos tardaba 20–25 s, porque cada sondeo arrancaba el procesador de un solo archivo. El procesador se empaqueta ahora en carpeta (`bin/beru-processor/`), y el mismo lote tarda unos 3 s. Batch también arranca sus llamadas de medios más rápido.
+- **Exportación del Editor** — Cancelar o cerrar la app durante una exportación ya no deja archivos parciales ni temporales junto a la salida.
+- **Vista previa del Editor con proxy** — Al crear el proxy de un video que Chromium no reproduce, la vista pasa a la copia. Antes seguía mostrando el archivo que había fallado.
+- **Vista previa del Editor sin pista de video** — Un archivo que se carga sin video decodificable (HEVC) muestra el aviso y el botón de proxy, en lugar de quedar como listo.
+- **Línea de tiempo del Editor en ventanas bajas** — La columna central y la biblioteca se desplazan, así que la línea de tiempo ya no queda cortada por el borde de la ventana.
+- **Contraste del Editor en el tema claro** — El aviso de la vista previa vacía pasa de 2,8:1 a 12,6:1 de contraste. Un destino ocupado por otro programa o un disco lleno se informan con un mensaje claro.
 
 ### Changed
 
