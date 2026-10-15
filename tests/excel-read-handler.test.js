@@ -2,11 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 import * as XLSXNamespace from "xlsx";
 
 const XLSX = XLSXNamespace.default ?? XLSXNamespace;
 
 const mocks = vi.hoisted(() => ({ handlers: new Map() }));
+
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
 
 vi.mock("electron", () => ({
   app: { isPackaged: false },
@@ -51,7 +56,7 @@ describe("fs:readExcel handler", () => {
     const filePath = path.join(tempDirectory, "tabla.xlsx");
     fs.writeFileSync(filePath, XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
 
-    await expect(readExcel({}, filePath)).resolves.toEqual({
+    await expect(readExcel(trustedSenderEvent, filePath)).resolves.toEqual({
       success: true,
       rows: [{ ID: "v1", Nombre: "Ana" }],
       headers: ["ID", "Nombre"],
@@ -63,7 +68,7 @@ describe("fs:readExcel handler", () => {
     const filePath = path.join(tempDirectory, "vacio.xlsx");
     fs.writeFileSync(filePath, "");
 
-    await expect(readExcel({}, filePath)).resolves.toEqual({
+    await expect(readExcel(trustedSenderEvent, filePath)).resolves.toEqual({
       success: false,
       error: "Empty Excel file data",
     });
@@ -74,7 +79,7 @@ describe("fs:readExcel handler", () => {
     const filePath = path.join(tempDirectory, "roto.xlsx");
     fs.writeFileSync(filePath, "not an excel file");
 
-    const result = await readExcel({}, filePath);
+    const result = await readExcel(trustedSenderEvent, filePath);
     expect(result.success).toBe(false);
     expect(typeof result.error).toBe("string");
   });
@@ -83,7 +88,7 @@ describe("fs:readExcel handler", () => {
     const { readExcel, pathSecurity } = await register();
     pathSecurity.validateReadableFile.mockReturnValue({ ok: false, error: "denegado" });
 
-    await expect(readExcel({}, "C:\\otro\\tabla.xlsx")).resolves.toEqual({
+    await expect(readExcel(trustedSenderEvent, "C:\\otro\\tabla.xlsx")).resolves.toEqual({
       success: false,
       error: "denegado",
     });

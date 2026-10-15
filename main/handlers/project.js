@@ -4,7 +4,7 @@ import fs from "fs";
 import { getMainWindow } from "../shared-state.js";
 import { validateProjectDocument } from "../../shared/project-document.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
-import { handleIpc } from "../utils/ipc.js";
+import { handleIpc, isTrustedSender } from "../utils/ipc.js";
 
 async function readValidatedProject(resolvedPath) {
   const raw = await fs.promises.readFile(resolvedPath, "utf8");
@@ -46,7 +46,8 @@ export function registerProjectHandlers(pathSecurity) {
     return await readValidatedProject(check.resolvedPath);
   });
 
-  ipcMain.handle(IPC_INVOKE.loadProjectFromPath, async (_event, filePath) => {
+  ipcMain.handle(IPC_INVOKE.loadProjectFromPath, async (event, filePath) => {
+    if (!isTrustedSender(event)) return { success: false, error: "untrusted sender" };
     const check = pathSecurity.validateReadableFile(filePath, "project");
     if (!check.ok) return { success: false, error: check.error };
     try {

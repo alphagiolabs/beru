@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -18,6 +19,10 @@ vi.mock("../main/utils/media-task-pool.js", async (importOriginal) => ({
   ...(await importOriginal()),
   runMediaTask: mocks.run,
 }));
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
+
 vi.mock("electron", () => ({
   app: { isPackaged: false },
   ipcMain: { handle: (channel, handler) => mocks.handlers.set(channel, handler) },
@@ -183,11 +188,11 @@ describe("exact preview frame cache", () => {
         allowed ? { ok: true, resolvedPath: input } : { ok: false, error: "Access revoked" },
     });
     const handle = mocks.handlers.get("video:renderPreviewFrame");
-    expect(await handle({}, job)).toEqual(FRAME);
-    expect(await handle({}, job)).toEqual(FRAME);
+    expect(await handle(trustedSenderEvent, job)).toEqual(FRAME);
+    expect(await handle(trustedSenderEvent, job)).toEqual(FRAME);
     expect(mocks.render).toHaveBeenCalledTimes(1);
     allowed = false;
-    expect(await handle({}, job)).toMatchObject({
+    expect(await handle(trustedSenderEvent, job)).toMatchObject({
       ok: false,
       error: expect.stringContaining("Access revoked"),
     });
@@ -201,9 +206,13 @@ describe("exact preview frame cache", () => {
     const handle = mocks.handlers.get("video:renderSourceFrame");
     const info = fs.statSync(input);
     const expected = { size: info.size, mtimeMs: info.mtimeMs, ctimeMs: info.ctimeMs };
-    expect(await handle({}, { input_path: input, expected_stat: expected })).toEqual(FRAME);
+    expect(
+      await handle(trustedSenderEvent, { input_path: input, expected_stat: expected }),
+    ).toEqual(FRAME);
     fs.utimesSync(input, info.atime, new Date(info.mtimeMs + 5000));
-    expect(await handle({}, { input_path: input, expected_stat: expected })).toMatchObject({
+    expect(
+      await handle(trustedSenderEvent, { input_path: input, expected_stat: expected }),
+    ).toMatchObject({
       ok: false,
     });
     expect(mocks.render).toHaveBeenCalledTimes(1);

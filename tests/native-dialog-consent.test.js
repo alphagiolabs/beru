@@ -1,17 +1,26 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPathSecurity } from "../main/pathSecurity.js";
 import { IPC_INVOKE } from "../shared/ipc-channels.js";
 
 const mocks = vi.hoisted(() => ({ handlers: new Map(), select: vi.fn(), getPath: vi.fn() }));
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
+
 vi.mock("electron", () => ({
   app: { getPath: mocks.getPath },
   ipcMain: { handle: (name, callback) => mocks.handlers.set(name, callback) },
   dialog: { showOpenDialog: mocks.select },
 }));
-vi.mock("../main/shared-state.js", () => ({ getMainWindow: () => null }));
+vi.mock("../main/shared-state.js", () => ({
+  getMainWindow: () => null,
+  isDev: false,
+  DEV_URL: "http://localhost:5173",
+}));
 import { registerDialogHandlers } from "../main/handlers/dialog.js";
 import { registerFileHandlers } from "../main/handlers/file.js";
 
@@ -47,7 +56,7 @@ describe("native picker read consent", () => {
       fs.writeFileSync(sibling, "fixture");
       expect(security.validateReadableFile(selected, kind).ok).toBe(false);
       mocks.select.mockResolvedValueOnce({ canceled: false, filePaths: [selected] });
-      await mocks.handlers.get(channel)({});
+      await mocks.handlers.get(channel)(trustedSenderEvent);
       expect(security.validateReadableFile(selected, kind)).toMatchObject({
         ok: true,
         resolvedPath: fs.realpathSync.native(selected),
@@ -61,7 +70,7 @@ describe("native picker read consent", () => {
     const selected = path.join(root, "payload.exe");
     fs.writeFileSync(selected, "fixture");
     mocks.select.mockResolvedValueOnce({ canceled: false, filePaths: [selected] });
-    const result = await mocks.handlers.get(IPC_INVOKE.openVideos)({});
+    const result = await mocks.handlers.get(IPC_INVOKE.openVideos)(trustedSenderEvent);
     expect(result).toEqual([]);
     expect(security.validateReadableFile(selected, "video").ok).toBe(false);
   });

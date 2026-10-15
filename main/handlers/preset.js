@@ -4,7 +4,7 @@ import fs from "fs";
 import { readPresetsFromDir } from "../utils/presets.js";
 import { PRESET_TYPE } from "../../shared/project-document.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
-import { handleIpc } from "../utils/ipc.js";
+import { handleIpc, isTrustedSender } from "../utils/ipc.js";
 
 function userPresetsDir() {
   const userDir = path.join(app.getPath("userData"), "presets");
@@ -15,7 +15,8 @@ function userPresetsDir() {
 }
 
 export function registerPresetHandlers() {
-  ipcMain.handle(IPC_INVOKE.listPresets, async () => {
+  ipcMain.handle(IPC_INVOKE.listPresets, async (event) => {
+    if (!isTrustedSender(event)) return { success: false, error: "untrusted sender" };
     try {
       const userDir = userPresetsDir();
       return { success: true, presets: readPresetsFromDir(userDir), userDir };

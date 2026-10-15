@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { pathToFileURL } from "url";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
@@ -10,6 +11,10 @@ const mocks = vi.hoisted(() => ({
   codexPetsRoot: "",
   packaged: false,
 }));
+
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
 
 vi.mock("electron", () => ({
   app: {
@@ -65,7 +70,7 @@ describe("petdex handlers", () => {
     registerPetdexHandlers();
 
     const listHandler = mocks.handlers.get("petdex:listInstalled");
-    await expect(listHandler()).resolves.toMatchObject({
+    await expect(listHandler(trustedSenderEvent)).resolves.toMatchObject({
       success: true,
       pets: [
         {
@@ -91,7 +96,7 @@ describe("petdex handlers", () => {
     registerPetdexHandlers();
 
     const listHandler = mocks.handlers.get("petdex:listInstalled");
-    await expect(listHandler()).resolves.toMatchObject({
+    await expect(listHandler(trustedSenderEvent)).resolves.toMatchObject({
       success: true,
       pets: [{ slug: "kebo", displayName: "Kebo", source: "codex" }],
     });
@@ -110,7 +115,7 @@ describe("petdex handlers", () => {
     registerPetdexHandlers();
 
     const listHandler = mocks.handlers.get("petdex:listInstalled");
-    await expect(listHandler()).resolves.toMatchObject({
+    await expect(listHandler(trustedSenderEvent)).resolves.toMatchObject({
       success: true,
       pets: [{ slug: "mallow", displayName: "Mallow", source: "codex" }],
     });
@@ -127,7 +132,7 @@ describe("petdex handlers", () => {
     registerPetdexHandlers();
 
     const spritesheetHandler = mocks.handlers.get("petdex:getSpritesheet");
-    const res = await spritesheetHandler({}, "boba");
+    const res = await spritesheetHandler(trustedSenderEvent, "boba");
     expect(res.success).toBe(true);
     expect(res.path).toBe(spritesheetPath);
   });
@@ -137,7 +142,7 @@ describe("petdex handlers", () => {
     registerPetdexHandlers();
 
     const installHandler = mocks.handlers.get("petdex:install");
-    const res = await installHandler({}, { slug: "boba", displayName: "Boba" });
+    const res = await installHandler(trustedSenderEvent, { slug: "boba", displayName: "Boba" });
     expect(res.success).toBe(true);
     expect(fs.existsSync(path.join(tempDirectory, "pets", "boba", "spritesheet.webp"))).toBe(true);
   });
@@ -147,7 +152,7 @@ describe("petdex handlers", () => {
     registerPetdexHandlers();
 
     const bundledHandler = mocks.handlers.get("petdex:getBundledSpritesheet");
-    const res = await bundledHandler({}, "boba");
+    const res = await bundledHandler(trustedSenderEvent, "boba");
     expect(res.success).toBe(true);
     expect(res.path).toMatch(/spritesheet\.webp$/);
   });
@@ -169,15 +174,12 @@ describe("petdex handlers", () => {
     registerPetdexHandlers();
 
     const installHandler = mocks.handlers.get("petdex:install");
-    const res = await installHandler(
-      {},
-      {
-        slug: "../evil",
-        displayName: "Evil",
-        petJsonUrl: "https://assets.petdex.dev/curated/evil/pet.json",
-        spritesheetUrl: "https://assets.petdex.dev/curated/evil/spritesheet.webp",
-      },
-    );
+    const res = await installHandler(trustedSenderEvent, {
+      slug: "../evil",
+      displayName: "Evil",
+      petJsonUrl: "https://assets.petdex.dev/curated/evil/pet.json",
+      spritesheetUrl: "https://assets.petdex.dev/curated/evil/spritesheet.webp",
+    });
 
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/Slug de mascota inválido/);

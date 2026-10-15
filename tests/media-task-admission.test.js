@@ -1,12 +1,18 @@
 import { EventEmitter } from "events";
 import { PassThrough } from "stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import path from "path";
+import { pathToFileURL } from "url";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
   probeVideoFast: vi.fn(),
   extractThumbnail: vi.fn(),
 }));
+
+const trustedSenderEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
 
 vi.mock("electron", () => ({
   app: { isPackaged: false, getPath: () => "/tmp" },
@@ -280,7 +286,7 @@ describe("video batch handler size guard", () => {
     const handle = mocks.handlers.get("fs:getVideoInfoBatch");
     await expect(
       handle(
-        {},
+        trustedSenderEvent,
         Array.from({ length: 501 }, (_, i) => `v${i}.mp4`),
       ),
     ).rejects.toThrow("Demasiados videos en una sola solicitud");
@@ -296,7 +302,7 @@ describe("video batch handler size guard", () => {
     const handle = mocks.handlers.get("video:thumbnailBatch");
     await expect(
       handle(
-        {},
+        trustedSenderEvent,
         Array.from({ length: 501 }, (_, i) => `v${i}.mp4`),
       ),
     ).rejects.toThrow("Demasiados videos en una sola solicitud");
@@ -309,7 +315,7 @@ describe("video batch handler size guard", () => {
     registerVideoHandlers(allowAll);
 
     const paths = Array.from({ length: 500 }, (_, i) => `v${i}.mp4`);
-    const results = await mocks.handlers.get("fs:getVideoInfoBatch")({}, paths);
+    const results = await mocks.handlers.get("fs:getVideoInfoBatch")(trustedSenderEvent, paths);
     expect(results).toHaveLength(500);
     expect(mocks.probeVideoFast).toHaveBeenCalledTimes(500);
   });

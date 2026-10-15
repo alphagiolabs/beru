@@ -5,7 +5,7 @@ import path from "path";
 import { getMainWindow } from "../shared-state.js";
 import { OUTPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
-import { handleIpc } from "../utils/ipc.js";
+import { handleIpc, isTrustedSender } from "../utils/ipc.js";
 import { invalidateBeruStatCache } from "../utils/beru-protocol.js";
 import { parseExcelBuffer } from "../utils/excel.js";
 
@@ -98,7 +98,8 @@ export function registerFileHandlers(pathSecurity) {
     return { success: true };
   });
 
-  ipcMain.handle(IPC_INVOKE.restoreSessionPaths, (_event, payload) =>
-    restoreSessionPaths(pathSecurity, payload),
-  );
+  ipcMain.handle(IPC_INVOKE.restoreSessionPaths, (event, payload) => {
+    if (!isTrustedSender(event)) throw new Error("untrusted sender");
+    return restoreSessionPaths(pathSecurity, payload);
+  });
 }
