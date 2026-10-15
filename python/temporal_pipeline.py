@@ -18,11 +18,25 @@ from delogo_chains import (
     _build_padded_region,
     _delogo_reconstruction_filter,
 )
-from ffmpeg_runner import StderrBuffer, _kill_ffmpeg_process
+from ffmpeg_runner import StderrBuffer, _emit_job_progress, _emit_warning, _kill_ffmpeg_process
 from op_shared import _coerce_int
 
 logger = logging.getLogger("beru")
 _PTS = re.compile(r"\bn:\s*\d+.*?pts_time:([-+\d.eE]+)")
+_PATCH_SKIP_MESSAGES = {
+    "patch_skipped_timing": (
+        "Reconstrucci\u00f3n temporal omitida: el video tiene timestamps variables; "
+        "se aplic\u00f3 reparaci\u00f3n espacial."
+    ),
+    "patch_skipped_budget": (
+        "Reconstrucci\u00f3n temporal omitida: excedi\u00f3 el presupuesto de tiempo; "
+        "se aplic\u00f3 reparaci\u00f3n espacial."
+    ),
+    "patch_skipped_too_large": (
+        "Reconstrucci\u00f3n temporal omitida: el \u00e1rea a reconstruir es demasiado grande; "
+        "se aplic\u00f3 reparaci\u00f3n espacial."
+    ),
+}
 
 
 @dataclass
@@ -59,6 +73,9 @@ class TemporalPatchResolver:
         frame_limit=None,
         ctx=None,
         timeout=7200,
+        job_id=None,
+        progress_range=None,
+        total_frames=None,
     ):
         self.input_path = input_path
         self.directory = directory
@@ -69,8 +86,32 @@ class TemporalPatchResolver:
         self.frame_limit = frame_limit
         self.ctx = ctx
         self.timeout = timeout
+        self.job_id = job_id
+        self.progress_range = progress_range if progress_range is not None else (0, 100)
+        self.total_frames = total_frames
+        self._patch_total = None
+        self._frames_seen = 0
+        self._defer_reason = None
+
+    def _report_patch_frames(self, count):
+        self._frames_seen = max(self._frames_seen, count)
+        if self.job_id is None or self.ctx is None:
+            return
+        lo, hi = self.progress_range
+        total = self._patch_total
+        percent = lo + (hi - lo) * min(count, total) / total if total else lo
+        _emit_job_progress(self.job_id, percent, None, ctx=self.ctx, fields={"phase": "patch"})
+
+    def _warn_patch_skipped(self):
+        if self.job_id is None:
+            return
+        code = self._defer_reason
+        if code:
+            _emit_warning(self.job_id, code, _PATCH_SKIP_MESSAGES.get(code, code))
 
     def __call__(self, index, op, width, height, prefix, label, media):
+        self._frames_seen = 0
+        self._defer_reason = None
         if not (0 < self.fps <= 240):
             return None
         region = op["region"]
@@ -99,6 +140,7 @@ class TemporalPatchResolver:
             frame_limit -= math.floor(start * self.fps + 1e-6)
             if frame_limit <= 0:
                 return None
+        self._patch_total = self._estimate_patch_frames(start, end, frame_limit)
         effect = _build_padded_region(
             x, y, w, h, width, height, max(2, feather), aligned=True
         )
@@ -109,6 +151,7 @@ class TemporalPatchResolver:
             ex, ey, ew, eh, width, height, 96 if spatial else 32, aligned=True
         )
         if bw * bh > 1280 * 720:
+            self._defer_reason = "patch_skipped_too_large"
             logger.info("Temporal: spatial fallback for a patch larger than 1280x720")
             return None
         box = (x - bx, y - by, w, h)
@@ -215,8 +258,22 @@ class TemporalPatchResolver:
         if patch_start is None:
             if os.path.exists(path):
                 os.unlink(path)
+            if self._defer_reason and not _check_cancelled(self.ctx):
+                self._warn_patch_skipped()
             return None
         return MotionPatch(path, ex, ey, ew, eh, patch_start)
+
+    def _estimate_patch_frames(self, start, end, frame_limit):
+        if self.total_frames is None or not (0 < self.fps <= 240):
+            return None
+        total = self.total_frames
+        if end is not None:
+            total = min(total, math.ceil(end * self.fps))
+        if start > 0:
+            total = max(1, total - math.floor(start * self.fps + 1e-6))
+        if frame_limit is not None:
+            total = min(total, frame_limit)
+        return total or None
 
     def _render(
         self, decoder, encoder, width, height, box, radius, crop, *, spatial=False
@@ -266,10 +323,14 @@ class TemporalPatchResolver:
 
         def watch():
             deadline = time.monotonic() + self.timeout
+            next_beat = time.monotonic() + 15
             try:
                 while not stop.wait(0.1):
                     with os.scandir(self.directory) as entries:
                         disk_bytes = sum(item.stat().st_size for item in entries if item.name.endswith(".mkv"))
+                    if self._frames_seen and time.monotonic() >= next_beat:
+                        next_beat = time.monotonic() + 15
+                        self._report_patch_frames(self._frames_seen)
                     if (
                         _check_cancelled(self.ctx)
                         or time.monotonic() > deadline
@@ -304,6 +365,7 @@ class TemporalPatchResolver:
                     return
                 previous = timestamp
                 count += 1
+                self._report_patch_frames(count)
                 image = np.frombuffer(data, np.uint16).reshape(height, width * 2, 3)
                 yield image[:, :width].copy(), image[:, width:].copy()
 
@@ -331,6 +393,7 @@ class TemporalPatchResolver:
             monitor = threading.Thread(target=watch, daemon=True)
             monitor.start()
             threads.append(monitor)
+            self._report_patch_frames(0)
             cx, cy, cw, ch = crop
             donor_guard = 0 if "444" in (self.source_format or "") else 2
             if spatial:
@@ -362,6 +425,7 @@ class TemporalPatchResolver:
                 processes[1].stdin.write(patch.tobytes())
             processes[1].stdin.close()
             if variable:
+                self._defer_reason = "patch_skipped_timing"
                 logger.info("Temporal: variable frame timing; using spatial repair")
                 return None
             for proc in processes:
@@ -381,6 +445,7 @@ class TemporalPatchResolver:
             if background_error:
                 raise RuntimeError(background_error[0]) from exc
             if timed_out.is_set() and not _check_cancelled(self.ctx):
+                self._defer_reason = "patch_skipped_budget"
                 logger.info(
                     "Temporal: preparation exceeded its time/disk budget; using spatial repair"
                 )

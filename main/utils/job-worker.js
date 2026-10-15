@@ -52,7 +52,9 @@ const lineWorker = createLineWorker({
 
     if (
       activeRun?.proc === proc &&
-      ["progress", "job_progress", "complete", "error", "cancelled", "summary"].includes(msg?.type)
+      ["progress", "job_progress", "complete", "error", "cancelled", "summary", "warning"].includes(
+        msg?.type,
+      )
     ) {
       activeRun.timer.refresh();
     }

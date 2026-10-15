@@ -115,6 +115,12 @@ export function createProcessingRun(set, get) {
     set((state) => run.target.result(state, kind, msg, previous));
   }
 
+  const WARNING_KEYS = {
+    patch_skipped_timing: "errors.patchSkippedTiming",
+    patch_skipped_budget: "errors.patchSkippedBudget",
+    patch_skipped_too_large: "errors.patchSkippedTooLarge",
+  };
+
   const handlers = {
     onRunStarted: (msg) => {
       const runId = msg?.runId;
@@ -162,6 +168,16 @@ export function createProcessingRun(set, get) {
         success: !msg?.cancelled && msg?.code === 0,
         cancelled: Boolean(msg?.cancelled),
         error: msg?.error,
+      });
+    },
+    onRunWarning: (msg) => {
+      const run = eventRun(msg);
+      if (!run || run.outcome) return;
+      const lang = get().language || "es";
+      const key = msg?.code && WARNING_KEYS[msg.code];
+      get().showToast({
+        kind: "warn",
+        text: (key ? tStatic(key, {}, lang) : msg?.message) || tStatic("errors.unknown", {}, lang),
       });
     },
     onError: (msg) => {
