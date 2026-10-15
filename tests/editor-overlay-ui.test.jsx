@@ -137,6 +137,20 @@ describe("overlay inspector", () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ style: { textShadowEnabled: true } });
   });
 
+  it("groups the text controls in tabs and shows one panel at a time", () => {
+    mount(<OverlayInspector overlay={overlay} onUpdate={() => {}} onRemove={() => {}} />);
+    const tabs = [...container.querySelectorAll('[role="tab"]')];
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Texto", "Estilo", "Posición"]);
+    const shadowPanel = () => buttonNamed("Sombra").closest('[role="tabpanel"]');
+    expect(shadowPanel().hidden).toBe(true);
+    act(() => tabs[1].click());
+    expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+    expect(shadowPanel().hidden).toBe(false);
+    expect(container.querySelector('input[type="text"]').closest('[role="tabpanel"]').hidden).toBe(
+      true,
+    );
+  });
+
   it("chooses the alignment from its list", () => {
     const onUpdate = vi.fn();
     mount(<OverlayInspector overlay={overlay} onUpdate={onUpdate} onRemove={() => {}} />);

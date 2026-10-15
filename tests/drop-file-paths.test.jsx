@@ -47,10 +47,10 @@ window.api = {
 let root = null;
 let App = null;
 
-function dispatchDrop(files) {
+function dispatchDrop(files, types = ["Files"]) {
   const shell = document.querySelector(".app-shell");
   const event = new Event("drop", { bubbles: true, cancelable: true });
-  Object.defineProperty(event, "dataTransfer", { value: { files } });
+  Object.defineProperty(event, "dataTransfer", { value: { files, types } });
   shell.dispatchEvent(event);
 }
 
@@ -173,5 +173,15 @@ describe("drop file paths", () => {
 
     expect(resolveDroppedPaths).not.toHaveBeenCalled();
     expect(useEditorStore.getState().appToast?.text).toMatch(/No se detectaron rutas de archivos/i);
+  });
+
+  it("ignores a drag that carries no files, such as a clip from the editor library", async () => {
+    await act(async () => {
+      dispatchDrop([], ["application/x-beru-editor-asset"]);
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    expect(getPathForFile).not.toHaveBeenCalled();
+    expect(useEditorStore.getState().appToast).toBeNull();
   });
 });
