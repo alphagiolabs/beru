@@ -1,0 +1,224 @@
+{
+  "version": 1,
+  "_comment": "Test contract for the Job Manifest envelope and job keys. Not runtime config. Keep JS (shared/job-manifest.js normalizeJob/normalizeManifest) and Python (python/processor.py _load_jobs_manifest + job field consumers) in sync. 'jobs' holds one representative job per kind; 'expected' pins the representative field values normalizeJob must produce (dotted paths address nested fields, 'absent' lists keys normalizeJob strips or never emits). All paths are fictional.",
+  "envelope": { "type": "beru-job-manifest", "version": 1 },
+  "jobs": [
+    {
+      "kind": "video",
+      "id": 1,
+      "input_path": "C:\\videos\\demo.mp4",
+      "width": 1920,
+      "height": 1080,
+      "video_duration": 30,
+      "frame_rate": 30,
+      "pix_fmt": "yuv420p",
+      "audio_codec": "aac",
+      "audio_channels": 2,
+      "trim_start": 2,
+      "trim_end": 12.5,
+      "playback_rate": 2,
+      "repeat_count": 99,
+      "audio_gain": 2,
+      "audio_muted": true,
+      "external_audio": {
+        "path": "C:\\audio\\voiceover.wav",
+        "name": "voiceover.wav",
+        "duration": 12,
+        "version": "v1",
+        "mode": "replace",
+        "offset": 1.5,
+        "trim_start": 0.5,
+        "trim_end": 8.5,
+        "gain": 0.8
+      },
+      "rotation": 45,
+      "flip_h": true,
+      "flip_v": false,
+      "output_height": 720,
+      "operations": [
+        {
+          "mode": "text",
+          "region": { "x": 100, "y": 50, "w": 600, "h": 120 },
+          "text": "Demo overlay",
+          "font_size": 32,
+          "font_color": "#ffffff",
+          "text_align": "left",
+          "bold": true,
+          "italic": false,
+          "start_time": 1,
+          "end_time": 5
+        }
+      ],
+      "watermark": {
+        "enabled": true,
+        "type": "text",
+        "text": "DEMO",
+        "imagePath": "",
+        "opacity": 0.5,
+        "scale": 1,
+        "position": "bottom-right",
+        "fontSize": 18,
+        "fontColor": "#ffffff",
+        "fontFamily": "Arial"
+      }
+    },
+    {
+      "kind": "composition",
+      "id": 2,
+      "output_path": "C:\\videos\\composition.mp4",
+      "width": 1920,
+      "height": 1080,
+      "trim_start": 0,
+      "clips": [
+        {
+          "kind": "video",
+          "input_path": "C:\\videos\\clip-a.mp4",
+          "width": 1280,
+          "height": 720,
+          "video_duration": 10,
+          "frame_rate": 25,
+          "pix_fmt": "yuv420p",
+          "audio_codec": "aac",
+          "audio_channels": 2,
+          "trim_start": 1,
+          "trim_end": 8,
+          "playback_rate": 1,
+          "repeat_count": 1
+        },
+        {
+          "kind": "video",
+          "input_path": "C:\\videos\\clip-b.mp4",
+          "width": 1920,
+          "height": 1080,
+          "video_duration": 20,
+          "frame_rate": 30,
+          "pix_fmt": "yuv420p",
+          "audio_codec": "aac",
+          "audio_channels": 2,
+          "trim_end": 15
+        }
+      ],
+      "canvas": { "width": 1920, "height": 1080 },
+      "composition_fps": 30
+    },
+    {
+      "kind": "stabilization",
+      "id": 3,
+      "input_path": "C:\\videos\\shaky.mp4",
+      "output_path": "C:\\videos\\shaky-stable.mp4",
+      "width": 1920,
+      "height": 1080,
+      "video_duration": 45,
+      "frame_rate": 30,
+      "pix_fmt": "yuv420p",
+      "stabilization": { "intensity": "medium", "edges": "zoom" },
+      "sample_seconds": 5
+    }
+  ],
+  "expected": [
+    {
+      "label": "video",
+      "note": "audio_gain/rotation/repeat_count out of range clamp or reset to defaults; external_audio keeps only the processing fields (audioAssetJob drops name/duration/version).",
+      "fields": {
+        "kind": "video",
+        "id": 1,
+        "encode_profile": "balanced",
+        "input_path": "C:\\videos\\demo.mp4",
+        "width": 1920,
+        "height": 1080,
+        "source_width": 1920,
+        "source_height": 1080,
+        "video_duration": 30,
+        "frame_rate": 30,
+        "pix_fmt": "yuv420p",
+        "video_codec": "",
+        "audio_codec": "aac",
+        "audio_channels": 2,
+        "trim_start": 2,
+        "trim_end": 12.5,
+        "playback_rate": 2,
+        "repeat_count": 1,
+        "audio_gain": 1,
+        "audio_muted": true,
+        "rotation": 0,
+        "flip_h": true,
+        "flip_v": false,
+        "output_height": 720,
+        "external_audio": {
+          "path": "C:\\audio\\voiceover.wav",
+          "mode": "replace",
+          "offset": 1.5,
+          "trim_start": 0.5,
+          "trim_end": 8.5,
+          "gain": 0.8
+        },
+        "operations": [
+          {
+            "mode": "text",
+            "region": { "x": 100, "y": 50, "w": 600, "h": 120 },
+            "text": "Demo overlay",
+            "font_size": 32,
+            "font_color": "#ffffff",
+            "text_align": "left",
+            "bold": true,
+            "italic": false,
+            "start_time": 1,
+            "end_time": 5
+          }
+        ],
+        "watermark": {
+          "enabled": true,
+          "type": "text",
+          "text": "DEMO",
+          "imagePath": "",
+          "opacity": 0.5,
+          "scale": 1,
+          "position": "bottom-right",
+          "fontSize": 18,
+          "fontColor": "#ffffff",
+          "fontFamily": "Arial"
+        },
+        "video_info_probed": true
+      },
+      "absent": []
+    },
+    {
+      "label": "composition",
+      "note": "Clips normalize as full video jobs; clip-b omits trim_start/playback_rate/repeat_count so the defaults apply. Source and edit fields on the composition record itself are stripped.",
+      "fields": {
+        "kind": "composition",
+        "id": 2,
+        "encode_profile": "balanced",
+        "output_path": "C:\\videos\\composition.mp4",
+        "canvas": { "width": 1920, "height": 1080 },
+        "composition_fps": 30,
+        "clips.0.trim_start": 1,
+        "clips.0.trim_end": 8,
+        "clips.0.playback_rate": 1,
+        "clips.1.trim_start": 0,
+        "clips.1.playback_rate": 1,
+        "clips.1.repeat_count": 1,
+        "clips.1.audio_gain": 1
+      },
+      "absent": ["width", "height", "trim_start"]
+    },
+    {
+      "label": "stabilization",
+      "note": "Source fields survive; edit fields never do. stabilization settings and sample_seconds pass through untouched.",
+      "fields": {
+        "kind": "stabilization",
+        "id": 3,
+        "encode_profile": "balanced",
+        "input_path": "C:\\videos\\shaky.mp4",
+        "width": 1920,
+        "height": 1080,
+        "video_duration": 45,
+        "frame_rate": 30,
+        "pix_fmt": "yuv420p",
+        "stabilization": { "intensity": "medium", "edges": "zoom" },
+        "sample_seconds": 5
+      },
+      "absent": []
+    }
+  ]
+}
