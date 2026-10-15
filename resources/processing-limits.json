@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "_comment": "Test contract and single source for processing timing limits. Keep JS (shared/clip-timeline.js) and Python (python/clip_timing.py, clip_render.py, composition.py, stabilization.py) in sync. Changing a value here changes preview and export together.",
+  "min_rate": 0.25,
+  "max_rate": 4,
+  "min_repeat_count": 1,
+  "max_repeat_count": 20,
+  "max_output_duration_seconds": 7200
+}

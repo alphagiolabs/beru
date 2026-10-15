@@ -22,6 +22,7 @@ const outputDir = join(binDir, processorDirName);
 const outputExe = join(outputDir, exeName);
 const profilesJson = join(root, "resources", "encode-profiles.json");
 const compositionLimitsJson = join(root, "resources", "composition-limits.json");
+const processingLimitsJson = join(root, "resources", "processing-limits.json");
 const workerPolicyJson = join(root, "resources", "worker-policy.json");
 const pythonVersionFile = join(root, ".python-version");
 const pythonVersion = readFileSync(pythonVersionFile, "utf8").trim();
@@ -191,6 +192,7 @@ const watchFiles = [
   specPath,
   profilesJson,
   compositionLimitsJson,
+  processingLimitsJson,
   workerPolicyJson,
   requirementsPath,
   pythonVersionFile,
@@ -250,6 +252,7 @@ runPython(
       "required = {'numpy', 'temporal_motion', 'temporal_pipeline'}; missing = required.difference(modules)",
       "assert not missing, f'Missing bundled runtime modules: {sorted(missing)}'",
       "assert os.path.isfile(os.path.join(internal, 'resources', 'worker-policy.json')), 'Missing worker policy'",
+      "assert os.path.isfile(os.path.join(internal, 'resources', 'processing-limits.json')), 'Missing processing limits'",
       "assert glob.glob(os.path.join(internal, '**', '_multiarray_umath*.pyd'), recursive=True), 'Missing NumPy native extension'",
       `assert os.path.isfile(os.path.join(internal, 'python${pythonVersion.split(".").slice(0, 2).join("")}.dll')), 'Unexpected bundled Python runtime'`,
       "print('[build:processor] Bundled Python, NumPy and temporal modules verified')",

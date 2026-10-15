@@ -1,3 +1,5 @@
+import { VIDEO_EXT } from "../../shared/video-extensions.js";
+
 const MIN_REGION_SIZE = 0.01;
 
 export function isRegionUsable(region, minSize = MIN_REGION_SIZE) {
@@ -262,7 +264,7 @@ export function formatMatchIdRaw(raw) {
 
 export function normalizeMatchId(name) {
   if (name === undefined || name === null) return "";
-  return stripExt(formatMatchIdRaw(name)).toLowerCase();
+  return formatMatchIdRaw(name).replace(VIDEO_EXT, "").toLowerCase();
 }
 
 export function rowGet(row, ...keys) {

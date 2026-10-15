@@ -1,8 +1,11 @@
-import { COMPOSITION_LIMITS } from "./composition-settings.js";
+import limits from "../resources/processing-limits.json" with { type: "json" };
 
 export const IDENTITY_TIMING = { rate: 1, repeatCount: 1 };
-export const MAX_REPEAT_COUNT = COMPOSITION_LIMITS.maxRepeatCount;
-export const MAX_OUTPUT_DURATION = COMPOSITION_LIMITS.maxDurationSeconds;
+export const MIN_RATE = limits.min_rate;
+export const MAX_RATE = limits.max_rate;
+export const MIN_REPEAT_COUNT = limits.min_repeat_count;
+export const MAX_REPEAT_COUNT = limits.max_repeat_count;
+export const MAX_OUTPUT_DURATION = limits.max_output_duration_seconds;
 export function playbackRates(current = 1) {
   const rates = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
   if (!rates.includes(current)) rates.push(current);
@@ -16,14 +19,16 @@ export function normalizeTiming(value) {
     rate:
       typeof value?.rate !== "boolean" &&
       Number.isFinite(rate) &&
-      rate >= COMPOSITION_LIMITS.minRate &&
-      rate <= COMPOSITION_LIMITS.maxRate
+      rate >= MIN_RATE &&
+      rate <= MAX_RATE
         ? rate
-        : 1,
+        : IDENTITY_TIMING.rate,
     repeatCount:
-      Number.isInteger(repeatCount) && repeatCount >= 1 && repeatCount <= MAX_REPEAT_COUNT
+      Number.isInteger(repeatCount) &&
+      repeatCount >= MIN_REPEAT_COUNT &&
+      repeatCount <= MAX_REPEAT_COUNT
         ? repeatCount
-        : 1,
+        : IDENTITY_TIMING.repeatCount,
   };
 }
 

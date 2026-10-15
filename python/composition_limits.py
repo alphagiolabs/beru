@@ -3,11 +3,19 @@ import json
 import math
 import sys
 from pathlib import Path
+from clip_timing import MIN_RATE, MAX_RATE, MIN_REPEAT_COUNT, MAX_REPEAT_COUNT, MAX_OUTPUT_DURATION_SECONDS
 from composition_overlays import CompositionError, OVERLAY_MAX_COUNT, validate_overlay
 
 root = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
 with (root / "resources" / "composition-limits.json").open(encoding="utf-8") as handle:
     LIMITS = json.load(handle)
+LIMITS.update({
+    "minRate": MIN_RATE,
+    "maxRate": MAX_RATE,
+    "minRepeatCount": MIN_REPEAT_COUNT,
+    "maxRepeatCount": MAX_REPEAT_COUNT,
+    "maxDurationSeconds": MAX_OUTPUT_DURATION_SECONDS,
+})
 
 
 def number(value):
@@ -47,7 +55,7 @@ def validate_composition_job(job):
         repeat = clip.get("repeat_count", 1)
         if not number(rate) or not LIMITS["minRate"] <= rate <= LIMITS["maxRate"]:
             raise CompositionError("Invalid composition playback rate")
-        if not isinstance(repeat, int) or isinstance(repeat, bool) or not 1 <= repeat <= LIMITS["maxRepeatCount"]:
+        if not isinstance(repeat, int) or isinstance(repeat, bool) or not LIMITS["minRepeatCount"] <= repeat <= LIMITS["maxRepeatCount"]:
             raise CompositionError("Invalid composition repeats")
         if "audio_muted" in clip and not isinstance(clip["audio_muted"], bool):
             raise CompositionError("Invalid composition mute")

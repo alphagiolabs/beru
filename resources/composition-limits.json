@@ -3,9 +3,5 @@
   "minCanvasDimension": 16,
   "maxCanvasDimension": 4096,
   "minFps": 1,
-  "maxFps": 120,
-  "maxDurationSeconds": 7200,
-  "minRate": 0.25,
-  "maxRate": 4,
-  "maxRepeatCount": 20
+  "maxFps": 120
 }

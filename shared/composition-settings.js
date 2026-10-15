@@ -1,4 +1,11 @@
-import limits from "../resources/composition-limits.json" with { type: "json" };
+import canvasLimits from "../resources/composition-limits.json" with { type: "json" };
+import {
+  MIN_RATE,
+  MAX_RATE,
+  MIN_REPEAT_COUNT,
+  MAX_REPEAT_COUNT,
+  MAX_OUTPUT_DURATION,
+} from "./clip-timeline.js";
 import {
   OVERLAY_MAX_COUNT,
   validateOverlayGeometry,
@@ -6,7 +13,15 @@ import {
   validateOverlayText,
 } from "./overlay-style.js";
 
-export const COMPOSITION_LIMITS = Object.freeze(limits);
+const limits = Object.freeze({
+  ...canvasLimits,
+  minRate: MIN_RATE,
+  maxRate: MAX_RATE,
+  minRepeatCount: MIN_REPEAT_COUNT,
+  maxRepeatCount: MAX_REPEAT_COUNT,
+  maxDurationSeconds: MAX_OUTPUT_DURATION,
+});
+export const COMPOSITION_LIMITS = limits;
 export const COMPOSITION_FITS = new Set(["contain", "cover"]);
 export const absoluteMediaPath = (value) =>
   typeof value === "string" &&
@@ -100,7 +115,11 @@ export function validateCompositionJob(job) {
       repeat = clip.repeat_count ?? 1;
     if (!Number.isFinite(rate) || rate < limits.minRate || rate > limits.maxRate)
       return "Velocidad fuera de rango";
-    if (!Number.isInteger(repeat) || repeat < 1 || repeat > limits.maxRepeatCount)
+    if (
+      !Number.isInteger(repeat) ||
+      repeat < limits.minRepeatCount ||
+      repeat > limits.maxRepeatCount
+    )
       return "Repeticiones fuera de rango";
     if (clip.framing != null) {
       const error = validateCompositionFraming(clip.framing);

@@ -7,9 +7,9 @@ from fractions import Fraction
 import media_probe
 from batch_context import _check_cancelled
 from batch_errors import is_hardware_encode_error, remove_partial_output
-from clip_timing import cycle_duration, repeat_count, playback_rate
+from clip_timing import MAX_OUTPUT_DURATION_SECONDS, cycle_duration, repeat_count, playback_rate
 from composition_graph import build_filter_graph, seek_args
-from composition_limits import LIMITS, validate_composition_job
+from composition_limits import validate_composition_job
 from composition_overlays import image_input_args, overlays_at_frame, prepare_overlay_workdir
 from media_paths import _validated_job_media
 
@@ -80,7 +80,7 @@ def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encod
             infos.append(info)
             durations.append(duration)
         total = max(sum(durations), max((overlay["endUs"] / 1e6 for overlay in overlays), default=0))
-        if total > LIMITS["maxDurationSeconds"]:
+        if total > MAX_OUTPUT_DURATION_SECONDS:
             raise ValueError("Composition exceeds maximum duration")
         if frame:
             clips, infos, durations = _frame_clips(clips, infos, durations, frame["atUs"], fps)

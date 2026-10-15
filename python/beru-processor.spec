@@ -11,7 +11,7 @@ if not profiles_json.is_file():
     raise SystemExit(f"encode-profiles.json not found: {profiles_json}")
 
 datas = [(str(project_root / "resources" / name), "resources") for name in (
-    "encode-profiles.json", "composition-limits.json", "worker-policy.json",
+    "encode-profiles.json", "composition-limits.json", "processing-limits.json", "worker-policy.json",
 )]
 
 a = Analysis(
