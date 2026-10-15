@@ -7,12 +7,21 @@ export function letterSpacingToPx(value) {
   return clampNum(value, LETTER_SPACING_MIN, LETTER_SPACING_MAX, 0);
 }
 
+export const TEXT_SCALE_X_MIN = 0.5;
+export const TEXT_SCALE_X_MAX = 3;
+
+export function textScaleLayoutWidth(width, scaleX = 1) {
+  const k = clampNum(scaleX ?? 1, TEXT_SCALE_X_MIN, TEXT_SCALE_X_MAX, 1);
+  return k === 1 ? width : Math.max(1, Math.floor(width / k + 0.5));
+}
+
 export const TEXT_STYLE_DEFAULTS = Object.freeze({
   fontSize: 32,
   fontColor: "white",
   fontFamily: "Arial",
   fontWeight: 400,
   letterSpacing: 0,
+  textScaleX: 1,
   textAlign: "left",
   textOpacity: 1,
   bold: false,
@@ -79,6 +88,12 @@ export function normalizeTextStyle(style = {}, defaults = TEXT_STYLE_DEFAULTS) {
       LETTER_SPACING_MIN,
       LETTER_SPACING_MAX,
       defaults.letterSpacing,
+    ),
+    textScaleX: clampNum(
+      source.textScaleX,
+      TEXT_SCALE_X_MIN,
+      TEXT_SCALE_X_MAX,
+      defaults.textScaleX,
     ),
     textAlign: ["left", "center", "right"].includes(source.textAlign)
       ? source.textAlign
@@ -155,6 +170,7 @@ export function textStyleToPythonPayload(style = {}) {
     font_family: safe.fontFamily,
     font_weight: safe.fontWeight,
     letter_spacing: safe.letterSpacing,
+    text_scale_x: safe.textScaleX,
     text_align: safe.textAlign,
     text_opacity: safe.textOpacity,
     bold: safe.bold,
@@ -222,4 +238,28 @@ export function findTextOpForRegion(operations, region, regionId = null) {
       ? linkedIdx
       : operations.findIndex((o) => textOpMatchesRegion(o, region, regionId));
   return { op: idx >= 0 ? operations[idx] : null, opIdx: idx };
+}
+
+const BOX_SCALED_PX_KEYS = [
+  "letterSpacing",
+  "boxBorderWidth",
+  "safeMargin",
+  "borderWidth",
+  "textShadowOffsetX",
+  "textShadowOffsetY",
+];
+
+export function scaleTextStyleToRegion(style, fromRegion, toRegion) {
+  const base = normalizeTextStyle(style);
+  const sy = fromRegion.h > 0 ? toRegion.h / fromRegion.h : 1;
+  const sx = fromRegion.w > 0 ? toRegion.w / fromRegion.w : 1;
+  const fontSize = clampNum(Math.round(base.fontSize * sy), 8, 200, base.fontSize);
+  const k = fontSize / base.fontSize;
+  const patch = {
+    fontSize,
+    textScaleX: Math.round(((base.textScaleX * sx) / k) * 100) / 100,
+  };
+  for (const key of BOX_SCALED_PX_KEYS) patch[key] = Math.round(base[key] * k);
+  const scaled = normalizeTextStyle({ ...base, ...patch });
+  return Object.fromEntries(Object.keys(patch).map((key) => [key, scaled[key]]));
 }

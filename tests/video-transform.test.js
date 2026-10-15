@@ -100,6 +100,8 @@ describe("video transform — session", () => {
       flipH: false,
       flipV: true,
       outputHeight: 480,
+      outputWidth: null,
+      fitMode: "pad",
     });
   });
 
@@ -110,6 +112,8 @@ describe("video transform — session", () => {
       flipH: false,
       flipV: false,
       outputHeight: null,
+      outputWidth: null,
+      fitMode: "pad",
     });
   });
 });

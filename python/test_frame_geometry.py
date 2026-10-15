@@ -7,7 +7,12 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from frame_geometry import is_identity_transform, normalize_transform, output_dimensions  # noqa: E402
+from frame_geometry import (  # noqa: E402
+    is_identity_transform,
+    normalize_transform,
+    output_dimensions,
+    output_layout,
+)
 from job_classify import _job_takes_copy_path  # noqa: E402
 
 CASES = json.loads((HERE.parent / "tests" / "fixtures" / "output-geometry-cases.json").read_text(encoding="utf-8"))
@@ -19,7 +24,18 @@ def job_from_case(transform):
         "flip_h": transform["flipH"],
         "flip_v": transform["flipV"],
         "output_height": transform["outputHeight"],
+        "output_width": transform.get("outputWidth"),
+        "fit_mode": transform.get("fitMode"),
     }
+
+
+def test_shared_layout_cases_match_the_javascript_helper():
+    for case in CASES["layout_cases"]:
+        width, height, resized, content = output_layout(
+            case["frame"]["width"], case["frame"]["height"],
+            normalize_transform(job_from_case(case["transform"])))
+        assert {"width": width, "height": height, "resized": resized,
+                "content": content} == case["expect"], case
 
 
 def test_shared_cases_match_the_javascript_helper():
@@ -50,6 +66,7 @@ def test_any_geometry_change_leaves_the_stream_copy_path():
 
 if __name__ == "__main__":
     test_shared_cases_match_the_javascript_helper()
+    test_shared_layout_cases_match_the_javascript_helper()
     test_invalid_values_fall_back_to_identity()
     test_any_geometry_change_leaves_the_stream_copy_path()
     print("frame geometry: all checks passed")

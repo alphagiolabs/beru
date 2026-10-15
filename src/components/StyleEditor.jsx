@@ -1,7 +1,12 @@
 import { Bold, Italic, AlignLeft, AlignCenter, AlignRight, Ban } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
-import { pickTextStyle, pickGlobalTextStyle, patchToGlobalState } from "../utils/text-style";
+import {
+  normalizeTextStyle,
+  pickTextStyle,
+  pickGlobalTextStyle,
+  patchToGlobalState,
+} from "../utils/text-style";
 import { normalizeColor } from "../utils/color-utils";
 import { FONT_FAMILIES, FONT_WEIGHTS, TEXT_ALIGNS, TEXT_STYLE_PRESETS } from "../utils/types";
 import TextLayoutControls from "./TextLayoutControls";
@@ -9,8 +14,12 @@ import { useT } from "../i18n/useT";
 import { presetMatches, presetPreviewTextStyle } from "./style-editor/preset-utils";
 import { InspectorGroup, ToggleSwitch, SegmentedToolbar, FontFamilyPicker } from "./inspector";
 
-export default function StyleEditor() {
+export default function StyleEditor({ value, onPatch, showFlowControls = true }) {
   const t = useT();
+  const globalStyle = useEditorStore(
+    (s) => ({ isBatch: s.sidebarMode === "batch", ...pickGlobalTextStyle(s) }),
+    shallow,
+  );
   const {
     isBatch,
     fontFamily,
@@ -25,6 +34,7 @@ export default function StyleEditor() {
     borderColor,
     fontWeight,
     letterSpacing,
+    textScaleX,
     textAlign,
     textOpacity,
     boxBorderWidth,
@@ -38,12 +48,13 @@ export default function StyleEditor() {
     textWrap,
     safeMargin,
     truncate,
-  } = useEditorStore(
-    (s) => ({ isBatch: s.sidebarMode === "batch", ...pickGlobalTextStyle(s) }),
-    shallow,
-  );
+  } = value ? { isBatch: false, ...patchToGlobalState(normalizeTextStyle(value)) } : globalStyle;
 
   const patch = (stylePatch) => {
+    if (onPatch) {
+      onPatch(stylePatch);
+      return;
+    }
     const getState = useEditorStore.getState;
     if (isBatch) getState().patchBatchTextStyle(stylePatch);
     else {
@@ -56,6 +67,7 @@ export default function StyleEditor() {
     fontColor: textFontColor,
     fontWeight,
     letterSpacing,
+    textScaleX,
     textOpacity,
     bold,
     italic,
@@ -193,6 +205,20 @@ export default function StyleEditor() {
                   step={0.5}
                 />
               </label>
+              <label className="inspector-type-metric" title={t("props.textScaleXHint")}>
+                <span className="inspector-type-metric-key">{t("props.textScaleXAbbr")}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  aria-label={t("props.textScaleX")}
+                  value={Math.round((textScaleX ?? 1) * 100)}
+                  onChange={(e) => patch({ textScaleX: Number(e.target.value) / 100 })}
+                  className="inspector-type-metric-input"
+                  min={50}
+                  max={300}
+                  step={5}
+                />
+              </label>
             </div>
 
             <div className="inspector-type-style" role="group" aria-label={t("props.fontStyle")}>
@@ -229,6 +255,7 @@ export default function StyleEditor() {
       >
         <TextLayoutControls
           showTextAlign
+          showFlowControls={showFlowControls}
           values={{
             textAlign: textAlign || "left",
             autoFit,

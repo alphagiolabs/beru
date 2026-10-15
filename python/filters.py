@@ -5,6 +5,7 @@ Patch drawtext option and filter caches here; processor.py re-exports helpers.
 
 import json
 import logging
+import math
 import os
 import re
 import subprocess
@@ -13,6 +14,12 @@ import threading
 import media_probe
 from color_validation import _validate_drawtext_color
 from frame_geometry import is_identity_transform, transform_filters
+from datetime_stamp import (
+    clock_parts,
+    normalize_clock_fields,
+    split_clock_region,
+    template_for_tokens,
+)
 from delogo_chains import _build_delogo_chain
 from fonts import _resolve_font
 from op_shared import (
@@ -111,7 +118,7 @@ def _drawtext_cache_store(cache_key, filter_str):
         _DRAWTEXT_CACHE[cache_key] = filter_str
 
 
-def build_drawtext(op, *, ffmpeg_path=None):
+def build_drawtext(op, *, ffmpeg_path=None, expansions=None):
     """Build ffmpeg drawtext filter string from operation."""
     text = (op.get("text") or "").strip()
     if not text:
@@ -140,6 +147,7 @@ def build_drawtext(op, *, ffmpeg_path=None):
                 ffmpeg_path,
                 json.dumps(op, sort_keys=True, separators=(",", ":")),
                 resolved_font,
+                json.dumps(expansions, sort_keys=True) if expansions else None,
             )
         except (TypeError, ValueError):
             cache_key = None
@@ -277,6 +285,14 @@ def build_drawtext(op, *, ffmpeg_path=None):
             parts.append(enable_clause)
         return parts
 
+    expansion_mode = "normal" if expansions else "none"
+
+    def _drawtext_value(raw):
+        escaped = _escape_drawtext_text(raw)
+        for placeholder, expansion in (expansions or {}).items():
+            escaped = escaped.replace(placeholder, _escape_drawtext_text(expansion))
+        return escaped
+
     if tight_glyph_layout:
         glyphs = _text_glyph_positions(
             text,
@@ -291,10 +307,10 @@ def build_drawtext(op, *, ffmpeg_path=None):
         if len(glyphs) >= 2:
             filters = []
             for cluster, dx, dy in glyphs:
-                escaped = _escape_drawtext_text(cluster)
+                escaped = _drawtext_value(cluster)
                 gx = int(round(x + dx))
                 gy = int(round(y + dy))
-                parts = [f"text='{escaped}'", "expansion=none"] + _style_parts(
+                parts = [f"text='{escaped}'", f"expansion={expansion_mode}"] + _style_parts(
                     gx, gy, include_line_spacing=False, include_native_spacing=False
                 )
                 filters.append("drawtext=" + ":".join(parts))
@@ -304,8 +320,8 @@ def build_drawtext(op, *, ffmpeg_path=None):
                 _drawtext_cache_store(cache_key, filter_str)
             return filter_str
 
-    text = _escape_drawtext_text(text)
-    parts = [f"text='{text}'", "expansion=none"] + _style_parts(
+    text = _drawtext_value(text)
+    parts = [f"text='{text}'", f"expansion={expansion_mode}"] + _style_parts(
         x_expr, y_expr, include_line_spacing=True, include_native_spacing=True
     )
     filter_str = "drawtext=" + ":".join(parts)
@@ -393,6 +409,87 @@ def _build_watermark_filter(watermark, video_w, video_h):
     return None, False, None
 
 
+def _text_scale_x(op):
+    return _coerce_float(op.get("text_scale_x"), 1.0, 0.5, 3.0)
+
+
+def _text_graph(op, pieces, prev, n, ffmpeg_path):
+    """drawbox drifts chroma when it blends in YUV, so translucent boxes are
+    RGBA layers composited by overlay. Layers come from the video itself so
+    drawtext ``t`` keeps the frame time.
+    """
+    enable_clause = _build_enable_clause(op)
+    pieces = [p for p in pieces if p[0]["w"] > 0 and p[0]["h"] > 0]
+    direct = []
+    layers = []
+    if _text_bg_enabled(op):
+        opacity = _coerce_float(op.get("bg_opacity"), 0.65, 0.0, 1.0)
+        color = _validate_drawtext_color(op.get("bg_color", "black"), "bg_color")
+        for box, _, _ in pieces:
+            if opacity >= 1:
+                direct.append(_build_region_bg_drawbox(box, color, opacity, enable_clause))
+            elif opacity > 0:
+                w, h = max(1, int(box["w"])), max(1, int(box["h"]))
+                layers.append((
+                    f"crop=2:2:0:0,scale={w}:{h},format=rgba,"
+                    f"drawbox=x=0:y=0:w={w}:h={h}:color={color}@{opacity:.3f}:t=fill:replace=1",
+                    int(box["x"]), int(box["y"]), enable_clause,
+                ))
+    scale_x = _text_scale_x(op)
+    texts = []
+    safe_margin = max(0, _coerce_int(op.get("safe_margin"), 0, 0, 48))
+    for box, text, expansions in pieces:
+        if abs(scale_x - 1.0) < 1e-6:
+            texts.append(build_drawtext({**op, "text": text, "region": box}, ffmpeg_path=ffmpeg_path,
+                                        expansions=expansions))
+            continue
+        inner = _text_layout_bounds(box, safe_margin, _text_box_pad(op))
+        if inner["w"] <= 0 or inner["h"] <= 0:
+            continue
+        layer_w = max(1, math.floor(inner["w"] / scale_x + 0.5))
+        dt = build_drawtext(
+            {**op, "bg_enabled": False, "safe_margin": 0, "text": text,
+             "region": {"x": 0, "y": 0, "w": layer_w, "h": inner["h"]}},
+            ffmpeg_path=ffmpeg_path, expansions=expansions,
+        )
+        if dt:
+            layers.append((
+                f"crop=2:2:0:0,scale={layer_w}:{inner['h']},format=rgba,colorchannelmixer=aa=0,"
+                f"{dt},scale={inner['w']}:{inner['h']}:flags=bicubic",
+                inner["x"], inner["y"], "",
+            ))
+    texts = [t for t in texts if t]
+    if not layers:
+        chain = ",".join(direct + texts)
+        return f"{prev}{chain}[tmp{n}]" if chain else None
+
+    labels = [f"lay{n}_{i}" for i in range(len(layers))]
+    head = ",".join(direct + [f"split={len(layers) + 1}[base{n}]" + "".join(f"[src{l}]" for l in labels)])
+    graph = [f"{prev}{head}"]
+    for (chain, _, _, _), label in zip(layers, labels):
+        graph.append(f"[src{label}]{chain}[{label}]")
+    current = f"[base{n}]"
+    for index, ((_, x, y, enable), label) in enumerate(zip(layers, labels)):
+        last = index == len(layers) - 1
+        out = f"[tmp{n}]" if last and not texts else f"[ov{label}]"
+        graph.append(f"{current}[{label}]overlay={_overlay_opts(x, y, enable)}{out}")
+        current = out
+    if texts:
+        graph.append(f"{current}{','.join(texts)}[tmp{n}]")
+    return ";".join(graph)
+
+
+def _datetime_pieces(op, region):
+    blocks = clock_parts(op)
+    if not blocks:
+        return []
+    templates = [template_for_tokens(tokens) for tokens in blocks]
+    font_size = _coerce_int(op.get("font_size"), 32, 8, 200)
+    inset = max(0, _coerce_int(op.get("safe_margin"), 0, 0, 48)) + _text_box_pad(op)
+    boxes = split_clock_region(region, [len(text) for text, _ in templates], font_size, inset)
+    return [(box, text, expansions) for (text, expansions), box in zip(templates, boxes)]
+
+
 def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg_path=None,
                          source_pix_fmt=None, temporal_resolver=None, transform=None):
     """Build ffmpeg -filter_complex argument for all operations.
@@ -413,10 +510,14 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
             image_paths.append(path)
         return image_index[path]
 
+    stamps = []
     for raw_op in operations:
         op = _normalize_operation(raw_op)
         mode = op.get("mode")
         if _is_op_time_disabled(op):
+            continue
+        if mode == "datetime":
+            stamps.append(op)
             continue
         region = _region_to_pixels(op.get("region", {}), source_w, source_h)
         if not region:
@@ -442,22 +543,11 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
         if mode == "text":
             if not (op.get("text") or "").strip():
                 continue
-            enable_clause = _build_enable_clause(op)
-            segments = []
-            if _text_bg_enabled(op):
-                bg_color = op.get("bg_color", "black")
-                bg_opacity = op.get("bg_opacity", 0.65)
-                segments.append(
-                    _build_region_bg_drawbox(region, bg_color, bg_opacity, enable_clause)
-                )
-            dt = build_drawtext({**op, "region": region}, ffmpeg_path=ffmpeg_path)
-            if dt:
-                segments.append(dt)
-            if not segments:
-                continue
-            chain = ",".join(segments)
             prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
-            filters.append(f"{prev}{chain}[tmp{n}]")
+            graph = _text_graph(op, [(region, op.get("text"), None)], prev, n, ffmpeg_path)
+            if not graph:
+                continue
+            filters.append(graph)
         elif mode == "blur":
             chain = _build_delogo_chain(
                 {**op, "region": region, "delogo_method": "blur", "edge_feather": 0},
@@ -541,10 +631,22 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
                 n += 1
 
     if transform is not None and not is_identity_transform(transform):
-        chain, _ = transform_filters(transform, video_w, video_h)
+        chain, (video_w, video_h) = transform_filters(transform, video_w, video_h)
         if chain:
             prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
             filters.append(f"{prev}{','.join(chain)}[tmp{n}]")
+            n += 1
+
+    for op in stamps:
+        region = _region_to_pixels(op.get("region", {}), video_w, video_h)
+        if not region:
+            continue
+        op = {**normalize_clock_fields(op), "auto_fit": False, "text_wrap": False,
+              "truncate": "none", "line_height": 1}
+        prev = "[0:v]" if n == 0 else f"[tmp{n-1}]"
+        graph = _text_graph(op, _datetime_pieces(op, region), prev, n, ffmpeg_path)
+        if graph:
+            filters.append(graph)
             n += 1
 
     if n == 0:

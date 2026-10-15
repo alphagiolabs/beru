@@ -1,6 +1,13 @@
 import { useCallback, useRef, useEffect } from "react";
 import useEditorStore from "../stores/useEditorStore";
-import { toVideoCoordsNormalized, drawRegionOnCanvas, contentRect } from "../utils/video-utils";
+import {
+  toVideoCoordsNormalized,
+  drawRegionOnCanvas,
+  contentRect,
+  contentRectLayout,
+  clientToVideoNormUnclamped,
+  isInOutputView,
+} from "../utils/video-utils";
 import { applyMove, applyResizeRaw, cursorForHandle } from "../utils/region-interaction";
 
 const HANDLE_THRESHOLD_PX = 16;
@@ -54,6 +61,20 @@ export default function useCanvas(videoEl, videoKey) {
     const r = currentRegion;
     const video = videoEl?.current;
     if (!r || !video || !video.videoWidth || !video.videoHeight) return null;
+    if (isInOutputView(video)) {
+      const c = contentRectLayout(video);
+      if (!c) return null;
+      return {
+        rx: r.x * c.dw + c.ox,
+        ry: r.y * c.dh + c.oy,
+        rw: r.w * c.dw,
+        rh: r.h * c.dh,
+        point: (cx, cy) => {
+          const v = clientToVideoNormUnclamped(video, cx, cy);
+          return v && [v.x * c.dw + c.ox, v.y * c.dh + c.oy];
+        },
+      };
+    }
     const c = contentRect(video);
     if (!c) return null;
     const sx = c.dw / video.videoWidth;
@@ -62,13 +83,15 @@ export default function useCanvas(videoEl, videoKey) {
     const ry = r.y * video.videoHeight * sy + c.oy + c.br.top;
     const rw = r.w * video.videoWidth * sx;
     const rh = r.h * video.videoHeight * sy;
-    return { rx, ry, rw, rh };
+    return { rx, ry, rw, rh, point: (cx, cy) => [cx, cy] };
   }, [currentRegion, videoEl]);
 
   const hitTestHandle = useCallback(
-    (cx, cy) => {
+    (clientX, clientY) => {
       const sr = getScreenRect();
-      if (!sr) return null;
+      const p = sr?.point(clientX, clientY);
+      if (!p) return null;
+      const [cx, cy] = p;
       const { rx, ry, rw, rh } = sr;
       const T = HANDLE_THRESHOLD_PX;
       const handles = {
@@ -90,9 +113,11 @@ export default function useCanvas(videoEl, videoKey) {
   );
 
   const hitTestRegion = useCallback(
-    (cx, cy) => {
+    (clientX, clientY) => {
       const sr = getScreenRect();
-      if (!sr) return false;
+      const p = sr?.point(clientX, clientY);
+      if (!p) return false;
+      const [cx, cy] = p;
       const { rx, ry, rw, rh } = sr;
       return (
         cx > rx + MOVE_INSET_PX &&

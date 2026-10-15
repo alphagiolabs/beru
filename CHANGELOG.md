@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ediciones por video de giro, flips, tamaño, ganancia, silencio, audio externo, velocidad y repeticiones, con historial y restauración de Session.
 - Composición de videos con documento propio, orden de clips, canvas y FPS; estabilización con muestra previa y exportación como medio derivado.
+- **Fechero** — Nuevo espacio de trabajo en la barra lateral, debajo de Marca de agua, con su propia capa de fecha y hora que avanza con el video, en una o dos cajas y con orden de fecha configurable. "Estilo y posición DVR" reproduce el sello de cámara de referencia: Segoe UI estirada al 206 %, caja negra al 43 % y tamaño según el alto del video. La preview en vivo, la preview exacta y la exportación muestran la misma hora.
+- Un Fechero aplicado se puede editar por completo: hora, formato, estilo (presets, fuente, colores, caja, borde y sombra), estilo DVR y posición. Al hacer clic sobre una capa de texto, imagen o Fechero en el video, la capa queda seleccionada.
+- El Fechero se redimensiona con manijas en el video o con W/H en el panel, y el texto escala con la caja: el alto cambia el tamaño de fuente (con margen, espaciado, borde y sombra) y el ancho, el ancho de letra.
+- **Tamaño de salida libre** — Ancho y alto exactos por video (también para agrandar), con candado de proporción, presets de proporción (Original, 16:9, 4:3, 1:1, 9:16) y de resolución (1080p, 720p, 480p) y modos Barras / Estirar / Recortar. Una proporción que difiere hasta un 1 % llena el cuadro sin barras finas (848×478 → 1920×1080). El Fechero se dibuja sobre el cuadro final: no se deforma, no rota ni se voltea, y acompaña los cambios de tamaño.
+- La vista en vivo muestra el cuadro de salida (tamaño, barras, estirado, recorte, rotación y volteo) fuera de las herramientas de logo, y las regiones se dibujan y arrastran sobre él.
+- **Ancho de letra** — Las capas de texto y el Fechero pueden estirarse en horizontal (50–300 %) sin cambiar su altura, en la preview y en la exportación.
 
 ### Changed
 
@@ -21,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Las cajas de fondo translúcidas de texto conservan el tinte del video al exportar, como en la preview; antes FFmpeg desplazaba el color del fondo dentro de la caja.
 - Los errores por Job de composición y estabilización conservan la ejecución activa hasta su cierre; las respuestas de preview obsoletas y los cambios que exceden el límite de duración se descartan.
 
 ## [1.6.47] - 2026-10-02

@@ -1,5 +1,7 @@
 import RegionBlurPreview from "./RegionBlurPreview";
 import TextOverlay from "../TextOverlay";
+import DateTimeOverlay from "./DateTimeOverlay";
+import { sourceRegionToOutput, stampPlacement } from "../../utils/stamp-geometry";
 import { isRegionUsable, regionToScreen } from "../../utils/video-utils";
 import { useT } from "../../i18n/useT";
 
@@ -13,6 +15,8 @@ export default function LogoDraftOverlays({
   tempStart,
   tempEnd,
   textInput,
+  tempClock,
+  stampGeometry,
   globalTextStyle,
 }) {
   const t = useT();
@@ -34,6 +38,25 @@ export default function LogoDraftOverlays({
           }}
           showOutline={false}
           showOverflowWarning={false}
+          zIndex={35}
+        />
+      );
+    }
+  }
+
+  if (activeTool === "datetime" && isRegionUsable(currentRegion)) {
+    const region = stampGeometry
+      ? sourceRegionToOutput(currentRegion, stampGeometry)
+      : currentRegion;
+    const placement = stampPlacement(region, stampGeometry, videoRef.current);
+    if (placement) {
+      textDraft = (
+        <DateTimeOverlay
+          videoRef={videoRef}
+          screen={placement.screen}
+          cssTransform={placement.cssTransform}
+          op={{ ...globalTextStyle, ...tempClock }}
+          fallbackText={t("datetime.draftHint")}
           zIndex={35}
         />
       );

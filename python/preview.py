@@ -9,6 +9,7 @@ import time
 import threading
 
 import media_probe
+from datetime_stamp import shift_clock_epoch
 from filters import build_filter_complex
 from frame_geometry import is_identity_transform, normalize_transform
 from media_paths import _validated_job_media
@@ -279,7 +280,7 @@ def _render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
         if radius and frame_rate > 0:
             seek = math.floor(seek * frame_rate + 1e-6) / frame_rate
         target_rel = sample_timestamp - seek
-        graph_ops = [_shift_op_time_bounds(op, seek) for op in operations]
+        graph_ops = [shift_clock_epoch(_shift_op_time_bounds(op, seek), seek) for op in operations]
         temporal_kwargs = {}
         if radius:
             temporal_kwargs["temporal_resolver"] = TemporalPatchResolver(

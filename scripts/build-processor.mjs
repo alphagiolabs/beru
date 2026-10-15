@@ -177,6 +177,7 @@ const watchFiles = [
   join(pythonDir, "temporal_pipeline.py"),
   join(pythonDir, "spatial_inpaint.py"),
   join(pythonDir, "requirements.txt"),
+  join(pythonDir, "datetime_stamp.py"),
   join(pythonDir, "delogo_chains.py"),
   join(pythonDir, "text_layout_helpers.py"),
   join(pythonDir, "color_validation.py"),

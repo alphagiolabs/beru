@@ -45,6 +45,7 @@ a = Analysis(
         "temporal_pipeline",
         "spatial_inpaint",
         "color_validation",
+        "datetime_stamp",
         "delogo_chains",
         "text_layout_helpers",
     ],

@@ -3800,7 +3800,7 @@ a:focus-visible,
 .inspector-type-metrics {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
   min-width: 0;
   border-radius: 6px;
