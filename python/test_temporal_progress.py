@@ -28,14 +28,15 @@ def _fixture_dir():
     return root
 
 
-def _make_input(path, vf_tail=""):
+def _make_input(path, vf_tail="", output_args=()):
     vf = f"drawbox=x={LOGO['x']}:y={LOGO['y']}:w={LOGO['w']}:h={LOGO['h']}:color=red@1:t=fill"
     if vf_tail:
         vf += "," + vf_tail
     result = _run([
         find_ffmpeg(), "-y", "-v", "error", "-f", "lavfi",
         "-i", f"testsrc2=size={VW}x{VH}:rate={FPS}:duration={DUR}",
-        "-vf", vf, "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p", "-an", path,
+        "-vf", vf, *output_args,
+        "-c:v", "libx264", "-crf", "20", "-pix_fmt", "yuv420p", "-an", path,
     ], text=True)
     assert result.returncode == 0, result.stderr[-800:]
 
@@ -144,12 +145,34 @@ def test_patch_phase_emits_job_progress():
         shutil.rmtree(workdir, ignore_errors=True)
 
 
-def test_variable_timing_warns_and_falls_back():
+def test_variable_timing_keeps_patch():
     workdir = _fixture_dir()
     try:
         src = workdir / "vfr-in.mp4"
         _make_input(src, vf_tail="setpts=PTS+if(gt(N\\,5)\\,0.12/TB\\,0)")
         manifest = _manifest(src, workdir / "vfr-out.mp4")
+        result, events = _run_processor(workdir, manifest)
+
+        codes = sorted({e.get("code") for e in _warnings(events)})
+        assert "patch_skipped_timing" not in codes, f"dropped frames skipped the patch: {codes}"
+        assert _summary(events)["succeeded"] == 1, _summary(events)
+        output = Path(manifest["jobs"][0]["output_path"])
+        assert output.exists() and output.stat().st_size > 0
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def test_irregular_timing_warns_and_falls_back():
+    workdir = _fixture_dir()
+    try:
+        src = workdir / "irregular-in.mkv"
+        # Every other frame lands 0.1 frame after its predecessor.
+        _make_input(
+            src,
+            vf_tail="settb=1/1000,setpts=(N-0.9*mod(N\\,2))*0.04/TB",
+            output_args=("-fps_mode", "passthrough", "-enc_time_base", "1:1000"),
+        )
+        manifest = _manifest(src, workdir / "irregular-out.mp4")
         result, events = _run_processor(workdir, manifest)
 
         codes = sorted({e.get("code") for e in _warnings(events)})
@@ -174,7 +197,8 @@ def test_terminating_thread_counts_as_hardware_error():
 def main():
     tests = [
         test_patch_phase_emits_job_progress,
-        test_variable_timing_warns_and_falls_back,
+        test_variable_timing_keeps_patch,
+        test_irregular_timing_warns_and_falls_back,
         test_terminating_thread_counts_as_hardware_error,
     ]
     failed = 0

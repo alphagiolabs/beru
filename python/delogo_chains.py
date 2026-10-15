@@ -339,7 +339,8 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
     if method in {"temporal", "inpaint"} and temporal_patch is not None and img_input_index is not None:
         patch = temporal_patch
         input_idx = img_input_index(patch.path)
-        timing = f"setpts=PTS+{patch.start:.8f}/TB" if patch.start else "null"
+        steps = "".join(f"{shift:+.8f}*gte(N\\,{frame})" for frame, shift in patch.steps)
+        timing = f"setpts=PTS+({patch.start:.8f}{steps})/TB" if patch.start or steps else "null"
         head = f"{src}null[full{s}];[{input_idx}:v]{timing}[clean{s}];"
         return head + _seamless_overlay_tail(
             f"clean{s}", s, idx, patch.x, patch.y, patch.width, patch.height,

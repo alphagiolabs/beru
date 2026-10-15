@@ -8,6 +8,8 @@ import re
 import subprocess
 import threading
 import time
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 
@@ -25,7 +27,7 @@ logger = logging.getLogger("beru")
 _PTS = re.compile(r"\bn:\s*\d+.*?pts_time:([-+\d.eE]+)")
 _PATCH_SKIP_MESSAGES = {
     "patch_skipped_timing": (
-        "Reconstrucci\u00f3n temporal omitida: el video tiene timestamps variables; "
+        "Reconstrucci\u00f3n temporal omitida: el video tiene timestamps irregulares;"
         "se aplic\u00f3 reparaci\u00f3n espacial."
     ),
     "patch_skipped_budget": (
@@ -47,6 +49,8 @@ class MotionPatch:
     width: int
     height: int
     start: float = 0
+    # (patch frame index, seconds) jumps of a variable-rate source.
+    steps: tuple = ()
 
 
 def extra_media_input_args(path, *, duration=0, image_fps=None):
@@ -148,7 +152,7 @@ class TemporalPatchResolver:
             return None
         ex, ey, ew, eh = effect
         bx, by, bw, bh = _build_padded_region(
-            ex, ey, ew, eh, width, height, 96 if spatial else 32, aligned=True
+            ex, ey, ew, eh, width, height, 96 + min(w, h) // 2 if spatial else 32, aligned=True
         )
         if bw * bh > 1280 * 720:
             self._defer_reason = "patch_skipped_too_large"
@@ -245,7 +249,7 @@ class TemporalPatchResolver:
             "1",
             path,
         ]
-        patch_start = self._render(
+        timing = self._render(
             decoder,
             encoder,
             bw,
@@ -255,13 +259,13 @@ class TemporalPatchResolver:
             (ex - bx, ey - by, ew, eh),
             spatial=spatial,
         )
-        if patch_start is None:
+        if timing is None:
             if os.path.exists(path):
                 os.unlink(path)
             if self._defer_reason and not _check_cancelled(self.ctx):
                 self._warn_patch_skipped()
             return None
-        return MotionPatch(path, ex, ey, ew, eh, patch_start)
+        return MotionPatch(path, ex, ey, ew, eh, *timing)
 
     def _estimate_patch_frames(self, start, end, frame_limit):
         if self.total_frames is None or not (0 < self.fps <= 240):
@@ -280,7 +284,7 @@ class TemporalPatchResolver:
     ):
         import numpy as np
         from temporal_motion import compensated_frames
-        from spatial_inpaint import reconstruct_texture
+        from spatial_inpaint import EXACT_SCORE, reconstruct_texture
 
         processes = []
         threads = []
@@ -292,6 +296,9 @@ class TemporalPatchResolver:
         variable = False
         count = 0
         first_timestamp = None
+        steps = []
+        jitter = False
+        tolerance = 0.1 / self.fps
         timed_out = threading.Event()
 
         def stop_processes():
@@ -344,8 +351,9 @@ class TemporalPatchResolver:
                 fail_background(exc)
 
         def frames():
-            nonlocal variable, count, first_timestamp
+            nonlocal variable, count, first_timestamp, jitter
             previous = None
+            offset = 0.0
             size = width * 2 * height * 6
             while True:
                 if _check_cancelled(self.ctx):
@@ -358,9 +366,16 @@ class TemporalPatchResolver:
                 timestamp = timestamps.get(timeout=10)
                 if first_timestamp is None:
                     first_timestamp = timestamp
-                if previous is not None and abs(
-                    timestamp - previous - 1 / self.fps
-                ) > max(0.003, 0.05 / self.fps):
+                # Patch frames are written at a constant rate; record where a
+                # variable-rate source drifts so the overlay can follow it.
+                drift = timestamp - first_timestamp - count / self.fps
+                if abs(drift - offset) > tolerance:
+                    steps.append((count, drift - offset))
+                    offset = drift
+                jitter = jitter or abs(drift - offset) > 0.001
+                if len(steps) > 64 or (
+                    previous is not None and timestamp - previous <= 3 * tolerance
+                ):
                     variable = True
                     return
                 previous = timestamp
@@ -401,12 +416,30 @@ class TemporalPatchResolver:
                     cx, cy, cw, ch, width, height, 32, aligned=True
                 )
 
+                def texture_frame(original, filled, job):
+                    repaired, score = job.result()
+                    # Only a near-exact copy outranks real background
+                    # revealed by neighboring frames.
+                    exact = repaired is not None and score <= EXACT_SCORE
+                    return original[my : my + mh, mx : mx + mw].copy(), (
+                        filled if repaired is None else repaired
+                    )[my : my + mh, mx : mx + mw].copy(), exact
+
                 def texture_frames():
-                    for original, filled in frames():
-                        repaired = reconstruct_texture(original, filled, box)
-                        yield original[my : my + mh, mx : mx + mw].copy(), repaired[
-                            my : my + mh, mx : mx + mw
-                        ].copy(), repaired is not filled
+                    # Frames are independent, so a few run at once (numpy
+                    # releases the GIL) while the output order stays fixed.
+                    workers = min(4, os.cpu_count() or 1)
+                    pending = deque()
+                    with ThreadPoolExecutor(workers) as pool:
+                        for original, filled in frames():
+                            job = pool.submit(
+                                reconstruct_texture, original, box, guard=donor_guard
+                            )
+                            pending.append((original, filled, job))
+                            if len(pending) > 2 * workers:
+                                yield texture_frame(*pending.popleft())
+                        while pending:
+                            yield texture_frame(*pending.popleft())
 
                 motion_box = (box[0] - mx, box[1] - my, box[2], box[3])
                 output_frames = compensated_frames(
@@ -440,7 +473,9 @@ class TemporalPatchResolver:
                 raise RuntimeError(background_error[0])
             if not count:
                 raise RuntimeError("Temporal source produced no frames")
-            return first_timestamp
+            # Lead each frame slightly so rounding never shows its predecessor.
+            margin = 2 * tolerance if steps or jitter else 0
+            return first_timestamp - margin, tuple(steps)
         except Exception as exc:
             if background_error:
                 raise RuntimeError(background_error[0]) from exc

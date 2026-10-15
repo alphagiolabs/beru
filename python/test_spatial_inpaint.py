@@ -205,20 +205,15 @@ def main():
         repaired_path = export(
             stationary, directory, "stationary-repaired", depth="yuv444p10le"
         )
-        fallback_path = export(
-            stationary,
-            directory,
-            "stationary-baseline",
-            depth="yuv444p10le",
-            resolver=False,
+        repaired = decode(repaired_path)[:, 40:64, 76:94].astype(float)
+        surroundings = occluded[0][exterior].astype(float)
+        assert repaired.std() > 0.7 * surroundings.std(), (
+            "Without temporal references the grain must continue, not blur",
+            repaired.std(),
+            surroundings.std(),
         )
-        repaired, fallback = decode(repaired_path), decode(fallback_path)
-        assert (
-            np.abs(
-                repaired[:, 40:64, 76:94].astype(float) - fallback[:, 40:64, 76:94]
-            ).mean()
-            < 1
-        ), "No reliable sample should preserve the spatial fallback"
+        assert abs(repaired.mean() - surroundings.mean()) < 15, "The logo leaked into the repair"
+        assert np.array_equal(repaired[0], repaired[-1]), "A still source must give a still repair"
         native_before = np.frombuffer(
             run(
                 [
