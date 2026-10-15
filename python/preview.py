@@ -1,6 +1,7 @@
 """Single-frame previews with injectable binary paths, probes and filter builders."""
 
 import base64
+import json
 import math
 import os
 import subprocess
@@ -205,10 +206,25 @@ def _run_preview_with_end_fallback(make_command, info, input_path, vw, vh, times
     return result
 
 
+def _stamp_scratch_owner(directory):
+    """Mark scratch ownership with the parent pid so an instance's temp sweep
+    skips the live preview scratch of another instance."""
+    try:
+        pid = int(os.environ.get("BERU_PARENT_PID") or os.getpid())
+    except ValueError:
+        pid = os.getpid()
+    try:
+        with open(os.path.join(directory, "owner.json"), "w", encoding="utf-8") as handle:
+            json.dump({"pid": pid}, handle)
+    except OSError:
+        pass
+
+
 def render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
                  info_fn=None, filter_fn=None):
     try:
         with tempfile.TemporaryDirectory(prefix="beru-preview-") as directory:
+            _stamp_scratch_owner(directory)
             return _render_frame(
                 payload, source_only=source_only, ffmpeg_path=ffmpeg_path,
                 probe_fn=probe_fn, info_fn=info_fn, filter_fn=filter_fn,
