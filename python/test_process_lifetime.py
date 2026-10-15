@@ -15,7 +15,7 @@ from pathlib import Path
 @unittest.skipUnless(os.name == "nt", "Windows process ownership")
 class ProcessLifetimeTests(unittest.TestCase):
     def test_packaged_media_owner_closes_its_child_when_its_bootloader_is_killed(self):
-        executable = Path(__file__).resolve().parent.parent / "bin" / "beru-processor.exe"
+        executable = Path(__file__).resolve().parent.parent / "bin" / "beru-processor" / "beru-processor.exe"
         if not executable.is_file():
             self.skipTest("bundled processor is not built")
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -49,7 +49,7 @@ class ProcessLifetimeTests(unittest.TestCase):
                     kernel.CloseHandle(handle)
 
     def test_packaged_media_owner_preserves_stdin_output_and_failure_code(self):
-        executable = Path(__file__).resolve().parent.parent / "bin" / "beru-processor.exe"
+        executable = Path(__file__).resolve().parent.parent / "bin" / "beru-processor" / "beru-processor.exe"
         if not executable.is_file():
             self.skipTest("bundled processor is not built")
         with tempfile.TemporaryDirectory() as directory:

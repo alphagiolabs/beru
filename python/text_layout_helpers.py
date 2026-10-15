@@ -167,7 +167,7 @@ def _text_clusters(text):
     return clusters
 
 
-def _apply_letter_spacing_fallback(text, spacing_px, font_size):
+def _approximate_letter_spacing_with_hair_spaces(text, spacing_px, font_size):
     """Approximate *positive* CSS letter-spacing when drawtext lacks native spacing.
 
     Negative spacing cannot insert "negative space" — use
@@ -181,8 +181,6 @@ def _apply_letter_spacing_fallback(text, spacing_px, font_size):
     if spacing_px <= 0:
         return text
 
-    # U+200A is roughly 1/12 em in FreeType. Distributing it cumulatively keeps
-    # the total requested width accurate even when one spacer is wider than 1 px.
     spacer = "\u200a"
     spacer_width = max(1.0, font_size / 12.0)
     spaced_lines = []

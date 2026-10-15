@@ -1,7 +1,10 @@
 """Worker-count and RAM-capacity policy for processor batches."""
 
+import json
 import logging
 import os
+import sys
+from pathlib import Path
 
 from encode_profiles import (
     ENCODE_PROFILES,
@@ -13,22 +16,17 @@ from op_shared import _env_int
 
 logger = logging.getLogger("beru")
 
-MAX_WORKERS_CAP = 16
+root = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
+with (root / "resources" / "worker-policy.json").open(encoding="utf-8") as handle:
+    _POLICY = json.load(handle)
 
-_ENCODER_CAPS = {
-    "conservative": {
-        "h264_mf": 1,
-        "h264_nvenc": 2,
-        "h264_qsv": 2,
-        "h264_amf": 2,
-    },
-    "balanced": {
-        "h264_mf": 1,
-        "h264_nvenc": 5,
-        "h264_qsv": 5,
-        "h264_amf": 4,
-    },
-}
+MAX_WORKERS_CAP = _POLICY["maxWorkers"]
+_ENCODER_CAPS = _POLICY["encoderCaps"]
+_RAM_PER_JOB_MB = _POLICY["ramPerJobMb"]
+_X264_PRESET_RAM_MULT = _POLICY["x264PresetRamMultiplier"]
+_HEAVY_DECODE_CODECS = frozenset(_POLICY["heavyDecodeCodecs"])
+_HIGH_BIT_DEPTH_PIX_TOKENS = tuple(_POLICY["highBitDepthTokens"])
+_REMUX_JOB_RAM_MB = 128
 
 
 def _get_available_ram_mb():
@@ -60,34 +58,6 @@ def _get_available_ram_mb():
     except Exception:
         pass
     return 0
-
-
-_RAM_PER_JOB_MB = {
-    "software": 512,
-    "nvenc": 256,
-    "qsv": 192,
-    "amf": 128,
-    "mf": 64,
-}
-
-_REMUX_JOB_RAM_MB = 128
-
-
-_X264_PRESET_RAM_MULT = {
-    "ultrafast": 0.6,
-    "superfast": 0.7,
-    "veryfast": 0.8,
-    "faster": 0.9,
-    "fast": 1.0,
-    "medium": 1.3,
-    "slow": 1.6,
-    "slower": 1.9,
-    "veryslow": 2.2,
-}
-
-_HEAVY_DECODE_CODECS = frozenset({"hevc", "h265", "av1", "vp9", "prores", "wmv3"})
-
-_HIGH_BIT_DEPTH_PIX_TOKENS = ("p10", "p12", "p16", "10le", "10be", "12le", "12be", "16le", "16be")
 
 
 def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, source_pixels=0):

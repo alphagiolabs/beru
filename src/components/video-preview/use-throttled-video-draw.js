@@ -10,8 +10,7 @@ export function useThrottledVideoDraw({
   paint,
   syncFrames = false,
   afterDraw = null,
-  resumeEvents = ["play", "seeked", "loadeddata"],
-  deps = [],
+  redrawRevision = 0,
 }) {
   useEffect(() => {
     if (!enabled) return;
@@ -103,7 +102,7 @@ export function useThrottledVideoDraw({
       lastDrawTs = 0;
       rafId = requestAnimationFrame(() => draw());
     };
-    const events = new Set([...resumeEvents, "pause"]);
+    const events = ["play", "seeked", "loadeddata", "pause"];
     for (const eventName of events) video?.addEventListener(eventName, refresh);
     video?.addEventListener("seeking", cancelDraw);
     scheduleNext();
@@ -122,5 +121,5 @@ export function useThrottledVideoDraw({
       video?.removeEventListener("seeking", cancelDraw);
       resizeObserver?.disconnect();
     };
-  }, [enabled, videoRef, canvasRef, syncFrames, ...deps]);
+  }, [enabled, videoRef, canvasRef, syncFrames, getRegion, paint, afterDraw, redrawRevision]);
 }

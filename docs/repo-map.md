@@ -24,7 +24,7 @@ scripts/         Dev (dev.mjs), build (build-processor.mjs, electron-builder.con
 tests/           Tests de Vitest (.test.js / .test.jsx)
 resources/       Presets (.beru.json), encode-profiles.json, catálogo de pets y fixtures de layout
 shared/          Módulos compartidos entre main y renderer (job-manifest.js, project-document.js, ...)
-bin/             FFmpeg, ffprobe y beru-processor.exe (generados, gitignored)
+bin/             FFmpeg, ffprobe y beru-processor/ (carpeta del procesador, generados, gitignored)
 build/           Output de Vite (renderer compilado)
 dist-installer/  Output de electron-builder (.exe)
 docs/            Documentación para agentes (repo-map.md, releasing.md, dead-code-audit.md)
@@ -37,7 +37,7 @@ CHANGELOG.md     Historial de releases (entrada obligatoria por versión)
 
 ## Entorno
 
-- `bin/` se puebla en `npm install` (postinstall descarga FFmpeg y ffprobe); `npm run fetch:ffmpeg` lo fuerza y `npm run build:processor` genera `beru-processor.exe`.
+- `bin/` se puebla en `npm install` (postinstall descarga FFmpeg y ffprobe); `npm run fetch:ffmpeg` lo fuerza y `npm run build:processor` genera `bin/beru-processor/beru-processor.exe` con sus bibliotecas en `_internal/`.
 - `npm run build` compila el renderer **y** empaqueta el instalador completo; para solo el renderer, `vite build`.
 - `.env` está gitignored. Las vars `VITE_*` se baken en build time; CI inyecta `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`. Si faltan, el build sigue pero sin login (`isSupabaseConfigured = false`).
 - Los videos de entrada deben estar en disco local (no en modo "solo nube" de OneDrive/Drive/Dropbox).

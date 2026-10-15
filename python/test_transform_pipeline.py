@@ -96,16 +96,12 @@ def run():
               {"tl": "lime", "tr": "red", "bl": "yellow", "br": "blue"})
         check(source, transform(flip_v=True), size, (160, 90),
               {"tl": "blue", "tr": "yellow", "bl": "red", "br": "lime"})
-        # A quarter turn clockwise (TL blue, TR red, BR lime, BL yellow), then a horizontal flip.
         check(source, transform(rotation=90, flip_h=True), size, (90, 160),
               {"tl": "red", "tr": "blue", "bl": "lime", "br": "yellow"})
-        # A resize keeps the proportion of the rotated frame and never upscales.
         shrunk = render(source, [], size, transform(output_height=44))
         frame_size(shrunk, 78, 44)
         frame_size(render(source, [], size, transform(output_height=1080)), 160, 90)
 
-        # Metadata-rotated source: the decoder presents it as 90x160, with lime TL, yellow TR,
-        # red BL and blue BR. A further quarter turn composes on top of that presentation.
         rotated = str(Path(directory) / "rotated.mp4")
         subprocess.run(
             [FFMPEG, "-v", "error", "-y", "-display_rotation:v:0", "90", "-i", source,

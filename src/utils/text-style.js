@@ -1,4 +1,4 @@
-import { clampNum } from "./clamp";
+import { clampNum } from "./clamp.js";
 
 export const LETTER_SPACING_MIN = -20;
 export const LETTER_SPACING_MAX = 80;

@@ -1,6 +1,3 @@
-# Benchmark Beru batch throughput (local maintainer script).
-# Usage:
-#   .\scripts\benchmark-batch.ps1 -InputDir "C:\videos\clips" -Count 5 -Workers 5
 
 param(
   [string]$InputDir = "",

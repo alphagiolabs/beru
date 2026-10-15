@@ -17,7 +17,6 @@ export const createMockApi = () => ({
   getVideoInfoBatch: vi.fn(async () => []),
 });
 
-// The store reads window.api; install before importing useEditorStore.
 export const installMockApi = (api = createMockApi()) => {
   globalThis.window = { api };
   return api;

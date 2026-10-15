@@ -181,7 +181,6 @@ def _resolve_font(font_family, font_weight=None, italic=False, bold=False):
         return full_path.replace("\\", "/").replace(":", "\\:")
 
     def _emit(result):
-        # Cache entries hold the raw path so a hit can be re-verified.
         return (result[0], _format_fontfile(result[1]), True) if result[2] else result
 
     with _resolve_font_cache_lock:

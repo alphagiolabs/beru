@@ -4,12 +4,14 @@ import { activeOpsBitmask, resolvedDuration } from "./utils";
 import { normalizeTiming } from "../../../shared/clip-timeline.js";
 
 export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode }) {
-  const [timeEpoch, setTimeEpoch] = useState(0);
+  const [, setTimeEpoch] = useState(0);
   const currentTimeRef = useRef(0);
   const activeOpsKeyRef = useRef("");
   const [duration, setDuration] = useState(0);
   const [videoError, setVideoError] = useState(null);
-  const [layoutTick, setLayoutTick] = useState(0);
+  const [, setLayoutTick] = useState(0);
+  const sourcePath = sel?.path;
+  const sourceDuration = sel?.duration;
   const trimStart = Math.max(0, Math.min(duration, sel?.trimStart ?? 0));
   const trimEnd = Math.max(trimStart, Math.min(duration, sel?.trimEnd ?? duration));
   const rate = normalizeTiming(sel?.timing).rate;
@@ -19,7 +21,7 @@ export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode })
       video.playbackRate = rate;
       video.preservesPitch = true;
     }
-  }, [videoRef, sel?.path, rate]);
+  }, [videoRef, sourcePath, rate]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -27,13 +29,13 @@ export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode })
     const ro = new ResizeObserver(() => setLayoutTick((t) => t + 1));
     ro.observe(v);
     return () => ro.disconnect();
-  }, [videoRef, sel?.path]);
+  }, [videoRef, sourcePath]);
 
   useEffect(() => {
-    if (!sel) {
+    if (!sourcePath) {
       useEditorStore.getState().setCurrentRegion(null);
     }
-  }, [sel?.path]);
+  }, [sourcePath]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -60,7 +62,7 @@ export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode })
       syncTime(v.currentTime, v.paused);
     };
     const onSeeked = () => syncTime(v.currentTime, true);
-    const onLoadedMeta = () => setDuration(resolvedDuration(v, sel?.duration));
+    const onLoadedMeta = () => setDuration(resolvedDuration(v, sourceDuration));
     const onEnded = () => {
       syncTime(v.currentTime, true);
     };
@@ -76,7 +78,7 @@ export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode })
       v.removeEventListener("loadedmetadata", onLoadedMeta);
       v.removeEventListener("ended", onEnded);
     };
-  }, [videoRef, sel?.path, sel?.duration, sidebarMode, duration, trimEnd]);
+  }, [videoRef, sourcePath, sourceDuration, sidebarMode, duration, trimEnd]);
 
   useEffect(() => {
     const onCommand = (e) => {
@@ -85,7 +87,7 @@ export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode })
       const { type, delta, value } = e.detail || {};
       const st = useEditorStore.getState();
       const item = st.queue[st.selectedIdx];
-      const d = resolvedDuration(v, item?.duration ?? sel?.duration);
+      const d = resolvedDuration(v, item?.duration ?? sourceDuration);
       const logo = st.sidebarMode === "logo" && d > 0;
       const tStart = logo ? Math.max(0, Math.min(d, item?.trimStart ?? 0)) : 0;
       const tEnd = logo ? Math.max(tStart, Math.min(d, item?.trimEnd ?? d)) : d;
@@ -105,20 +107,23 @@ export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode })
     };
     window.addEventListener("beru:video:command", onCommand);
     return () => window.removeEventListener("beru:video:command", onCommand);
-  }, [videoRef, sel?.path, sel?.duration]);
+  }, [videoRef, sourcePath, sourceDuration]);
 
   useEffect(() => {
     currentTimeRef.current = 0;
     activeOpsKeyRef.current = "";
     setTimeEpoch((e) => e + 1);
-    setDuration(sel?.duration || 0);
     setVideoError(null);
-  }, [sel?.path]);
+  }, [sourcePath]);
+
+  useEffect(() => {
+    setDuration(sourceDuration || 0);
+  }, [sourcePath, sourceDuration]);
 
   const videoHandlers = {
     onLoadedMetadata: () => {
       useEditorStore.getState().setCurrentRegion(null);
-      setDuration(resolvedDuration(videoRef.current, sel?.duration));
+      setDuration(resolvedDuration(videoRef.current, sourceDuration));
       setVideoError(null);
     },
     onError: () => {
@@ -129,13 +134,11 @@ export default function useVideoPreviewLifecycle({ videoRef, sel, sidebarMode })
   };
 
   return {
-    timeEpoch,
     currentTimeRef,
     duration,
     trimStart,
     trimEnd,
     videoError,
-    layoutTick,
     videoHandlers,
   };
 }

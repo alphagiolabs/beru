@@ -402,7 +402,7 @@ def _execute_batch(
     max_workers = ctx.max_workers
     hw_encoder = ctx.hw_encoder
     total = len(jobs)
-    results = {}
+    results = [None] * total
     state = {"succeeded": 0, "failed": 0, "cancelled": 0, "completed": 0}
     state_lock = threading.Lock()
     admission_cond = threading.Condition()
@@ -482,8 +482,7 @@ def _execute_batch(
             _emit_job_failed(result)
 
         with state_lock:
-            idx = result.get("index", -1)
-            results[idx] = result
+            results[fut._beru_job_pos] = result
             state["completed"] += 1
             status = result.get("status", "failed")
             if status == "succeeded":
@@ -505,8 +504,8 @@ def _execute_batch(
     def _mark_cancelled(job, i):
         job_id = job.get("id", i) if isinstance(job, dict) else i
         with state_lock:
-            if job_id not in results:
-                results[job_id] = {"index": job_id, "status": "cancelled"}
+            if results[i] is None:
+                results[i] = {"index": job_id, "status": "cancelled"}
                 state["cancelled"] += 1
                 state["completed"] += 1
                 if emit_batch_progress:
@@ -557,8 +556,7 @@ def _execute_batch(
     for i, job in enumerate(jobs):
         if not isinstance(job, dict):
             continue
-        job_id = job.get("id", i)
-        result = results.get(job_id)
+        result = results[i]
         if result and result.get("status") == "failed":
             failed_jobs.append((job, result))
 
@@ -687,7 +685,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
         (job, result) for job, result in pass1["failed_jobs"]
         if _should_retry_failed_job(result, max_workers)
     ]
-    retry_candidates = [job for job, _result in retry_pairs]
+    retry_candidates = [{**job, "id": result["index"]} for job, result in retry_pairs]
     if retry_enabled and retry_candidates and _check_cancelled(ctx):
         for _job, result in retry_pairs:
             _emit_job_failed(result)
@@ -711,11 +709,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
                 sum(1 for job in retry_candidates if _job_takes_copy_path(job)), env=ctx.env
             ),
         )
-        # pass2 result keys are job.get("id", position-within-retry-list), so
-        # look up by retry index — jobs without an id must still be recounted.
-        for pos, (_job, prev) in enumerate(retry_pairs):
-            job_key = _job.get("id", pos)
-            new = pass2["results"].get(job_key)
+        for (_job, prev), new in zip(retry_pairs, pass2["results"]):
             if not prev or prev.get("status") != "failed":
                 continue
             failed -= 1

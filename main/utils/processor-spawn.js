@@ -6,7 +6,7 @@ import { getPythonPath } from "./paths.js";
 import { runCapturedProcess } from "./run-captured.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROCESSOR_NAME = "beru-processor.exe";
+const PROCESSOR_RELATIVE = path.join("beru-processor", "beru-processor.exe");
 const PROCESSOR_SOURCE_DIR = path.join(__dirname, "..", "..", "python");
 const IGNORED_SOURCE_DIRS = new Set(["__pycache__", "build", "dist"]);
 
@@ -116,13 +116,13 @@ function warnIfProcessorStale(bundledPath) {
 }
 
 function getBundledProcessorPath() {
-  const devBin = path.join(__dirname, "..", "..", "bin", PROCESSOR_NAME);
+  const devBin = path.join(__dirname, "..", "..", "bin", PROCESSOR_RELATIVE);
   if (fs.existsSync(devBin)) {
     warnIfProcessorStale(devBin);
     return devBin;
   }
   if (!isDev && process.resourcesPath) {
-    const packaged = path.join(process.resourcesPath, "bin", PROCESSOR_NAME);
+    const packaged = path.join(process.resourcesPath, "bin", PROCESSOR_RELATIVE);
     if (fs.existsSync(packaged)) return packaged;
   }
   return null;

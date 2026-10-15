@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, Suspense } from "react";
+import { lazy, useEffect, useRef, useState, Suspense } from "react";
 import useEditorStore from "./stores/useEditorStore";
 import useKeyboard from "./hooks/useKeyboard";
 import useProcessing from "./hooks/useProcessing";
@@ -22,8 +22,10 @@ import {
 } from "./components/modal-panels";
 
 const api = window.api;
+const EditorWorkspace = lazy(() => import("./features/editor/EditorWorkspace.jsx"));
 
 export default function App() {
+  const isEditorMode = useEditorStore((s) => s.sidebarMode === "editor");
   const isDragging = useEditorStore((s) => s.isDragging);
   const setIsDragging = useEditorStore((s) => s.setIsDragging);
   const addVideos = useEditorStore((s) => s.addVideos);
@@ -104,7 +106,8 @@ export default function App() {
     dragDepthRef.current = 0;
     setIsDragging(false);
 
-    if (useEditorStore.getState().isProcessing) {
+    const editorTarget = useEditorStore.getState().sidebarMode === "editor";
+    if (!editorTarget && useEditorStore.getState().isProcessing) {
       showToast({ kind: "warn", text: t("queue.processingBusy") });
       return;
     }
@@ -130,7 +133,23 @@ export default function App() {
       return;
     }
 
-    await addVideos(videoPaths, api);
+    if (editorTarget) {
+      const { importSources } = await import("./features/editor/editor-actions.js");
+      const imported = await importSources(api, videoPaths);
+      if (!imported.success) {
+        showToast({ kind: "warn", text: imported.error });
+        return;
+      }
+      if (imported.errors.length > 0) {
+        showToast({
+          kind: "warn",
+          text: t("editor.importErrors", { count: imported.errors.length }),
+        });
+        return;
+      }
+    } else {
+      await addVideos(videoPaths, api);
+    }
 
     if (ignored > 0) {
       showToast({
@@ -154,54 +173,62 @@ export default function App() {
     >
       <AppRail />
       <div className="flex flex-col flex-1 min-w-0 min-h-0">
-        <Header />
-        <div className="app-canvas">
-          {!isLogoMode && (
-            <nav className="mobile-workspace-nav" aria-label={t("workspace.navigation")}>
-              {[
-                ["queue", t("workspace.queue")],
-                ["editor", t("workspace.editor")],
-                ["properties", t("workspace.properties")],
-              ].map(([panel, label]) => (
-                <button
-                  key={panel}
-                  type="button"
-                  className={mobilePanel === panel ? "is-active" : ""}
-                  aria-current={mobilePanel === panel ? "page" : undefined}
-                  onClick={() => setMobilePanel(panel)}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-          )}
-          <div
-            className={`workspace-layout flex-1 flex overflow-hidden min-h-0${isLogoMode ? " workspace-layout--logo" : ""}`}
-          >
-            <div
-              className={`workspace-panel workspace-panel--queue${mobilePanel === "queue" ? " is-mobile-active" : ""}`}
-            >
-              {isLogoMode ? <LogoSidePanel /> : <QueueSidebar />}
-            </div>
-            <div
-              className={`workspace-panel workspace-panel--editor${mobilePanel === "editor" ? " is-mobile-active" : ""}`}
-            >
-              <VideoPreview />
-            </div>
-            {!isLogoMode && (
-              <aside
-                className={`workspace-panel workspace-panel--properties inspector w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l${mobilePanel === "properties" ? " is-mobile-active" : ""}`}
-                style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+        {isEditorMode ? (
+          <Suspense fallback={<PanelLoading label={t("editor.title")} />}>
+            <EditorWorkspace />
+          </Suspense>
+        ) : (
+          <>
+            <Header />
+            <div className="app-canvas">
+              {!isLogoMode && (
+                <nav className="mobile-workspace-nav" aria-label={t("workspace.navigation")}>
+                  {[
+                    ["queue", t("workspace.queue")],
+                    ["editor", t("workspace.editor")],
+                    ["properties", t("workspace.properties")],
+                  ].map(([panel, label]) => (
+                    <button
+                      key={panel}
+                      type="button"
+                      className={mobilePanel === panel ? "is-active" : ""}
+                      aria-current={mobilePanel === panel ? "page" : undefined}
+                      onClick={() => setMobilePanel(panel)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </nav>
+              )}
+              <div
+                className={`workspace-layout flex-1 flex overflow-hidden min-h-0${isLogoMode ? " workspace-layout--logo" : ""}`}
               >
-                <Suspense fallback={<PanelLoading label={t("workspace.properties")} />}>
-                  <PropertiesPanel />
-                  <LayerList />
-                </Suspense>
-              </aside>
-            )}
-          </div>
-        </div>
-        <StatusFooter />
+                <div
+                  className={`workspace-panel workspace-panel--queue${mobilePanel === "queue" ? " is-mobile-active" : ""}`}
+                >
+                  {isLogoMode ? <LogoSidePanel /> : <QueueSidebar />}
+                </div>
+                <div
+                  className={`workspace-panel workspace-panel--editor${mobilePanel === "editor" ? " is-mobile-active" : ""}`}
+                >
+                  <VideoPreview />
+                </div>
+                {!isLogoMode && (
+                  <aside
+                    className={`workspace-panel workspace-panel--properties inspector w-[280px] flex-shrink-0 min-w-0 overflow-y-auto overflow-x-hidden border-l${mobilePanel === "properties" ? " is-mobile-active" : ""}`}
+                    style={{ borderColor: "var(--border)", background: "var(--bg-surface)" }}
+                  >
+                    <Suspense fallback={<PanelLoading label={t("workspace.properties")} />}>
+                      <PropertiesPanel />
+                      <LayerList />
+                    </Suspense>
+                  </aside>
+                )}
+              </div>
+            </div>
+            <StatusFooter />
+          </>
+        )}
       </div>
       <DeferredPanel
         when={(s) => s.showShortcuts}

@@ -27,6 +27,7 @@ import { registerStabilizationHandlers } from "./handlers/stabilization.js";
 import { disposePreviewFrameWorker } from "./utils/preview-frame-cache.js";
 import { disposeJobWorker } from "./utils/job-worker.js";
 import { registerProjectHandlers } from "./handlers/project.js";
+import { registerEditorHandlers } from "./handlers/editor.js";
 import { registerPresetHandlers } from "./handlers/preset.js";
 import { registerSettingsHandlers } from "./handlers/settings.js";
 import { registerRecentHandlers } from "./handlers/recent.js";
@@ -204,7 +205,6 @@ function registerBeruProtocol() {
 
 app.commandLine.appendSwitch("disable-gpu-shader-disk-cache");
 
-// Task Manager uses the packaged exe FileDescription. Match it in dev.
 app.setName("Beru");
 app.setAppUserModelId("app.beru.desktop");
 
@@ -238,6 +238,7 @@ registerProcessHandlers(pathSecurity);
 registerCompositionHandlers(pathSecurity);
 registerStabilizationHandlers(pathSecurity);
 registerProjectHandlers(pathSecurity);
+registerEditorHandlers(pathSecurity);
 registerPresetHandlers();
 registerSettingsHandlers();
 registerRecentHandlers();

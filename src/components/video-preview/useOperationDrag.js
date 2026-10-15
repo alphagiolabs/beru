@@ -14,7 +14,6 @@ export default function useOperationDrag({
   selectedOperationIdx,
   showFfmpegPreview,
   showFfmpegOverlay,
-  layoutTick,
 }) {
   const updateOperationRegion = useEditorStore((s) => s.updateOperationRegion);
   const [draggingOp, setDraggingOp] = useState(null);
@@ -115,6 +114,7 @@ export default function useOperationDrag({
     selectedOperationIdx,
     currentRegion,
     showFfmpegPreview,
+    showFfmpegOverlay,
     sidebarMode,
     activeTool,
   ]);
@@ -132,8 +132,6 @@ export default function useOperationDrag({
     onCommit: patchSelectedRegionOp,
   });
 
-  // Undo stack identity and nudged operation after this keyboard session's snapshot;
-  // undo, redo or selecting another operation starts a new one.
   const keyboardSnapshot = useRef(null);
   const selectedRegionOpGestureWrapped = useMemo(
     () => ({
@@ -164,10 +162,9 @@ export default function useOperationDrag({
     [selectedRegionOpGesture],
   );
 
-  const selectedRegionOpScreen = useMemo(() => {
-    if (!selectedRegionOp) return null;
-    return regionToScreen(selectedRegionOp.op.region, videoRef.current);
-  }, [selectedRegionOp, layoutTick, videoRef]);
+  const selectedRegionOpScreen = selectedRegionOp
+    ? regionToScreen(selectedRegionOp.op.region, videoRef.current)
+    : null;
 
   const handleBatchTextDragStart = (tr, e) => {
     e.preventDefault();

@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Uso: bash scripts/regression-guard.sh [--cached | --prepush]
-# Sin argumentos valida el working tree; --cached valida staged y --prepush el diff vs upstream.
 set -euo pipefail
 
-# Git hooks on Windows can close stdout; log to stderr and preserve stdout for the TTY check.
 exec 3>&1 1>&2
 
 if [[ -t 3 ]]; then
@@ -18,7 +15,6 @@ cd "$BERU_DIR"
 
 PASS=0; FAIL=0; ERRORS=""
 
-# A broken log stream must not abort the hook under set -e.
 ok()   { PASS=$((PASS+1)); printf '%b\n' "  ${GREEN}[PASS]${NC} $1" || true; }
 fail() { FAIL=$((FAIL+1)); ERRORS="${ERRORS}\n  ${RED}[FAIL]${NC} $1"; printf '%b\n' "  ${RED}[FAIL]${NC} $1" || true; }
 info() { printf '%b\n' "  ${CYAN}[INFO]${NC} $1" || true; }
@@ -34,7 +30,6 @@ run_verify() {
     return 1
 }
 
-# Same isolation as scripts/test-environment.mjs: a private TEMP under .tmp/.
 run_isolated_python() {
     local dir win status=0
     mkdir -p "$BERU_DIR/.tmp"
@@ -61,7 +56,6 @@ fi
 
 if [[ -z "${CHANGED// /}" ]]; then
     if [[ "${1:-}" == "--prepush" ]]; then
-        # An empty upstream diff still requires the full validation gate.
         warn "[WARN] --prepush: sin diff vs upstream. Corriendo suite completa como safety net."
         MODE="vs upstream (pre-push, sin diff) → safety net"
     else

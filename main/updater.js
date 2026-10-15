@@ -33,7 +33,6 @@ const tryLoad = () => {
 
 const send = (payload) => {
   lastSnapshot = { ...releaseInfo, ...payload };
-  // Window can be recreated after a renderer crash; a captured ref would drop events.
   const win = getMainWindow();
   if (win && !win.isDestroyed()) {
     try {
@@ -154,7 +153,6 @@ const startDownload = async (opts = {}) => {
     if (!result.ok) return result;
     if (!pendingVersion) return { ok: false, error: "no-update-available" };
   }
-  // Only the provider's update-available event authorizes a download.
   if (opts?.version && String(opts.version).replace(/^v/i, "") !== pendingVersion)
     return { ok: false, error: "no-update-available" };
   if (isDownloadBusy()) return { ok: true, reason: "already-downloading" };
@@ -222,7 +220,6 @@ const scheduleInstall = (au) => {
   const attempt = ++installAttempt;
   status = "installing";
   setAppIsQuitting(true);
-  // NSIS oneClick:false requires the wizard; silent install relaunches the old build.
   setImmediate(() => {
     Promise.resolve()
       .then(() => cancelRun())

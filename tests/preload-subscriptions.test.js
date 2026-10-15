@@ -29,6 +29,7 @@ const handlerModules = await Promise.all([
   import("../main/handlers/preset.js"),
   import("../main/handlers/process.js"),
   import("../main/handlers/project.js"),
+  import("../main/handlers/editor.js"),
   import("../main/handlers/recent.js"),
   import("../main/handlers/settings.js"),
   import("../main/handlers/system.js"),

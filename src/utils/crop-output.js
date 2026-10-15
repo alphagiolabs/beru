@@ -1,16 +1,11 @@
 import { denormalizeRegion } from "./types.js";
 
-// Mirrors the Processor's crop chain (python/filters.py): a crop without a time window
-// clips to the current frame, changes its size (even-rounded) and shifts later crops;
-// a timed crop only zooms and keeps the frame. Regions are source-pixel based.
-
 const evenPixels = (n) => (n % 2 ? Math.max(2, n - 1) : n);
 
 const isTimed = (op) => op.startTime != null || op.endTime != null;
 const isTimeDisabled = (op) =>
   op.startTime != null && op.endTime != null && Number(op.endTime) <= Number(op.startTime);
 
-// Pixels as the Job sends them (denormalizeRegion), clamped like Python's pixel path.
 function sourcePixels(region, dims) {
   const px = denormalizeRegion(region, dims.w, dims.h);
   if (!(px?.w > 0 && px.h > 0)) return null;

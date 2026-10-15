@@ -119,7 +119,6 @@ async function main() {
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
   updater.disableWebInstaller = true;
-  // A clean verification cache has no previous installer for differential download.
   updater.disableDifferentialDownload = true;
   if (dist) updater.setFeedURL(feed);
   for (const event of [

@@ -1,6 +1,8 @@
+import { COMPOSITION_LIMITS } from "./composition-settings.js";
+
 export const IDENTITY_TIMING = { rate: 1, repeatCount: 1 };
-export const MAX_REPEAT_COUNT = 20;
-export const MAX_OUTPUT_DURATION = 7200;
+export const MAX_REPEAT_COUNT = COMPOSITION_LIMITS.maxRepeatCount;
+export const MAX_OUTPUT_DURATION = COMPOSITION_LIMITS.maxDurationSeconds;
 export function playbackRates(current = 1) {
   const rates = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4];
   if (!rates.includes(current)) rates.push(current);
@@ -12,7 +14,10 @@ export function normalizeTiming(value) {
   const repeatCount = Number(value?.repeatCount);
   return {
     rate:
-      typeof value?.rate !== "boolean" && Number.isFinite(rate) && rate >= 0.25 && rate <= 4
+      typeof value?.rate !== "boolean" &&
+      Number.isFinite(rate) &&
+      rate >= COMPOSITION_LIMITS.minRate &&
+      rate <= COMPOSITION_LIMITS.maxRate
         ? rate
         : 1,
     repeatCount:

@@ -1,7 +1,5 @@
 import { useRef, useState } from "react";
 
-// Partial input stays local. A false onCommit result leaves the undo session open
-// so the next effective edit records its own history step.
 export default function DraftNumberInput({
   value,
   onCommit,

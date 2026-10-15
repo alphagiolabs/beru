@@ -121,10 +121,21 @@ export async function extractThumbnail(filePath, width = 80, priority = {}) {
     .catch(() => null);
 }
 
-function filmstripKey(filePath, count, height, duration) {
+function filmstripKey(filePath, count, height, duration, start) {
   try {
     const { dev, ino, size, mtimeMs, ctimeMs } = fs.statSync(filePath);
-    return JSON.stringify([filePath, dev, ino, size, mtimeMs, ctimeMs, count, height, duration]);
+    return JSON.stringify([
+      filePath,
+      dev,
+      ino,
+      size,
+      mtimeMs,
+      ctimeMs,
+      count,
+      height,
+      duration,
+      start,
+    ]);
   } catch {
     return null;
   }
@@ -132,14 +143,21 @@ function filmstripKey(filePath, count, height, duration) {
 
 export async function extractFilmstrip(
   filePath,
-  { count = 20, height = 64, duration = 0, signal, onFrame } = {},
+  { count = 20, height = 64, duration = 0, start = 0, signal, onFrame } = {},
   priority = {},
 ) {
   const ffmpeg = getFfmpegPath();
-  if (!fs.existsSync(ffmpeg) || !Number.isFinite(duration) || !(duration > 0) || signal?.aborted) {
+  if (
+    !fs.existsSync(ffmpeg) ||
+    !Number.isFinite(duration) ||
+    !(duration > 0) ||
+    !Number.isFinite(start) ||
+    start < 0 ||
+    signal?.aborted
+  ) {
     return null;
   }
-  const cacheKey = filmstripKey(filePath, count, height, duration);
+  const cacheKey = filmstripKey(filePath, count, height, duration, start);
   if (!cacheKey) return null;
   const hit = filmstripCache.get(cacheKey);
   if (hit) {
@@ -148,7 +166,7 @@ export async function extractFilmstrip(
     return hit;
   }
   const times = Array.from({ length: count }, (_, i) =>
-    Math.max(0, Math.min(duration - 0.05, ((i + 0.5) * duration) / count)),
+    Math.max(start, Math.min(start + duration - 0.05, start + ((i + 0.5) * duration) / count)),
   );
   const order = [...new Set([0, Math.floor(count / 2), count - 1, ...times.map((_, i) => i)])];
   const frames = new Array(count).fill(null);
@@ -171,7 +189,10 @@ export async function extractFilmstrip(
   await Promise.all(Array.from({ length: Math.min(4, count) }, extractNext));
   if (signal?.aborted || !frames.some(Boolean)) return null;
   const result = { frames, aspect };
-  if (frames.every(Boolean) && cacheKey === filmstripKey(filePath, count, height, duration)) {
+  if (
+    frames.every(Boolean) &&
+    cacheKey === filmstripKey(filePath, count, height, duration, start)
+  ) {
     filmstripCache.set(cacheKey, result);
     trimOldest(filmstripCache, FILMSTRIP_CACHE_MAX);
   }

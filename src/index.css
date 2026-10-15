@@ -3524,7 +3524,6 @@ a:focus-visible,
   margin: 0;
 }
 
-/* Narrow numeric fields step with the keyboard; the native spinner would hide the digits. */
 .inspector-number-input {
   appearance: textfield;
   -moz-appearance: textfield;

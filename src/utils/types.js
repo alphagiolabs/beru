@@ -170,7 +170,6 @@ export const PET_MOVEMENT_MODES = [
   { id: "walk", labelKey: "settings.petdex.moveWalk" },
 ];
 
-// Legacy persisted values used Spanish words ("fijo"/"caminar"); normalize at the boundary.
 export function normalizePetMovement(value) {
   return value === "walk" || value === "caminar" ? "walk" : "fixed";
 }

@@ -120,7 +120,6 @@ def _build_cleanup_filter(method, op, rw, rh, enable_clause=""):
     """
     if method == "mosaic":
         block = _coerce_int(op.get("mosaic_size"), 12, 4, 80)
-        # Tiny patches (< 1 block) would evaluate scale to 0 and fail; clamp to 1.
         return (
             f"scale=max(1\\,iw/{block}):max(1\\,ih/{block}):flags=neighbor,"
             f"scale={rw}:{rh}:flags=neighbor"
@@ -398,7 +397,6 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
                 f"{mirror_chain};"
                 f"[full{s}][clean{s}]overlay={_delogo_overlay_opts(x, y, enable_clause, source_pix_fmt)}[tmp{idx}]"
             )
-        # Blend logo-free context at the seam; keep the logo box fully opaque.
         exp = max(1, int(feather))
         mx, my = max(0, x - exp), max(0, y - exp)
         mw = min(w + 2 * exp, video_w - mx)

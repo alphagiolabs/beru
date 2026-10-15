@@ -1,10 +1,6 @@
-// Per-video geometry after the crops: quarter-turn rotation, flips and output height.
-// Mirrors python/frame_geometry.py; tests/fixtures/output-geometry-cases.json keeps both in step.
-
 import { IDENTITY_TRANSFORM, normalizeTransform } from "../../shared/video-transform.js";
 export { IDENTITY_TRANSFORM, normalizeTransform };
 
-// Python's round(): ties go to the even integer.
 const roundHalfEven = (n) => {
   const rounded = Math.round(n);
   return Math.abs(n % 1) === 0.5 && rounded % 2 !== 0 ? rounded - 1 : rounded;
@@ -28,7 +24,6 @@ export function transformsEqual(a, b) {
   );
 }
 
-// Job wire format (snake_case), consumed by normalizeJob and the Processor.
 export function transformJobFields(value) {
   const t = normalizeTransform(value);
   return {

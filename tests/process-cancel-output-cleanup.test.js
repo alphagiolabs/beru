@@ -209,4 +209,50 @@ describe("run output ownership", () => {
     expect(fs.readFileSync(path.join(tmpDir, "out.mp4"), "utf8")).toBe("first export");
     expect(fs.readFileSync(path.join(tmpDir, "second.mp4"), "utf8")).toBe("second export");
   });
+
+  it("retries a promotion that Windows refuses while a scanner still holds the file", () => {
+    const run = createRunOutputFiles(runJobs(), tmpDir);
+    const rename = vi.spyOn(fs, "renameSync");
+    try {
+      fs.writeFileSync(run.jobs[0].output_path, "export");
+      rename.mockImplementationOnce(() => {
+        throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+      });
+      expect(fs.readFileSync(run.complete(1), "utf8")).toBe("export");
+      expect(rename).toHaveBeenCalledTimes(2);
+    } finally {
+      rename.mockRestore();
+      run.dispose();
+    }
+  });
+
+  it("reports the error once the file stays locked past the retry budget", () => {
+    const run = createRunOutputFiles(runJobs(), tmpDir);
+    const rename = vi.spyOn(fs, "renameSync").mockImplementation(() => {
+      throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+    });
+    try {
+      fs.writeFileSync(run.jobs[0].output_path, "export");
+      expect(() => run.complete(1)).toThrow("EPERM");
+      expect(rename).toHaveBeenCalledTimes(6);
+    } finally {
+      rename.mockRestore();
+      run.dispose();
+    }
+  });
+
+  it("does not retry errors that are not a transient lock", () => {
+    const run = createRunOutputFiles(runJobs(), tmpDir);
+    const rename = vi.spyOn(fs, "renameSync").mockImplementation(() => {
+      throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
+    });
+    try {
+      fs.writeFileSync(run.jobs[0].output_path, "export");
+      expect(() => run.complete(1)).toThrow("ENOSPC");
+      expect(rename).toHaveBeenCalledTimes(1);
+    } finally {
+      rename.mockRestore();
+      run.dispose();
+    }
+  });
 });

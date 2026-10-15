@@ -128,7 +128,6 @@ export function fitRegionToAspect(region, aspect, dims) {
   const cy = (region.y + region.h / 2) * H;
   let w = region.w * W;
   let h = w / aspect;
-  // The minimum size applies to the pair, so a tiny region keeps its proportion.
   if (h < MIN_SIZE * H) {
     h = MIN_SIZE * H;
     w = h * aspect;
@@ -150,7 +149,6 @@ export function fitRegionToAspect(region, aspect, dims) {
   return clampRegionToVideo({ x: x / W, y: y / H, w: w / W, h: h / H });
 }
 
-// Uses getBoundingClientRect so CSS scale on ancestors is included.
 export function getContentPx(videoEl) {
   if (!videoEl) return null;
   const br = videoEl.getBoundingClientRect();

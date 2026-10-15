@@ -1,3 +1,4 @@
+import { COMPOSITION_LIMITS } from "../../../shared/composition-settings.js";
 import { useT } from "../../i18n/useT.js";
 import { Select } from "../ui/select";
 import DraftNumberInput from "../DraftNumberInput";
@@ -15,8 +16,8 @@ export default function CompositionCanvas({ document, locked, settings }) {
               className="cap-input w-full"
               aria-label={t("composition.width")}
               value={document.canvas.width}
-              min={16}
-              max={4096}
+              min={COMPOSITION_LIMITS.minCanvasDimension}
+              max={COMPOSITION_LIMITS.maxCanvasDimension}
               step={2}
               disabled={locked}
               onCommit={(value) => settings({ canvas: { ...document.canvas, width: value } })}
@@ -28,8 +29,8 @@ export default function CompositionCanvas({ document, locked, settings }) {
               className="cap-input w-full"
               aria-label={t("composition.height")}
               value={document.canvas.height}
-              min={16}
-              max={4096}
+              min={COMPOSITION_LIMITS.minCanvasDimension}
+              max={COMPOSITION_LIMITS.maxCanvasDimension}
               step={2}
               disabled={locked}
               onCommit={(value) =>

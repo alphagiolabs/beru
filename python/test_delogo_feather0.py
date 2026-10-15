@@ -55,7 +55,7 @@ def test_inpaint_feather6_with_time_applies_seamless_blend():
 
 def test_mirror_fallback_feather0_with_time_no_boxblur():
     op = _op("mirror", 0, 5, 10)
-    op["region"] = {"x": 600, "y": 100, "w": 80, "h": 60}  # flush at right edge of 640
+    op["region"] = {"x": 600, "y": 100, "w": 80, "h": 60}
     op["mirror_side"] = "right"
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     assert chain is not None

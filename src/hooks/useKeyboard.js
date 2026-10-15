@@ -18,6 +18,8 @@ export default function useKeyboard() {
       const cmd = ctrlKey || metaKey;
 
       if (store.showCompositionModal || store.showStabilizationModal) return;
+      if (store.sidebarMode === "editor" && key !== "Escape") return;
+
       if (key === "Escape") {
         if (store.confirmDialog || store.showPetPalette) return;
         if (store.showSettings) {

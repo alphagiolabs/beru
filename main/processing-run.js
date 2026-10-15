@@ -29,7 +29,8 @@ const isInterrupted = (run) => !isCurrent(run) || run.cancellation || getAppIsQu
 const isChildAlive = (proc) => Boolean(proc && proc.exitCode == null && proc.signalCode == null);
 
 function emit(run, channel, payload) {
-  if (isCurrent(run)) emitRunEvent(sendToRenderer, channel, run.runId, payload);
+  const target = run.events ? run.events[channel] : channel;
+  if (target && isCurrent(run)) emitRunEvent(sendToRenderer, target, run.runId, payload);
 }
 
 function emitError(run, error) {
@@ -78,7 +79,8 @@ function finish(run, result, channel, payload) {
   if (activeRun === run) {
     activeRun = null;
     setMediaProcessingActive(false);
-    if (channel) emitRunEvent(sendToRenderer, channel, run.runId, payload);
+    const target = run.events ? run.events[channel] : channel;
+    if (target) emitRunEvent(sendToRenderer, target, run.runId, payload);
   }
   run.resolve(run.result);
 }
@@ -322,7 +324,7 @@ async function prepareAndStart(run, { manifest, jobs, outputDirectory, spawnSpec
 export function executeProcessingRun(options) {
   if (getAppIsQuitting())
     return Promise.resolve({ success: false, error: "Procesamiento cancelado", cancelled: true });
-  if (activeRun)
+  if (hasActiveProcessing())
     return Promise.resolve({
       success: false,
       error: "Ya hay un proceso en ejecución",
@@ -331,6 +333,8 @@ export function executeProcessingRun(options) {
   const run = {
     runId: Date.now() + "-" + randomBytes(16).toString("hex"),
     phase: "preparing",
+    owner: options.owner,
+    events: options.events,
     proc: null,
     artifacts: null,
     outputFiles: null,
@@ -415,9 +419,9 @@ function stopWorker(run, graceMs) {
   return run.termination;
 }
 
-export async function cancelRun() {
+export async function cancelRun({ owner } = {}) {
   const run = activeRun;
-  if (!run) return { success: true, idle: true };
+  if (!run || (owner && run.owner !== owner)) return { success: true, idle: true };
   if (!run.cancellation) {
     let resolveCancellation;
     run.cancellation = new Promise((resolve) => {

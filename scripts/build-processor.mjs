@@ -1,6 +1,6 @@
 import { requireWindows } from "../shared/platform.js";
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -16,9 +16,13 @@ const root = resolve(__dirname, "..");
 const pythonDir = join(root, "python");
 const binDir = join(root, "bin");
 const specPath = join(pythonDir, "beru-processor.spec");
+const processorDirName = "beru-processor";
 const exeName = "beru-processor.exe";
-const outputExe = join(binDir, exeName);
+const outputDir = join(binDir, processorDirName);
+const outputExe = join(outputDir, exeName);
 const profilesJson = join(root, "resources", "encode-profiles.json");
+const compositionLimitsJson = join(root, "resources", "composition-limits.json");
+const workerPolicyJson = join(root, "resources", "worker-policy.json");
 const pythonVersionFile = join(root, ".python-version");
 const pythonVersion = readFileSync(pythonVersionFile, "utf8").trim();
 const requirementsPath = join(pythonDir, "requirements-build.txt");
@@ -156,6 +160,9 @@ const watchFiles = [
   join(pythonDir, "clip_timing.py"),
   join(pythonDir, "clip_render.py"),
   join(pythonDir, "composition.py"),
+  join(pythonDir, "composition_graph.py"),
+  join(pythonDir, "composition_limits.py"),
+  join(pythonDir, "composition_overlays.py"),
   join(pythonDir, "stabilization.py"),
   join(pythonDir, "encode_profiles.py"),
   join(pythonDir, "batch_errors.py"),
@@ -182,6 +189,8 @@ const watchFiles = [
   join(pythonDir, "color_validation.py"),
   specPath,
   profilesJson,
+  compositionLimitsJson,
+  workerPolicyJson,
   requirementsPath,
   pythonVersionFile,
   fileURLToPath(import.meta.url),
@@ -221,7 +230,8 @@ runPython(
   "PyInstaller failed",
 );
 
-const builtExe = join(pythonDir, "dist", exeName);
+const builtDir = join(pythonDir, "dist", processorDirName);
+const builtExe = join(builtDir, exeName);
 if (!existsSync(builtExe)) {
   console.error(`[build:processor] Expected output not found: ${builtExe}`);
   process.exit(1);
@@ -233,22 +243,25 @@ runPython(
     "-I",
     "-c",
     [
-      "import sys; from PyInstaller.archive.readers import CArchiveReader",
-      "archive = CArchiveReader(sys.argv[1]); modules = archive.open_embedded_archive('PYZ.pyz').toc",
+      "import glob, os, sys; from PyInstaller.archive.readers import CArchiveReader",
+      "exe, folder = sys.argv[1], sys.argv[2]; internal = os.path.join(folder, '_internal')",
+      "archive = CArchiveReader(exe); modules = archive.open_embedded_archive('PYZ.pyz').toc",
       "required = {'numpy', 'temporal_motion', 'temporal_pipeline'}; missing = required.difference(modules)",
       "assert not missing, f'Missing bundled runtime modules: {sorted(missing)}'",
-      "assert any('_multiarray_umath' in name for name in archive.toc), 'Missing NumPy native extension'",
-      `assert 'python${pythonVersion.split(".").slice(0, 2).join("")}.dll' in archive.toc, 'Unexpected bundled Python runtime'`,
+      "assert os.path.isfile(os.path.join(internal, 'resources', 'worker-policy.json')), 'Missing worker policy'",
+      "assert glob.glob(os.path.join(internal, '**', '_multiarray_umath*.pyd'), recursive=True), 'Missing NumPy native extension'",
+      `assert os.path.isfile(os.path.join(internal, 'python${pythonVersion.split(".").slice(0, 2).join("")}.dll')), 'Unexpected bundled Python runtime'`,
       "print('[build:processor] Bundled Python, NumPy and temporal modules verified')",
     ].join("\n"),
     builtExe,
+    builtDir,
   ],
   "Packaged processor is incomplete",
 );
 
-if (builtExe !== outputExe) {
-  copyFileSync(builtExe, outputExe);
-}
+rmSync(outputDir, { recursive: true, force: true });
+rmSync(join(binDir, exeName), { force: true });
+cpSync(builtDir, outputDir, { recursive: true });
 writeProcessorReceipt(outputExe, receiptPath, fingerprint, toolchain);
 
 console.log(`[build:processor] Built -> ${outputExe}`);

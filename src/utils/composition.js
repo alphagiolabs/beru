@@ -1,3 +1,4 @@
+import { COMPOSITION_LIMITS } from "../../shared/composition-settings.js";
 import {
   parseCompositionDocument,
   compositionItem,
@@ -22,8 +23,14 @@ export function newComposition(item) {
     type: COMPOSITION_TYPE,
     version: COMPOSITION_VERSION,
     canvas: {
-      width: Math.max(16, Math.min(4096, Math.floor((size.width || 1280) / 2) * 2)),
-      height: Math.max(16, Math.min(4096, Math.floor((size.height || 720) / 2) * 2)),
+      width: Math.max(
+        COMPOSITION_LIMITS.minCanvasDimension,
+        Math.min(COMPOSITION_LIMITS.maxCanvasDimension, Math.floor((size.width || 1280) / 2) * 2),
+      ),
+      height: Math.max(
+        COMPOSITION_LIMITS.minCanvasDimension,
+        Math.min(COMPOSITION_LIMITS.maxCanvasDimension, Math.floor((size.height || 720) / 2) * 2),
+      ),
       fit: "contain",
     },
     fps: [24, 25, 30, 50, 60].includes(item?.frameRate) ? item.frameRate : 30,
@@ -33,11 +40,12 @@ export function newComposition(item) {
 }
 export function compositionJob(document, { outputPath, encodeProfile = "balanced" }) {
   const composition = parseCompositionDocument(document);
-  if (!composition || composition.entries.length < 2) return null;
-  const clips = composition.entries.map((entry, index) =>
-    buildExportJob(entry.item, index, { outputPath: null, encodeProfile }),
-  );
-  if (clips.some((clip) => !clip)) return null;
+  if (!composition || composition.entries.length < 1) return null;
+  const clips = composition.entries.map((entry, index) => ({
+    ...buildExportJob(entry.item, index, { outputPath: null, encodeProfile }),
+    ...(entry.item.framing ? { framing: entry.item.framing } : {}),
+    ...(entry.item.sourceIdentity ? { source_identity: entry.item.sourceIdentity } : {}),
+  }));
   return {
     id: COMPOSITION_JOB_ID,
     kind: "composition",
@@ -46,5 +54,6 @@ export function compositionJob(document, { outputPath, encodeProfile = "balanced
     clips,
     canvas: composition.canvas,
     composition_fps: composition.fps,
+    ...(composition.overlays ? { overlays: composition.overlays } : {}),
   };
 }

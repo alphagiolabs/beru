@@ -9,6 +9,7 @@ import {
   Moon,
   Table2,
   FileSpreadsheet,
+  Film,
   LogOut,
   Combine,
   Focus,
@@ -118,6 +119,7 @@ export default function AppRail() {
   const showToast = useEditorStore((s) => s.showToast);
   const t = useT();
   const isLogoMode = sidebarMode === "logo";
+  const isEditorMode = sidebarMode === "editor";
   const api = window.api;
   const themeSwitchLabel = t("header.themeSwitchTo", {
     name: resolveThemeName(themeActiveSlot === 1 ? themeSlot2 : themeSlot1, customThemes, t),
@@ -137,66 +139,76 @@ export default function AppRail() {
             label={t("props.modeBatch")}
             onIntent={preloadEditorPanels}
             icon={Type}
-            active={!isLogoMode}
+            active={sidebarMode === "batch"}
             onClick={() => get().setSidebarMode("batch")}
           />
-        </div>
-
-        <div className="app-rail-sep" role="separator" aria-hidden />
-
-        <div className="app-rail-group">
           <RailItem
-            label={t("composition.title")}
-            icon={Combine}
-            disabled={isProcessing}
-            onIntent={CompositionModal.preload}
-            onClick={() => get().setShowCompositionModal(true)}
-          />
-          <RailItem
-            label={t("stabilization.title")}
-            icon={Focus}
-            disabled={isProcessing}
-            onIntent={StabilizationModal.preload}
-            onClick={() => get().setShowStabilizationModal(true)}
-          />
-          <RailItem
-            label={t("batch.tableEditor")}
-            onIntent={() => {
-              if (get().queue.length > 0) TableEditor.preload();
-            }}
-            icon={Table2}
-            onClick={() => {
-              const s = get();
-              if (s.queue.length === 0) {
-                showToast({ kind: "warn", text: t("table.needsVideos") });
-                return;
-              }
-              s.setShowTableEditor(true);
-            }}
-          />
-          <RailItem
-            label={t("batch.excelImport")}
-            onIntent={ExcelMappingModal.preload}
-            icon={FileSpreadsheet}
-            onClick={() => {
-              void importExcelFromDialog({ api, store: get(), t, showToast });
-            }}
-          />
-          <RailItem
-            label={t("header.watermark")}
-            onIntent={WatermarkModal.preload}
-            icon={Droplets}
-            disabled={isProcessing}
-            onClick={() => get().setShowWatermarkModal(true)}
+            label={t("editor.railLabel")}
+            icon={Film}
+            active={isEditorMode}
+            onClick={() => get().setSidebarMode("editor")}
           />
         </div>
 
-        <div className="app-rail-sep" role="separator" aria-hidden />
+        {!isEditorMode && (
+          <>
+            <div className="app-rail-sep" role="separator" aria-hidden />
 
-        <div className="app-rail-group">
-          <PresetsMenu placement="rail" />
-          <RecentMenu placement="rail" />
-        </div>
+            <div className="app-rail-group">
+              <RailItem
+                label={t("composition.title")}
+                icon={Combine}
+                disabled={isProcessing}
+                onIntent={CompositionModal.preload}
+                onClick={() => get().setShowCompositionModal(true)}
+              />
+              <RailItem
+                label={t("stabilization.title")}
+                icon={Focus}
+                disabled={isProcessing}
+                onIntent={StabilizationModal.preload}
+                onClick={() => get().setShowStabilizationModal(true)}
+              />
+              <RailItem
+                label={t("batch.tableEditor")}
+                onIntent={() => {
+                  if (get().queue.length > 0) TableEditor.preload();
+                }}
+                icon={Table2}
+                onClick={() => {
+                  const s = get();
+                  if (s.queue.length === 0) {
+                    showToast({ kind: "warn", text: t("table.needsVideos") });
+                    return;
+                  }
+                  s.setShowTableEditor(true);
+                }}
+              />
+              <RailItem
+                label={t("batch.excelImport")}
+                onIntent={ExcelMappingModal.preload}
+                icon={FileSpreadsheet}
+                onClick={() => {
+                  void importExcelFromDialog({ api, store: get(), t, showToast });
+                }}
+              />
+              <RailItem
+                label={t("header.watermark")}
+                onIntent={WatermarkModal.preload}
+                icon={Droplets}
+                disabled={isProcessing}
+                onClick={() => get().setShowWatermarkModal(true)}
+              />
+            </div>
+
+            <div className="app-rail-sep" role="separator" aria-hidden />
+
+            <div className="app-rail-group">
+              <PresetsMenu placement="rail" />
+              <RecentMenu placement="rail" />
+            </div>
+          </>
+        )}
 
         <div className="app-rail-spacer" aria-hidden />
 

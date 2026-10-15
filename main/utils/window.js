@@ -26,7 +26,6 @@ function loadProductionBuild(win) {
 }
 
 export function createWindow() {
-  // setTitleBarOverlay can fail before the window is ready. Apply again after load.
   const theme = readSettings().theme;
   const initialTheme = resolveWindowTheme(theme);
 
@@ -89,8 +88,6 @@ export function createWindow() {
       });
   });
 
-  // Electron restores DevTools from userData on `npm run dev`. Close restores
-  // during startup; F12 after that still works.
   if (isDev) {
     const startupOpenedAt = Date.now();
     win.webContents.on("devtools-opened", () => {

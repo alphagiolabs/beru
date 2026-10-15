@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-// Synthetic, deterministic video fixtures for manual and automated checks.
-// Output goes to .tmp/media-fixtures (gitignored). Never uses personal media.
-//
-//   node scripts/make-media-fixtures.mjs           generate fixtures and manifest.json
-//   node scripts/make-media-fixtures.mjs --verify  regenerate elsewhere and compare hashes
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -40,7 +35,6 @@ function corners(w, h, size = 16) {
   ].join(",");
 }
 
-// `expect` values are checked against ffprobe after generation.
 const FIXTURES = [
   {
     name: "corners-160x90.mp4",
@@ -67,7 +61,6 @@ const FIXTURES = [
   {
     name: "rotated-meta-160x90.mp4",
     purpose: "Mismos píxeles 160×90 con metadata de giro de 90°: presentación 90×160.",
-    // Stream copy of the corners fixture; the rotation is an input option of ffmpeg.
     args: ["-display_rotation:v:0", "90", "-i", "{dir}/corners-160x90.mp4", "-c", "copy", "-an"],
     expect: {
       width: 160,
@@ -144,7 +137,6 @@ const CORNER_RGB = {
   yellow: [255, 255, 0],
 };
 
-// Autorotated first frame, sampled inside each colour box.
 function sampleCorners(file, width, height) {
   const result = spawnSync(
     FFMPEG,
@@ -188,7 +180,6 @@ function sampleCorners(file, width, height) {
 }
 
 const sameCorners = (a, b) => ["tl", "tr", "bl", "br"].every((k) => a[k] === b[k]);
-// Both 90° orientations of the unrotated layout (clockwise and counter-clockwise).
 const ROTATED_LAYOUTS = [
   { tl: "blue", tr: "red", br: "lime", bl: "yellow" },
   { tl: "lime", tr: "yellow", br: "blue", bl: "red" },

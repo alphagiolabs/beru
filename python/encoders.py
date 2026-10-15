@@ -82,7 +82,6 @@ def _detect_hw_encoder(ffmpeg_path, *, force_test=False, env=None):
         logger.info("Using hardware encoder: %s", candidates[0])
         return candidates[0]
 
-    # Default ON. BERU_HW_PROBE_PARALLEL=0 for GPUs that flake on concurrent 1-frame encodes.
     if _env_flag("BERU_HW_PROBE_PARALLEL", True, env=env) and len(candidates) > 1:
         results = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(candidates)) as pool:

@@ -3,7 +3,6 @@ import { frameAfterCrops } from "../utils/crop-output";
 import { useT } from "../i18n/useT";
 import { Button } from "./ui/Button";
 
-// Mirrors the Processor: a crop without a time window changes the output size, rounded to even.
 export default function CropRatioPresets({ region, dims, timed, operations, onRegionChange }) {
   const t = useT();
   const ready = !!region && dims.w > 0 && dims.h > 0;

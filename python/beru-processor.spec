@@ -10,7 +10,9 @@ profiles_json = project_root / "resources" / "encode-profiles.json"
 if not profiles_json.is_file():
     raise SystemExit(f"encode-profiles.json not found: {profiles_json}")
 
-datas = [(str(profiles_json), "resources")]
+datas = [(str(project_root / "resources" / name), "resources") for name in (
+    "encode-profiles.json", "composition-limits.json", "worker-policy.json",
+)]
 
 a = Analysis(
     ["processor.py"],
@@ -24,6 +26,9 @@ a = Analysis(
         "clip_timing",
         "clip_render",
         "composition",
+        "composition_graph",
+        "composition_limits",
+        "composition_overlays",
         "stabilization",
         "encode_profiles",
         "batch_errors",
@@ -63,10 +68,8 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="beru-processor",
     debug=False,
     bootloader_ignore_signals=False,
@@ -80,4 +83,15 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="beru-processor",
 )

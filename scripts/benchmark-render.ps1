@@ -1,9 +1,3 @@
-# Self-contained Beru render benchmark.
-# Generates small synthetic clips, renders text overlays through python/processor.py,
-# and prints elapsed time. Useful for comparing branches without user media files.
-#
-# Usage:
-#   .\scripts\benchmark-render.ps1 -Count 3 -Duration 2 -Workers 2 -Profile fast
 
 param(
   [int]$Count = 3,

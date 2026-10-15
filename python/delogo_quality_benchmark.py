@@ -183,7 +183,6 @@ def main():
         (args.output / "metrics.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
         del truth
 
-    # Resolution sweep measures the actual filter stage without huge RGB arrays.
     for width, height in ((1920, 1080), (3836, 2160)):
         path = args.output / f"cost-{width}.mkv"
         run(["-y", "-f", "lavfi", "-i", f"testsrc2=s={width}x{height}:r={FPS}",

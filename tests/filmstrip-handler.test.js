@@ -70,6 +70,25 @@ describe("filmstrip request ownership", () => {
     expect(cancel(firstWindow, "current")).toBe(false);
   });
 
+  it("keeps one window's requests independent when they carry different owners, and passes the source window", async () => {
+    const contents = sender(1);
+    const call = (requestId, owner) =>
+      mocks.handlers.get(IPC_INVOKE.getFilmstrip)(
+        { sender: contents },
+        { path: "video.mp4", duration: 4, start: 1, owner, requestId },
+      );
+    const clipA = call("a", "clip:a");
+    const clipB = call("b", "clip:b");
+    expect(pending.map((p) => p.signal.aborted)).toEqual([false, false]);
+    expect(pending.map((p) => p.start)).toEqual([1, 1]);
+    expect(cancel(sender(2), "a")).toBe(false);
+    expect(cancel(contents, "a")).toBe(true);
+    expect(pending.map((p) => p.signal.aborted)).toEqual([true, false]);
+    pending[0].resolve(null);
+    pending[1].resolve(null);
+    await Promise.all([clipA, clipB]);
+  });
+
   it.each(["destroyed", "render-process-gone", "did-start-navigation"])(
     "cancels work when its owner emits %s",
     async (event) => {

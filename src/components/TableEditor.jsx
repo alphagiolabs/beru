@@ -97,8 +97,11 @@ export default function TableEditor() {
   useEffect(() => {
     setPlaying(false);
     setCurrentTime(0);
-    setDuration(queue[focused.videoIdx]?.duration || 0);
   }, [focused.videoIdx]);
+
+  useEffect(() => {
+    setDuration(focusedVideoDuration || 0);
+  }, [focused.videoIdx, focusedVideoDuration]);
 
   const seekTo = useCallback(
     (fraction) => {
