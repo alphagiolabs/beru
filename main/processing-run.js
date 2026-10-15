@@ -167,6 +167,12 @@ function dispatchProcessorLine(run, line) {
       }
     } else if (msg.type === "summary") {
       run.summary = msg;
+    } else if (msg.type === "warning") {
+      emit(run, IPC_EVENTS.onRunWarning, {
+        index: msg.index,
+        code: msg.code || "unknown",
+        message: msg.message || "",
+      });
     } else throw new Error("Evento desconocido: " + msg.type);
   } catch (err) {
     run.protocolError = true;
