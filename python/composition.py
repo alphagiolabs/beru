@@ -6,7 +6,7 @@ import media_probe
 from audio_settings import normalize_audio
 from job_classify import _job_takes_copy_path
 from media_paths import _validated_job_media
-from clip_timing import cycle_duration, repeat_count
+from clip_timing import MAX_OUTPUT_DURATION_SECONDS, cycle_duration, repeat_count
 from batch_context import _check_cancelled
 
 
@@ -37,8 +37,8 @@ def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encod
         infos.append(info)
         durations.append(math.ceil(duration * fps - 1e-8) / fps)
     total = sum(durations)
-    if total > 7200:
-        raise ValueError('Composition exceeds 7200 seconds')
+    if total > MAX_OUTPUT_DURATION_SECONDS:
+        raise ValueError(f'Composition exceeds {MAX_OUTPUT_DURATION_SECONDS} seconds')
     workers = ctx.max_workers if ctx else 1
     run_directory = os.path.dirname(os.path.abspath(ctx.jobs_file)) if ctx and ctx.jobs_file else None
     os.makedirs(os.path.dirname(job['output_path']) or '.', exist_ok=True)
