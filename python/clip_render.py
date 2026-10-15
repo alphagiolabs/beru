@@ -10,7 +10,7 @@ import media_probe
 from audio_settings import audio_filter, normalize_audio
 from batch_context import _check_cancelled
 from batch_errors import is_hardware_encode_error, remove_partial_output
-from clip_timing import cycle_duration, playback_rate, repeat_count, tempo_filter
+from clip_timing import MAX_OUTPUT_DURATION_SECONDS, cycle_duration, playback_rate, repeat_count, tempo_filter
 from encode_args import _AUDIO_COPY_CODECS, _FASTSTART_EXTS, build_audio_args
 from encode_profiles import profile_allows_hardware
 from external_audio import build_external_audio_graph
@@ -169,7 +169,7 @@ class ClipRenderer:
         except OSError:
             input_bytes = 0
         return VideoPlan(job, cmd, float(job.get("video_duration") or 0),
-                         max(300, min(7200, int(input_bytes / (25 * 1024 * 1024)))),
+                         max(300, min(MAX_OUTPUT_DURATION_SECONDS, int(input_bytes / (25 * 1024 * 1024)))),
                          native_copy=audio_af is None and not job.get("external_audio"))
 
     def _encode_plan(self, raw_job, job, source_info, external_info, trim_start, trim_end, rate, temporal_directory,
@@ -210,8 +210,8 @@ class ClipRenderer:
             output_duration = (trim_end if trim_end is not None else duration) - trim_start
         if rate != 1:
             output_duration = cycle_duration(job, duration)
-            if not math.isfinite(output_duration) or not 0 < output_duration <= 7200:
-                raise ValueError("Retimed output must be between 0 and 7200 seconds")
+            if not math.isfinite(output_duration) or not 0 < output_duration <= MAX_OUTPUT_DURATION_SECONDS:
+                raise ValueError(f"Retimed output must be between 0 and {MAX_OUTPUT_DURATION_SECONDS} seconds")
             fps = float(info.get("frame_rate") or job.get("frame_rate") or 30)
             retime = f"setpts=(PTS-STARTPTS)/{rate:.6f},fps={fps:.6f}[retimed]"
             graph = f"{graph};{label}{retime}" if graph else f"[0:v]{retime}"
@@ -249,7 +249,7 @@ class ClipRenderer:
             cmd += build_audio_args(job["output_path"], codec, channels, force_encode=trimmed or audio_af is not None or rate != 1)
             if rate != 1:
                 cmd += ["-t", f"{output_duration:.6f}"]
-        return self._encoding_plan(raw_job, cmd, output_duration, max(600, min(7200, int(duration * 2 + 300))))
+        return self._encoding_plan(raw_job, cmd, output_duration, max(600, min(MAX_OUTPUT_DURATION_SECONDS, int(duration * 2 + 300))))
 
     def _encoding_plan(self, job, command, duration, timeout, *, reserve_software=False):
         profile = job.get("encode_profile", "balanced")
@@ -306,8 +306,8 @@ class ClipRenderer:
         seconds = cycle_duration(job, float(info.get("duration") or 0))
         count = repeat_count(job)
         total = seconds * count
-        if not math.isfinite(total) or not 0 < total <= 7200:
-            raise ValueError("Repeated output must be between 0 and 7200 seconds")
+        if not math.isfinite(total) or not 0 < total <= MAX_OUTPUT_DURATION_SECONDS:
+            raise ValueError(f"Repeated output must be between 0 and {MAX_OUTPUT_DURATION_SECONDS} seconds")
         with tempfile.TemporaryDirectory(prefix="beru-loop-", dir=self.run_directory) as directory:
             cycle = os.path.join(directory, "cycle" + os.path.splitext(job["output_path"])[1])
             start, end = progress_range or (0, 100)

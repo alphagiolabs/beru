@@ -5,10 +5,11 @@ import tempfile
 import media_probe
 from media_paths import _validated_job_media
 from batch_context import _check_cancelled
+from clip_timing import MAX_OUTPUT_DURATION_SECONDS
 
 SMOOTHING = {'low': 10, 'medium': 20, 'high': 30}
 COPYABLE_AUDIO = ('aac', 'mp3', 'ac3', 'eac3', 'alac')
-MAX_SOURCE_SECONDS = 7200
+MAX_SOURCE_SECONDS = MAX_OUTPUT_DURATION_SECONDS
 MAX_SAMPLE_SECONDS = 60
 
 
