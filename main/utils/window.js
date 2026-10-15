@@ -25,6 +25,27 @@ function loadProductionBuild(win) {
   win.loadFile(BUILD_INDEX);
 }
 
+function isOwnDocumentUrl(url, currentUrl) {
+  if (!url || !currentUrl) return false;
+  try {
+    return new URL(url).href === new URL(currentUrl).href;
+  } catch {
+    return false;
+  }
+}
+
+export function attachNavigationGuards(win) {
+  win.webContents.on("will-navigate", (event, url) => {
+    if (isOwnDocumentUrl(url, win.webContents.getURL())) return;
+    event.preventDefault();
+    console.error("[beru] blocked navigation to:", url);
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    console.error("[beru] blocked navigation to:", url);
+    return { action: "deny" };
+  });
+}
+
 export function createWindow() {
   // setTitleBarOverlay can fail before the window is ready. Apply again after load.
   const theme = readSettings().theme;
@@ -56,6 +77,7 @@ export function createWindow() {
   });
   win.setMenu(null);
   setMainWindow(win);
+  attachNavigationGuards(win);
 
   let closeConfirmed = false;
   win.on("close", (event) => {
