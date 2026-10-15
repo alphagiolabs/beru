@@ -30,10 +30,17 @@ export default defineConfig({
     },
     coverage: {
       provider: "v8",
-      include: ["src/**/*.{js,jsx}"],
-      exclude: ["src/i18n/**", "src/main.jsx"],
+      include: ["src/**/*.{js,jsx}", "main/**/*.js", "shared/**/*.js"],
+      exclude: ["src/i18n/**", "src/main.jsx", "scripts/**"],
       reporter: ["text", "text-summary", "html"],
       reportsDirectory: "coverage",
+      reportOnFailure: true,
+      thresholds: {
+        perFile: false,
+        lines: 70,
+        functions: 68,
+        branches: 63,
+      },
     },
   },
 });

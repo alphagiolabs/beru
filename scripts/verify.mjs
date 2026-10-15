@@ -9,7 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const GATES = [
   { name: "lint", args: ["node_modules/eslint/bin/eslint.js", ".", "--quiet"] },
   { name: "format", args: ["node_modules/prettier/bin/prettier.cjs", "--check", "."] },
-  { name: "test", args: ["node_modules/vitest/vitest.mjs", "run"] },
+  { name: "test", args: ["node_modules/vitest/vitest.mjs", "run", "--coverage"] },
   { name: "python", npm: "test:python" },
 ];
 
