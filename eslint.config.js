@@ -16,6 +16,7 @@ export default [
       "agent-tools/**",
       ".tmp/**",
       ".audit-tmp/**",
+      ".claude/**",
       ".runtime/**",
       ".tmp-job-audit-*/**",
       "beru_*/**",

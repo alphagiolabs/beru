@@ -4,13 +4,14 @@ export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 4;
 export const ZOOM_STEP = 0.1;
 
-export const REGION_EDIT_MODES = new Set(["blur", "delogo", "crop"]);
+export const REGION_EDIT_MODES = new Set(["blur", "delogo", "crop", "datetime"]);
 const FRAME_DRIVEN_DELOGO_METHODS = new Set(["blur", "temporal", "mirror", "mosaic", "inpaint"]);
 
 export const REGION_EDIT_LABEL = {
   blur: "catalog.editLabel.blur",
   delogo: "catalog.editLabel.delogo",
   crop: "catalog.editLabel.crop",
+  datetime: "toolbar.datetime",
 };
 
 export function isPreviewOpActive(op, t, sidebarMode) {
@@ -35,6 +36,7 @@ export const opModeColor = {
   delogo: "#f43f5e",
   crop: "#fbbf24",
   image: "#10b981",
+  datetime: "#a855f7",
 };
 
 export function resolvedDuration(video, fallback) {

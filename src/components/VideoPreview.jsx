@@ -1,9 +1,16 @@
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import useCanvas from "../hooks/useCanvas";
 import useRegionGesture from "../hooks/useRegionGesture";
-import { regionToScreen, isRegionUsable } from "../utils/video-utils";
+import { regionToScreen, isRegionUsable, OUTPUT_LAYER_ATTR } from "../utils/video-utils";
+import {
+  fitOutputStage,
+  itemOutputGeometry,
+  outputStageLayer,
+  showsOutputFrame,
+  stampPlacement,
+} from "../utils/stamp-geometry";
 import DelogoLivePreview from "./DelogoLivePreview";
 import Landing from "./Landing";
 import TextRegionFrame from "./TextRegionFrame";
@@ -39,6 +46,7 @@ export default function VideoPreview() {
     activeTool,
     currentRegion,
     textInput,
+    tempClock,
     blurStrength,
     tempStart,
     tempEnd,
@@ -48,6 +56,7 @@ export default function VideoPreview() {
     selectedTemplateRegionId,
     watermark,
     selectedOperationIdx,
+    editorWorkspace,
   } = useEditorStore(
     (s) => ({
       selectedIdx: s.selectedIdx,
@@ -55,6 +64,7 @@ export default function VideoPreview() {
       activeTool: s.activeTool,
       currentRegion: s.currentRegion,
       textInput: s.textInput,
+      tempClock: s.tempClock,
       blurStrength: s.blurStrength,
       tempStart: s.tempStart,
       tempEnd: s.tempEnd,
@@ -64,6 +74,7 @@ export default function VideoPreview() {
       selectedTemplateRegionId: s.selectedTemplateRegionId,
       watermark: s.watermark,
       selectedOperationIdx: s.selectedOperationIdx,
+      editorWorkspace: s.editorWorkspace,
     }),
     shallow,
   );
@@ -83,15 +94,19 @@ export default function VideoPreview() {
 
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp } = useCanvas(videoRef, sel?.path);
 
+  const stampGeometry = useMemo(() => (sel ? itemOutputGeometry(sel) : null), [sel]);
+
   const opsWithScreen = useMemo(() => {
     if (!sel?.operations) return [];
     const videoEl = videoRef.current;
-    return sel.operations.map((op, opIdx) => ({
-      op,
-      opIdx,
-      screen: regionToScreen(op.region, videoEl),
-    }));
-  }, [sel?.operations, layoutTick]);
+    return sel.operations.map((op, opIdx) => {
+      if (op.mode !== "datetime") {
+        return { op, opIdx, screen: regionToScreen(op.region, videoEl) };
+      }
+      const placement = stampPlacement(op.region, stampGeometry, videoEl);
+      return { op, opIdx, screen: placement?.screen, cssTransform: placement?.cssTransform };
+    });
+  }, [sel?.operations, stampGeometry, layoutTick]);
 
   const activeOpsWithScreen = useMemo(
     () =>
@@ -156,7 +171,7 @@ export default function VideoPreview() {
     isRegionUsable(currentRegion) &&
     !showFfmpegPreview &&
     activeTool !== "pan" &&
-    (sidebarMode === "batch" || activeTool === "text");
+    (sidebarMode === "batch" || activeTool === "text" || activeTool === "datetime");
 
   const previewTextRegion = useCallback((region) => {
     useEditorStore.setState({ currentRegion: region });
@@ -199,6 +214,31 @@ export default function VideoPreview() {
     showFfmpegOverlay,
     layoutTick,
   });
+
+  const hasSelection = !!sel;
+  const [stageRoom, setStageRoom] = useState(null);
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const measure = () => setStageRoom({ width: el.clientWidth, height: el.clientHeight });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    measure();
+    return () => ro.disconnect();
+  }, [outerRef, hasSelection]);
+
+  const editsSource = sidebarMode === "logo" && editorWorkspace !== "datetime";
+  const stage =
+    stageRoom && !isSplitCompare && !editsSource && showsOutputFrame(stampGeometry)
+      ? fitOutputStage(stampGeometry, {
+          width: stageRoom.width - 32,
+          height: Math.min(
+            stageRoom.height - 32,
+            window.innerHeight - (sidebarMode === "logo" ? 330 : 200),
+          ),
+        })
+      : null;
+  const layer = stage && outputStageLayer(stampGeometry, stage);
 
   useEffect(() => {
     setZoomBoth(1);
@@ -256,7 +296,18 @@ export default function VideoPreview() {
               if (event.button === 0) beginLogoGesture();
             }}
             style={
-              isSplitCompare ? undefined : { transform: `scale(${zoom})`, transformOrigin: "0 0" }
+              isSplitCompare
+                ? undefined
+                : {
+                    transform: `scale(${zoom})`,
+                    transformOrigin: "0 0",
+                    ...(stage && {
+                      width: stage.width,
+                      height: stage.height,
+                      background: "#000",
+                      overflow: "hidden",
+                    }),
+                  }
             }
           >
             {isSplitCompare && (
@@ -267,18 +318,143 @@ export default function VideoPreview() {
                 {sidebarMode === "logo" ? t("logo.before") : "CSS"}
               </div>
             )}
-            <video
-              ref={videoRef}
-              src={sel.src || null}
-              className={`${videoMaxH} max-w-full block object-contain rounded`}
-              style={{ imageRendering: "auto" }}
-              preload="metadata"
-              playsInline
-              disablePictureInPicture
-              controlsList="nodownload noplaybackrate"
-              onLoadedMetadata={videoHandlers.onLoadedMetadata}
-              onError={videoHandlers.onError}
-            />
+            <div
+              {...(layer && { [OUTPUT_LAYER_ATTR]: "" })}
+              style={
+                layer
+                  ? {
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      width: layer.width,
+                      height: layer.height,
+                      transform: layer.transform,
+                      transformOrigin: "0 0",
+                    }
+                  : { display: "contents" }
+              }
+            >
+              <video
+                ref={videoRef}
+                src={sel.src || null}
+                className={
+                  layer
+                    ? "block w-full h-full object-contain"
+                    : `${videoMaxH} max-w-full block object-contain rounded`
+                }
+                style={{ imageRendering: "auto" }}
+                preload="metadata"
+                playsInline
+                disablePictureInPicture
+                controlsList="nodownload noplaybackrate"
+                onLoadedMetadata={videoHandlers.onLoadedMetadata}
+                onError={videoHandlers.onError}
+              />
+
+              <OperationOverlays
+                ops={activeOpsWithScreen}
+                videoRef={videoRef}
+                currentTimeRef={currentTimeRef}
+                sidebarMode={sidebarMode}
+                activeTool={activeTool}
+                selectedOperationIdx={selectedOperationIdx}
+                draggingOp={draggingOp}
+                showFfmpegPreview={showFfmpegPreview}
+                showFfmpegOverlay={showFfmpegOverlay}
+                logoComparisonVisible={logoComparisonVisible}
+                currentRegion={currentRegion}
+                onRegionOpDragStart={handleRegionOpDragStart}
+                onImageDragStart={handleImageDragStart}
+              />
+
+              <LogoDraftOverlays
+                sidebarMode={sidebarMode}
+                activeTool={activeTool}
+                currentRegion={currentRegion}
+                showFfmpegOverlay={showFfmpegOverlay}
+                videoRef={videoRef}
+                blurStrength={blurStrength}
+                tempStart={tempStart}
+                tempEnd={tempEnd}
+                textInput={textInput}
+                tempClock={tempClock}
+                stampGeometry={stampGeometry}
+                globalTextStyle={globalTextStyle}
+              />
+
+              <BatchOverlays
+                sidebarMode={sidebarMode}
+                selectedIdx={selectedIdx}
+                currentRegion={currentRegion}
+                showFfmpegOverlay={showFfmpegOverlay}
+                showFfmpegPreview={showFfmpegPreview}
+                videoRef={videoRef}
+                globalTextStyle={globalTextStyle}
+                batchRegionPreviews={batchRegionPreviews}
+                selectedTemplateRegionId={selectedTemplateRegionId}
+                draggingBatchText={draggingBatchText}
+                textSelectionActive={textSelectionActive}
+                textGestureActive={textRegionGesture.active}
+                onBatchTextDragStart={handleBatchTextDragStart}
+              />
+
+              {watermark?.enabled && !showFfmpegOverlay && !logoComparisonVisible && (
+                <WatermarkOverlay watermark={watermark} videoRef={videoRef} />
+              )}
+
+              {!logoComparisonVisible && !showFfmpegOverlay && (
+                <DelogoLivePreview videoRef={videoRef} />
+              )}
+
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0 w-full h-full"
+                style={{
+                  cursor: activeTool === "pan" && zoom > 1 ? "grab" : undefined,
+                  zIndex: 30,
+                  pointerEvents:
+                    activeTool === "pan" || (showFfmpegOverlay && sidebarMode !== "logo")
+                      ? "none"
+                      : "auto",
+                  opacity: showFfmpegOverlay ? 0 : 1,
+                }}
+                onMouseDown={(event) => {
+                  onMouseDown(event);
+                }}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+              />
+
+              {textSelectionActive && textSelectionScreen && (
+                <TextRegionFrame
+                  screen={textSelectionScreen}
+                  region={currentRegion}
+                  gesture={textRegionGesture}
+                  label={textSelectionLabel}
+                  color={
+                    sidebarMode === "batch"
+                      ? "var(--purple, #a855f7)"
+                      : "var(--accent-brand, #00b4b0)"
+                  }
+                  zIndex={50}
+                />
+              )}
+
+              {selectedRegionOp && selectedRegionOpScreen && (
+                <TextRegionFrame
+                  screen={selectedRegionOpScreen}
+                  region={selectedRegionOp.region}
+                  gesture={selectedRegionOpGestureWrapped}
+                  label={
+                    REGION_EDIT_LABEL[selectedRegionOp.op.mode]
+                      ? t(REGION_EDIT_LABEL[selectedRegionOp.op.mode])
+                      : selectedRegionOp.op.mode
+                  }
+                  color={opModeColor[selectedRegionOp.op.mode] || "var(--rose, #f43f5e)"}
+                  zIndex={45}
+                />
+              )}
+            </div>
 
             <PreviewTimingClock videoRef={videoRef} item={sel} />
 
@@ -295,108 +471,6 @@ export default function VideoPreview() {
               ffmpegPreviewError={ffmpegPreviewError}
               sidebarMode={sidebarMode}
             />
-
-            <OperationOverlays
-              ops={activeOpsWithScreen}
-              videoRef={videoRef}
-              currentTimeRef={currentTimeRef}
-              sidebarMode={sidebarMode}
-              activeTool={activeTool}
-              selectedOperationIdx={selectedOperationIdx}
-              draggingOp={draggingOp}
-              showFfmpegPreview={showFfmpegPreview}
-              showFfmpegOverlay={showFfmpegOverlay}
-              logoComparisonVisible={logoComparisonVisible}
-              currentRegion={currentRegion}
-              onRegionOpDragStart={handleRegionOpDragStart}
-              onImageDragStart={handleImageDragStart}
-            />
-
-            <LogoDraftOverlays
-              sidebarMode={sidebarMode}
-              activeTool={activeTool}
-              currentRegion={currentRegion}
-              showFfmpegOverlay={showFfmpegOverlay}
-              videoRef={videoRef}
-              blurStrength={blurStrength}
-              tempStart={tempStart}
-              tempEnd={tempEnd}
-              textInput={textInput}
-              globalTextStyle={globalTextStyle}
-            />
-
-            <BatchOverlays
-              sidebarMode={sidebarMode}
-              selectedIdx={selectedIdx}
-              currentRegion={currentRegion}
-              showFfmpegOverlay={showFfmpegOverlay}
-              showFfmpegPreview={showFfmpegPreview}
-              videoRef={videoRef}
-              globalTextStyle={globalTextStyle}
-              batchRegionPreviews={batchRegionPreviews}
-              selectedTemplateRegionId={selectedTemplateRegionId}
-              draggingBatchText={draggingBatchText}
-              textSelectionActive={textSelectionActive}
-              textGestureActive={textRegionGesture.active}
-              onBatchTextDragStart={handleBatchTextDragStart}
-            />
-
-            {watermark?.enabled && !showFfmpegOverlay && !logoComparisonVisible && (
-              <WatermarkOverlay watermark={watermark} videoRef={videoRef} />
-            )}
-
-            {!logoComparisonVisible && !showFfmpegOverlay && (
-              <DelogoLivePreview videoRef={videoRef} />
-            )}
-
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full"
-              style={{
-                cursor: activeTool === "pan" && zoom > 1 ? "grab" : undefined,
-                zIndex: 30,
-                pointerEvents:
-                  activeTool === "pan" || (showFfmpegOverlay && sidebarMode !== "logo")
-                    ? "none"
-                    : "auto",
-                opacity: showFfmpegOverlay ? 0 : 1,
-              }}
-              onMouseDown={(event) => {
-                onMouseDown(event);
-              }}
-              onMouseMove={onMouseMove}
-              onMouseUp={onMouseUp}
-            />
-
-            {textSelectionActive && textSelectionScreen && (
-              <TextRegionFrame
-                screen={textSelectionScreen}
-                region={currentRegion}
-                gesture={textRegionGesture}
-                label={textSelectionLabel}
-                color={
-                  sidebarMode === "batch"
-                    ? "var(--purple, #a855f7)"
-                    : "var(--accent-brand, #00b4b0)"
-                }
-                zIndex={50}
-              />
-            )}
-
-            {selectedRegionOp && selectedRegionOpScreen && (
-              <TextRegionFrame
-                screen={selectedRegionOpScreen}
-                region={selectedRegionOp.op.region}
-                gesture={selectedRegionOpGestureWrapped}
-                label={
-                  REGION_EDIT_LABEL[selectedRegionOp.op.mode]
-                    ? t(REGION_EDIT_LABEL[selectedRegionOp.op.mode])
-                    : selectedRegionOp.op.mode
-                }
-                color={opModeColor[selectedRegionOp.op.mode] || "var(--rose, #f43f5e)"}
-                zIndex={45}
-              />
-            )}
           </div>
 
           {isSplitCompare && (

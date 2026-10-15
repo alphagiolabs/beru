@@ -1,9 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useEditorStore from "../../stores/useEditorStore";
 import useRegionGesture from "../../hooks/useRegionGesture";
-import { regionToScreen } from "../../utils/video-utils";
+import { isInOutputView, regionToScreen, videoPointerDelta } from "../../utils/video-utils";
 import { getContentPx } from "../../utils/region-interaction";
 import { REGION_EDIT_MODES } from "./utils";
+import { scaleTextStyleToRegion } from "../../utils/text-style";
+import {
+  itemOutputGeometry,
+  outputRegionOnSource,
+  sourceRegionToOutput,
+} from "../../utils/stamp-geometry";
+
+function dragDelta(video, start, e) {
+  if (isInOutputView(video)) {
+    const delta = videoPointerDelta(video, { clientX: start.mouseX, clientY: start.mouseY }, e);
+    if (delta) return delta;
+  }
+  return {
+    dx: (e.clientX - start.mouseX) / (start.contentW || 1),
+    dy: (e.clientY - start.mouseY) / (start.contentH || 1),
+  };
+}
+
+function stampGeometryOf(op) {
+  if (op?.mode !== "datetime") return null;
+  const st = useEditorStore.getState();
+  const item = st.queue[st.selectedIdx];
+  return item ? itemOutputGeometry(item) : null;
+}
 
 export default function useOperationDrag({
   videoRef,
@@ -29,7 +53,9 @@ export default function useOperationDrag({
     if (!video) return;
     const content = getContentPx(video);
     if (!content) return;
-    useEditorStore.getState()._saveUndo?.();
+    const st = useEditorStore.getState();
+    if (st.selectedOperationIdx !== opIdx) st.selectOperation(opIdx);
+    st._saveUndo?.();
     setDraggingOp({ op, opIdx });
     setDragStart({
       mouseX: e.clientX,
@@ -38,16 +64,38 @@ export default function useOperationDrag({
       regionY: op.region.y,
       contentW: content.width,
       contentH: content.height,
+      stampGeometry: stampGeometryOf(op),
     });
   };
 
   const handleImageDragMove = useCallback(
     (e) => {
       if (!draggingOp || !dragStart) return;
-      const contentW = dragStart.contentW || 1;
-      const contentH = dragStart.contentH || 1;
-      const normalizedDeltaX = (e.clientX - dragStart.mouseX) / contentW;
-      const normalizedDeltaY = (e.clientY - dragStart.mouseY) / contentH;
+      const { dx: normalizedDeltaX, dy: normalizedDeltaY } = dragDelta(
+        videoRef.current,
+        dragStart,
+        e,
+      );
+      const geo = dragStart.stampGeometry;
+      if (geo) {
+        const start = { ...draggingOp.op.region, x: dragStart.regionX, y: dragStart.regionY };
+        const { rect } = outputRegionOnSource(start, geo);
+        const moved = sourceRegionToOutput(
+          { ...rect, x: rect.x + normalizedDeltaX, y: rect.y + normalizedDeltaY },
+          geo,
+        );
+        const { w, h } = draggingOp.op.region;
+        updateOperationRegion(
+          draggingOp.opIdx,
+          {
+            ...draggingOp.op.region,
+            x: Math.max(0, Math.min(1 - w, moved.x)),
+            y: Math.max(0, Math.min(1 - h, moved.y)),
+          },
+          { recordHistory: false },
+        );
+        return;
+      }
 
       const newX = Math.max(
         0,
@@ -68,7 +116,7 @@ export default function useOperationDrag({
         { recordHistory: false },
       );
     },
-    [draggingOp, dragStart, updateOperationRegion],
+    [draggingOp, dragStart, updateOperationRegion, videoRef],
   );
 
   const handleImageDragEnd = useCallback(() => {
@@ -109,7 +157,9 @@ export default function useOperationDrag({
       return null;
     const op = sel?.operations?.[selectedOperationIdx];
     if (!op || !op.region || !REGION_EDIT_MODES.has(op.mode)) return null;
-    return { op, opIdx: selectedOperationIdx };
+    const geo = op.mode === "datetime" && sel ? itemOutputGeometry(sel) : null;
+    const region = geo ? outputRegionOnSource(op.region, geo).rect : op.region;
+    return { op, opIdx: selectedOperationIdx, region };
   }, [
     sel?.operations,
     selectedOperationIdx,
@@ -119,10 +169,24 @@ export default function useOperationDrag({
     activeTool,
   ]);
 
+  const resizeStart = useRef(null);
   const patchSelectedRegionOp = useCallback((region) => {
-    const idx = useEditorStore.getState().selectedOperationIdx;
+    const st = useEditorStore.getState();
+    const idx = st.selectedOperationIdx;
     if (idx == null) return;
-    useEditorStore.getState().updateOperationRegion(idx, region, { recordHistory: false });
+    const geo = stampGeometryOf(st.queue[st.selectedIdx]?.operations?.[idx]);
+    if (geo) region = sourceRegionToOutput(region, geo);
+    const start = resizeStart.current;
+    if (!start) {
+      st.updateOperationRegion(idx, region, { recordHistory: false });
+      return;
+    }
+    st.updateOperation(
+      st.selectedIdx,
+      idx,
+      { region: { ...region }, ...scaleTextStyleToRegion(start, start.region, region) },
+      { recordHistory: false },
+    );
   }, []);
 
   const selectedRegionOpGesture = useRegionGesture({
@@ -140,10 +204,14 @@ export default function useOperationDrag({
       ...selectedRegionOpGesture,
       beginMove: (e, region) => {
         useEditorStore.getState()._saveUndo?.();
+        resizeStart.current = null;
         selectedRegionOpGesture.beginMove(e, region);
       },
       beginResize: (e, region, handle) => {
-        useEditorStore.getState()._saveUndo?.();
+        const st = useEditorStore.getState();
+        st._saveUndo?.();
+        const op = st.queue[st.selectedIdx]?.operations?.[st.selectedOperationIdx];
+        resizeStart.current = op?.mode === "datetime" ? { ...op, region: { ...op.region } } : null;
         selectedRegionOpGesture.beginResize(e, region, handle);
       },
       nudge: (region, dxPx, dyPx) => {
@@ -155,6 +223,7 @@ export default function useOperationDrag({
           st._saveUndo?.();
           keyboardSnapshot.current = { stack: useEditorStore.getState().undoStack, owner };
         }
+        resizeStart.current = null;
         selectedRegionOpGesture.nudge(region, dxPx, dyPx);
       },
       endNudge: () => {
@@ -166,7 +235,7 @@ export default function useOperationDrag({
 
   const selectedRegionOpScreen = useMemo(() => {
     if (!selectedRegionOp) return null;
-    return regionToScreen(selectedRegionOp.op.region, videoRef.current);
+    return regionToScreen(selectedRegionOp.region, videoRef.current);
   }, [selectedRegionOp, layoutTick, videoRef]);
 
   const handleBatchTextDragStart = (tr, e) => {
@@ -203,12 +272,8 @@ export default function useOperationDrag({
   const handleBatchTextDragMove = useCallback(
     (e) => {
       if (!draggingBatchText || !batchTextDragStart) return;
-      const contentW = batchTextDragStart.contentW || 1;
-      const contentH = batchTextDragStart.contentH || 1;
-
       const startRegion = batchTextDragStart.region;
-      const deltaX = (e.clientX - batchTextDragStart.mouseX) / contentW;
-      const deltaY = (e.clientY - batchTextDragStart.mouseY) / contentH;
+      const { dx: deltaX, dy: deltaY } = dragDelta(videoRef.current, batchTextDragStart, e);
       const nextRegion = {
         ...startRegion,
         x: Math.max(0, Math.min(1 - startRegion.w, startRegion.x + deltaX)),
@@ -225,7 +290,7 @@ export default function useOperationDrag({
         );
       useEditorStore.setState({ currentRegion: nextRegion });
     },
-    [draggingBatchText, batchTextDragStart],
+    [draggingBatchText, batchTextDragStart, videoRef],
   );
 
   const handleBatchTextDragEnd = useCallback(() => {

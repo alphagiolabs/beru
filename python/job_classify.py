@@ -50,7 +50,8 @@ def _job_takes_copy_path(job):
         return False
     transform = normalize_transform(job)
     _, height = _job_dimensions(job)
-    if height > 0 and transform["output_height"] is not None and transform["output_height"] >= height:
+    if (height > 0 and transform["output_width"] is None and transform["output_height"] is not None
+            and transform["output_height"] >= height):
         transform = {**transform, "output_height": None}
     if not is_identity_transform(transform):
         return False
@@ -72,7 +73,7 @@ def _jobs_require_fonts(jobs):
         if job.get("kind") == "composition" and _jobs_require_fonts(job.get("clips", [])):
             return True
         operations = job.get("operations", [])
-        if any(op.get("mode") == "text" for op in operations if isinstance(op, dict)):
+        if any(op.get("mode") in ("text", "datetime") for op in operations if isinstance(op, dict)):
             return True
         watermark = job.get("watermark")
         if (

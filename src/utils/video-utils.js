@@ -71,7 +71,51 @@ export function contentRectLayout(videoEl) {
   };
 }
 
+export const OUTPUT_LAYER_ATTR = "data-output-layer";
+
+function outputLayerPoint(videoEl, cx, cy) {
+  const layer = videoEl?.closest?.(`[${OUTPUT_LAYER_ATTR}]`);
+  const stage = layer?.offsetParent;
+  if (!stage?.offsetWidth || !stage.offsetHeight) return null;
+  const sr = stage.getBoundingClientRect();
+  const local = new DOMMatrix(getComputedStyle(layer).transform)
+    .inverse()
+    .transformPoint(
+      new DOMPoint(
+        ((cx - sr.left) * stage.offsetWidth) / sr.width - layer.offsetLeft,
+        ((cy - sr.top) * stage.offsetHeight) / sr.height - layer.offsetTop,
+      ),
+    );
+  return { x: local.x - videoEl.offsetLeft, y: local.y - videoEl.offsetTop };
+}
+
+export function clientToVideoNormUnclamped(videoEl, cx, cy) {
+  const local = outputLayerPoint(videoEl, cx, cy);
+  if (!local) {
+    const c = contentRect(videoEl);
+    if (!c) return null;
+    return { x: (cx - c.br.left - c.ox) / c.dw, y: (cy - c.br.top - c.oy) / c.dh };
+  }
+  const c = contentRectLayout(videoEl);
+  if (!c) return null;
+  return { x: (local.x - c.ox) / c.dw, y: (local.y - c.oy) / c.dh };
+}
+
+export function isInOutputView(videoEl) {
+  return !!videoEl?.closest?.(`[${OUTPUT_LAYER_ATTR}]`);
+}
+
+export function videoPointerDelta(videoEl, start, now) {
+  const a = clientToVideoNormUnclamped(videoEl, start.clientX, start.clientY);
+  const b = clientToVideoNormUnclamped(videoEl, now.clientX, now.clientY);
+  return a && b ? { dx: b.x - a.x, dy: b.y - a.y } : null;
+}
+
 export function toVideoCoordsNormalized(videoEl, cx, cy) {
+  if (isInOutputView(videoEl)) {
+    const v = clientToVideoNormUnclamped(videoEl, cx, cy);
+    return v && { x: Math.max(0, Math.min(v.x, 1)), y: Math.max(0, Math.min(v.y, 1)) };
+  }
   const c = contentRect(videoEl);
   if (!c || !videoEl || !videoEl.videoWidth || !videoEl.videoHeight) return null;
   return {

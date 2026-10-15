@@ -204,5 +204,207 @@
         "resized": true
       }
     }
+  ],
+  "layout_cases": [
+    {
+      "frame": {
+        "width": 640,
+        "height": 480
+      },
+      "transform": {
+        "rotation": 0,
+        "flipH": false,
+        "flipV": false,
+        "outputHeight": 720,
+        "outputWidth": 1280,
+        "fitMode": "stretch"
+      },
+      "expect": {
+        "width": 1280,
+        "height": 720,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 720
+        }
+      }
+    },
+    {
+      "frame": {
+        "width": 640,
+        "height": 480
+      },
+      "transform": {
+        "rotation": 0,
+        "flipH": false,
+        "flipV": false,
+        "outputHeight": 720,
+        "outputWidth": 1280,
+        "fitMode": "pad"
+      },
+      "expect": {
+        "width": 1280,
+        "height": 720,
+        "resized": true,
+        "content": {
+          "x": 160,
+          "y": 0,
+          "w": 960,
+          "h": 720
+        }
+      }
+    },
+    {
+      "frame": {
+        "width": 640,
+        "height": 480
+      },
+      "transform": {
+        "rotation": 0,
+        "flipH": false,
+        "flipV": false,
+        "outputHeight": 720,
+        "outputWidth": 1280,
+        "fitMode": "crop"
+      },
+      "expect": {
+        "width": 1280,
+        "height": 720,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": -120,
+          "w": 1280,
+          "h": 960
+        }
+      }
+    },
+    {
+      "frame": {
+        "width": 1920,
+        "height": 1080
+      },
+      "transform": {
+        "rotation": 90,
+        "flipH": false,
+        "flipV": false,
+        "outputHeight": 1080,
+        "outputWidth": 1080,
+        "fitMode": "pad"
+      },
+      "expect": {
+        "width": 1080,
+        "height": 1080,
+        "resized": true,
+        "content": {
+          "x": 236,
+          "y": 0,
+          "w": 608,
+          "h": 1080
+        }
+      }
+    },
+    {
+      "frame": {
+        "width": 1280,
+        "height": 720
+      },
+      "transform": {
+        "rotation": 0,
+        "flipH": false,
+        "flipV": false,
+        "outputHeight": 1080,
+        "outputWidth": 1920,
+        "fitMode": "crop"
+      },
+      "expect": {
+        "width": 1920,
+        "height": 1080,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 1920,
+          "h": 1080
+        }
+      }
+    },
+    {
+      "frame": {
+        "width": 1280,
+        "height": 720
+      },
+      "transform": {
+        "rotation": 0,
+        "flipH": false,
+        "flipV": false,
+        "outputHeight": 563,
+        "outputWidth": 1001,
+        "fitMode": "stretch"
+      },
+      "expect": {
+        "width": 1000,
+        "height": 562,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 1000,
+          "h": 562
+        }
+      }
+    },
+    {
+      "frame": {
+        "width": 1280,
+        "height": 720
+      },
+      "transform": {
+        "rotation": 0,
+        "flipH": false,
+        "flipV": false,
+        "outputHeight": 720,
+        "outputWidth": 1280,
+        "fitMode": "stretch"
+      },
+      "expect": {
+        "width": 1280,
+        "height": 720,
+        "resized": false,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 1280,
+          "h": 720
+        }
+      }
+    },
+    {
+      "frame": {
+        "width": 848,
+        "height": 478
+      },
+      "transform": {
+        "rotation": 0,
+        "flipH": false,
+        "flipV": false,
+        "outputHeight": 1080,
+        "outputWidth": 1920,
+        "fitMode": "pad"
+      },
+      "expect": {
+        "width": 1920,
+        "height": 1080,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 1920,
+          "h": 1080
+        }
+      }
+    }
   ]
 }

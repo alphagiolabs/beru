@@ -43,5 +43,9 @@ export default defineConfig({
     },
   },
   resolve: { alias: { "@": path.resolve("./src") } },
-  server: { port: devPort, strictPort: true },
+  server: {
+    port: devPort,
+    strictPort: true,
+    watch: { ignored: ["**/.tmp/**", "**/.audit-tmp/**", "**/build/**", "**/bin/**"] },
+  },
 });

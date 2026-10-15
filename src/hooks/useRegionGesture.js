@@ -5,15 +5,18 @@ import {
   getContentPx,
   pointerDeltaToNorm,
 } from "../utils/region-interaction";
+import { isInOutputView, videoPointerDelta } from "../utils/video-utils";
 
 export default function useRegionGesture({ videoEl, onChange, onCommit, enabled = true }) {
   const sessionRef = useRef(null);
   const onChangeRef = useRef(onChange);
   const onCommitRef = useRef(onCommit);
+  const videoRef = useRef(null);
   const [active, setActive] = useState(false);
 
   onChangeRef.current = onChange;
   onCommitRef.current = onCommit;
+  videoRef.current = videoEl?.current ?? null;
 
   const endSession = useCallback(() => {
     const s = sessionRef.current;
@@ -30,7 +33,12 @@ export default function useRegionGesture({ videoEl, onChange, onCommit, enabled 
       const clientX = e.clientX;
       const clientY = e.clientY;
       if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return;
-      const { dx, dy } = pointerDeltaToNorm(s.startPointer, { clientX, clientY }, s.contentPx);
+      const video = videoRef.current;
+      const delta = isInOutputView(video)
+        ? videoPointerDelta(video, s.startPointer, { clientX, clientY })
+        : pointerDeltaToNorm(s.startPointer, { clientX, clientY }, s.contentPx);
+      if (!delta) return;
+      const { dx, dy } = delta;
       const next =
         s.mode === "move"
           ? applyMove(s.startRegion, dx, dy)

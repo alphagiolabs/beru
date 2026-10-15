@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import RegionBlurPreview from "./RegionBlurPreview";
 import DelogoLivePreview from "../DelogoLivePreview";
 import TextOverlay from "../TextOverlay";
+import DateTimeOverlay from "./DateTimeOverlay";
 import { isOpActive } from "../../utils/operation";
 import { beruLocalUrl } from "../../utils/beru-url";
 import { useT } from "../../i18n/useT";
@@ -44,7 +45,7 @@ export default function OperationOverlays({
 }) {
   const t = useT();
   if (logoComparisonVisible || showFfmpegOverlay) return null;
-  return ops.map(({ op, opIdx, screen: s }) => {
+  return ops.map(({ op, opIdx, screen: s, cssTransform }) => {
     if (!s) return null;
     if (op.mode === "blur") {
       const isSelected = selectedOperationIdx === opIdx;
@@ -169,6 +170,24 @@ export default function OperationOverlays({
           cursor={textInteractive ? (isDragging ? "grabbing" : "grab") : undefined}
           zIndex={textInteractive ? 40 : 20}
           onMouseDown={textInteractive ? (e) => onImageDragStart(op, opIdx, e) : undefined}
+        />
+      );
+    }
+    if (op.mode === "datetime" && sidebarMode !== "batch" && !showFfmpegOverlay) {
+      const interactive = !currentRegion;
+      const isDragging = draggingOp?.opIdx === opIdx;
+      return (
+        <DateTimeOverlay
+          key={op.id}
+          videoRef={videoRef}
+          screen={s}
+          cssTransform={cssTransform}
+          op={op}
+          showOutline={(!showFfmpegPreview || sidebarMode === "logo") && interactive}
+          interactive={interactive}
+          cursor={interactive ? (isDragging ? "grabbing" : "grab") : undefined}
+          zIndex={interactive ? 40 : 20}
+          onMouseDown={interactive ? (e) => onImageDragStart(op, opIdx, e) : undefined}
         />
       );
     }

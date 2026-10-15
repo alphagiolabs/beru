@@ -6,7 +6,7 @@ Beru is a batch video editor. Excel rows drive text overlays onto a queue of vid
 
 **QueueItem** — One input video in the editor queue, with probe metadata and Operations.
 
-**Video Transform** — Per-QueueItem `{rotation, flipH, flipV, outputHeight}` edit, separate from source metadata and regional Operations. Quarter turns are clockwise; flips use the rotated frame axes. The Processor applies Operations and watermark before rotation, flips and proportional resize. A target height at or above the effective frame never enlarges it; identity preserves stream copy when other edits permit it.
+**Video Transform** — Per-QueueItem `{rotation, flipH, flipV, outputHeight, outputWidth, fitMode}` edit, separate from source metadata and regional Operations. Quarter turns are clockwise; flips use the rotated frame axes. The Processor applies Operations and watermark before rotation, flips and resize. A height alone scales proportionally and never enlarges; width and height together give that exact even-pixel size, enlarging if needed, and `fitMode` fills a different aspect by stretching, padding with black bars or cropping the overflow. `outputLayout` (JS) and `output_layout` (Python) share the content rectangle through `output-geometry-cases.json`. Identity preserves stream copy when other edits permit it.
 
 **Original Audio** — Per-QueueItem `{gain, muted}` export settings, separate from playback volume. Gain attenuates from 0 to 1; mute keeps the original track silent and preserves gain for unmute. Missing, null, blank or non-finite gain defaults to 1. A source without audio stays without audio. Jobs carry `audio_gain` and `audio_muted`; edited audio is encoded while identity video can be copied.
 
@@ -20,9 +20,11 @@ Changing trim or restoring history cannot extend edited timing beyond 7200 secon
 
 **Operation** — An overlay or region effect on a video (`text`, `blur`, `crop`, `delogo`, `image`). Factory, export filter, and Job wire format live in `src/utils/operation.js`. UI uses camelCase; `operationToJobPayload` emits snake_case plus pixel Regions for the Processor.
 
+**Fechero** — Operation `datetime`: a date/time stamp that advances with the source timeline. It is drawn last, on the output frame after crops, rotation, flips and resize, so its region is normalized to that frame and Jobs send it normalized; it never deforms, rotates or mirrors. Changing the output size rescales it by the new height (shrinking to fit the width) without stretching. The live preview maps it onto the source view (`stamp-geometry.js`), so bars, crop and rotation only show in the rendered preview, which the Fechero workspace opens on its rendered frame. `clockStart` is the wall clock (no zone) of the source's first frame; Jobs carry it as `clock_start_epoch` seconds and FFmpeg formats it as UTC, so the exporting machine's zone never shifts it. Operations run before trim and retiming, so a trimmed export shows the real time of each source frame, a retimed one advances at that rate, and repetition repeats the clock. Each digit is an FFmpeg `eif` expansion so the text-spacing fallback still applies. `single` (one box) is the default; `split` layout draws date and time in separate boxes whose widths `splitClockRegion`/`split_clock_region` share by character count. Exact preview adds its `-ss` seek to the epoch, since the seek restarts filter `t` at 0. Not linked to Excel.
+
 **Region** — Normalized `{x,y,w,h}` rectangle on a video (`src/utils/types.js`). Jobs send pixel rectangles.
 
-**Text Overlay** — Text style and layout for preview and export. Merge, persist, and hydrate live in `src/utils/text-style.js`. Preview CSS layout is `src/utils/text-layout.js`; drawtext math is the Python adapter.
+**Text Overlay** — Text style and layout for preview and export. `textScaleX` stretches glyphs horizontally: layout, wrapping and fit run in a box `1/textScaleX` as wide as the inner area, then the run is stretched onto it (CSS `scaleX`, a scaled transparent layer in FFmpeg). Translucent backgrounds are RGBA layers composited with overlay, because drawbox shifts chroma when it blends in YUV. Merge, persist, and hydrate live in `src/utils/text-style.js`. Preview CSS layout is `src/utils/text-layout.js`; drawtext math is the Python adapter.
 
 **TemplateRegion** — A batch text slot (label + Region + style) filled from Excel.
 

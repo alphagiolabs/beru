@@ -11,12 +11,14 @@ const labelKeys = {
   text: "props.mode.text",
   image: "props.mode.image",
   delogo: "props.mode.delogo",
+  datetime: "props.mode.datetime",
 };
 const colors = {
   blur: "var(--accent)",
   crop: "var(--amber)",
   text: "var(--purple)",
   delogo: "var(--rose)",
+  datetime: "var(--purple)",
 };
 
 const LayerRow = memo(function LayerRow({
@@ -53,6 +55,7 @@ const LayerRow = memo(function LayerRow({
         {op.mode === "text" && op.text
           ? ` "${op.text.slice(0, 20)}${op.text.length > 20 ? "…" : ""}"`
           : ""}
+        {op.mode === "datetime" && op.clockStart ? ` ${op.clockStart.replace("T", " ")}` : ""}
       </button>
       <div className="inspector-layer-actions">
         <button

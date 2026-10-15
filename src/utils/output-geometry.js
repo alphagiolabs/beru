@@ -1,8 +1,13 @@
 // Per-video geometry after the crops: quarter-turn rotation, flips and output height.
 // Mirrors python/frame_geometry.py; tests/fixtures/output-geometry-cases.json keeps both in step.
 
-import { IDENTITY_TRANSFORM, normalizeTransform } from "../../shared/video-transform.js";
-export { IDENTITY_TRANSFORM, normalizeTransform };
+import {
+  FIT_MODES,
+  IDENTITY_TRANSFORM,
+  normalizeTransform,
+  transformJobFields,
+} from "../../shared/video-transform.js";
+export { FIT_MODES, IDENTITY_TRANSFORM, normalizeTransform, transformJobFields };
 
 // Python's round(): ties go to the even integer.
 const roundHalfEven = (n) => {
@@ -11,6 +16,9 @@ const roundHalfEven = (n) => {
 };
 
 const evenPixels = (n) => Math.max(2, n % 2 ? n - 1 : n);
+const evenFloor = (n) => Math.floor(n / 2) * 2;
+
+export const ASPECT_FILL_TOLERANCE = 0.01;
 
 export function isIdentityTransform(value) {
   const t = normalizeTransform(value);
@@ -24,38 +32,50 @@ export function transformsEqual(a, b) {
     x.rotation === y.rotation &&
     x.flipH === y.flipH &&
     x.flipV === y.flipV &&
-    x.outputHeight === y.outputHeight
+    x.outputHeight === y.outputHeight &&
+    x.outputWidth === y.outputWidth &&
+    (x.outputWidth === null || x.fitMode === y.fitMode)
   );
 }
 
-// Job wire format (snake_case), consumed by normalizeJob and the Processor.
-export function transformJobFields(value) {
-  const t = normalizeTransform(value);
-  return {
-    rotation: t.rotation,
-    flip_h: t.flipH,
-    flip_v: t.flipV,
-    output_height: t.outputHeight,
-  };
-}
-
-/**
- * Output frame after rotation and output height. Flips keep the size.
- * The height is never raised above the rotated frame's height.
- *
- * @param {{ width: number, height: number }} frame size after the crops
- * @param {object} [transform]
- * @returns {{ width: number, height: number, resized: boolean }}
- */
-export function outputDimensions(frame, transform = IDENTITY_TRANSFORM) {
+export function outputLayout(croppedFrame, transform = IDENTITY_TRANSFORM) {
   const t = normalizeTransform(transform);
-  let width = frame.width;
-  let height = frame.height;
+  let width = croppedFrame.width;
+  let height = croppedFrame.height;
   if (t.rotation === 90 || t.rotation === 270) [width, height] = [height, width];
-  if (t.outputHeight === null || t.outputHeight >= height) {
-    return { width, height, resized: false };
+  const full = (w, h, resized) => ({
+    width: w,
+    height: h,
+    resized,
+    content: { x: 0, y: 0, w, h },
+  });
+  if (t.outputWidth !== null) {
+    const outW = evenPixels(t.outputWidth);
+    const outH = evenPixels(t.outputHeight);
+    const mismatch = Math.abs(outW * height - outH * width) / (outH * width);
+    if (t.fitMode === "stretch" || mismatch <= ASPECT_FILL_TOLERANCE) {
+      return full(outW, outH, outW !== width || outH !== height);
+    }
+    const scale =
+      t.fitMode === "crop"
+        ? Math.max(outW / width, outH / height)
+        : Math.min(outW / width, outH / height);
+    const w = evenPixels(roundHalfEven(width * scale));
+    const h = evenPixels(roundHalfEven(height * scale));
+    return {
+      width: outW,
+      height: outH,
+      resized: true,
+      content: { x: evenFloor((outW - w) / 2), y: evenFloor((outH - h) / 2), w, h },
+    };
   }
+  if (t.outputHeight === null || t.outputHeight >= height) return full(width, height, false);
   const nextHeight = evenPixels(t.outputHeight);
   const nextWidth = evenPixels(roundHalfEven((width * nextHeight) / height));
-  return { width: nextWidth, height: nextHeight, resized: true };
+  return full(nextWidth, nextHeight, true);
+}
+
+export function outputDimensions(frame, transform = IDENTITY_TRANSFORM) {
+  const { width, height, resized } = outputLayout(frame, transform);
+  return { width, height, resized };
 }
