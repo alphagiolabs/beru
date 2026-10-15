@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Export run emits patch-phase progress and degraded-patch warnings."""
 
 import json
 import os

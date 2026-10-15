@@ -22,14 +22,11 @@ from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 
 logger = logging.getLogger("beru")
 
-# Portion of the video job's progress range that the temporal/inpaint patch
-# preparation takes before the main encode reports the remainder.
 _TEMPORAL_PATCH_SPAN = 0.2
 _TEMPORAL_BUDGET_S_DEFAULT = 1800
 
 
 def _temporal_budget_seconds(env=None):
-    """Wall-clock budget for the temporal patch phase of an export (seconds)."""
     raw = (env or os.environ).get("BERU_TEMPORAL_BUDGET_S")
     try:
         seconds = int(float(raw))
