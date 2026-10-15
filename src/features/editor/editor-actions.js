@@ -103,8 +103,8 @@ export async function createPreviewProxy(api, asset) {
   return result;
 }
 
-export function appendLibraryAsset(assetId) {
-  return store().apply((p) => appendClipFromAsset(p, assetId));
+export function appendLibraryAsset(assetId, index = null) {
+  return store().apply((p) => appendClipFromAsset(p, assetId, index));
 }
 
 function applyOverlayOperation(operation) {

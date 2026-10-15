@@ -5,6 +5,7 @@ import {
   dropIndex,
   fitPxPerSecond,
   isInView,
+  overlayWindow,
   pxToUs,
   snapCandidates,
   snapTime,
@@ -111,5 +112,31 @@ describe("viewport culling", () => {
     expect(isInView(100, 200, 0, 500)).toBe(true);
     expect(isInView(3000, 3100, 0, 500)).toBe(false);
     expect(isInView(3000, 3100, 2900, 500)).toBe(true);
+  });
+});
+
+describe("overlayWindow", () => {
+  const overlay = { startUs: 2 * SECOND, endUs: 5 * SECOND };
+
+  it("moves the whole interval and keeps its length, never before zero", () => {
+    expect(overlayWindow(overlay, "move", SECOND)).toEqual({
+      startUs: 3 * SECOND,
+      endUs: 6 * SECOND,
+    });
+    expect(overlayWindow(overlay, "move", -9 * SECOND)).toEqual({ startUs: 0, endUs: 3 * SECOND });
+  });
+
+  it("trims one edge and keeps a minimum length", () => {
+    expect(overlayWindow(overlay, "start", SECOND)).toEqual({
+      startUs: 3 * SECOND,
+      endUs: 5 * SECOND,
+    });
+    expect(overlayWindow(overlay, "start", 9 * SECOND).startUs).toBe(5 * SECOND - MIN_CLIP_US);
+    expect(overlayWindow(overlay, "end", -9 * SECOND).endUs).toBe(2 * SECOND + MIN_CLIP_US);
+  });
+
+  it("lets the edge snap to a nearby point", () => {
+    const snap = (us) => (Math.abs(us - 4 * SECOND) < 100_000 ? 4 * SECOND : us);
+    expect(overlayWindow(overlay, "end", -950_000, snap).endUs).toBe(4 * SECOND);
   });
 });

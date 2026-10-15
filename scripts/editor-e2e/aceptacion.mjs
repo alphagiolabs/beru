@@ -32,7 +32,7 @@ function clickInCard(page, filename, text) {
     const card = [...document.querySelectorAll(".editor-asset")].find(
       (li) => li.querySelector(".editor-asset-name")?.textContent === ${JSON.stringify(filename)},
     );
-    const button = card && [...card.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(text)});
+    const button = card && [...card.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(text)} || b.getAttribute("aria-label") === ${JSON.stringify(text)});
     if (!button) return false;
     button.click();
     return true;
@@ -281,6 +281,7 @@ async function main() {
 
     await report.step("variante de velocidad: B a 2×", async () => {
       await page.mouseClick('.timeline-clip[aria-label="b.mp4"]');
+      await page.click(L.speed, ".editor-side");
       await pickOption(page, L.speed, "2×");
       await page.waitForText("0:07.50", { selector: ".editor-timeline-head", timeout: 10000 });
       await host.queueSave(speedMontage);

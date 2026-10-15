@@ -26,8 +26,9 @@ import EditorWorkspace from "../src/features/editor/EditorWorkspace.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { useTimelineStore } from "../src/features/editor/store/useTimelineStore.js";
 import { createEmptyEditorProject } from "../shared/editor-project.js";
-import { addAsset, addImageOverlay, insertClip } from "../shared/editor-timeline.js";
+import { addAsset, addImageOverlay, insertClip, layoutTrack } from "../shared/editor-timeline.js";
 import { createHistory } from "../src/features/editor/store/history.js";
+import { useEditorSession } from "../src/features/editor/store/useEditorSession.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -140,6 +141,35 @@ describe("EditorWorkspace", () => {
         jobs: [expect.objectContaining({ encode_profile: "quality" })],
       }),
     });
+  });
+
+  it("inserts a video dropped from the library where it lands and selects it", () => {
+    const meta = { durationUs: 4_000_000, width: 640, height: 360 };
+    const a = addAsset(createEmptyEditorProject(), {
+      path: "C:/Videos/a.mp4",
+      filename: "a.mp4",
+      sizeBytes: 1,
+      mtimeMs: 1,
+      metadata: meta,
+    });
+    const b = addAsset(insertClip(a.project, { assetId: a.assetId }).project, {
+      path: "C:/Videos/b.mp4",
+      filename: "b.mp4",
+      sizeBytes: 1,
+      mtimeMs: 1,
+      metadata: meta,
+    });
+    resetDocument(b.project);
+    mount();
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, "clientX", { value: 0 });
+    Object.defineProperty(drop, "dataTransfer", {
+      value: { getData: (type) => (type === "application/x-beru-editor-asset" ? b.assetId : "") },
+    });
+    act(() => container.querySelector(".editor-timeline-viewport").dispatchEvent(drop));
+    const order = layoutTrack(useTimelineStore.getState().history.present).map((e) => e.clip);
+    expect(order.map((clip) => clip.assetId)).toEqual([b.assetId, a.assetId]);
+    expect(useEditorSession.getState().selectedClipId).toBe(order[0].id);
   });
 
   it("cancels the frame render when a busy exact-frame view is closed", async () => {

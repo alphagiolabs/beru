@@ -21,6 +21,22 @@ export function formatClock(seconds) {
   return `${minutes}:${rest}`;
 }
 
+export function formatTimecode(seconds, fps) {
+  const totalFrames = Math.floor(Math.max(0, seconds) * fps + 1e-6);
+  const perSecond = Math.ceil(fps);
+  const frames = totalFrames % perSecond;
+  const wholeSeconds = Math.floor(totalFrames / perSecond);
+  const pad = (n) => String(n).padStart(2, "0");
+  return [
+    Math.floor(wholeSeconds / 3600),
+    Math.floor(wholeSeconds / 60) % 60,
+    wholeSeconds % 60,
+    frames,
+  ]
+    .map(pad)
+    .join(":");
+}
+
 export const evenDimension = (value) =>
   Math.max(COMPOSITION_LIMITS.minCanvasDimension, Math.round(value / 2) * 2);
 
@@ -28,6 +44,9 @@ export function canvasForSource(width, height, limit = DEFAULT_CANVAS_LIMIT) {
   const scale = Math.min(1, limit / Math.max(width, height));
   return { width: evenDimension(width * scale), height: evenDimension(height * scale) };
 }
+
+export const ASSET_DRAG_TYPE = "application/x-beru-editor-asset";
+export const IMAGE_DRAG_TYPE = "application/x-beru-editor-image";
 
 export const isImageAsset = (asset) => asset.metadata?.durationUs == null;
 

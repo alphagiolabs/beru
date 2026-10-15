@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, FolderOpen, Redo2, Save, Undo2, X } from "lucide-react";
+import { Download, FolderOpen, Save, X } from "lucide-react";
 import { useT } from "../../i18n/useT";
 import useEditorStore from "../../stores/useEditorStore";
+import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/select";
+import { TooltipProvider } from "../../components/ui/tooltip";
 import { layoutTrack } from "../../../shared/editor-timeline.js";
 import { selectIsDirty, useTimelineStore } from "./store/useTimelineStore.js";
 import { useEditorSession } from "./store/useEditorSession.js";
@@ -10,6 +12,7 @@ import {
   CANVAS_PRESETS,
   canvasPresetKey,
   evenDimension,
+  isImageAsset,
   secondsToUs,
   setClipRange,
 } from "./editor-model.js";
@@ -44,9 +47,8 @@ import EditorPreview from "./EditorPreview.jsx";
 import EditorTimeline from "./EditorTimeline.jsx";
 import ClipInspector from "./ClipInspector.jsx";
 import OverlayInspector from "./OverlayInspector.jsx";
-import CanvasFields from "./CanvasFields.jsx";
-import DraftField from "./DraftField.jsx";
-import { DEFAULT_PX_PER_SECOND } from "./timeline/geometry.js";
+import ProjectInspector from "./ProjectInspector.jsx";
+import { DEFAULT_PX_PER_SECOND, dropIndex } from "./timeline/geometry.js";
 import useExactFrame from "./playback/useExactFrame.js";
 import "./editor.css";
 
@@ -77,14 +79,11 @@ export default function EditorWorkspace() {
   const filePath = useTimelineStore((s) => s.filePath);
   const assetStatus = useTimelineStore((s) => s.assetStatus);
   const lastError = useTimelineStore((s) => s.lastError);
-  const canUndo = useTimelineStore((s) => s.history.past.length > 0);
-  const canRedo = useTimelineStore((s) => s.history.future.length > 0);
   const previewPaths = useTimelineStore((s) => s.previewPaths);
   const selectedClipId = useEditorSession((s) => s.selectedClipId);
   const selectedOverlayId = useEditorSession((s) => s.selectedOverlayId);
   const [audio, setAudio] = useState("original");
   const [encodeProfile, setEncodeProfile] = useState("balanced");
-  const [customCanvas, setCustomCanvas] = useState(false);
   const [exportPercent, setExportPercent] = useState(null);
   const [proxyBusy, setProxyBusy] = useState(false);
   const {
@@ -181,10 +180,11 @@ export default function EditorWorkspace() {
     }
   };
 
-  const handleAppend = (assetId) => {
-    if (!appendLibraryAsset(assetId)) return;
-    const appended = layoutTrack(useTimelineStore.getState().history.present).at(-1);
-    if (appended) useEditorSession.getState().selectClip(appended.clip.id);
+  const handleAppend = (assetId, index = null) => {
+    if (!appendLibraryAsset(assetId, index)) return;
+    const next = layoutTrack(useTimelineStore.getState().history.present);
+    const inserted = index == null ? next.at(-1) : next[index];
+    if (inserted) useEditorSession.getState().selectClip(inserted.clip.id);
   };
 
   const handleCanvasSize = (width, height) => {
@@ -209,8 +209,8 @@ export default function EditorWorkspace() {
     useEditorSession.getState().selectOverlay(result.overlayId);
   };
 
-  const handleAddLayer = (assetId) => {
-    const overlayId = addImageLayerAt(assetId, useEditorSession.getState().playhead);
+  const handleAddLayer = (assetId, startUs = useEditorSession.getState().playhead) => {
+    const overlayId = addImageLayerAt(assetId, startUs);
     if (overlayId) useEditorSession.getState().selectOverlay(overlayId);
   };
 
@@ -341,190 +341,153 @@ export default function EditorWorkspace() {
   });
 
   const title = filePath ? baseName(filePath) : t("editor.untitled");
-  const presetKey = canvasPresetKey(project.canvas);
-  const isCustomCanvas = customCanvas || presetKey === "custom";
-  const canvasOptions = [
-    ...Object.keys(CANVAS_PRESETS).map((key) => ({ value: key, label: key })),
-    { value: "custom", label: t("editor.canvasCustom") },
-  ];
 
   return (
-    <div className="editor-workspace">
-      <div className="editor-toolbar" role="toolbar" aria-label={t("editor.title")}>
-        <strong className="editor-title">{t("editor.title")}</strong>
-        <span className="editor-doc-name">
-          {title}
-          {dirty ? " •" : ""}
-        </span>
-        <button type="button" className="editor-button" onClick={handleOpen}>
-          <FolderOpen size={14} strokeWidth={1.75} />
-          {t("editor.open")}
-        </button>
-        <button
-          type="button"
-          className="editor-button"
-          onClick={() => handleSave(false)}
-          disabled={!dirty && Boolean(filePath)}
+    <TooltipProvider>
+      <div className="editor-workspace">
+        <div
+          className="editor-toolbar cap-titlebar-drag"
+          role="toolbar"
+          aria-label={t("editor.title")}
         >
-          <Save size={14} strokeWidth={1.75} />
-          {t("editor.save")}
-        </button>
-        <button type="button" className="editor-button" onClick={() => handleSave(true)}>
-          {t("editor.saveAs")}
-        </button>
-        <button
-          type="button"
-          className="editor-button"
-          disabled={!canUndo}
-          onClick={() => useTimelineStore.getState().undo()}
-          aria-label={t("editor.undo")}
-        >
-          <Undo2 size={14} strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
-          className="editor-button"
-          disabled={!canRedo}
-          onClick={() => useTimelineStore.getState().redo()}
-          aria-label={t("editor.redo")}
-        >
-          <Redo2 size={14} strokeWidth={1.75} />
-        </button>
-        <span className="editor-spacer" />
-        <div className="editor-field">
-          <span>{t("editor.canvas")}</span>
-          <Select
-            size="sm"
-            value={isCustomCanvas ? "custom" : presetKey}
-            onValueChange={(key) => {
-              setCustomCanvas(key === "custom");
-              if (key !== "custom") setCanvasPreset(key);
-            }}
-            aria-label={t("editor.canvas")}
-            options={canvasOptions}
-          />
+          <div className="editor-toolbar-group">
+            <Button variant="tertiary" size="sm" onClick={handleOpen}>
+              <FolderOpen size={14} strokeWidth={1.75} />
+              {t("editor.open")}
+            </Button>
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() => handleSave(false)}
+              disabled={!dirty && Boolean(filePath)}
+            >
+              <Save size={14} strokeWidth={1.75} />
+              {t("editor.save")}
+            </Button>
+            <Button variant="tertiary" size="sm" onClick={() => handleSave(true)}>
+              {t("editor.saveAs")}
+            </Button>
+          </div>
+          <div className="editor-doc" title={filePath ?? undefined}>
+            <span className="editor-doc-name">{title}</span>
+            {dirty ? <span className="editor-dirty" aria-hidden /> : null}
+          </div>
+          <div className="editor-toolbar-group editor-toolbar-end">
+            {exportPercent == null ? (
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={!exportable}
+                title={!exportable && layout.length > 0 ? t("editor.exportBlocked") : undefined}
+                onClick={handleExport}
+              >
+                <Download size={14} strokeWidth={1.75} />
+                {t("editor.export")}
+              </Button>
+            ) : (
+              <>
+                <progress
+                  className="editor-progress"
+                  max={100}
+                  value={exportPercent}
+                  aria-label={t("editor.exporting")}
+                />
+                <Button variant="secondary" size="sm" onClick={() => api.cancelEditorExport()}>
+                  <X size={14} strokeWidth={1.75} />
+                  {t("editor.exportCancel")}
+                </Button>
+              </>
+            )}
+          </div>
         </div>
-        {isCustomCanvas ? <CanvasFields canvas={project.canvas} onSize={handleCanvasSize} /> : null}
-        <div className="editor-field">
-          <DraftField
-            label={t("editor.canvasBackground")}
-            type="color"
-            value={project.canvas.background}
-            onCommit={setCanvasBackground}
-          />
-        </div>
-        <div className="editor-field">
-          <span>{t("editor.audio")}</span>
-          <Select
-            size="sm"
-            value={audio}
-            onValueChange={setAudio}
-            aria-label={t("editor.audio")}
-            options={[
-              { value: "original", label: t("editor.audioOriginal") },
-              { value: "silence", label: t("editor.audioSilence") },
-            ]}
-          />
-        </div>
-        <div className="editor-field">
-          <span>{t("header.encodeProfile")}</span>
-          <Select
-            size="sm"
-            value={encodeProfile}
-            onValueChange={setEncodeProfile}
-            aria-label={t("header.encodeProfile")}
-            options={[
-              { value: "fast", label: t("header.encodeFast") },
-              { value: "balanced", label: t("header.encodeBalanced") },
-              { value: "quality", label: t("header.encodeQuality") },
-              { value: "uquality", label: t("header.encodeUltraQuality") },
-            ]}
-          />
-        </div>
-        {exportPercent == null ? (
-          <button
-            type="button"
-            className="editor-button editor-button--primary"
-            disabled={!exportable}
-            title={!exportable && layout.length > 0 ? t("editor.exportBlocked") : undefined}
-            onClick={handleExport}
-          >
-            <Download size={14} strokeWidth={1.75} />
-            {t("editor.export")}
-          </button>
-        ) : (
-          <>
-            <progress max={100} value={exportPercent} aria-label={t("editor.exporting")} />
+
+        {lastError ? (
+          <div role="alert" className="editor-error">
+            <span>{lastError}</span>
             <button
               type="button"
-              className="editor-button"
-              onClick={() => api.cancelEditorExport()}
+              className="editor-icon-button"
+              onClick={() => useTimelineStore.getState().clearError()}
+              aria-label={t("common.close")}
             >
               <X size={14} strokeWidth={1.75} />
-              {t("editor.exportCancel")}
             </button>
-          </>
-        )}
-      </div>
+          </div>
+        ) : null}
 
-      {lastError ? (
-        <div role="alert" className="editor-error">
-          <span>{lastError}</span>
-          <button
-            type="button"
-            className="editor-button"
-            onClick={() => useTimelineStore.getState().clearError()}
-            aria-label={t("common.close")}
-          >
-            <X size={14} strokeWidth={1.75} />
-          </button>
-        </div>
-      ) : null}
-
-      <div className="editor-body">
-        <EditorLibrary
-          assets={project.assets}
-          assetStatus={assetStatus}
-          usedAssetIds={new Set(layout.map((entry) => entry.clip.assetId))}
-          onImport={handleImport}
-          onAppend={handleAppend}
-          onAddLayer={handleAddLayer}
-          onRelink={handleRelink}
-        />
-        <div className="editor-center">
+        <div className="editor-body">
+          <EditorLibrary
+            assets={project.assets}
+            assetStatus={assetStatus}
+            usedAssetIds={new Set(layout.map((entry) => entry.clip.assetId))}
+            onImport={handleImport}
+            onAppend={handleAppend}
+            onAddLayer={handleAddLayer}
+            onRelink={handleRelink}
+          />
           <EditorPreview
             layout={layout}
             duration={duration}
             canvas={project.canvas}
+            fps={project.fps.num / project.fps.den}
             overlays={project.overlays}
             assetsById={assetsById}
             assetStatus={assetStatus}
             previewPaths={previewPaths}
             proxyBusy={proxyBusy}
             onCreateProxy={handleCreateProxy}
-            onCommitRange={commitRange}
-            selectedEntry={selectedEntry && selectedStatus === "ready" ? selectedEntry : null}
             exactFrame={exactFrame}
             onExactFrame={() => requestExactFrame(useEditorSession.getState().playhead)}
             onCloseExactFrame={closeExactFrame}
+            canvasControl={
+              <Select
+                variant="ghost"
+                size="sm"
+                value={canvasPresetKey(project.canvas)}
+                onValueChange={(key) => {
+                  if (key === "custom") useEditorSession.getState().selectClip(null);
+                  else setCanvasPreset(key);
+                }}
+                aria-label={t("editor.canvas")}
+                options={[
+                  ...Object.keys(CANVAS_PRESETS).map((key) => ({ value: key, label: key })),
+                  { value: "custom", label: t("editor.canvasCustom") },
+                ]}
+              />
+            }
           />
-          {selectedEntry ? (
-            <ClipInspector
-              entry={selectedEntry}
-              onSpeed={(speed) => setSpeedOfClip(selectedEntry.clip.id, speed)}
-              onMute={(muted) => setMuteOfClip(selectedEntry.clip.id, muted)}
-              onTransform={handleTransform}
-              onGesture={handleInspectorGesture}
-            />
-          ) : null}
-          {selectedOverlay ? (
-            <OverlayInspector
-              overlay={selectedOverlay}
-              asset={selectedOverlay.kind === "image" ? assetsById[selectedOverlay.assetId] : null}
-              onUpdate={(patch) => updateOverlayOf(selectedOverlay.id, patch)}
-              onRemove={removeSelectedOverlay}
-            />
-          ) : null}
+          <aside className="editor-side">
+            {selectedOverlay ? (
+              <OverlayInspector
+                overlay={selectedOverlay}
+                asset={
+                  selectedOverlay.kind === "image" ? assetsById[selectedOverlay.assetId] : null
+                }
+                onUpdate={(patch) => updateOverlayOf(selectedOverlay.id, patch)}
+                onRemove={removeSelectedOverlay}
+              />
+            ) : selectedEntry ? (
+              <ClipInspector
+                entry={selectedEntry}
+                asset={selectedAsset}
+                onCommitRange={selectedStatus === "ready" ? commitRange : null}
+                onSpeed={(speed) => setSpeedOfClip(selectedEntry.clip.id, speed)}
+                onMute={(muted) => setMuteOfClip(selectedEntry.clip.id, muted)}
+                onTransform={handleTransform}
+                onGesture={handleInspectorGesture}
+              />
+            ) : (
+              <ProjectInspector
+                canvas={project.canvas}
+                onCanvasSize={handleCanvasSize}
+                onBackground={setCanvasBackground}
+                audio={audio}
+                onAudio={setAudio}
+                encodeProfile={encodeProfile}
+                onEncodeProfile={setEncodeProfile}
+              />
+            )}
+          </aside>
           <EditorTimeline
             layout={layout}
             duration={duration}
@@ -533,9 +496,17 @@ export default function EditorWorkspace() {
             overlays={project.overlays}
             onAddTitle={handleAddTitle}
             onAddImage={handleAddImage}
+            onSplit={splitAtPlayhead}
+            onDuplicate={duplicateSelected}
+            onDelete={removeSelected}
+            onImport={handleImport}
+            onDropAsset={(assetId, timeUs) => {
+              if (isImageAsset(assetsById[assetId])) handleAddLayer(assetId, timeUs);
+              else handleAppend(assetId, dropIndex(layout, timeUs, null));
+            }}
           />
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }

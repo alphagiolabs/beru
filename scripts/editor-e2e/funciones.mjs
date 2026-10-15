@@ -107,9 +107,7 @@ async function exactFrameCase(report) {
     await report.step(
       "un cambio durante el render deja la vista marcada como desactualizada",
       async () => {
-        await page.evaluate(
-          `document.querySelector(".editor-exact-frame > .editor-button")?.click()`,
-        );
+        await page.evaluate(`document.querySelector(".editor-exact-frame > button")?.click()`);
         await page.mouseClick(".timeline-clip");
         await page.click(L.exactFrame);
         await page.setInput(".editor-range label:nth-child(2) input", "5");

@@ -105,6 +105,7 @@ export default function App() {
     e.preventDefault();
     dragDepthRef.current = 0;
     setIsDragging(false);
+    if (!Array.from(e.dataTransfer?.types || []).includes("Files")) return;
 
     const editorTarget = useEditorStore.getState().sidebarMode === "editor";
     if (!editorTarget && useEditorStore.getState().isProcessing) {
@@ -169,7 +170,7 @@ export default function App() {
   return (
     <div
       {...dropHandlers}
-      className={`app-shell h-screen flex overflow-hidden${isDragging ? " is-file-dragging" : ""}`}
+      className={`app-shell h-screen flex overflow-hidden${isEditorMode ? " is-editor-mode" : ""}${isDragging ? " is-file-dragging" : ""}`}
     >
       <AppRail />
       <div className="flex flex-col flex-1 min-w-0 min-h-0">

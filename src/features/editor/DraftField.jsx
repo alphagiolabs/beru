@@ -12,9 +12,10 @@ export default function DraftField({ label, value, onCommit, type = "number", ..
     onCommit(type === "number" ? Number(draft) : draft);
   };
   return (
-    <label>
-      {label}
+    <label className={`editor-draft editor-draft--${type}`}>
+      <span className="editor-draft-label">{label}</span>
       <input
+        className={type === "color" ? "editor-swatch" : "cap-input"}
         type={type}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}

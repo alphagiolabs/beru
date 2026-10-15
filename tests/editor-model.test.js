@@ -5,6 +5,7 @@ import {
   appendClipFromAsset,
   canvasForSource,
   formatClock,
+  formatTimecode,
   secondsToUs,
   setClipRange,
   splitAtPlayhead,
@@ -36,6 +37,13 @@ describe("time and canvas helpers", () => {
   it("formats clock values for the transport", () => {
     expect(formatClock(0)).toBe("0:00.00");
     expect(formatClock(75.5)).toBe("1:15.50");
+  });
+
+  it("formats the player timecode as hours, minutes, seconds and frames", () => {
+    expect(formatTimecode(0, 30)).toBe("00:00:00:00");
+    expect(formatTimecode(75.5, 30)).toBe("00:01:15:15");
+    expect(formatTimecode(3661 + 29 / 30, 30)).toBe("01:01:01:29");
+    expect(formatTimecode(1 / 25, 25)).toBe("00:00:00:01");
   });
 
   it("keeps the source aspect ratio, even dimensions and a 1920 cap", () => {

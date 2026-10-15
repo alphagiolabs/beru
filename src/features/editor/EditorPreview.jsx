@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pause, Play } from "lucide-react";
+import { Maximize, Pause, Play, ScanEye, X } from "lucide-react";
+import { Button } from "../../components/ui/Button";
+import { Tooltip } from "../../components/ui/tooltip";
 import { useT } from "../../i18n/useT";
 import { beruLocalUrl } from "../../utils/beru-url";
 import { clipLayerGeometry } from "../../../shared/clip-transform.js";
-import { formatClock, usToSeconds } from "./editor-model.js";
+import { formatTimecode, usToSeconds } from "./editor-model.js";
 import { entryAt } from "./playback/scene.js";
 import { recordSeek, seekIsSlow } from "./playback/proxy-policy.js";
 import { useMontagePlayer } from "./playback/useMontagePlayer.js";
 import { useEditorSession } from "./store/useEditorSession.js";
 import { useTimelineStore } from "./store/useTimelineStore.js";
 import OverlayLayer from "./OverlayLayer.jsx";
-import DraftField from "./DraftField.jsx";
 
 const PROXY_STATUSES = new Set(["noVideo", "error"]);
 const STATUS_MESSAGES = {
@@ -20,45 +21,21 @@ const STATUS_MESSAGES = {
   error: "editor.errorPlayback",
 };
 
-function ClipRange({ entry, onCommitRange }) {
-  const t = useT();
-  const inS = usToSeconds(entry.clip.sourceInUs);
-  const outS = usToSeconds(entry.clip.sourceOutUs);
-  return (
-    <div className="editor-range">
-      <DraftField
-        label={t("editor.rangeStart")}
-        value={inS.toFixed(2)}
-        min={0}
-        step={0.01}
-        onCommit={(seconds) => onCommitRange(seconds, outS)}
-      />
-      <DraftField
-        label={t("editor.rangeEnd")}
-        value={outS.toFixed(2)}
-        min={0}
-        step={0.01}
-        onCommit={(seconds) => onCommitRange(inS, seconds)}
-      />
-    </div>
-  );
-}
-
 export default function EditorPreview({
   layout,
   duration,
   canvas,
+  fps,
   overlays,
   assetsById,
   assetStatus,
   previewPaths,
   proxyBusy,
   onCreateProxy,
-  selectedEntry,
-  onCommitRange,
   exactFrame,
   onExactFrame,
   onCloseExactFrame,
+  canvasControl,
 }) {
   const t = useT();
   const playhead = useEditorSession((s) => s.playhead);
@@ -85,6 +62,7 @@ export default function EditorPreview({
     [assetsById, canvas],
   );
 
+  const stageRef = useRef(null);
   const canvasRef = useRef(null);
   const frameRefs = [useRef(null), useRef(null)];
   const [scale, setScale] = useState(1);
@@ -143,7 +121,7 @@ export default function EditorPreview({
 
   return (
     <section className="editor-preview">
-      <div className="editor-stage">
+      <div className="editor-stage" ref={stageRef}>
         <div
           className="editor-canvas"
           ref={canvasRef}
@@ -177,53 +155,80 @@ export default function EditorPreview({
           <div className="editor-stage-message">
             <span>{message}</span>
             {canProxy ? (
-              <button
-                type="button"
-                className="editor-button"
-                disabled={proxyBusy}
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={proxyBusy}
                 onClick={() => onCreateProxy(headAsset)}
               >
                 {proxyBusy ? t("editor.proxy.creating") : t("editor.proxy.create")}
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : null}
       </div>
 
       <div className="editor-transport">
-        <button
-          type="button"
-          className="editor-button"
-          onClick={togglePlay}
-          disabled={layout.length === 0}
-          aria-label={playing ? t("editor.pause") : t("editor.play")}
-        >
-          {playing ? <Pause size={14} strokeWidth={1.75} /> : <Play size={14} strokeWidth={1.75} />}
-        </button>
         <input
           type="range"
+          className="editor-scrubber"
           min={0}
           max={totalSeconds}
           step={0.01}
           value={usToSeconds(playhead)}
           disabled={layout.length === 0}
+          style={{
+            "--progress": `${totalSeconds > 0 ? (usToSeconds(playhead) / totalSeconds) * 100 : 0}%`,
+          }}
           onChange={(event) => {
             setPlaying(false);
             setPlayhead(Number(event.target.value) * 1_000_000);
           }}
           aria-label={t("editor.seek")}
         />
-        <span className="editor-time">
-          {formatClock(usToSeconds(playhead))} / {formatClock(totalSeconds)}
-        </span>
-        <button
-          type="button"
-          className="editor-button"
-          disabled={layout.length === 0 || exactFrame?.status === "busy"}
-          onClick={onExactFrame}
-        >
-          {t("editor.exactFrame")}
-        </button>
+        <div className="editor-transport-row">
+          <span className="editor-time">
+            <strong>{formatTimecode(usToSeconds(playhead), fps)}</strong> /{" "}
+            {formatTimecode(totalSeconds, fps)}
+          </span>
+          <Tooltip label={playing ? t("editor.pause") : t("editor.play")}>
+            <button
+              type="button"
+              className="editor-play"
+              onClick={togglePlay}
+              disabled={layout.length === 0}
+              aria-label={playing ? t("editor.pause") : t("editor.play")}
+            >
+              {playing ? (
+                <Pause size={16} strokeWidth={2} fill="currentColor" />
+              ) : (
+                <Play size={16} strokeWidth={2} fill="currentColor" />
+              )}
+            </button>
+          </Tooltip>
+          <div className="editor-transport-end">
+            {canvasControl}
+            <Button
+              variant="tertiary"
+              size="sm"
+              disabled={layout.length === 0 || exactFrame?.status === "busy"}
+              onClick={onExactFrame}
+            >
+              <ScanEye size={14} strokeWidth={1.75} />
+              {t("editor.exactFrame")}
+            </Button>
+            <Tooltip label={t("editor.fullscreen")}>
+              <button
+                type="button"
+                className="editor-icon-button"
+                aria-label={t("editor.fullscreen")}
+                onClick={() => stageRef.current?.requestFullscreen?.()}
+              >
+                <Maximize size={15} strokeWidth={1.75} />
+              </button>
+            </Tooltip>
+          </div>
+        </div>
       </div>
 
       {exactFrame ? (
@@ -244,16 +249,14 @@ export default function EditorPreview({
           )}
           <button
             type="button"
-            className="editor-button"
+            className="editor-icon-button"
             onClick={onCloseExactFrame}
             aria-label={t("common.close")}
           >
-            ×
+            <X size={14} strokeWidth={1.75} />
           </button>
         </figure>
       ) : null}
-
-      {selectedEntry ? <ClipRange entry={selectedEntry} onCommitRange={onCommitRange} /> : null}
     </section>
   );
 }
