@@ -2,7 +2,12 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { IPC_EVENTS, IPC_INVOKE } from "../shared/ipc-channels.js";
+
+const trustedEvent = {
+  senderFrame: { url: pathToFileURL(path.join(process.cwd(), "build", "index.html")).href },
+};
 
 const mocks = vi.hoisted(() => ({
   tempRoot: "",
@@ -37,7 +42,11 @@ vi.mock("../main/utils/paths.js", async (importOriginal) => ({
   ...(await importOriginal()),
   validateMediaBinaries: () => ({ ok: true }),
 }));
-vi.mock("../main/shared-state.js", () => ({ getMainWindow: () => null }));
+vi.mock("../main/shared-state.js", () => ({
+  getMainWindow: () => null,
+  isDev: false,
+  DEV_URL: null,
+}));
 vi.mock("../main/processing-run.js", () => ({
   executeProcessingRun: mocks.executeProcessingRun,
   cancelRun: mocks.cancelRun,
@@ -100,7 +109,9 @@ describe("shared processing lifecycle", () => {
     const manifest = manifestFor(path.join(tmp, "out.mp4"));
     manifest.jobs[0].clips[0].input_path = media;
     mocks.saveDialog.mockResolvedValue({ canceled: false, filePath: path.join(tmp, "out.mp4") });
-    const exported = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)({}, { manifest });
+    const exported = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)(trustedEvent, {
+      manifest,
+    });
     expect(exported.success).toBe(true);
     expect(mocks.executeProcessingRun.mock.calls[0][0]).toMatchObject({
       owner: "editor:export",
@@ -110,10 +121,10 @@ describe("shared processing lifecycle", () => {
     manifest.jobs[0].frame = { atUs: 500000 };
     expect(
       (
-        await mocks.handlers.get(IPC_INVOKE.renderEditorExactFrame)(
-          {},
-          { manifest, requestId: "frame-1" },
-        )
+        await mocks.handlers.get(IPC_INVOKE.renderEditorExactFrame)(trustedEvent, {
+          manifest,
+          requestId: "frame-1",
+        })
       ).success,
     ).toBe(true);
     expect(mocks.executeProcessingRun.mock.calls[1][0]).toMatchObject({
@@ -123,7 +134,9 @@ describe("shared processing lifecycle", () => {
     });
     const stat = fs.statSync(media),
       source = { path: media, sizeBytes: stat.size, mtimeMs: stat.mtimeMs, durationUs: 1e6 };
-    const proxy = await mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy)({}, { source });
+    const proxy = await mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy)(trustedEvent, {
+      source,
+    });
     expect(proxy.success).toBe(true);
     expect(mocks.executeProcessingRun.mock.calls[2][0]).toMatchObject({
       owner: "editor:proxy",
@@ -137,7 +150,9 @@ describe("shared processing lifecycle", () => {
         },
       ],
     });
-    expect(await mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy)({}, { source })).toEqual({
+    expect(
+      await mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy)(trustedEvent, { source }),
+    ).toEqual({
       ...proxy,
       reused: true,
     });
@@ -148,32 +163,31 @@ describe("shared processing lifecycle", () => {
     manifest.jobs[0].clips[0].input_path = media;
     manifest.jobs[0].frame = { atUs: 0 };
     const handler = mocks.handlers.get(IPC_INVOKE.renderEditorExactFrame);
-    const first = await handler({}, { manifest, requestId: "first" });
+    const first = await handler(trustedEvent, { manifest, requestId: "first" });
     expect(first.success).toBe(true);
     mocks.executeProcessingRun.mockResolvedValueOnce({
       success: false,
       code: "already_processing",
     });
-    const second = await handler({}, { manifest, requestId: "second" });
+    const second = await handler(trustedEvent, { manifest, requestId: "second" });
     expect(second.success).toBe(false);
     expect(fs.existsSync(first.path)).toBe(true);
-    const third = await handler({}, { manifest, requestId: "third" });
+    const third = await handler(trustedEvent, { manifest, requestId: "third" });
     expect(third.success).toBe(true);
     expect(fs.existsSync(first.path)).toBe(false);
     expect(fs.existsSync(third.path)).toBe(true);
   });
   it("cancels only the requested Editor owner through the shared lifecycle", async () => {
     const cancel = mocks.handlers.get(IPC_INVOKE.cancelEditorExport);
-    await cancel({}, { kind: "frame" });
+    await cancel(trustedEvent, { kind: "frame" });
     expect(mocks.cancelRun).toHaveBeenLastCalledWith({ owner: "editor:frame" });
-    await cancel({}, {});
+    await cancel(trustedEvent, {});
     expect(mocks.cancelRun).toHaveBeenLastCalledWith({ owner: "editor:export" });
   });
   it("invalidates a proxy when its source identity changed", async () => {
-    const result = await mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy)(
-      {},
-      { source: { path: media, sizeBytes: 999, mtimeMs: null, durationUs: 1e6 } },
-    );
+    const result = await mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy)(trustedEvent, {
+      source: { path: media, sizeBytes: 999, mtimeMs: null, durationUs: 1e6 },
+    });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/cambió/);
     expect(mocks.executeProcessingRun).not.toHaveBeenCalled();
@@ -232,10 +246,9 @@ describe("import and export handlers", () => {
         ? { duration: 0, width: 0, height: 0, audioCodec: "" }
         : { duration: 4.5, width: 1280, height: 720, audioCodec: "aac" },
     );
-    const result = await mocks.handlers.get(IPC_INVOKE.importEditorVideos)(
-      {},
-      { paths: [media, broken] },
-    );
+    const result = await mocks.handlers.get(IPC_INVOKE.importEditorVideos)(trustedEvent, {
+      paths: [media, broken],
+    });
     expect(result.success).toBe(true);
     expect(result.sources).toEqual([
       expect.objectContaining({
@@ -250,7 +263,7 @@ describe("import and export handlers", () => {
 
   it("asks for files through the dialog when no paths are dropped", async () => {
     mocks.openDialog.mockResolvedValue({ canceled: true, filePaths: [] });
-    const result = await mocks.handlers.get(IPC_INVOKE.importEditorVideos)({}, undefined);
+    const result = await mocks.handlers.get(IPC_INVOKE.importEditorVideos)(trustedEvent, undefined);
     expect(mocks.openDialog).toHaveBeenCalledTimes(1);
     expect(result).toEqual({ success: false, canceled: true });
   });
@@ -259,7 +272,9 @@ describe("import and export handlers", () => {
     mocks.saveDialog.mockResolvedValue({ canceled: true, filePath: undefined });
     const manifest = manifestFor(path.join(tmp, "unused.mp4"));
     manifest.jobs[0].clips[0].input_path = media;
-    const result = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)({}, { manifest });
+    const result = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)(trustedEvent, {
+      manifest,
+    });
     expect(result).toEqual({ success: false, canceled: true });
     expect(mocks.executeProcessingRun).not.toHaveBeenCalled();
   });
@@ -268,7 +283,9 @@ describe("import and export handlers", () => {
     mocks.saveDialog.mockResolvedValue({ canceled: false, filePath: media });
     const manifest = manifestFor(path.join(tmp, "unused.mp4"));
     manifest.jobs[0].clips[0].input_path = media;
-    const result = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)({}, { manifest });
+    const result = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)(trustedEvent, {
+      manifest,
+    });
     expect(result.error).toMatch(/no puede reemplazar una fuente/);
     expect(mocks.executeProcessingRun).not.toHaveBeenCalled();
   });
@@ -276,7 +293,9 @@ describe("import and export handlers", () => {
   it("validates the manifest before touching any file or dialog", async () => {
     const manifest = manifestFor(path.join(tmp, "unused.mp4"));
     manifest.jobs[0].clips = [];
-    const result = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)({}, { manifest });
+    const result = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)(trustedEvent, {
+      manifest,
+    });
     expect(result).toEqual({ success: false, error: "La composición no tiene clips" });
     expect(mocks.saveDialog).not.toHaveBeenCalled();
   });
@@ -291,7 +310,7 @@ describe("import and export handlers", () => {
     };
     mocks.openDialog.mockResolvedValue({ canceled: false, filePaths: [image] });
     mocks.probe.mockResolvedValue({ duration: 0, width: 40, height: 40, audioCodec: "" });
-    const result = await mocks.handlers.get(IPC_INVOKE.importEditorImage)({});
+    const result = await mocks.handlers.get(IPC_INVOKE.importEditorImage)(trustedEvent);
     expect(kinds).toEqual(["image"]);
     expect(result).toEqual({
       success: true,
@@ -309,17 +328,16 @@ describe("import and export handlers", () => {
     fs.writeFileSync(image, "x");
     mocks.openDialog.mockResolvedValue({ canceled: false, filePaths: [image] });
     mocks.probe.mockResolvedValue({ duration: 0, width: 0, height: 0, audioCodec: "" });
-    const result = await mocks.handlers.get(IPC_INVOKE.importEditorImage)({});
+    const result = await mocks.handlers.get(IPC_INVOKE.importEditorImage)(trustedEvent);
     expect(result).toEqual({ success: false, error: "No se pudo leer la imagen" });
   });
 
   it("probes a relinked video, so the document can check its duration against the clips", async () => {
     mocks.openDialog.mockResolvedValue({ canceled: false, filePaths: [media] });
     mocks.probe.mockResolvedValue({ duration: 2, width: 640, height: 360, audioCodec: "" });
-    const result = await mocks.handlers.get(IPC_INVOKE.pickEditorReplacement)(
-      {},
-      { kind: "video" },
-    );
+    const result = await mocks.handlers.get(IPC_INVOKE.pickEditorReplacement)(trustedEvent, {
+      kind: "video",
+    });
     expect(result).toEqual({
       success: true,
       source: expect.objectContaining({
@@ -348,7 +366,9 @@ describe("import and export handlers", () => {
         source: { path: logo, sizeBytes: 64, mtimeMs: fs.statSync(logo).mtimeMs },
       },
     ];
-    const result = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)({}, { manifest });
+    const result = await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)(trustedEvent, {
+      manifest,
+    });
     expect(result).toEqual({
       success: false,
       error: "No se puede leer logo.png: Tipo de archivo no permitido",
