@@ -17,6 +17,13 @@ describe("normalizeMatchId", () => {
     expect(normalizeMatchId(123456789012345)).toBe("123456789012345");
     expect(normalizeMatchId("1.23456789012345e+14")).toBe("123456789012345");
   });
+
+  it("strips only known video extensions", () => {
+    expect(normalizeMatchId("123.45")).toBe("123.45");
+    expect(normalizeMatchId("intro.v2")).toBe("intro.v2");
+    expect(normalizeMatchId("intro.v2.MP4")).toBe("intro.v2");
+    expect(normalizeMatchId("sin-extension")).toBe("sin-extension");
+  });
 });
 
 describe("formatMatchIdRaw", () => {
@@ -63,5 +70,26 @@ describe("Excel row matching with extension in ID column", () => {
   it("getCellTextForRegion reads Excel text after extension-normalized match", () => {
     useEditorStore.getState().updateExcelMapping({ idColumn: "id", columns: { r1: "TEXT_1" } });
     expect(useEditorStore.getState().getCellTextForRegion(0, "r1")).toBe("Titulo");
+  });
+
+  it("updateExcelMapping links rows when the ID contains dots before the extension", () => {
+    useEditorStore.setState({
+      queue: [
+        {
+          path: "C:\\videos\\123.45.mp4",
+          filename: "123.45.mp4",
+          width: 1920,
+          height: 1080,
+          operations: [],
+          status: "idle",
+          progress: 0,
+          error: null,
+        },
+      ],
+      excelRows: [{ id: "123.45", TEXT_1: "Con punto" }],
+    });
+    useEditorStore.getState().updateExcelMapping({ idColumn: "id", columns: { r1: "TEXT_1" } });
+    expect(useEditorStore.getState().excelMatchStatus[0]).toBe("matched");
+    expect(useEditorStore.getState().queue[0].operations[0].text).toBe("Con punto");
   });
 });
