@@ -36,9 +36,11 @@ def _motion(current, donor, box, search=24):
     if len(xx) < 32:
         return None
 
-    def score(dx, dy, coarse=False):
-        sx = xx + dx
-        sy = yy + dy
+    def best(offsets, coarse=False):
+        """Lowest mean clipped difference, ties to the smaller shift (scored at once)."""
+        offsets = np.asarray(offsets)
+        sx = xx + offsets[:, :1]
+        sy = yy + offsets[:, 1:]
         valid = (
             (sx >= 0)
             & (sx < width)
@@ -46,31 +48,37 @@ def _motion(current, donor, box, search=24):
             & (sy < height)
             & ((sx < x - 2) | (sx >= x + w + 2) | (sy < y - 2) | (sy >= y + h + 2))
         )
-        if valid.sum() < max(32, len(xx) // 2):
-            return float("inf")
         first, second = (low_current, low_donor) if coarse else (current, donor)
-        return float(
-            np.minimum(
-                np.abs(first[yy[valid], xx[valid]] - second[sy[valid], sx[valid]]), 60
-            ).mean()
+        difference = np.minimum(
+            np.abs(
+                first[yy, xx]
+                - second[np.clip(sy, 0, height - 1), np.clip(sx, 0, width - 1)]
+            ),
+            60,
         )
+        counts = valid.sum(axis=1)
+        scores = np.where(valid, difference, 0).sum(axis=1) / np.maximum(counts, 1)
+        scores[counts < max(32, len(xx) // 2)] = np.inf
+        index = np.lexsort((np.abs(offsets).sum(axis=1), scores))[0]
+        return float(scores[index]), int(offsets[index, 0]), int(offsets[index, 1])
 
-    stationary = score(0, 0)
+    stationary = best([(0, 0)])[0]
     if stationary <= 0.25:
         return 0, 0, stationary
-    coarse = [
-        (score(dx, dy, True), dx, dy)
-        for dy in range(-search, search + 1, 4)
-        for dx in range(-search, search + 1, 4)
-    ]
-    _, cx, cy = min(coarse, key=lambda entry: (entry[0], abs(entry[1]) + abs(entry[2])))
-    candidates = [
-        (score(dx, dy), dx, dy)
-        for dy in range(max(-search, cy - 3), min(search, cy + 3) + 1)
-        for dx in range(max(-search, cx - 3), min(search, cx + 3) + 1)
-    ]
-    residual, dx, dy = min(
-        candidates, key=lambda entry: (entry[0], abs(entry[1]) + abs(entry[2]))
+    _, cx, cy = best(
+        [
+            (dx, dy)
+            for dy in range(-search, search + 1, 4)
+            for dx in range(-search, search + 1, 4)
+        ],
+        coarse=True,
+    )
+    residual, dx, dy = best(
+        [
+            (dx, dy)
+            for dy in range(max(-search, cy - 3), min(search, cy + 3) + 1)
+            for dx in range(max(-search, cx - 3), min(search, cx + 3) + 1)
+        ]
     )
     if residual > 8:
         return None
@@ -158,9 +166,14 @@ def compensated_frames(frames, box, radius, *, guard=2):
                     int(radius), 15, (64 * 1024 * 1024 // max(1, frame_bytes) - 1) // 2
                 ),
             )
-        gray = _gray(original)
-        if previous is not None and _motion(previous, gray, box) is None:
+        if protected:
+            # A verified spatial frame neither borrows nor lends, so it skips motion work.
+            gray = None
             scene += 1
+        else:
+            gray = _gray(original)
+            if previous is None or _motion(previous, gray, box) is None:
+                scene += 1
         previous = gray
         window.append((index, (original, filled, gray, scene, protected)))
         last = index
