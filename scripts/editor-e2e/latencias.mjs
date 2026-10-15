@@ -184,7 +184,7 @@ const EXACT_FRAME = `(async () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
   }
   const elapsed = performance.now() - started;
-  document.querySelector(".editor-exact-frame > .editor-button")?.click();
+  document.querySelector(".editor-exact-frame > button")?.click();
   await new Promise((resolve) => setTimeout(resolve, 100));
   return elapsed;
 })()`;

@@ -1591,6 +1591,22 @@ a:focus-visible,
   opacity: 0.4;
 }
 
+.app-shell.is-editor-mode {
+  background: var(--bg-surface);
+}
+
+.is-editor-mode .rail-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+
+.is-editor-mode .rail-item.is-active,
+.is-editor-mode .rail-item.is-active:hover:not(:disabled) {
+  color: var(--accent-brand);
+  background: color-mix(in srgb, var(--accent-brand) 14%, transparent);
+  border-color: transparent;
+  box-shadow: none;
+}
+
 .app-rail .ui-tooltip-anchor {
   display: flex;
   justify-content: center;

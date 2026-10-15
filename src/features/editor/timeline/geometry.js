@@ -63,3 +63,15 @@ export function trimmedWindow(clip, edge, deltaUs, assetDurationUs) {
 export function isInView(startPx, endPx, scrollLeft, viewportWidth, marginPx = 240) {
   return endPx >= scrollLeft - marginPx && startPx <= scrollLeft + viewportWidth + marginPx;
 }
+
+export function overlayWindow(overlay, mode, deltaUs, snap = (us) => us) {
+  const { startUs, endUs } = overlay;
+  if (mode === "move") {
+    const nextStart = Math.max(0, snap(startUs + deltaUs));
+    return { startUs: nextStart, endUs: nextStart + (endUs - startUs) };
+  }
+  if (mode === "start") {
+    return { startUs: clamp(snap(startUs + deltaUs), 0, endUs - MIN_CLIP_US), endUs };
+  }
+  return { startUs, endUs: Math.max(startUs + MIN_CLIP_US, snap(endUs + deltaUs)) };
+}

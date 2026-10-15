@@ -22,7 +22,7 @@ function clickInCard(page, filename, text) {
     const card = [...document.querySelectorAll(".editor-asset")].find(
       (li) => li.querySelector(".editor-asset-name")?.textContent === ${JSON.stringify(filename)},
     );
-    const button = card && [...card.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(text)});
+    const button = card && [...card.querySelectorAll("button")].find((b) => b.textContent.trim() === ${JSON.stringify(text)} || b.getAttribute("aria-label") === ${JSON.stringify(text)});
     if (!button) return false;
     button.click();
     return true;

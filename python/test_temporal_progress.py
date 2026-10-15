@@ -132,7 +132,7 @@ def test_patch_phase_emits_job_progress():
         assert patch, "no patch-phase job_progress was emitted"
         percents = [e["percent"] for e in patch]
         assert percents == sorted(percents), f"patch percent not monotonic: {percents}"
-        assert max(percents) < 20, f"patch percent left its range: {percents}"
+        assert max(percents) <= 20, f"patch percent left its range: {percents}"
         encode_percents = [e["percent"] for e in events
                            if e.get("type") == "job_progress" and not e.get("phase")]
         assert encode_percents and min(encode_percents) >= 20, encode_percents

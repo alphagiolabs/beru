@@ -1004,7 +1004,7 @@
   "editor.proxy.creating": "Creating proxy…",
   "editor.proxy.automatic": "{name}: seeking was slow, so the preview uses its proxy. The export still uses the original.",
   "editor.timeline.title": "Montage",
-  "editor.timeline.empty": "Add a library video to the montage to get started.",
+  "editor.timeline.empty": "Drag videos here or click to import.",
   "editor.timeline.zoomIn": "Zoom in",
   "editor.timeline.zoomOut": "Zoom out",
   "editor.timeline.fit": "Fit",
@@ -1036,5 +1036,17 @@
   "editor.recover.title": "Recover montage",
   "editor.recover.message": "There is an unsaved montage from {time}. Recover it?",
   "editor.recover.confirm": "Recover",
-  "editor.recover.discard": "Discard"
+  "editor.recover.discard": "Discard",
+  "editor.project": "Project",
+  "editor.exportSettings": "Export",
+  "editor.split": "Split",
+  "editor.duplicate": "Duplicate",
+  "editor.delete": "Delete",
+  "editor.transform": "Transform",
+  "editor.range": "Range",
+  "editor.overlay.style": "Style",
+  "editor.tab.basic": "Basic",
+  "editor.tab.position": "Position",
+  "editor.fullscreen": "Full screen",
+  "editor.timeline.zoom": "Timeline zoom"
 }

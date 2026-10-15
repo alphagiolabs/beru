@@ -1004,7 +1004,7 @@
   "editor.proxy.creating": "Creando proxy…",
   "editor.proxy.automatic": "{name}: la búsqueda era lenta, así que la vista previa usa su proxy. La exportación sigue usando el original.",
   "editor.timeline.title": "Montaje",
-  "editor.timeline.empty": "Añade un video de la biblioteca al montaje para empezar.",
+  "editor.timeline.empty": "Arrastra videos aquí o haz clic para importar.",
   "editor.timeline.zoomIn": "Acercar",
   "editor.timeline.zoomOut": "Alejar",
   "editor.timeline.fit": "Ajustar",
@@ -1036,5 +1036,17 @@
   "editor.recover.title": "Recuperar montaje",
   "editor.recover.message": "Hay un montaje sin guardar del {time}. ¿Quieres recuperarlo?",
   "editor.recover.confirm": "Recuperar",
-  "editor.recover.discard": "Descartar"
+  "editor.recover.discard": "Descartar",
+  "editor.project": "Proyecto",
+  "editor.exportSettings": "Exportación",
+  "editor.split": "Dividir",
+  "editor.duplicate": "Duplicar",
+  "editor.delete": "Eliminar",
+  "editor.transform": "Transformar",
+  "editor.range": "Rango",
+  "editor.overlay.style": "Estilo",
+  "editor.tab.basic": "Básico",
+  "editor.tab.position": "Posición",
+  "editor.fullscreen": "Pantalla completa",
+  "editor.timeline.zoom": "Zoom de la línea de tiempo"
 }
