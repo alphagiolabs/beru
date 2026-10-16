@@ -1,10 +1,3 @@
-"""Regression: font caches are bounded by the run, not the worker lifetime.
-
-The job worker stays alive across runs. Without `reset_caches` a font
-installed after the first run stays invisible, and a font deleted between
-runs leaves a `fontfile` cache hit pointing at a missing file and fails jobs.
-"""
-
 import sys
 import tempfile
 from pathlib import Path
@@ -15,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 import fonts as fonts_module  # noqa: E402
 import filters  # noqa: E402
 import processor  # noqa: E402
+import encoders
 
 
 def test_deleted_fontfile_reverifies_on_cache_hit():
@@ -71,8 +65,7 @@ def test_process_jobs_rescans_fonts_every_run():
 
     with patch.object(fonts_module, "FONT_DIRS", []), patch.object(
         fonts_module, "_windows_registry_fonts", side_effect=_no_registry_fonts
-    ), patch.object(processor, "_execute_batch", return_value=batch), patch.object(
-        processor, "detect_hw_encoder", return_value=None
+    ), patch.object(processor, "_execute_batch", return_value=batch), patch.object(encoders, "detect_hw_encoder", return_value=None
     ):
         processor.process_jobs([job], "ffmpeg")
         processor.process_jobs([job], "ffmpeg")

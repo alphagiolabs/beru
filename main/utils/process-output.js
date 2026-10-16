@@ -21,12 +21,69 @@ function renameWithRetry(from, to) {
     }
   }
 }
+const EXPORT_OWNER_FILE = "owner.json";
+const EXPORT_ORPHAN_AGE_MS = 24 * 60 * 60 * 1000;
+
+export function sweepOrphanedExports(outputRoot) {
+  try {
+    const root = fs.realpathSync(outputRoot);
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isDirectory() || !entry.name.startsWith(EXPORT_DIR_PREFIX)) continue;
+      const dir = path.resolve(root, entry.name);
+      if (!isPathInsideRoot(dir, root)) continue;
+      try {
+        const ownerPath = path.join(dir, EXPORT_OWNER_FILE);
+        if (!fs.lstatSync(ownerPath).isFile()) continue;
+        const owner = JSON.parse(fs.readFileSync(ownerPath, "utf8"));
+        if (
+          owner.type !== "beru-export-staging" ||
+          !Number.isSafeInteger(owner.pid) ||
+          owner.pid <= 0 ||
+          !Number.isFinite(owner.createdAt) ||
+          Date.now() - owner.createdAt < EXPORT_ORPHAN_AGE_MS ||
+          owner.recoverable === true
+        )
+          continue;
+        try {
+          process.kill(owner.pid, 0);
+          continue;
+        } catch (err) {
+          if (err.code !== "ESRCH") continue;
+        }
+        const files = fs.readdirSync(dir, { withFileTypes: true });
+        if (
+          files.some(
+            (file) =>
+              !file.isFile() ||
+              (file.name !== EXPORT_OWNER_FILE &&
+                !/^\d+\.(mp4|mov|mkv|avi|webm)$/i.test(file.name)),
+          )
+        )
+          continue;
+        for (const file of files) fs.unlinkSync(path.join(dir, file.name));
+        fs.rmdirSync(dir);
+      } catch {}
+    }
+  } catch {}
+}
 
 function isPathInsideRoot(candidatePath, rootPath) {
   const root = path.resolve(rootPath);
   const resolved = path.resolve(candidatePath);
   const relative = path.relative(root, resolved);
   return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+async function promoteWithoutOverwrite(staged, destination) {
+  try {
+    fs.linkSync(staged, destination);
+  } catch (err) {
+    if (err.code === "EEXIST") throw err;
+    await fs.promises.copyFile(staged, destination, fs.constants.COPYFILE_EXCL);
+  }
+  try {
+    fs.unlinkSync(staged);
+  } catch {}
 }
 
 export function deriveOutputPath(selectedDirectory, rendererOutputPath, { frame = false } = {}) {
@@ -110,7 +167,19 @@ export async function validateBatchOutputPaths(jobs) {
   }
 }
 
-export function createRunOutputFiles(jobs, outputRoot) {
+export async function findExistingOutputs(jobs) {
+  const existing = await Promise.all(
+    jobs.map((job) =>
+      fs.promises.lstat(job.output_path).then(
+        () => job.output_path,
+        () => null,
+      ),
+    ),
+  );
+  return existing.filter(Boolean);
+}
+
+export function createRunOutputFiles(jobs, outputRoot, { overwrite = false } = {}) {
   const targets = jobs.map((job, index) => {
     const outputPath = deriveOutputPath(outputRoot, job.output_path, {
       frame: job.kind === "composition" && job.frame != null,
@@ -122,33 +191,76 @@ export function createRunOutputFiles(jobs, outputRoot) {
   }
   const root = path.resolve(outputRoot);
   const dir = fs.mkdtempSync(path.join(root, EXPORT_DIR_PREFIX));
+  const ownerPath = path.join(dir, EXPORT_OWNER_FILE);
+  const owner = { type: "beru-export-staging", pid: process.pid, createdAt: Date.now() };
+  fs.writeFileSync(ownerPath, JSON.stringify(owner), { flag: "wx" });
   const stagedJobs = jobs.map((job, index) => ({
     ...job,
     output_path: path.join(dir, `${index}${path.extname(targets[index].outputPath)}`),
     output_root: dir,
   }));
-  const completed = new Set();
+  const reserved = new Set(targets.map((job) => job.outputPath.toLowerCase()));
+  const promoteToFreePath = async (staged, target) => {
+    const { dir: targetDir, name, ext } = path.parse(target);
+    for (let n = 1; ; n++) {
+      const candidate = n === 1 ? target : path.join(targetDir, `${name}__${n}${ext}`);
+      if (n > 1 && reserved.has(candidate.toLowerCase())) continue;
+      try {
+        await promoteWithoutOverwrite(staged, candidate);
+        return candidate;
+      } catch (err) {
+        if (err.code !== "EEXIST") throw err;
+      }
+    }
+  };
+  const completed = new Map();
+  const preserved = new Set();
   return {
     jobs: stagedJobs,
-    complete(index) {
+    async complete(index) {
       const position = targets.findIndex((job) => job.key === index);
       if (position < 0) throw new Error("El procesador devolvió un trabajo desconocido");
       if (!completed.has(index)) {
-        const stat = fs.statSync(stagedJobs[position].output_path);
+        const staged = stagedJobs[position].output_path;
+        const target = targets[position].outputPath;
+        const stat = fs.statSync(staged);
         if (!stat.isFile() || stat.size === 0) {
           throw new Error("FFmpeg no produjo un archivo de salida válido");
         }
-        renameWithRetry(stagedJobs[position].output_path, targets[position].outputPath);
-        invalidateBeruStatCache(targets[position].outputPath);
-        completed.add(index);
+        let destination = target;
+        try {
+          let replaced = false;
+          if (overwrite) {
+            try {
+              renameWithRetry(staged, target);
+              replaced = true;
+            } catch {}
+          }
+          if (!replaced) destination = await promoteToFreePath(staged, target);
+        } catch (err) {
+          preserved.add(staged);
+          try {
+            fs.writeFileSync(ownerPath, JSON.stringify({ ...owner, recoverable: true }));
+          } catch {
+            try {
+              fs.unlinkSync(ownerPath);
+            } catch {}
+          }
+          throw new Error(`${err.message}. El video exportado se conservó en ${staged}`);
+        }
+        invalidateBeruStatCache(destination);
+        completed.set(index, destination);
       }
-      return targets[position].outputPath;
+      return completed.get(index);
     },
     dispose() {
       for (const job of stagedJobs) {
+        if (preserved.has(job.output_path)) continue;
         removeIncompleteOutput(job.output_path, { outputRoot: dir, inputPath: job.input_path });
       }
+      if (preserved.size > 0) return;
       try {
+        fs.unlinkSync(ownerPath);
         fs.rmdirSync(dir);
       } catch {}
     },

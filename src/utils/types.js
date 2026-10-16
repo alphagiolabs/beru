@@ -1,4 +1,3 @@
-// @ts-check
 import { DEFAULT_PIX_FMT } from "../../shared/job-manifest.js";
 import { IDENTITY_TRANSFORM } from "./output-geometry.js";
 import { IDENTITY_AUDIO } from "./audio-settings.js";

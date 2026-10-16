@@ -1,3 +1,4 @@
+import { DelogoFields } from "./RegionEffectFields.jsx";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
@@ -13,40 +14,16 @@ import VideoTransformControls from "./VideoTransformControls";
 import VideoAudioControls from "./VideoAudioControls";
 import ExternalAudioControls from "./ExternalAudioControls";
 import VideoTimingControls from "./VideoTimingControls";
-import DelogoMethodHelp from "./DelogoMethodHelp";
 import TimeRangeFields from "./TimeRangeFields";
 import CropRatioPresets from "./CropRatioPresets";
 import { isRegionUsable } from "../utils/video-utils";
 import { parseClockStart } from "../utils/datetime-stamp";
 import { beruLocalUrl, imageVersion } from "../utils/beru-url";
-import { DELOGO_METHODS, MIRROR_SIDES } from "../utils/types";
 import { storeErrorText } from "../utils/store-errors";
 import { InspectorGroup } from "./inspector";
-import { Tooltip, TooltipProvider } from "./ui/tooltip";
-import {
-  Timer,
-  FlipHorizontal2,
-  Grid3x3,
-  Sparkles,
-  Droplet,
-  PaintBucket,
-  Eye,
-  Upload,
-  X,
-  Film,
-  SquareDashedMousePointer,
-} from "lucide-react";
+import { Eye, X, Film, SquareDashedMousePointer } from "lucide-react";
 import { Button } from "./ui/Button";
 import { PositionIcon } from "./ui/PositionIcon";
-
-const DELOGO_ICONS = {
-  temporal: Timer,
-  mirror: FlipHorizontal2,
-  mosaic: Grid3x3,
-  inpaint: Sparkles,
-  blur: Droplet,
-  fill: PaintBucket,
-};
 
 const selectSelectedVideo = (s) => {
   const item = s.selectedIdx >= 0 && s.selectedIdx < s.queue.length ? s.queue[s.selectedIdx] : null;
@@ -478,253 +455,29 @@ export default function PropertiesPanel() {
                     <Eye size={10} /> {t("logo.quickPreview")}
                   </span>
                 </div>
-                <details className="mt-2" open={delogoMethod !== "blur" || undefined}>
-                  <summary className="inspector-helper cursor-pointer">
-                    {t("logo.advancedMethods")}
-                  </summary>
-                  <TooltipProvider>
-                    <div className="delogo-method-grid grid grid-cols-3 gap-1 mt-2">
-                      {DELOGO_METHODS.map((m) => {
-                        const Icon = DELOGO_ICONS[m.id];
-                        const active = delogoMethod === m.id;
-                        return (
-                          <Tooltip
-                            key={m.id}
-                            label={t(m.labelKey)}
-                            description={t(m.descriptionKey)}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => get().setDelogoMethod(m.id)}
-                              className={`inspector-chip flex-col gap-0.5 !min-h-[40px]${active ? " is-selected" : ""}`}
-                              style={
-                                active
-                                  ? {
-                                      background: "var(--rose)",
-                                      color: "var(--text-on-rose)",
-                                      borderColor: "var(--rose)",
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {Icon && <Icon size={11} />}
-                              <span className="text-[10px]">{t(m.labelKey)}</span>
-                            </button>
-                          </Tooltip>
-                        );
-                      })}
-                    </div>
-                  </TooltipProvider>
-                </details>
-                <DelogoMethodHelp methodId={delogoMethod} />
-
-                {delogoMethod === "temporal" && (
-                  <div
-                    className="flex items-center gap-2 text-[11px] min-w-0"
-                    style={{ color: "var(--text-dim)" }}
-                  >
-                    {t("props.radiusFrames")}
-                    <input
-                      type="range"
-                      min="1"
-                      max="15"
-                      value={temporalRadius}
-                      onChange={(e) => get().setTemporalRadius(e.target.value)}
-                      className="inspector-range"
-                    />
-                    <span
-                      className="font-mono text-xs w-6 text-right"
-                      style={{ color: "var(--text-brand)" }}
-                    >
-                      {temporalRadius}
-                    </span>
-                  </div>
-                )}
-
-                {delogoMethod === "mosaic" && (
-                  <div
-                    className="flex items-center gap-2 text-[11px] min-w-0"
-                    style={{ color: "var(--text-dim)" }}
-                  >
-                    {t("props.blockSize")}
-                    <input
-                      type="range"
-                      min="4"
-                      max="40"
-                      value={mosaicSize}
-                      onChange={(e) => get().setMosaicSize(e.target.value)}
-                      className="inspector-range"
-                    />
-                    <span
-                      className="font-mono text-xs w-6 text-right"
-                      style={{ color: "var(--text-brand)" }}
-                    >
-                      {mosaicSize}px
-                    </span>
-                  </div>
-                )}
-
-                {delogoMethod === "mirror" && (
-                  <div>
-                    <span className="cap-input-label">{t("props.mirrorSide")}</span>
-                    <div className="grid grid-cols-2 gap-1">
-                      {MIRROR_SIDES.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => get().setMirrorSide(s.id)}
-                          className={`inspector-chip${mirrorSide === s.id ? " is-selected" : ""}`}
-                          style={
-                            mirrorSide === s.id
-                              ? {
-                                  background: "var(--rose)",
-                                  color: "var(--text-on-rose)",
-                                  borderColor: "var(--rose)",
-                                }
-                              : undefined
-                          }
-                        >
-                          {t(s.labelKey)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {delogoMethod === "blur" && (
-                  <div
-                    className="flex items-center gap-2 text-[11px] min-w-0"
-                    style={{ color: "var(--text-dim)" }}
-                  >
-                    {t("props.intensity")}
-                    <input
-                      type="range"
-                      min="2"
-                      max="60"
-                      value={blurStrength}
-                      onChange={(e) => get().setBlurStrength(Number(e.target.value))}
-                      className="inspector-range"
-                    />
-                    <span
-                      className="font-mono text-xs w-6 text-right"
-                      style={{ color: "var(--text-brand)" }}
-                    >
-                      {blurStrength}
-                    </span>
-                  </div>
-                )}
-
-                {delogoMethod === "fill" && (
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2">
-                      <span className="cap-input-label !mb-0">{t("table.color")}</span>
-                      <input
-                        type="color"
-                        value={delogoFillColor}
-                        onChange={(e) => get().setDelogoFillColor(e.target.value)}
-                        className="w-6 h-6 rounded cursor-pointer border-0"
-                      />
-                      <span className="font-mono text-[10px]" style={{ color: "var(--text-dim)" }}>
-                        {delogoFillColor}
-                      </span>
-                    </label>
-                    <div
-                      className="flex items-center gap-2 text-[11px] min-w-0"
-                      style={{ color: "var(--text-dim)" }}
-                    >
-                      {t("table.opacity")}
-                      <input
-                        type="range"
-                        min="0"
-                        max="1"
-                        step="0.05"
-                        value={delogoFillOpacity}
-                        onChange={(e) => get().setDelogoFillOpacity(e.target.value)}
-                        className="inspector-range"
-                      />
-                      <span
-                        className="font-mono text-xs w-6 text-right"
-                        style={{ color: "var(--text-brand)" }}
-                      >
-                        {delogoFillOpacity.toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {delogoMethod === "cover" && (
-                  <div>
-                    <span className="cap-input-label">{t("props.coverImage")}</span>
-                    <div className="flex gap-1.5">
-                      <input
-                        type="text"
-                        value={delogoImagePath ? delogoImagePath.split(/[\\/]/).pop() : ""}
-                        placeholder={t("logo.coverImagePlaceholder")}
-                        readOnly
-                        className="cap-input flex-1 font-mono text-[10px] truncate"
-                      />
-                      <Button
-                        onClick={async () => {
-                          const res = await window.api?.pickImage();
-                          if (res?.success) {
-                            const r = await window.api?.statImage(res.path);
-                            get().setDelogoImagePath(res.path, r?.success ? imageVersion(r) : "");
-                          } else if (res && !res.canceled) {
-                            get().showToast({
-                              kind: "err",
-                              text: storeErrorText(t, res, "errors.imageReadFailed"),
-                            });
-                          }
-                        }}
-                        variant="secondary"
-                        size="sm"
-                        className="!text-[10px] !px-2"
-                      >
-                        <Upload size={12} /> {t("logo.pick")}
-                      </Button>
-                      {delogoImagePath && (
-                        <Button
-                          onClick={() => get().setDelogoImagePath("")}
-                          variant="tertiary"
-                          size="icon"
-                          className="text-[var(--rose)]"
-                          style={{ color: "var(--text-rose)" }}
-                          title={t("common.remove")}
-                          aria-label={t("common.remove")}
-                        >
-                          <X size={12} />
-                        </Button>
-                      )}
-                    </div>
-                    {!delogoImagePath && (
-                      <p className="inspector-helper mt-1" style={{ color: "var(--text-rose)" }}>
-                        {t("props.coverFallbackHint", {
-                          method: t("catalog.delogoMethod.blur"),
-                        })}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                <div
-                  className="flex items-center gap-2 text-[11px] pt-1 min-w-0"
-                  style={{ color: "var(--text-dim)" }}
-                >
-                  <span title={t("logo.edgeFeatherHint")}>{t("logo.edgeFeather")}</span>
-                  <input
-                    type="range"
-                    min="0"
-                    max="20"
-                    value={edgeFeather}
-                    onChange={(e) => get().setEdgeFeather(e.target.value)}
-                    className="inspector-range"
-                  />
-                  <span
-                    className="font-mono text-xs w-8 text-right"
-                    style={{ color: "var(--text-brand)" }}
-                  >
-                    {edgeFeather}px
-                  </span>
-                </div>
+                <DelogoFields
+                  variant="draft"
+                  op={{
+                    delogoMethod,
+                    blurStrength,
+                    delogoFillColor,
+                    delogoFillOpacity,
+                    delogoImagePath,
+                    temporalRadius,
+                    mosaicSize,
+                    mirrorSide,
+                    edgeFeather,
+                  }}
+                  onPatch={(patch) => {
+                    const state = get();
+                    if (Object.hasOwn(patch, "delogoImagePath"))
+                      state.setDelogoImagePath(patch.delogoImagePath, patch.delogoImageV);
+                    for (const [key, value] of Object.entries(patch)) {
+                      if (key === "delogoImagePath" || key === "delogoImageV") continue;
+                      state[`set${key[0].toUpperCase()}${key.slice(1)}`](value);
+                    }
+                  }}
+                />
               </InspectorGroup>
             )}
 

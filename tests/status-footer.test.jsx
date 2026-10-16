@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createRoot } from "react-dom/client";
 import useEditorStore from "../src/stores/useEditorStore";
 import StatusFooter from "../src/components/StatusFooter";
+import { createQueueItem } from "../src/utils/types.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -60,8 +61,8 @@ describe("StatusFooter", () => {
       progressDone: 0,
       progressTotal: 2,
       queue: [
-        { status: "processing", progress: 40 },
-        { status: "idle", progress: 0 },
+        createQueueItem({ path: "C:/a.mp4", status: "processing", progress: 40 }),
+        createQueueItem({ path: "C:/b.mp4" }),
       ],
     });
 
@@ -81,7 +82,7 @@ describe("StatusFooter", () => {
       progressDone: 0,
       progressTotal: 0,
       jobProgress: {},
-      queue: [{ status: "idle" }],
+      queue: [createQueueItem({ path: "C:/a.mp4" })],
     });
     await act(async () => {
       root.render(<StatusFooter />);
@@ -89,9 +90,31 @@ describe("StatusFooter", () => {
     expect(document.querySelector(".status-footer").textContent).toContain("0/1");
 
     await act(async () => {
-      useEditorStore.setState({ queue: [{ status: "idle" }, { status: "idle" }] });
+      useEditorStore.setState({
+        queue: [createQueueItem({ path: "C:/a.mp4" }), createQueueItem({ path: "C:/b.mp4" })],
+      });
     });
     expect(document.querySelector(".status-footer").textContent).toContain("0/2");
+  });
+
+  it("keeps batch counters when an editor run follows a derived-media export", async () => {
+    useEditorStore.setState({
+      isProcessing: true,
+      activeProcessingKind: "editor:export",
+      mediaExport: { kind: "stabilization", status: "done", progress: 100 },
+      progressDone: 1,
+      progressTotal: 2,
+      queue: [
+        createQueueItem({ path: "C:/a.mp4", status: "done" }),
+        createQueueItem({ path: "C:/b.mp4" }),
+      ],
+    });
+    try {
+      await act(async () => root.render(<StatusFooter />));
+      expect(document.querySelector(".status-footer").textContent).toContain("1/2");
+    } finally {
+      act(() => useEditorStore.setState({ activeProcessingKind: null, mediaExport: null }));
+    }
   });
 
   it("opens a centered confirmation when the current version is up to date", async () => {

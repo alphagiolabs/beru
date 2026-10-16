@@ -1,4 +1,3 @@
-"""The canonical composition processor, used by Batch and Editor jobs."""
 import math
 import os
 import tempfile
@@ -60,7 +59,7 @@ def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encod
             if _check_cancelled(ctx):
                 raise RuntimeError("Cancelled")
             clip = original
-            info = media_probe.ffprobe(clip["input_path"], ffmpeg_bin=ffmpeg_path, ffprobe_bin=probe_bin)
+            info = media_probe.ffprobe_cached(clip["input_path"], ffmpeg_bin=ffmpeg_path, ffprobe_bin=probe_bin)
             if not info.get("width") or not info.get("height") or info.get("color_transfer") in ("smpte2084", "arib-std-b67"):
                 raise ValueError("Composition supports readable SDR video only")
             duration = cycle_duration(clip, info["duration"]) * repeat_count(clip)
@@ -75,7 +74,7 @@ def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encod
                 clip = {**clip, "input_path": destination, "input_root": directory, "trim_start": 0,
                         "trim_end": duration, "video_duration": duration, "playback_rate": 1,
                         "repeat_count": 1, "audio_gain": 1, "audio_muted": False}
-                info = media_probe.ffprobe(destination, ffmpeg_bin=ffmpeg_path, ffprobe_bin=probe_bin)
+                info = media_probe.ffprobe_cached(destination, ffmpeg_bin=ffmpeg_path, ffprobe_bin=probe_bin)
             clips.append(clip)
             infos.append(info)
             durations.append(duration)

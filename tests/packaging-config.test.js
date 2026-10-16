@@ -50,41 +50,24 @@ describe("installer packaging config", () => {
     expect(pkg.build.beforeBuild).toBe("scripts/build-processor.hook.cjs");
   });
 
-  it("includes the updater runtime modules in the packaged app", () => {
-    expect(pkg.dependencies).toHaveProperty("electron-updater");
-
-    expect(pkg.build.files).toEqual(
-      expect.arrayContaining([
-        "node_modules/electron-updater/**/*",
-        "node_modules/js-yaml/**/*",
-        "node_modules/lazy-val/**/*",
-        "node_modules/lodash.escaperegexp/**/*",
-        "node_modules/lodash.isequal/**/*",
-        "node_modules/tiny-typed-emitter/**/*",
-        "node_modules/debug/**/*",
-        "node_modules/ms/**/*",
-        "node_modules/sax/**/*",
-        "node_modules/argparse/**/*",
-        "node_modules/graceful-fs/**/*",
-      ]),
-    );
+  it("keeps only main-process modules as runtime dependencies", () => {
+    expect(Object.keys(pkg.dependencies).sort()).toEqual(["electron-updater", "xlsx"]);
   });
 
-  it("includes the xlsx parser modules in the packaged app", () => {
-    expect(pkg.dependencies).toHaveProperty("xlsx");
-
-    expect(pkg.build.files).toEqual(
-      expect.arrayContaining([
-        "node_modules/xlsx/**/*",
-        "node_modules/adler-32/**/*",
-        "node_modules/cfb/**/*",
-        "node_modules/crc-32/**/*",
-        "node_modules/codepage/**/*",
-        "node_modules/ssf/**/*",
-        "node_modules/frac/**/*",
-        "node_modules/wmf/**/*",
-        "node_modules/word/**/*",
-      ]),
-    );
+  it("bundles renderer dependencies through Vite instead of manual node_modules globs", () => {
+    for (const dependency of [
+      "@supabase/supabase-js",
+      "@tanstack/react-virtual",
+      "clsx",
+      "lucide-react",
+      "radix-ui",
+      "react",
+      "react-dom",
+      "tailwind-merge",
+      "zustand",
+    ]) {
+      expect(pkg.devDependencies).toHaveProperty(dependency);
+    }
+    expect(pkg.build.files.some((pattern) => pattern.includes("node_modules/"))).toBe(false);
   });
 });

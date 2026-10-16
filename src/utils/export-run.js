@@ -1,5 +1,5 @@
 import { hasVideoDimensions, listVideosMissingBatchText } from "./batch-process.js";
-import { createJobManifest } from "./job-manifest.js";
+import { buildJobManifest } from "../../shared/build-job-manifest.js";
 import {
   buildExportJob,
   buildExportJobs,
@@ -64,7 +64,7 @@ export function prepareRun({
     return {
       ok: true,
       jobs: [job],
-      manifest: createJobManifest([job]),
+      manifest: buildJobManifest([job]),
       signatures,
       startPatch: {
         ...createSingleStartPatch({ queue: list, videoIdx }),
@@ -83,7 +83,7 @@ export function prepareRun({
   return {
     ok: true,
     jobs,
-    manifest: createJobManifest(jobs),
+    manifest: buildJobManifest(jobs),
     signatures,
     startPatch: {
       ...createBatchStartPatch({ queue: list, jobCount: jobs.length }),

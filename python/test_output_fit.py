@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 
 from frame_geometry import normalize_transform
-from processor import build_filter_complex
+from filters import build_filter_complex
 
 ROOT = Path(__file__).resolve().parents[1]
 FFMPEG = str(ROOT / "bin" / "ffmpeg.exe")

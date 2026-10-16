@@ -3,6 +3,7 @@ import { persistWatermark, restoreWatermark } from "./sanitize-preset.js";
 import { swallow } from "./swallow.js";
 import { normalizeVideoSettings } from "../../shared/video-settings.js";
 import { parseCompositionDocument } from "../../shared/composition-document.js";
+import { buildExportJob } from "./export-pipeline.js";
 
 export const SESSION_PERSIST_KEY = "beru-queue-session";
 const SESSION_PERSIST_VERSION = 1;
@@ -65,6 +66,21 @@ const SESSION_PERSIST_FIELDS = {
 
 export const SESSION_PERSIST_KEYS = Object.keys(SESSION_PERSIST_FIELDS);
 
+export function hasUnexportedWork(state) {
+  let outputPaths;
+  return (state?.queue || []).some((item, index) => {
+    if (item.status !== "done") return true;
+    if (!item.exportSignature) return false;
+    outputPaths ??= state.outputPathsForAll?.() || [];
+    const job = buildExportJob(item, index, {
+      outputPath: outputPaths[index] ?? item.exportedOutputPath,
+      encodeProfile: state.encodeProfile,
+      watermark: state.watermark?.enabled ? state.watermark : null,
+    });
+    return JSON.stringify(job) !== item.exportSignature;
+  });
+}
+
 export function hasPersistedFieldChanged(state, prev) {
   return SESSION_PERSIST_KEYS.some((key) => state[key] !== prev[key]);
 }
@@ -77,10 +93,6 @@ export function buildSessionSnapshot(state) {
   return snapshot.queue.length === 0 && !snapshot.composition?.entries.length ? null : snapshot;
 }
 
-/**
- * @param {unknown} raw parsed JSON from sessionStorage
- * @returns {object|null} store patch fields, or null if invalid/empty
- */
 export function parseSessionSnapshot(raw) {
   const legacy = Array.isArray(raw);
   const source = legacy ? {} : raw;

@@ -1,5 +1,3 @@
-"""Hardware encoder detection through real FFmpeg smoke tests."""
-
 import concurrent.futures
 import logging
 import subprocess
@@ -15,7 +13,6 @@ _HW_ENCODER_LOCK = threading.Lock()
 
 
 def _test_hw_encoder_real(ffmpeg_path, encoder):
-    """Smoke-test the encoder with a tiny 1-frame encode to verify it actually works."""
     test_src = "testsrc=duration=0.1:size=320x240:rate=1"
     preset_args = (
         ["-preset", "p1"] if encoder == "h264_nvenc"
@@ -47,11 +44,6 @@ def detect_hw_encoder(ffmpeg_path, *, force_test=False, env=None):
 
 
 def _detect_hw_encoder(ffmpeg_path, *, force_test=False, env=None):
-    """Detect first usable hardware H.264 encoder.
-
-    Cached for process lifetime. If force_test is True, also validates the
-    encoder with a real 1-frame encode (recommended before a batch run).
-    """
     global _HW_ENCODER_CACHE, _HW_ENCODER_CACHE_FOR
     if _HW_ENCODER_CACHE is not None and _HW_ENCODER_CACHE_FOR == ffmpeg_path and not force_test:
         return _HW_ENCODER_CACHE or None

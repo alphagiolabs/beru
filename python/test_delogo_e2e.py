@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""End-to-end delogo test: real ffmpeg encode, real pixel assertions.
-
-The other delogo tests assert on filter-graph *strings* or a fakesrc that
-never decodes a picture; this one runs the graph ``build_filter_complex``
-produces through a real encode and measures decoded RGB afterwards. Fixtures
-are generated at test time and decoded as rawvideo, so no binary fixture or
-third-party package is needed. The untouched-region guard compares bit-exact
-against a re-encode of the same input with the same encoder settings, so it
-holds across ffmpeg builds instead of hiding behind a tolerance.
-"""
 import shutil
 import subprocess
 import sys
@@ -18,7 +8,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from processor import build_filter_complex, find_ffmpeg  # noqa: E402
+from filters import build_filter_complex
+from media_probe import find_ffmpeg# noqa: E402
 
 VW, VH = 320, 180
 FPS, DUR = 30, 2
@@ -47,7 +38,6 @@ TMP = Path(_TMP.name)
 
 
 def _resolve_ffmpeg():
-    """Resolve the Windows FFmpeg binary from the bundle or PATH."""
     found = Path(find_ffmpeg())
     if found.exists():
         return found
@@ -92,7 +82,6 @@ def make_base():
 
 
 def sample(video, name):
-    """Decode one frame to raw RGB24 (rawvideo needs no container parsing)."""
     raw = TMP / f"{name}.rgb"
     result = run(
         [
@@ -129,7 +118,6 @@ def render(src, op, out):
 
 
 def dominance(pixels, region, inset=INSET):
-    """Mean R - max(G,B) over a region."""
     x0, y0 = region["x"] + inset, region["y"] + inset
     x1, y1 = region["x"] + region["w"] - inset, region["y"] + region["h"] - inset
     total = 0
@@ -171,8 +159,6 @@ def test_every_method_runs_real_ffmpeg(frames):
 
 
 def test_fixture_is_what_it_claims_to_be(frames):
-    """Guards the guards: if the logo did not land, or the re-encode control
-    already 'fixed' it, the dominance assertions below prove nothing."""
     logo_dom = dominance(frames["input"], LOGO)
     ctrl_dom = dominance(frames["control"], LOGO)
     assert logo_dom > 200, f"baked logo is not red enough: {logo_dom:.1f}"
@@ -204,9 +190,6 @@ def test_blur_reduces_red_dominance(frames):
 
 
 def test_far_region_is_untouched(frames):
-    """The distinguishing assertion: the filter must be local. A chain that
-    blurred, re-encoded or re-timed the whole frame would pass every dominance
-    check above while destroying untouched footage."""
     control = frames["control"]
     x, y, w, h = FLOOR["x"], FLOOR["y"], FLOOR["w"], FLOOR["h"]
     for method in METHODS:

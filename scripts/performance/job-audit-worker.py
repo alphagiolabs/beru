@@ -1,5 +1,3 @@
-"""Isolated Job experiments. Production modules are never edited."""
-
 import cProfile
 import ctypes
 import io
@@ -18,14 +16,19 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 import processor
+import capacity
+import ffmpeg_runner
+import filters
+import job_classify
+import media_probe
 from batch_context import BatchContext
 
 processor._init_ffmpeg_globals()
 original_popen = subprocess.Popen
-original_filter = processor.build_filter_complex
-original_run = processor._run_ffmpeg
-original_info = processor.job_video_info
-original_copy = processor._native_stream_copy
+original_filter = filters.build_filter_complex
+original_run = ffmpeg_runner._run_ffmpeg
+original_info = media_probe.job_video_info
+original_copy = ffmpeg_runner._native_stream_copy
 local = threading.local()
 
 
@@ -80,17 +83,17 @@ def launch(args, *other, **kwargs):
     return proc
 
 
-processor.build_filter_complex = timed("filters_and_patch_preparation", original_filter)
-processor._run_ffmpeg = timed("ffmpeg_final", original_run)
-processor.job_video_info = timed("metadata", original_info)
-processor._native_stream_copy = timed("native_copy", original_copy)
+filters.build_filter_complex = timed("filters_and_patch_preparation", original_filter)
+ffmpeg_runner._run_ffmpeg = timed("ffmpeg_final", original_run)
+media_probe.job_video_info = timed("metadata", original_info)
+ffmpeg_runner._native_stream_copy = timed("native_copy", original_copy)
 subprocess.Popen = launch
 
 
 def configure(variant):
     import ffmpeg_runner
     ffmpeg_runner._native_stream_copy = original_copy
-    processor._native_stream_copy = timed("native_copy", original_copy)
+    ffmpeg_runner._native_stream_copy = timed("native_copy", original_copy)
     if variant in {"allocating-copy", "pre-optimizations"}:
         namespace = dict(ffmpeg_runner.__dict__)
         source = inspect.getsource(original_copy)
@@ -107,7 +110,7 @@ def configure(variant):
                 raise RuntimeError("Allocating-copy control no longer matches source")
             source = source.replace(before, after)
         exec(compile(source, "<allocating-copy-control>", "exec"), namespace)
-        processor._native_stream_copy = timed("native_copy", namespace["_native_stream_copy"])
+        ffmpeg_runner._native_stream_copy = timed("native_copy", namespace["_native_stream_copy"])
     if variant == "copy-buffer":
         namespace = dict(ffmpeg_runner.__dict__)
         source = inspect.getsource(original_copy)
@@ -126,7 +129,7 @@ def configure(variant):
         if before not in source:
             raise RuntimeError("Copy-buffer experiment no longer matches source")
         exec(compile(source.replace(before, after), "<copy-buffer-experiment>", "exec"), namespace)
-        processor._native_stream_copy = timed("native_copy", namespace["_native_stream_copy"])
+        ffmpeg_runner._native_stream_copy = timed("native_copy", namespace["_native_stream_copy"])
     if not hasattr(ffmpeg_runner, "_audit_original_stream"):
         ffmpeg_runner._audit_original_stream = ffmpeg_runner._run_ffmpeg_stream
     ffmpeg_runner._run_ffmpeg_stream = ffmpeg_runner._audit_original_stream
@@ -215,7 +218,7 @@ def configure(variant):
 original_process_one = processor._process_one
 
 
-def audit_one(idx, job, ffmpeg_path, *, ctx=None, hw_encoder=None):
+def audit_one(idx, job, ffmpeg_path, *, ctx=None, hw_encoder=None, hardware_fallback=None):
     active = {"variant": request["variant"], "commands": [], "phases": [],
               "diagnostic": request.get("diagnostic"), "input_path": job["input_path"],
               "pix_fmt": job["pix_fmt"], "job": job, "_children": [],
@@ -228,7 +231,8 @@ def audit_one(idx, job, ffmpeg_path, *, ctx=None, hw_encoder=None):
     try:
         if profile:
             profile.enable()
-        result = original_process_one(idx, job, ffmpeg_path, ctx=ctx, hw_encoder=hw_encoder)
+        result = original_process_one(idx, job, ffmpeg_path, ctx=ctx, hw_encoder=hw_encoder,
+                                      hardware_fallback=hardware_fallback)
         active["result"] = result
         return result
     except Exception as error:
@@ -243,8 +247,8 @@ def audit_one(idx, job, ffmpeg_path, *, ctx=None, hw_encoder=None):
                       python_process_cpu_seconds=(time.process_time() - process_cpu_started
                           if "jobs" not in request or request.get("serial") else None),
                       ended=time.time() * 1000,
-                      estimated_ram_mb=processor._estimate_job_ram_mb(
-                          job, ctx.hw_encoder, processor._job_requires_encode(job),
+                      estimated_ram_mb=capacity._estimate_job_ram_mb(
+                          job, ctx.hw_encoder, job_classify._job_requires_encode(job),
                           job.get("encode_profile", "balanced")))
         for command, child in zip(active["commands"], active.pop("_children")):
             if child.poll() is not None:
@@ -276,7 +280,7 @@ for line in sys.stdin:
     measured_jobs = []
     result_lock = threading.Lock()
     configure(request["variant"])
-    context = BatchContext(ffmpeg_path=processor.FFMPEG, ffprobe_path=processor.FFPROBE,
+    context = BatchContext(ffmpeg_path=media_probe.FFMPEG, ffprobe_path=media_probe.FFPROBE,
                            max_workers=request.get("workers", 1), hw_encoder=request.get("hardware"),
                            env={**os.environ, "BERU_RETRY_FAILED": "0", "BERU_COPY_WORKERS": "1"})
     started = time.perf_counter()
@@ -285,15 +289,15 @@ for line in sys.stdin:
         if "jobs" in request:
             if request.get("serial"):
                 for idx, job in enumerate(request["jobs"]):
-                    audit_one(idx, job, processor.FFMPEG, ctx=context)
+                    audit_one(idx, job, media_probe.FFMPEG, ctx=context)
             else:
-                processor.process_jobs(request["jobs"], processor.FFMPEG,
+                processor.process_jobs(request["jobs"], media_probe.FFMPEG,
                                        max_workers=context.max_workers, ctx=context)
             print(json.dumps({"type": "audit_batch_result", "runs": measured_jobs,
                               "seconds": time.perf_counter() - started,
                               "python_process_cpu_seconds": time.process_time() - batch_cpu_started}), flush=True)
         else:
-            audit_one(0, request["job"], processor.FFMPEG, ctx=context)
+            audit_one(0, request["job"], media_probe.FFMPEG, ctx=context)
             print(json.dumps({"type": "audit_result", **measured_jobs[0]}), flush=True)
     except Exception as error:
         print(json.dumps({"type": "audit_batch_result" if "jobs" in request else "audit_result",

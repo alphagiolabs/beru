@@ -159,7 +159,6 @@ function TextOverlay({
             inset: 0,
             background: style.bgColor || "black",
             opacity: style.bgOpacity ?? 0.65,
-            // FFmpeg drawbox is axis-aligned. Radius made preview diverge from export.
             borderRadius: 0,
           }}
         />

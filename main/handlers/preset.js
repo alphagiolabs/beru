@@ -25,7 +25,7 @@ export function registerPresetHandlers() {
     }
   });
 
-  handleIpc(IPC_INVOKE.savePreset, async (_event, name, jsonStr) => {
+  handleIpc(IPC_INVOKE.savePreset, async (_event, name, jsonStr, options) => {
     if (typeof name !== "string" || !name.trim()) {
       return { success: false, error: "Nombre inválido" };
     }
@@ -52,7 +52,15 @@ export function registerPresetHandlers() {
       : `${safeBase}.beru.json`;
     const userDir = userPresetsDir();
     const filePath = path.join(userDir, fileName);
-    fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), "utf8");
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(parsed, null, 2), {
+        encoding: "utf8",
+        flag: options?.overwrite === true ? "w" : "wx",
+      });
+    } catch (err) {
+      if (err.code === "EEXIST") return { success: false, code: "preset_exists", fileName };
+      throw err;
+    }
     return { success: true, fileName, filePath, userDir };
   });
 

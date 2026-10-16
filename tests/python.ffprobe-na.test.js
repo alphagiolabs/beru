@@ -11,7 +11,7 @@ describeIfPython("python/processor.py ffprobe N/A handling", () => {
   it("returns valid dimensions when ffprobe reports bit_rate/duration as 'N/A'", () => {
     const code = `
 import json, logging
-import processor
+import os, subprocess, media_probe
 
 logging.disable(logging.CRITICAL)
 
@@ -38,12 +38,12 @@ def fake_run(cmd, **kw):
         returncode = 1
     return Fallback()
 
-processor.subprocess.run = fake_run
-processor.FFPROBE = "ffprobe"
-processor.os.path.isfile = lambda p: True
-processor.os.path.exists = lambda p: True
+subprocess.run = fake_run
+media_probe.FFPROBE = "ffprobe"
+os.path.isfile = lambda p: True
+os.path.exists = lambda p: True
 
-result = processor.ffprobe("whatever.mp4")
+result = media_probe.ffprobe("whatever.mp4")
 print(json.dumps(result))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });

@@ -43,6 +43,34 @@ describe("useEditorStore.savePreset", () => {
     expect(mockApi.listPresets).toHaveBeenCalledTimes(1);
   });
 
+  it("asks before replacing a preset with the same name", async () => {
+    const original = useEditorStore.getState().requestConfirm;
+    mockApi.savePreset
+      .mockResolvedValueOnce({ success: false, code: "preset_exists", fileName: "Otro.beru.json" })
+      .mockResolvedValueOnce({ success: true, fileName: "Otro.beru.json" });
+    useEditorStore.setState({ requestConfirm: vi.fn(async () => true) });
+    try {
+      const res = await useEditorStore.getState().savePreset("Otro");
+      expect(res).toEqual(expect.objectContaining({ ok: true }));
+      expect(mockApi.savePreset.mock.calls[1][2]).toEqual({ overwrite: true });
+
+      mockApi.savePreset.mockClear();
+      mockApi.savePreset.mockResolvedValueOnce({
+        success: false,
+        code: "preset_exists",
+        fileName: "Otro.beru.json",
+      });
+      useEditorStore.setState({ requestConfirm: vi.fn(async () => false) });
+      expect(await useEditorStore.getState().savePreset("Otro")).toEqual({
+        ok: false,
+        canceled: true,
+      });
+      expect(mockApi.savePreset).toHaveBeenCalledTimes(1);
+    } finally {
+      useEditorStore.setState({ requestConfirm: original });
+    }
+  });
+
   it("rejects empty names without touching the API", async () => {
     const res = await useEditorStore.getState().savePreset("   ");
     expect(res).toEqual(expect.objectContaining({ ok: false }));

@@ -1,15 +1,9 @@
-"""Regression: time-bounded crop was a visual no-op — the cropped region was
-scaled back to its own w:h and overlaid at x:y, pasting it on its own pixels.
-The fix: time-bounded crop is a ZOOM — the crop is scaled to video_w:video_h
-and overlaid at 0:0, so during [start,end] the cropped region fills the frame.
-"""
-
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from processor import build_filter_complex  # noqa: E402
+from filters import build_filter_complex# noqa: E402
 
 
 def _crop_op(start, end):

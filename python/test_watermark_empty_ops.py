@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Watermark-only jobs must produce a filter graph (not a silent remux)."""
 import sys
 import subprocess
 from pathlib import Path
@@ -7,8 +6,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-import processor  # noqa: E402
-from processor import build_filter_complex  # noqa: E402
+from filters import build_filter_complex# noqa: E402
+import job_classify
+import media_probe
 
 
 def test_text_watermark_positions_match_the_selected_frame_edges():
@@ -21,7 +21,7 @@ def test_text_watermark_positions_match_the_selected_frame_edges():
                 "opacity": 1, "position": position,
             })
             result = subprocess.run(
-                [processor.find_ffmpeg(), "-v", "error", "-f", "lavfi", "-i",
+                [media_probe.find_ffmpeg(), "-v", "error", "-f", "lavfi", "-i",
                  f"color=black:s={width}x{height}:d=0.1", "-filter_complex", graph,
                  "-map", label, "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"],
                 capture_output=True, timeout=30,
@@ -38,7 +38,6 @@ def test_text_watermark_positions_match_the_selected_frame_edges():
                 if align in ("left", "top"):
                     assert abs(start - 10) <= 2, (position, start, end)
                 elif align in ("right", "bottom"):
-                    # Ink bounds exclude the glyph's trailing side bearing.
                     assert abs(extent - 1 - end - 10) <= 4, (position, start, end)
                 else:
                     assert abs((start + end) / 2 - extent / 2) <= 2, (position, start, end)
@@ -46,9 +45,9 @@ def test_text_watermark_positions_match_the_selected_frame_edges():
 
 def test_stream_copy_gate_requires_no_watermark():
     wm = {"enabled": True, "type": "text", "text": "WM"}
-    assert not processor._job_takes_copy_path({"operations": [], "watermark": wm})
-    assert processor._job_takes_copy_path({"operations": []})
-    assert processor._job_takes_copy_path({"watermark": {"enabled": False}})
+    assert not job_classify._job_takes_copy_path({"operations": [], "watermark": wm})
+    assert job_classify._job_takes_copy_path({"operations": []})
+    assert job_classify._job_takes_copy_path({"watermark": {"enabled": False}})
 
 
 if __name__ == "__main__":

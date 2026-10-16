@@ -1,21 +1,12 @@
-import { executeProcessingRun, cancelRun } from "../processing-run.js";
-import { validateMediaBinaries } from "../utils/paths.js";
-import { validateProcessorAvailableAsync } from "../utils/processor-spawn.js";
+import { startExportRun } from "../utils/start-export-run.js";
+import { cancelRun } from "../processing-run.js";
+import { cancelProcessingPreparation } from "../utils/process-preparation.js";
 import { unwrapJobManifest } from "../utils/jobManifest.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 import { handleIpc } from "../utils/ipc.js";
-import { findUnreadableInputsAsync } from "../utils/process-input-validation.js";
-import { sanitizeBatchJobMedia } from "../utils/process-media-validation.js";
-import { validateBatchOutputPaths } from "../utils/process-output.js";
-import {
-  captureProcessingPreparation,
-  isProcessingPreparationCurrent,
-  cancelProcessingPreparation,
-} from "../utils/process-preparation.js";
 
 export function registerProcessHandlers(pathSecurity) {
-  handleIpc(IPC_INVOKE.startProcessing, async (_event, payload) => {
-    const generation = captureProcessingPreparation();
+  handleIpc(IPC_INVOKE.startProcessing, async (_event, payload, options) => {
     const { jobs, manifest, error } = unwrapJobManifest(payload);
     if (error) {
       return { success: false, error };
@@ -26,51 +17,7 @@ export function registerProcessHandlers(pathSecurity) {
     if (jobs.some((job) => job.kind && job.kind !== "video"))
       return { success: false, error: "Unsupported batch job kind" };
 
-    const processorCheck = await validateProcessorAvailableAsync();
-    if (!processorCheck.ok) {
-      return { success: false, error: processorCheck.error };
-    }
-
-    const mediaCheck = validateMediaBinaries();
-    if (!mediaCheck.ok) {
-      return { success: false, error: mediaCheck.error };
-    }
-
-    const outputDirectory = pathSecurity.getOutputDirectory();
-    if (!outputDirectory) {
-      return { success: false, error: "Selecciona una carpeta de salida antes de procesar" };
-    }
-
-    let safeJobs;
-    try {
-      safeJobs = await sanitizeBatchJobMedia(jobs, pathSecurity, { outputDirectory });
-      await validateBatchOutputPaths(safeJobs);
-    } catch (securityError) {
-      return { success: false, error: securityError.message };
-    }
-
-    const unreadable = await findUnreadableInputsAsync(safeJobs);
-    if (!isProcessingPreparationCurrent(generation)) {
-      return { success: false, cancelled: true, error: "Procesamiento cancelado" };
-    }
-    if (unreadable.length > 0) {
-      const first = unreadable[0];
-      return {
-        success: false,
-        error: first.message,
-        unreadableInputs: unreadable.map((u) => ({
-          path: u.inputPath,
-          code: u.code,
-        })),
-      };
-    }
-
-    return executeProcessingRun({
-      manifest,
-      jobs: safeJobs,
-      outputDirectory,
-      spawnSpec: processorCheck,
-    });
+    return startExportRun({ manifest, jobs }, pathSecurity, options);
   });
 
   handleIpc(IPC_INVOKE.cancelProcessing, async () => {

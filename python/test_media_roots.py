@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""asset_roots must be non-empty for overlay/watermark images (fail closed)."""
 import os
 import sys
 import tempfile
@@ -8,7 +7,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from processor import _validated_job_media  # noqa: E402
+from media_paths import _validated_job_media# noqa: E402
 
 
 def _write_png(path: Path) -> None:

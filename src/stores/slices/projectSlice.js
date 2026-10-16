@@ -1,4 +1,5 @@
 import { reconcileBatchExport, removeLinkedTemplateText } from "../../utils/batch-export.js";
+import { tStatic } from "../../utils/format-message.js";
 import { createOperation } from "../../utils/operation";
 import {
   getGlobalTextStyleFromState,
@@ -134,7 +135,19 @@ export function createProjectSlice(set, get) {
       if (!cleanName) return { ok: false, code: "empty_preset_name", error: "Nombre vacío" };
       const payload = get().serializePreset();
       const jsonStr = JSON.stringify(payload, null, 2);
-      const res = await api.savePreset(cleanName, jsonStr);
+      let res = await api.savePreset(cleanName, jsonStr);
+      if (res?.code === "preset_exists") {
+        const confirmed = await get().requestConfirm({
+          message: tStatic(
+            "modal.preset.confirmOverwrite",
+            { name: res.fileName },
+            get().language || "es",
+          ),
+          variant: "danger",
+        });
+        if (!confirmed) return { ok: false, canceled: true };
+        res = await api.savePreset(cleanName, jsonStr, { overwrite: true });
+      }
       if (!res.success) return { ok: false, error: res.error };
       if (api.listPresets) {
         try {

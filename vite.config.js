@@ -46,6 +46,16 @@ export default defineConfig({
   server: {
     port: devPort,
     strictPort: true,
-    watch: { ignored: ["**/.tmp/**", "**/.audit-tmp/**", "**/build/**", "**/bin/**"] },
+    watch: {
+      ignored: [
+        "**/.claude/**",
+        "**/.tmp/**",
+        "**/tmp/**",
+        "**/.audit-tmp/**",
+        "**/build/**",
+        "**/bin/**",
+        "**/.venv-processor/**",
+      ],
+    },
   },
 });

@@ -1,14 +1,3 @@
-/** @typedef {import("./pet-states.js").PetStateId} PetStateId */
-
-/**
- * @param {{
- *   isProcessing?: boolean,
- *   confirmOpen?: boolean,
- *   updateDownloading?: boolean,
- *   celebration?: PetStateId | null,
- * }} signals
- * @returns {PetStateId}
- */
 export function resolvePetActivity(signals) {
   if (signals.celebration) return signals.celebration;
   if (signals.confirmOpen) return "waiting";
@@ -17,10 +6,6 @@ export function resolvePetActivity(signals) {
   return "idle";
 }
 
-/**
- * @param {{ total?: number, succeeded?: number, failed?: number } | null | undefined} summary
- * @returns {PetStateId | null}
- */
 export function resolveBatchCelebration(summary) {
   if (!summary) return null;
   const total = Number(summary.total) || 0;

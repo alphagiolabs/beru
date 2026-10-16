@@ -1,3 +1,11 @@
+import path from "path";
+import { readSettings } from "./settings.js";
+
+const sameDirectory = (a, b) =>
+  typeof a === "string" &&
+  typeof b === "string" &&
+  path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase();
+
 export function restoreSessionPaths(pathSecurity, payload = {}) {
   const result = {
     ok: true,
@@ -9,7 +17,12 @@ export function restoreSessionPaths(pathSecurity, payload = {}) {
     audio: 0,
   };
   if (payload?.outputDir) {
-    const check = pathSecurity.registerOutputDirectory(payload.outputDir);
+    const approved = [pathSecurity.getOutputDirectory(), readSettings().lastOutputDirectory].some(
+      (dir) => sameDirectory(dir, payload.outputDir),
+    );
+    const check = approved
+      ? pathSecurity.registerOutputDirectory(payload.outputDir)
+      : { ok: false, error: "Carpeta de salida no autorizada" };
     if (check.ok) result.outputDir = check.resolvedPath;
     else result.errors.push(check.error || "outputDir");
   }

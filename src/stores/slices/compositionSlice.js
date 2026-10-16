@@ -1,5 +1,4 @@
 import { uid } from "../../utils/types.js";
-import { releaseUnownedVideoPaths } from "../../utils/video-path-ownership.js";
 import {
   newComposition,
   compositionItem,
@@ -13,7 +12,6 @@ export function createCompositionSlice(set, get) {
     const next = parseCompositionDocument(update(previous));
     if (!next) return false;
     set({ composition: next });
-    releaseUnownedVideoPaths(previous?.entries.map((entry) => entry.item.path) || [], get());
     return true;
   };
   return {

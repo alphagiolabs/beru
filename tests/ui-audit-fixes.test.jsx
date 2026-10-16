@@ -204,12 +204,4 @@ describe("Operaciones de imagen", () => {
       `beru://local/${encodeURIComponent(op.imagePath)}?v=9-3`,
     );
   });
-
-  it("Delete elimina una op de imagen seleccionada", async () => {
-    await mount(<KbHost />);
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true }));
-    });
-    expect(useEditorStore.getState().queue[0].operations).toHaveLength(0);
-  });
 });

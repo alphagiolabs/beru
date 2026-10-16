@@ -13,8 +13,12 @@ import { createAuthSlice } from "./slices/authSlice.js";
 import { createPetSlice } from "./slices/petSlice.js";
 import { createCompositionSlice } from "./slices/compositionSlice.js";
 import { createStabilizationSlice } from "./slices/stabilizationSlice.js";
+import { namingInputs } from "../utils/export-pipeline.js";
+import { setVideoPathOwners } from "../utils/video-path-ownership.js";
+import { selectIsDirty, useTimelineStore } from "../features/editor/store/useTimelineStore.js";
 import {
   hasPersistedFieldChanged,
+  hasUnexportedWork,
   readSessionSnapshotFromStorage,
   writeSessionSnapshotToStorage,
 } from "../utils/session-persist.js";
@@ -63,7 +67,31 @@ const useEditorStore = createWithEqualityFn(
 );
 
 if (typeof window !== "undefined") {
+  const syncVideoPaths = (state) =>
+    setVideoPathOwners({
+      queue: state.queue.map((item) => item.path),
+      composition: state.composition?.entries.map((entry) => entry.item.path) ?? [],
+    });
+  syncVideoPaths(useEditorStore.getState());
+  let unexportedWork = null;
+  const syncUnexportedWork = (state) => {
+    const next = hasUnexportedWork(state) || selectIsDirty(useTimelineStore.getState());
+    if (next === unexportedWork) return;
+    unexportedWork = next;
+    void Promise.resolve(window.api?.setUnexportedWork?.(next)).catch(() => {});
+  };
+  syncUnexportedWork(useEditorStore.getState());
+  useTimelineStore.subscribe(() => syncUnexportedWork(useEditorStore.getState()));
+
   useEditorStore.subscribe((state, prev) => {
+    if (state.queue !== prev.queue || state.composition !== prev.composition) syncVideoPaths(state);
+    const previousInputs = namingInputs(prev);
+    if (
+      state.encodeProfile !== prev.encodeProfile ||
+      state.watermark !== prev.watermark ||
+      namingInputs(state).some((value, index) => value !== previousInputs[index])
+    )
+      syncUnexportedWork(state);
     if (hasPersistedFieldChanged(state, prev)) {
       persistSession(() => useEditorStore.getState());
     }

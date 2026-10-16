@@ -8,14 +8,14 @@ import { createQueueItem } from "../src/utils/types.js";
 const events = new EventEmitter();
 let requests;
 const api = {
-  startProcessing: vi.fn((manifest) => {
+  startProcessing: vi.fn((manifest, options) => {
     let resolve;
     let reject;
     const pending = new Promise((done, fail) => {
       resolve = done;
       reject = fail;
     });
-    requests.push({ manifest, resolve, reject });
+    requests.push({ manifest, options, resolve, reject });
     return pending;
   }),
   cancelProcessing: vi.fn(async () => ({ success: true })),
@@ -114,6 +114,63 @@ afterEach(async () => {
 });
 
 describe("renderer Processing Run through the store and IPC adapter", () => {
+  it("shares editor run occupancy and releases it without changing batch results", async () => {
+    mount();
+    const queue = get().queue;
+    const summary = { total: 3, succeeded: 2 };
+    act(() =>
+      useEditorStore.setState({ batchSummary: summary, progressDone: 2, progressTotal: 3 }),
+    );
+    emit("onRunStarted", { runId: "editor-export", owner: "editor:export" });
+    expect(get().isProcessing).toBe(true);
+    expect(get().activeProcessingKind).toBe("editor:export");
+    expect(await get().processAll()).toMatchObject({ ok: false, code: "busy" });
+    expect(api.startProcessing).not.toHaveBeenCalled();
+    emit("onFinished", { runId: "editor-export", code: 0 });
+    expect(get().isProcessing).toBe(false);
+    expect(get().activeProcessingKind).toBeNull();
+    expect(get().queue).toBe(queue);
+    expect(get().batchSummary).toBe(summary);
+    expect(get().progressDone).toBe(2);
+    const pending = start("next-batch");
+    emit("onFinished", { runId: "next-batch", code: 0 });
+    expect(await reply(0, { success: true, runId: "next-batch" }, pending)).toMatchObject({
+      ok: true,
+    });
+  });
+
+  it("restores a rejected batch when the editor start event arrives before the busy reply", async () => {
+    mount();
+    const summary = { total: 3, succeeded: 2 };
+    act(() =>
+      useEditorStore.setState({
+        queue: get().queue.map((item, index) =>
+          index === 0 ? { ...item, status: "done", progress: 100 } : item,
+        ),
+        batchSummary: summary,
+        progressDone: 2,
+        progressTotal: 3,
+      }),
+    );
+    let pending;
+    act(() => {
+      pending = get().processAll();
+    });
+    emit("onRunStarted", { runId: "editor-race", owner: "editor:export" });
+    await reply(
+      0,
+      { success: false, code: "already_processing", runId: "editor-race", owner: "editor:export" },
+      pending,
+    );
+    expect(get().queue[0]).toMatchObject({ status: "done", progress: 100 });
+    expect(get().batchSummary).toBe(summary);
+    expect(get().progressDone).toBe(2);
+    expect(get().isProcessing).toBe(true);
+    emit("onFinished", { runId: "editor-race", code: 0 });
+    expect(get().isProcessing).toBe(false);
+    expect(get().queue[0].status).toBe("done");
+  });
+
   it("keeps completed artifacts and job errors after partial batch cancellation", async () => {
     mount();
     const pending = start("run-a");
@@ -452,4 +509,73 @@ describe("renderer Processing Run through the store and IPC adapter", () => {
       }
     },
   );
+});
+
+describe("existing outputs", () => {
+  const existing = "C:\\output\\a_beru.mp4";
+  const conflict = { success: false, code: "output_exists", existingOutputs: [existing] };
+  let originalConfirm;
+
+  beforeEach(() => {
+    originalConfirm = get().requestConfirm;
+  });
+
+  afterEach(() => {
+    useEditorStore.setState({ requestConfirm: originalConfirm });
+  });
+
+  async function startWithConflict(confirmed) {
+    const requestConfirm = vi.fn(async () => confirmed);
+    useEditorStore.setState({ requestConfirm });
+    mount();
+    let pending;
+    act(() => {
+      pending = get().processAll();
+    });
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    await act(async () => requests[0].resolve(conflict));
+    return { pending, requestConfirm };
+  }
+
+  it("restores the queue without replacing anything when the user declines", async () => {
+    const before = get().queue.map((item) => item.status);
+    const { pending, requestConfirm } = await startWithConflict(false);
+    let outcome;
+    await act(async () => {
+      outcome = await pending;
+    });
+
+    expect(requestConfirm).toHaveBeenCalledTimes(1);
+    expect(requests).toHaveLength(1);
+    expect(outcome).toMatchObject({ ok: false, cancelled: true });
+    expect(get().isProcessing).toBe(false);
+    expect(get().queue.map((item) => item.status)).toEqual(before);
+  });
+
+  it("retries with overwrite once the user confirms", async () => {
+    const { pending } = await startWithConflict(true);
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+
+    expect(requests[1].options).toEqual({ overwrite: true });
+    let outcome;
+    await act(async () => {
+      requests[1].resolve({ success: true, code: 0 });
+      outcome = await pending;
+    });
+    expect(outcome).toMatchObject({ ok: true });
+  });
+
+  it("replaces its own previous exports without asking", async () => {
+    useEditorStore.setState((state) => ({
+      queue: state.queue.map((item, i) =>
+        i === 0 ? { ...item, exportedOutputPath: existing } : item,
+      ),
+    }));
+    const { requestConfirm } = await startWithConflict(false);
+    await vi.waitFor(() => expect(requests).toHaveLength(2));
+
+    expect(requestConfirm).not.toHaveBeenCalled();
+    expect(requests[1].options).toEqual({ overwrite: true });
+    await act(async () => requests[1].resolve({ success: true, code: 0 }));
+  });
 });

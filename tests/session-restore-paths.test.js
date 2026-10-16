@@ -7,6 +7,7 @@ import { createPathSecurity } from "../main/pathSecurity.js";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
+  settings: {},
 }));
 
 const trustedSenderEvent = {
@@ -38,6 +39,7 @@ vi.mock("../main/utils/dialog-history.js", () => ({
 vi.mock("../main/utils/processor-spawn.js", () => ({ validateProcessorAvailableAsync: vi.fn() }));
 vi.mock("../main/utils/paths.js", () => ({ validateMediaBinaries: vi.fn() }));
 vi.mock("../main/processing-run.js", () => ({ executeProcessingRun: vi.fn() }));
+vi.mock("../main/utils/settings.js", () => ({ readSettings: () => mocks.settings }));
 
 function makeNarrowApp(trustedRoot) {
   return {
@@ -66,6 +68,7 @@ describe("session:restorePaths", () => {
 
   beforeEach(() => {
     mocks.handlers.clear();
+    mocks.settings = {};
     trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-restore-trusted-"));
     outsideRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-restore-outside-"));
     fs.mkdirSync(path.join(trustedRoot, "temp"), { recursive: true });
@@ -89,6 +92,44 @@ describe("session:restorePaths", () => {
     const result = await restore(trustedSenderEvent, { videoPaths: [outsideFile] });
     expect(result.videos).toBe(0);
     expect(result.errors).toContain("Archivo fuera de ubicaciones permitidas");
+  });
+
+  it("only restores an output directory the user chose in the dialog", async () => {
+    const chosen = path.join(outsideRoot, "chosen");
+    const other = path.join(outsideRoot, "other");
+    fs.mkdirSync(chosen);
+    fs.mkdirSync(other);
+    const pathSecurity = createPathSecurity(makeNarrowApp(trustedRoot));
+    const { registerFileHandlers } = await import("../main/handlers/file.js");
+    registerFileHandlers(pathSecurity);
+    const restore = mocks.handlers.get("session:restorePaths");
+
+    const rejected = await restore(trustedSenderEvent, { outputDir: other });
+    expect(rejected.outputDir).toBeNull();
+    expect(rejected.errors).toContain("Carpeta de salida no autorizada");
+    expect(pathSecurity.getOutputDirectory()).toBeNull();
+
+    mocks.settings = { lastOutputDirectory: chosen };
+    const restored = await restore(trustedSenderEvent, { outputDir: chosen });
+    expect(restored.outputDir).toBe(fs.realpathSync.native(chosen));
+    expect(pathSecurity.getOutputDirectory()).toBe(fs.realpathSync.native(chosen));
+  });
+
+  it("offers and authorizes every supported input format in the video picker", async () => {
+    const extensions = ["mp4", "mov", "avi", "mkv", "webm", "flv", "wmv", "m4v", "mpg", "mpeg"];
+    const files = extensions.map((ext) => path.join(outsideRoot, `clip.${ext}`));
+    for (const file of files) fs.writeFileSync(file, "fixture");
+    const security = createPathSecurity(makeNarrowApp(trustedRoot));
+    const { showOpenDialog } = await import("../main/utils/dialog-history.js");
+    showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: files });
+    const { registerDialogHandlers } = await import("../main/handlers/dialog.js");
+    registerDialogHandlers(security);
+
+    expect(await mocks.handlers.get("dialog:openVideos")(trustedSenderEvent)).toHaveLength(
+      files.length,
+    );
+    expect(showOpenDialog.mock.calls.at(-1)[1].filters[0].extensions).toEqual(extensions);
+    for (const file of files) expect(security.validateReadableFile(file, "video").ok).toBe(true);
   });
 
   it("loads a composition with its real authorization results in one response, including a moved source", async () => {

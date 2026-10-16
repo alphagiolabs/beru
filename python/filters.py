@@ -1,8 +1,3 @@
-"""Drawtext and filter-graph construction.
-
-Patch drawtext option and filter caches here; processor.py re-exports helpers.
-"""
-
 import json
 import logging
 import math
@@ -10,6 +5,7 @@ import os
 import re
 import subprocess
 import threading
+from dataclasses import dataclass
 
 import media_probe
 from color_validation import _validate_drawtext_color
@@ -41,7 +37,6 @@ from text_layout_helpers import (
     _text_glyph_positions,
     _text_layout_bounds,
 )
-
 logger = logging.getLogger("beru")
 
 _DRAWTEXT_CACHE = {}
@@ -53,8 +48,25 @@ _DRAWTEXT_OPTIONS_CACHE = None
 _DRAWTEXT_OPTIONS_CACHE_FOR = None
 _DRAWTEXT_OPTIONS_LOCK = threading.Lock()
 
+
+@dataclass(frozen=True)
+class DisabledWatermark:
+    pass
+
+
+@dataclass(frozen=True)
+class TextWatermark:
+    drawtext_filter: str
+
+
+@dataclass(frozen=True)
+class ImageWatermark:
+    scale_filter: str
+    overlay_position: str
+    image_path: str
+
+
 def _validate_drawtext_text(value):
-    """Reject control characters; printable text is quoted in the filtergraph."""
     for char in value:
         code = ord(char)
         if char != "\n" and (code < 0x20 or code == 0x7F):
@@ -63,7 +75,6 @@ def _validate_drawtext_text(value):
 
 
 def _escape_drawtext_text(value):
-    # Escape option parsing, then apostrophes inside the quoted filtergraph value.
     option_value = value.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
     return option_value.replace("'", "'\\''")
 
@@ -74,7 +85,6 @@ def _get_drawtext_options(ffmpeg_path=None):
 
 
 def _probe_drawtext_options(ffmpeg_path):
-    """Return supported drawtext option names for the active FFmpeg binary."""
     global _DRAWTEXT_OPTIONS_CACHE, _DRAWTEXT_OPTIONS_CACHE_FOR
     if _DRAWTEXT_OPTIONS_CACHE is not None and _DRAWTEXT_OPTIONS_CACHE_FOR == ffmpeg_path:
         return _DRAWTEXT_OPTIONS_CACHE
@@ -100,18 +110,21 @@ def _drawtext_supports(option_name, ffmpeg_path=None):
 
 
 def _drawtext_cache_enabled():
-    """Lazily read the env flag once. On by default; 0/false/no/off opts out.
-
-    Cached filter strings depend on the op dict and the FFmpeg binary.
-    """
     global _DRAWTEXT_CACHE_ENABLED
     if _DRAWTEXT_CACHE_ENABLED is None:
         _DRAWTEXT_CACHE_ENABLED = _env_flag("BERU_DRAWTEXT_CACHE", True)
     return _DRAWTEXT_CACHE_ENABLED
 
 
+def _drawtext_cache_get(cache_key):
+    with _DRAWTEXT_CACHE_LOCK:
+        cached = _DRAWTEXT_CACHE.pop(cache_key, None)
+        if cached is not None:
+            _DRAWTEXT_CACHE[cache_key] = cached
+        return cached
+
+
 def _drawtext_cache_store(cache_key, filter_str):
-    """Insert into the memo cache; the least recently used entry is evicted at the cap."""
     with _DRAWTEXT_CACHE_LOCK:
         if len(_DRAWTEXT_CACHE) >= _DRAWTEXT_CACHE_MAX:
             _DRAWTEXT_CACHE.pop(next(iter(_DRAWTEXT_CACHE)), None)
@@ -119,7 +132,6 @@ def _drawtext_cache_store(cache_key, filter_str):
 
 
 def build_drawtext(op, *, ffmpeg_path=None, expansions=None):
-    """Build ffmpeg drawtext filter string from operation."""
     text = (op.get("text") or "").strip()
     if not text:
         return None
@@ -152,11 +164,9 @@ def build_drawtext(op, *, ffmpeg_path=None, expansions=None):
         except (TypeError, ValueError):
             cache_key = None
         if cache_key is not None:
-            with _DRAWTEXT_CACHE_LOCK:
-                cached = _DRAWTEXT_CACHE.pop(cache_key, None)
-                if cached is not None:
-                    _DRAWTEXT_CACHE[cache_key] = cached
-                    return cached
+            cached = _drawtext_cache_get(cache_key)
+            if cached is not None:
+                return cached
 
     region = op.get("region", {}) or {}
     try:
@@ -220,8 +230,8 @@ def build_drawtext(op, *, ffmpeg_path=None, expansions=None):
     else:
         y_expr = str(y)
 
-    font_key, font_val, is_fontfile = resolved_font
-    if is_fontfile:
+    font_key, font_val = resolved_font.option, resolved_font.value
+    if resolved_font.is_fontfile:
         font_val = f"'{font_val}'"
 
     text_opacity = op.get("text_opacity", 1)
@@ -306,10 +316,10 @@ def build_drawtext(op, *, ffmpeg_path=None, expansions=None):
         )
         if len(glyphs) >= 2:
             filters = []
-            for cluster, dx, dy in glyphs:
-                escaped = _drawtext_value(cluster)
-                gx = int(round(x + dx))
-                gy = int(round(y + dy))
+            for glyph in glyphs:
+                escaped = _drawtext_value(glyph.glyph)
+                gx = int(round(x + glyph.layout_dx))
+                gy = int(round(y + glyph.layout_dy))
                 parts = [f"text='{escaped}'", f"expansion={expansion_mode}"] + _style_parts(
                     gx, gy, include_line_spacing=False, include_native_spacing=False
                 )
@@ -331,15 +341,9 @@ def build_drawtext(op, *, ffmpeg_path=None, expansions=None):
     return filter_str
 
 
-def _build_watermark_filter(watermark, video_w, video_h):
-    """Build FFmpeg filter for a global watermark (text or image overlay).
-
-    Returns (filter_snippet, overlay_position_or_None, image_path). For text
-    watermarks the second value is None; for image watermarks it is the
-    "x:y" overlay position. (None, False, None) when disabled or invalid.
-    """
+def _build_watermark_filter(watermark, video_w, video_h) -> DisabledWatermark | TextWatermark | ImageWatermark:
     if not watermark or not watermark.get("enabled"):
-        return None, False, None
+        return DisabledWatermark()
 
     wm_type = watermark.get("type", "text")
     opacity = _coerce_float(watermark.get("opacity", 0.5), 0.5, 0.0, 1.0)
@@ -365,15 +369,16 @@ def _build_watermark_filter(watermark, video_w, video_h):
     if wm_type == "text":
         text = watermark.get("text", "")
         if not text.strip():
-            return None, False, None
+            return DisabledWatermark()
         _validate_drawtext_text(text)
         font_size = _coerce_int(watermark.get("fontSize", 18), 18, 1, 500)
         font_color = _validate_drawtext_color(watermark.get("fontColor", "white"), "fontColor")
         font_family = str(watermark.get("fontFamily", "Arial") or "Arial").strip()
         if not re.fullmatch(r"[\w .-]{1,100}", font_family, re.UNICODE):
             raise ValueError("fontFamily contains forbidden characters")
-        font_key, font_val, is_fontfile = _resolve_font(font_family)
-        if is_fontfile:
+        resolved_font = _resolve_font(font_family)
+        font_key, font_val = resolved_font.option, resolved_font.value
+        if resolved_font.is_fontfile:
             font_val = f"'{font_val}'"
         escaped_text = _escape_drawtext_text(text)
         alpha = f"{opacity:.2f}"
@@ -390,23 +395,23 @@ def _build_watermark_filter(watermark, video_w, video_h):
             "shadowy=1",
             "shadowcolor=black@0.5",
         ]
-        return f"drawtext={':'.join(dt_parts)}", False, None
+        return TextWatermark(f"drawtext={':'.join(dt_parts)}")
 
     elif wm_type == "image":
         img_path = watermark.get("imagePath", "")
         if not img_path or not os.path.exists(img_path):
-            return None, False, None
+            return DisabledWatermark()
         scale_factor = _coerce_float(watermark.get("scale", 1), 1.0, 0.05, 20.0)
         target_h = max(16, int(80 * scale_factor))
         x_expr, y_expr = xy.split(":")
-        return (
+        return ImageWatermark(
             f"scale=-1:{target_h},format=rgba,"
             f"colorchannelmixer=aa={opacity:.3f}",
             f"{x_expr}:{y_expr}",
             img_path,
         )
 
-    return None, False, None
+    return DisabledWatermark()
 
 
 def _text_scale_x(op):
@@ -511,8 +516,11 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
         return image_index[path]
 
     stamps = []
-    for raw_op in operations:
-        op = _normalize_operation(raw_op)
+    operations = [_normalize_operation(op) for op in operations]
+    batch_patches = {}
+    batch_through = -1
+    batch_prefix_safe = True
+    for op_index, op in enumerate(operations):
         mode = op.get("mode")
         if _is_op_time_disabled(op):
             continue
@@ -581,10 +589,39 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
             prev = f"tmp{n-1}" if n > 0 else None
             patch = None
             if temporal_resolver and (op.get("delogo_method") or "").lower() in {"temporal", "inpaint"}:
-                patch = temporal_resolver(
-                    n, {**op, "region": region}, video_w, video_h,
-                    ";".join(filters), f"[{prev}]" if prev else "[0:v]", image_paths,
-                )
+                resolve_batch = getattr(temporal_resolver, "resolve_batch", None)
+                if (resolve_batch and batch_prefix_safe and op_index > batch_through
+                        and n not in batch_patches):
+                    candidates = [{**op, "region": region}]
+                    for candidate in operations[op_index + 1:]:
+                        if (candidate.get("mode") != "delogo"
+                                or (candidate.get("delogo_method") or "").lower() not in {"temporal", "inpaint"}
+                                or _is_op_time_disabled(candidate)):
+                            break
+                        box = _region_to_pixels(candidate.get("region", {}), source_w, source_h)
+                        if not box:
+                            break
+                        box = {**box, "x": box["x"] - crop_x, "y": box["y"] - crop_y}
+                        if (box["x"] < 0 or box["y"] < 0 or box["w"] < 2 or box["h"] < 2
+                                or box["x"] + box["w"] > video_w or box["y"] + box["h"] > video_h):
+                            break
+                        candidates.append({**candidate, "region": box})
+                    batch_through = op_index + len(candidates) - 1
+                    if (len(candidates) > 1 and x >= 0 and y >= 0 and w >= 2 and h >= 2
+                            and x + w <= video_w and y + h <= video_h):
+                        patches = resolve_batch(
+                            list(range(n, n + len(candidates))), candidates, video_w, video_h,
+                            ";".join(filters), f"[{prev}]" if prev else "[0:v]", image_paths,
+                        )
+                        if patches is not None:
+                            batch_patches.update(patches)
+                if n in batch_patches:
+                    patch = batch_patches.pop(n)
+                else:
+                    patch = temporal_resolver(
+                        n, {**op, "region": region}, video_w, video_h,
+                        ";".join(filters), f"[{prev}]" if prev else "[0:v]", image_paths,
+                    )
             chain = _build_delogo_chain(
                 {**op, "region": region}, prev, n, video_w, video_h, img_input_index,
                 source_pix_fmt, temporal_patch=patch,
@@ -610,6 +647,9 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
             )
         else:
             continue
+        batch_prefix_safe = (mode in {"delogo", "blur"} or (
+            batch_prefix_safe and mode == "crop" and not _build_enable_clause(op)
+        ))
         n += 1
 
     if watermark and watermark.get("enabled"):
@@ -617,16 +657,14 @@ def build_filter_complex(operations, video_w, video_h, watermark=None, *, ffmpeg
         if wm_type in ("text", "image"):
             wm_result = _build_watermark_filter(watermark, video_w, video_h)
             prev = f"[tmp{n-1}]" if n > 0 else "[0:v]"
-            if wm_type == "text":
-                if wm_result and wm_result[0]:
-                    filters.append(f"{prev}{wm_result[0]}[tmp{n}]")
-                    n += 1
-            elif wm_result and len(wm_result) == 3 and wm_result[2]:
-                scale_filter, overlay_pos, img_path = wm_result
-                idx = img_input_index(img_path)
+            if isinstance(wm_result, TextWatermark):
+                filters.append(f"{prev}{wm_result.drawtext_filter}[tmp{n}]")
+                n += 1
+            elif isinstance(wm_result, ImageWatermark):
+                idx = img_input_index(wm_result.image_path)
                 filters.append(
-                    f"[{idx}:v]{scale_filter}[wm{n}];"
-                    f"{prev}[wm{n}]overlay={overlay_pos}[tmp{n}]"
+                    f"[{idx}:v]{wm_result.scale_filter}[wm{n}];"
+                    f"{prev}[wm{n}]overlay={wm_result.overlay_position}[tmp{n}]"
                 )
                 n += 1
 

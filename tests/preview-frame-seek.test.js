@@ -88,9 +88,9 @@ function renderPreviewRgb(ts, operations) {
   const out = runPy(`
 import sys, json
 sys.path.insert(0, r"${path.join(ROOT, "python")}")
-import processor
-processor.FFMPEG = processor.find_ffmpeg()
-processor.FFPROBE = processor.find_ffprobe(processor.FFMPEG)
+import processor, filters, media_probe, op_shared
+media_probe.FFMPEG = media_probe.find_ffmpeg()
+media_probe.FFPROBE = media_probe.find_ffprobe(media_probe.FFMPEG)
 res = processor.render_preview_frame({
     "input_path": r"${videoPath}",
     "width": ${W}, "height": ${H},
@@ -108,11 +108,11 @@ function renderExportRgb(ts, operations) {
   const b64 = runPy(`
 import sys, base64, subprocess
 sys.path.insert(0, r"${path.join(ROOT, "python")}")
-import processor
-processor.FFMPEG = processor.find_ffmpeg()
-ops = [processor._normalize_operation(o) for o in ${JSON.stringify(operations)}]
-graph, label, imgs = processor.build_filter_complex(ops, ${W}, ${H})
-cmd = [processor.FFMPEG, "-v", "error", "-i", r"${videoPath}"]
+import processor, filters, media_probe, op_shared
+media_probe.FFMPEG = media_probe.find_ffmpeg()
+ops = [op_shared._normalize_operation(o) for o in ${JSON.stringify(operations)}]
+graph, label, imgs = filters.build_filter_complex(ops, ${W}, ${H})
+cmd = [media_probe.FFMPEG, "-v", "error", "-i", r"${videoPath}"]
 for p in imgs:
     cmd += ["-loop", "1", "-t", "3", "-i", p]
 if graph:
@@ -237,9 +237,9 @@ describe("preview frame seek parity (real ffmpeg, decoded pixels)", () => {
       runPy(`
 import sys, json
 sys.path.insert(0, r"${path.join(ROOT, "python")}")
-import processor
-processor.FFMPEG = processor.find_ffmpeg()
-processor.FFPROBE = processor.find_ffprobe(processor.FFMPEG)
+import processor, filters, media_probe, op_shared
+media_probe.FFMPEG = media_probe.find_ffmpeg()
+media_probe.FFPROBE = media_probe.find_ffprobe(media_probe.FFMPEG)
 payload = {"input_path": r"${videoPath}", "width": ${W}, "height": ${H}, "video_duration": ${DUR}, "frame_rate": ${FPS}, "operations": []}
 result = {}
 for name, render in (("preview", processor.render_preview_frame), ("source", processor.render_source_frame)):
@@ -302,9 +302,9 @@ print(json.dumps(result))
       runPy(`
 import json, sys
 sys.path.insert(0, r"${path.join(ROOT, "python")}")
-import processor
-processor.FFMPEG = processor.find_ffmpeg()
-processor.FFPROBE = processor.find_ffprobe(processor.FFMPEG)
+import processor, filters, media_probe, op_shared
+media_probe.FFMPEG = media_probe.find_ffmpeg()
+media_probe.FFPROBE = media_probe.find_ffprobe(media_probe.FFMPEG)
 source = r"${source}"
 payload = {"input_path": source, "source_width": ${W}, "source_height": ${H}, "video_duration": 6, "frame_rate": ${FPS}, "operations": []}
 result = {}

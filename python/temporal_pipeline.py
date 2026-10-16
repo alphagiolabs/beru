@@ -1,5 +1,3 @@
-"""Build bounded, lossless spatial and temporal patches for FFmpeg compositing."""
-
 import logging
 import math
 import os
@@ -25,9 +23,10 @@ from op_shared import _coerce_int
 
 logger = logging.getLogger("beru")
 _PTS = re.compile(r"\bn:\s*\d+.*?pts_time:([-+\d.eE]+)")
+_MAX_ATLAS_PIXELS = 1920 * 1080 * 4
 _PATCH_SKIP_MESSAGES = {
     "patch_skipped_timing": (
-        "Reconstrucci\u00f3n temporal omitida: el video tiene timestamps irregulares;"
+        "Reconstrucci\u00f3n temporal omitida: el video tiene timestamps irregulares; "
         "se aplic\u00f3 reparaci\u00f3n espacial."
     ),
     "patch_skipped_budget": (
@@ -51,6 +50,23 @@ class MotionPatch:
     start: float = 0
     # (patch frame index, seconds) jumps of a variable-rate source.
     steps: tuple = ()
+
+
+@dataclass
+class _PreparedPatch:
+    patch: MotionPatch
+    context: tuple
+    box: tuple
+    radius: int
+    spatial: bool
+    window: tuple
+    fallback: str
+
+    @property
+    def crop(self):
+        bx, by, _, _ = self.context
+        patch = self.patch
+        return patch.x - bx, patch.y - by, patch.width, patch.height
 
 
 def extra_media_input_args(path, *, duration=0, image_fps=None):
@@ -106,6 +122,18 @@ class TemporalPatchResolver:
         percent = lo + (hi - lo) * min(count, total) / total if total else lo
         _emit_job_progress(self.job_id, percent, None, ctx=self.ctx, fields={"phase": "patch"})
 
+    def _estimate_patch_frames(self, start, end, frame_limit):
+        if self.total_frames is None or not (0 < self.fps <= 240):
+            return None
+        total = self.total_frames
+        if end is not None:
+            total = min(total, math.ceil(end * self.fps))
+        if start > 0:
+            total = max(1, total - math.floor(start * self.fps + 1e-6))
+        if frame_limit is not None:
+            total = min(total, frame_limit)
+        return total or None
+
     def _warn_patch_skipped(self):
         if self.job_id is None:
             return
@@ -113,7 +141,7 @@ class TemporalPatchResolver:
         if code:
             _emit_warning(self.job_id, code, _PATCH_SKIP_MESSAGES.get(code, code))
 
-    def __call__(self, index, op, width, height, prefix, label, media):
+    def _prepare_patch(self, index, op, width, height):
         self._frames_seen = 0
         self._defer_reason = None
         if not (0 < self.fps <= 240):
@@ -181,6 +209,17 @@ class TemporalPatchResolver:
             fallback = f"format={spatial_format}," + _build_boxblur_filter(
                 r, max(1, r // 2), 3
             )
+        return _PreparedPatch(
+            MotionPatch(os.path.join(self.directory, f"temporal-{index}.mkv"), ex, ey, ew, eh),
+            (bx, by, bw, bh), box, radius, spatial, (start, end, frame_limit), fallback,
+        )
+
+    def __call__(self, index, op, width, height, prefix, label, media):
+        prepared = self._prepare_patch(index, op, width, height)
+        if prepared is None:
+            return None
+        bx, by, bw, bh = prepared.context
+        start, end, frame_limit = prepared.window
         trim = ""
         if start > 0 or end is not None:
             trim = f"trim=start={start:.8f}"
@@ -191,8 +230,90 @@ class TemporalPatchResolver:
             (prefix + ";" if prefix else "")
             + f'{label or "[0:v]"}{trim}crop={bw}:{bh}:{bx}:{by},split[mt_original][mt_fallback];'
         )
-        graph += f"[mt_original]format=rgb48le[mt_rgb];[mt_fallback]{fallback},format=rgb48le[mt_fill];"
+        graph += f"[mt_original]format=rgb48le[mt_rgb];[mt_fallback]{prepared.fallback},format=rgb48le[mt_fill];"
         graph += "[mt_rgb][mt_fill]hstack,showinfo[mt_decode]"
+        timing = self._render(
+            self._decoder(graph, frame_limit, media),
+            [prepared],
+        )
+        if timing is None:
+            if os.path.exists(prepared.patch.path):
+                os.unlink(prepared.patch.path)
+            if self._defer_reason and not _check_cancelled(self.ctx):
+                self._warn_patch_skipped()
+            return None
+        prepared.patch.start, prepared.patch.steps = timing
+        return prepared.patch
+
+    def resolve_batch(self, indexes, ops, width, height, prefix, label, media):
+        """Return None for serial preparation when patches depend on earlier output."""
+        if len(ops) < 2 or self.seek or self.source_format not in {
+            "yuv420p", "yuv422p", "yuv444p",
+            "yuv420p10le", "yuv422p10le", "yuv444p10le",
+        }:
+            return None
+        prepared = [self._prepare_patch(index, op, width, height)
+                    for index, op in zip(indexes, ops)]
+        if any(item is None for item in prepared):
+            return None
+        window = prepared[0].window
+        if any(item.window != window for item in prepared):
+            return None
+        for i, item in enumerate(prepared):
+            x, y, w, h = item.context
+            for previous in prepared[:i]:
+                patch = previous.patch
+                if (x < patch.x + patch.width and patch.x < x + w
+                        and y < patch.y + patch.height and patch.y < y + h):
+                    return None
+        atlas_height = max(item.context[3] for item in prepared)
+        atlas_width = sum(2 * item.context[2] for item in prepared)
+        if atlas_width * atlas_height > _MAX_ATLAS_PIXELS:
+            return None
+        start, end, frame_limit = window
+        trim = ""
+        if start > 0 or end is not None:
+            trim = f"trim=start={start:.8f}"
+            if end is not None:
+                trim += f":end={end:.8f}"
+            trim += ","
+        labels = "".join(f"[mt_source{i}]" for i in range(len(prepared)))
+        graph = (prefix + ";" if prefix else "") + (
+            f'{label or "[0:v]"}{trim}split={len(prepared)}{labels};'
+        )
+        atlas = []
+        for i, item in enumerate(prepared):
+            x, y, w, h = item.context
+            graph += (f"[mt_source{i}]crop={w}:{h}:{x}:{y},split[mt_original{i}][mt_fallback{i}];"
+                      f"[mt_original{i}]format=rgb48le,pad={w}:{atlas_height}[mt_rgb{i}];"
+                      f"[mt_fallback{i}]{item.fallback},format=rgb48le,"
+                      f"pad={w}:{atlas_height}[mt_fill{i}];")
+            atlas += [f"[mt_rgb{i}]", f"[mt_fill{i}]"]
+        graph += "".join(atlas) + f"hstack=inputs={len(atlas)},showinfo[mt_decode]"
+        self._frames_seen = 0
+        self._defer_reason = None
+        self._patch_total = self._estimate_patch_frames(*window)
+        try:
+            timing = self._render(self._decoder(graph, frame_limit, media), prepared)
+        except Exception:
+            for item in prepared:
+                if os.path.exists(item.patch.path):
+                    os.unlink(item.patch.path)
+            raise
+        patches = {}
+        for index, item in zip(indexes, prepared):
+            if timing is None:
+                if os.path.exists(item.patch.path):
+                    os.unlink(item.patch.path)
+                if self._defer_reason and not _check_cancelled(self.ctx):
+                    self._warn_patch_skipped()
+                patches[index] = None
+            else:
+                item.patch.start, item.patch.steps = timing
+                patches[index] = item.patch
+        return patches
+
+    def _decoder(self, graph, frame_limit, media):
         decoder = [self.ffmpeg, "-nostdin", "-xerror", "-hide_banner", "-loglevel", "info", "-threads", "1"]
         if self.seek:
             decoder += ["-ss", f"{self.seek:.3f}"]
@@ -218,8 +339,10 @@ class TemporalPatchResolver:
             "rawvideo",
             "pipe:1",
         ]
-        path = os.path.join(self.directory, f"temporal-{index}.mkv")
-        encoder = [
+        return decoder
+
+    def _encoder(self, patch):
+        return [
             self.ffmpeg,
             "-nostdin",
             "-xerror",
@@ -233,7 +356,7 @@ class TemporalPatchResolver:
             "-pix_fmt",
             "rgb48le",
             "-s",
-            f"{ew}x{eh}",
+            f"{patch.width}x{patch.height}",
             "-r",
             f"{self.fps:.8f}",
             "-i",
@@ -247,41 +370,10 @@ class TemporalPatchResolver:
             "gbrp16le",
             "-threads",
             "1",
-            path,
+            patch.path,
         ]
-        timing = self._render(
-            decoder,
-            encoder,
-            bw,
-            bh,
-            box,
-            radius,
-            (ex - bx, ey - by, ew, eh),
-            spatial=spatial,
-        )
-        if timing is None:
-            if os.path.exists(path):
-                os.unlink(path)
-            if self._defer_reason and not _check_cancelled(self.ctx):
-                self._warn_patch_skipped()
-            return None
-        return MotionPatch(path, ex, ey, ew, eh, *timing)
 
-    def _estimate_patch_frames(self, start, end, frame_limit):
-        if self.total_frames is None or not (0 < self.fps <= 240):
-            return None
-        total = self.total_frames
-        if end is not None:
-            total = min(total, math.ceil(end * self.fps))
-        if start > 0:
-            total = max(1, total - math.floor(start * self.fps + 1e-6))
-        if frame_limit is not None:
-            total = min(total, frame_limit)
-        return total or None
-
-    def _render(
-        self, decoder, encoder, width, height, box, radius, crop, *, spatial=False
-    ):
+    def _render(self, decoder, prepared):
         import numpy as np
         from temporal_motion import compensated_frames
         from spatial_inpaint import EXACT_SCORE, reconstruct_texture
@@ -300,6 +392,9 @@ class TemporalPatchResolver:
         jitter = False
         tolerance = 0.1 / self.fps
         timed_out = threading.Event()
+        width = sum(2 * item.context[2] for item in prepared)
+        height = max(item.context[3] for item in prepared)
+        inputs = [queue.Queue(maxsize=2) for _ in prepared]
 
         def stop_processes():
             for proc in processes:
@@ -345,6 +440,7 @@ class TemporalPatchResolver:
                     ):
                         if not _check_cancelled(self.ctx):
                             timed_out.set()
+                        stop.set()
                         stop_processes()
                         return
             except Exception as exc:
@@ -354,7 +450,7 @@ class TemporalPatchResolver:
             nonlocal variable, count, first_timestamp, jitter
             previous = None
             offset = 0.0
-            size = width * 2 * height * 6
+            size = width * height * 6
             while True:
                 if _check_cancelled(self.ctx):
                     raise RuntimeError("Cancelled")
@@ -381,8 +477,77 @@ class TemporalPatchResolver:
                 previous = timestamp
                 count += 1
                 self._report_patch_frames(count)
-                image = np.frombuffer(data, np.uint16).reshape(height, width * 2, 3)
-                yield image[:, :width].copy(), image[:, width:].copy()
+                yield np.frombuffer(data, np.uint16).reshape(height, width, 3)
+
+        def put(inbox, value):
+            while not stop.is_set():
+                try:
+                    inbox.put(value, timeout=0.1)
+                    return
+                except queue.Full:
+                    pass
+
+        def encode_patch(item, inbox, proc):
+            def patch_frames():
+                while not stop.is_set():
+                    try:
+                        value = inbox.get(timeout=0.1)
+                    except queue.Empty:
+                        continue
+                    if value is None:
+                        return
+                    yield value
+
+            try:
+                _, _, pw, ph = item.context
+                box, radius = item.box, item.radius
+                cx, cy, cw, ch = item.crop
+                donor_guard = 0 if "444" in (self.source_format or "") else 2
+                if item.spatial:
+                    mx, my, mw, mh = _build_padded_region(
+                        cx, cy, cw, ch, pw, ph, 32, aligned=True
+                    )
+
+                    def texture_frame(original, filled, job):
+                        repaired, score = job.result()
+                        exact = repaired is not None and score <= EXACT_SCORE
+                        return original[my : my + mh, mx : mx + mw].copy(), (
+                            filled if repaired is None else repaired
+                        )[my : my + mh, mx : mx + mw].copy(), exact
+
+                    def texture_frames():
+                        workers = min(4, os.cpu_count() or 1)
+                        pending = deque()
+                        with ThreadPoolExecutor(workers) as pool:
+                            for original, filled in patch_frames():
+                                job = pool.submit(
+                                    reconstruct_texture, original, box, guard=donor_guard
+                                )
+                                pending.append((original, filled, job))
+                                if len(pending) > 2 * workers:
+                                    yield texture_frame(*pending.popleft())
+                            while pending:
+                                yield texture_frame(*pending.popleft())
+
+                    motion_box = (box[0] - mx, box[1] - my, box[2], box[3])
+                    output_frames = compensated_frames(
+                        texture_frames(), motion_box, radius, guard=donor_guard
+                    )
+                    output_x, output_y = cx - mx, cy - my
+                else:
+                    output_frames = compensated_frames(
+                        patch_frames(), box, radius, guard=donor_guard
+                    )
+                    output_x, output_y = cx, cy
+                for image in output_frames:
+                    if stop.is_set():
+                        return
+                    patch = image[output_y : output_y + ch, output_x : output_x + cw]
+                    proc.stdin.write(patch.tobytes())
+                proc.stdin.close()
+            except Exception as exc:
+                if not stop.is_set():
+                    fail_background(exc)
 
         try:
             env = dict(self.ctx.env) if self.ctx else None
@@ -393,15 +558,14 @@ class TemporalPatchResolver:
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 )
             )
-            processes.append(
-                subprocess.Popen(
-                    encoder, stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
+            for item in prepared:
+                processes.append(subprocess.Popen(
+                    self._encoder(item.patch), stdin=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
                     creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-                )
-            )
-            for proc, capture in zip(processes, (True, False)):
+                ))
+            for i, proc in enumerate(processes):
                 thread = threading.Thread(
-                    target=read_errors, args=(proc, capture), daemon=True
+                    target=read_errors, args=(proc, i == 0), daemon=True
                 )
                 thread.start()
                 threads.append(thread)
@@ -409,58 +573,34 @@ class TemporalPatchResolver:
             monitor.start()
             threads.append(monitor)
             self._report_patch_frames(0)
-            cx, cy, cw, ch = crop
-            donor_guard = 0 if "444" in (self.source_format or "") else 2
-            if spatial:
-                mx, my, mw, mh = _build_padded_region(
-                    cx, cy, cw, ch, width, height, 32, aligned=True
-                )
-
-                def texture_frame(original, filled, job):
-                    repaired, score = job.result()
-                    # Only a near-exact copy outranks real background
-                    # revealed by neighboring frames.
-                    exact = repaired is not None and score <= EXACT_SCORE
-                    return original[my : my + mh, mx : mx + mw].copy(), (
-                        filled if repaired is None else repaired
-                    )[my : my + mh, mx : mx + mw].copy(), exact
-
-                def texture_frames():
-                    # Frames are independent, so a few run at once (numpy
-                    # releases the GIL) while the output order stays fixed.
-                    workers = min(4, os.cpu_count() or 1)
-                    pending = deque()
-                    with ThreadPoolExecutor(workers) as pool:
-                        for original, filled in frames():
-                            job = pool.submit(
-                                reconstruct_texture, original, box, guard=donor_guard
-                            )
-                            pending.append((original, filled, job))
-                            if len(pending) > 2 * workers:
-                                yield texture_frame(*pending.popleft())
-                        while pending:
-                            yield texture_frame(*pending.popleft())
-
-                motion_box = (box[0] - mx, box[1] - my, box[2], box[3])
-                output_frames = compensated_frames(
-                    texture_frames(), motion_box, radius, guard=donor_guard
-                )
-                output_x, output_y = cx - mx, cy - my
-            else:
-                output_frames = compensated_frames(
-                    frames(), box, radius, guard=donor_guard
-                )
-                output_x, output_y = cx, cy
-            for image in output_frames:
-                if variable:
+            workers = []
+            for item, inbox, proc in zip(prepared, inputs, processes[1:]):
+                thread = threading.Thread(target=encode_patch, args=(item, inbox, proc), daemon=True)
+                thread.start()
+                workers.append(thread)
+                threads.append(thread)
+            for image in frames():
+                if stop.is_set():
                     break
-                patch = image[output_y : output_y + ch, output_x : output_x + cw]
-                processes[1].stdin.write(patch.tobytes())
-            processes[1].stdin.close()
+                offset = 0
+                for item, inbox in zip(prepared, inputs):
+                    _, _, pw, ph = item.context
+                    put(inbox, (image[:ph, offset:offset + pw].copy(),
+                                image[:ph, offset + pw:offset + 2 * pw].copy()))
+                    offset += 2 * pw
             if variable:
                 self._defer_reason = "patch_skipped_timing"
                 logger.info("Temporal: variable frame timing; using spatial repair")
                 return None
+            for inbox in inputs:
+                put(inbox, None)
+            for thread in workers:
+                while thread.is_alive() and not stop.is_set():
+                    thread.join(timeout=0.1)
+            if _check_cancelled(self.ctx):
+                raise RuntimeError("Cancelled")
+            if timed_out.is_set():
+                raise RuntimeError("Temporal preparation exceeded its budget")
             for proc in processes:
                 code = proc.wait(timeout=30)
                 if code != 0:
@@ -494,4 +634,9 @@ class TemporalPatchResolver:
             for proc in processes:
                 for stream in (proc.stdin, proc.stdout, proc.stderr):
                     if stream and not stream.closed:
-                        stream.close()
+                        try:
+                            stream.close()
+                        except OSError:
+                            # Killed encoders can still have buffered input to flush.
+                            if stream is not proc.stdin:
+                                raise

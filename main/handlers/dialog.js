@@ -3,6 +3,8 @@ import { showOpenDialog, showSaveDialog } from "../utils/dialog-history.js";
 import { getMainWindow } from "../shared-state.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 import { isTrustedSender } from "../utils/ipc.js";
+import { readSettings, writeSettings } from "../utils/settings.js";
+import { INPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
 
 export function registerDialogHandlers(pathSecurity) {
   ipcMain.handle(IPC_INVOKE.openVideos, async (event) => {
@@ -10,7 +12,7 @@ export function registerDialogHandlers(pathSecurity) {
     const win = getMainWindow();
     const { canceled, filePaths } = await showOpenDialog(win, {
       title: "Seleccionar videos",
-      filters: [{ name: "Videos", extensions: ["mp4", "mov", "avi", "mkv", "webm"] }],
+      filters: [{ name: "Videos", extensions: INPUT_VIDEO_EXTENSIONS }],
       properties: ["openFile", "multiSelections"],
     });
     if (canceled || filePaths.length === 0) return [];
@@ -43,6 +45,11 @@ export function registerDialogHandlers(pathSecurity) {
       if (!check.ok) {
         console.error("[beru] Invalid output directory:", check.error);
         return null;
+      }
+      try {
+        writeSettings({ ...readSettings(), lastOutputDirectory: check.resolvedPath });
+      } catch (err) {
+        console.error("[beru] Could not remember output directory:", err?.message || err);
       }
       return check.resolvedPath;
     } catch (err) {

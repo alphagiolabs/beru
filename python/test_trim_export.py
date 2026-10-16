@@ -1,15 +1,13 @@
-"""A trim keeps video, audio, and timed logo operations on the source timeline."""
-
 import json
 import subprocess
 import tempfile
 from pathlib import Path
 
 import processor
-
-
-FFMPEG = processor.find_ffmpeg()
-FFPROBE = processor.find_ffprobe(FFMPEG)
+import batch_context
+import media_probe
+FFMPEG = media_probe.find_ffmpeg()
+FFPROBE = media_probe.find_ffprobe(FFMPEG)
 
 
 def run(*args):
@@ -138,7 +136,7 @@ def test_incomplete_metadata_keeps_high_depth_in_trim_and_watermark_exports():
                 "width": 64, "height": 64, "video_duration": 1,
                 "pix_fmt": "yuv420p", "video_info_probed": False,
                 "operations": [], "encode_profile": "uquality", **effect,
-            }, FFMPEG, hw_encoder="", ctx=processor.BatchContext(
+            }, FFMPEG, hw_encoder="", ctx=batch_context.BatchContext(
                 ffmpeg_path=FFMPEG, ffprobe_path=FFPROBE,
             ))
             assert result["status"] == "succeeded", result

@@ -1,10 +1,4 @@
 #!/usr/bin/env python3
-"""Smoke test for build_filter_complex delogo branches.
-
-Validates that each method produces a syntactically plausible filter graph
-AND that ffmpeg accepts the graph via a no-op real run (libavfilter level
-parsing only — no decoding).
-"""
 import sys
 import subprocess
 import tempfile
@@ -13,7 +7,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from processor import build_filter_complex, find_ffmpeg  # noqa: E402
+from filters import build_filter_complex
+from media_probe import find_ffmpeg# noqa: E402
 
 FFMPEG = Path(find_ffmpeg())
 
@@ -35,8 +30,6 @@ def show(name, graph, label):
 
 
 def run_ffmpeg_parse(graph, out_label, images=None):
-    """Feed the graph to ffmpeg's -filter_complex with a fakesrc, decode 1 frame
-    to /dev/null. If the graph is invalid, ffmpeg errors out."""
     if not FFMPEG.exists():
         raise AssertionError(f"ffmpeg not found at {FFMPEG}")
     images = images or []
@@ -66,7 +59,6 @@ def run_ffmpeg_parse(graph, out_label, images=None):
 
 
 def create_test_image(path):
-    """Create a small PNG using ffmpeg lavfi so the cover method can load it."""
     if not FFMPEG.exists():
         return False
     cmd = [

@@ -1,5 +1,6 @@
 import { createQueueResults, createArtifactResults } from "./processing-results.js";
 import { tStatic } from "./format-message.js";
+import { fileName } from "../../shared/file-name.js";
 
 export function createProcessingRun(set, get) {
   let current = null;
@@ -23,28 +24,33 @@ export function createProcessingRun(set, get) {
     scheduledFlush = null;
   }
 
-  function makeRun(runId = null, jobs = null, artifact = null) {
+  function makeRun(runId = null, jobs = null, artifact = null, owner = null) {
     const state = get();
-    if (!jobs && state.activeProcessingKind) artifact = state.mediaExport;
+    if (!jobs && state.activeProcessingKind?.startsWith("editor:"))
+      owner ??= state.activeProcessingKind;
+    if (!jobs && !owner && state.activeProcessingKind) artifact = state.mediaExport;
     const paths = new Map(
-      jobs
-        ? jobs.map((job) => [job.id, job.input_path])
-        : artifact
-          ? [[artifact.jobId, null]]
-          : state.queue.map((item, index) => [index, item.path]),
+      owner
+        ? []
+        : jobs
+          ? jobs.map((job) => [job.id, job.input_path])
+          : artifact
+            ? [[artifact.jobId, null]]
+            : state.queue.map((item, index) => [index, item.path]),
     );
     return {
       runId,
       started: Boolean(runId),
+      owner,
       jobs: paths,
-      target: artifact ? createArtifactResults(artifact) : createQueueResults(paths),
+      target: owner ? null : artifact ? createArtifactResults(artifact) : createQueueResults(paths),
       results: new Map(),
       outcome: null,
     };
   }
 
   function isJob(run, index) {
-    return Number.isInteger(index) && run.jobs.has(index) && run.target.accepts(get(), index);
+    return Number.isInteger(index) && run.jobs.has(index) && run.target?.accepts(get(), index);
   }
 
   function flushProgress() {
@@ -76,12 +82,18 @@ export function createProcessingRun(set, get) {
     run.outcome = outcome;
     retire(run.runId);
     set((state) => ({
-      ...run.target.finish(state, outcome),
+      ...run.target?.finish(state, outcome),
       isProcessing: false,
       activeProcessRunId: null,
       activeProcessingKind: null,
     }));
-    if (!outcome.success && !outcome.cancelled && !outcome.superseded && !reportedJobFailure) {
+    if (
+      run.target &&
+      !outcome.success &&
+      !outcome.cancelled &&
+      !outcome.superseded &&
+      !reportedJobFailure
+    ) {
       outcome.notified = true;
       notifyError(outcome.error);
     }
@@ -126,22 +138,27 @@ export function createProcessingRun(set, get) {
       const runId = msg?.runId;
       if (!runId || retiredRunIds.has(runId)) return;
       if (current?.runId === runId) return;
-      if (!current || current.outcome || current.runId) {
+      if (!current || current.outcome || current.runId || msg.owner) {
         if (current && !current.outcome) {
+          if (msg.owner && !current.started) current.restoreStart?.();
           current.outcome = { success: false, superseded: true };
           retire(current.runId);
         }
-        current = makeRun(runId);
+        current = makeRun(runId, null, null, msg.owner);
       } else {
         current.runId = runId;
         current.started = true;
       }
       clearProgress();
-      set({ activeProcessRunId: runId, isProcessing: true });
+      set({
+        activeProcessRunId: runId,
+        activeProcessingKind: current.owner || current.target?.kind || null,
+        isProcessing: true,
+      });
     },
     onProgress: (msg) => {
       const run = eventRun(msg);
-      if (run) set((state) => run.target.progress(state, msg));
+      if (run?.target) set((state) => run.target.progress(state, msg));
     },
     onJobProgress: (msg) => {
       const run = eventRun(msg);
@@ -159,7 +176,7 @@ export function createProcessingRun(set, get) {
     onJobCancelled: (msg) => jobResult("cancelled", msg),
     onSummary: (msg) => {
       const run = eventRun(msg);
-      if (run) set((state) => run.target.summary(state, msg));
+      if (run?.target) set((state) => run.target.summary(state, msg));
     },
     onFinished: (msg) => {
       const run = eventRun(msg);
@@ -202,6 +219,31 @@ export function createProcessingRun(set, get) {
     };
   }
 
+  async function confirmOverwrite(run, existingOutputs) {
+    const state = get();
+    const key = (path) => String(path).replace(/\//g, "\\").toLowerCase();
+    const ownExports = new Set(
+      [
+        ...state.queue.map((item) => item.exportedOutputPath),
+        state.mediaExport?.confirmedOutputPath,
+      ]
+        .filter(Boolean)
+        .map(key),
+    );
+    if (!existingOutputs.every((path) => ownExports.has(key(path)))) {
+      const confirmed = await state.requestConfirm({
+        message: tStatic(
+          "queue.confirmOverwrite",
+          { count: String(existingOutputs.length), name: fileName(existingOutputs[0]) },
+          state.language || "es",
+        ),
+        variant: "danger",
+      });
+      if (!confirmed) return false;
+    }
+    return run === current && !run.outcome;
+  }
+
   function restoreStart(before, prepared) {
     set((state) => ({
       queue: state.queue.map((item, index) => {
@@ -217,6 +259,13 @@ export function createProcessingRun(set, get) {
       ...(state.exportSignatures === prepared.startPatch.exportSignatures
         ? { exportSignatures: before.exportSignatures }
         : {}),
+      progressDone: before.progressDone,
+      progressTotal: before.progressTotal,
+      jobProgress: before.jobProgress,
+      batchSummary: before.batchSummary,
+      ...(prepared.startPatch.mediaExport && state.mediaExport === prepared.startPatch.mediaExport
+        ? { mediaExport: before.mediaExport }
+        : {}),
     }));
   }
 
@@ -228,6 +277,7 @@ export function createProcessingRun(set, get) {
     retire(current?.runId);
     const before = get();
     const run = makeRun(null, prepared.jobs, prepared.startPatch.mediaExport);
+    run.restoreStart = () => restoreStart(before, prepared);
     current = run;
     set({
       ...prepared.startPatch,
@@ -235,20 +285,26 @@ export function createProcessingRun(set, get) {
       activeProcessingKind: run.target.kind,
     });
     try {
-      const response = await api.startProcessing(prepared.manifest);
+      let response = await api.startProcessing(prepared.manifest);
+      if (response?.code === "output_exists" && run === current && !run.outcome) {
+        response = (await confirmOverwrite(run, response.existingOutputs || []))
+          ? await api.startProcessing(prepared.manifest, { overwrite: true })
+          : { success: false, cancelled: true };
+      }
       if (run !== current) return resultFor(run, prepared, videoIdx);
       if (response?.code === "already_processing") {
         if (!run.started && !run.outcome) {
           restoreStart(before, prepared);
           set({
-            progressDone: before.progressDone,
-            progressTotal: before.progressTotal,
-            jobProgress: before.jobProgress,
-            batchSummary: before.batchSummary,
-            activeProcessRunId: before.activeProcessRunId,
-            activeProcessingKind: before.activeProcessingKind,
+            activeProcessRunId: response.runId || before.activeProcessRunId,
+            activeProcessingKind: response.owner || before.activeProcessingKind,
           });
-          current = makeRun(before.activeProcessRunId);
+          current = makeRun(
+            response.runId || before.activeProcessRunId,
+            null,
+            null,
+            response.owner,
+          );
         }
         if (!run.outcome) set({ isProcessing: true });
         return { ok: false, code: response.code, error: response.error };

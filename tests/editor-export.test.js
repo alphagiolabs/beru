@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   saveDialog: vi.fn(),
   probe: vi.fn(),
   executeProcessingRun: vi.fn(),
+  processorAvailable: vi.fn(async () => ({ ok: true, command: "python", args: ["processor.py"] })),
   cancelRun: vi.fn(async () => ({ success: true, idle: true })),
 }));
 vi.mock("../main/utils/dialog-history.js", () => ({
@@ -32,11 +33,7 @@ vi.mock("electron", () => ({
   ipcMain: { handle: (channel, handler) => mocks.handlers.set(channel, handler) },
 }));
 vi.mock("../main/utils/processor-spawn.js", () => ({
-  validateProcessorAvailableAsync: async () => ({
-    ok: true,
-    command: "python",
-    args: ["processor.py"],
-  }),
+  validateProcessorAvailableAsync: mocks.processorAvailable,
 }));
 vi.mock("../main/utils/paths.js", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -82,11 +79,12 @@ function manifestFor(outputPath) {
 }
 
 beforeEach(() => {
+  mocks.processorAvailable.mockReset().mockResolvedValue({ ok: true, command: "python", args: [] });
   mocks.executeProcessingRun.mockReset().mockImplementation(async ({ jobs }) => {
     const output = jobs[0].output_path;
     fs.mkdirSync(path.dirname(output), { recursive: true });
     fs.writeFileSync(output, "rendered");
-    return { success: true, runId: "test" };
+    return { success: true, runId: "test", outputs: [{ index: jobs[0].id, output }] };
   });
 });
 
@@ -105,6 +103,20 @@ describe("shared processing lifecycle", () => {
     registerEditorHandlers(security);
   });
   afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  it("returns the confirmed destination when publication chooses an alternate filename", async () => {
+    const requested = path.join(tmp, "out.mp4");
+    const confirmed = path.join(tmp, "out__2.mp4");
+    const manifest = manifestFor(requested);
+    manifest.jobs[0].clips[0].input_path = media;
+    mocks.saveDialog.mockResolvedValue({ canceled: false, filePath: requested });
+    mocks.executeProcessingRun.mockResolvedValueOnce({
+      success: true,
+      outputs: [{ index: -1, output: confirmed }],
+    });
+    expect(
+      await mocks.handlers.get(IPC_INVOKE.exportEditorComposition)(trustedEvent, { manifest }),
+    ).toMatchObject({ success: true, filePath: confirmed });
+  });
   it("runs export, frame and proxy as canonical composition jobs in Processing Run", async () => {
     const manifest = manifestFor(path.join(tmp, "out.mp4"));
     manifest.jobs[0].clips[0].input_path = media;
@@ -183,6 +195,58 @@ describe("shared processing lifecycle", () => {
     expect(mocks.cancelRun).toHaveBeenLastCalledWith({ owner: "editor:frame" });
     await cancel(trustedEvent, {});
     expect(mocks.cancelRun).toHaveBeenLastCalledWith({ owner: "editor:export" });
+  });
+  it.each([
+    ["export", "processor"],
+    ["frame", "processor"],
+    ["export", "media"],
+    ["frame", "media"],
+  ])("does not launch a cancelled %s while preparing %s", async (kind, stage) => {
+    const manifest = manifestFor(path.join(tmp, "out.mp4"));
+    manifest.jobs[0].clips[0].input_path = media;
+    if (kind === "frame") manifest.jobs[0].frame = { atUs: 0 };
+    mocks.saveDialog.mockResolvedValue({ canceled: false, filePath: path.join(tmp, "out.mp4") });
+    let release;
+    const blocked = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    if (stage === "processor") mocks.processorAvailable.mockImplementationOnce(blocked);
+    else security.validateReadableFileAsync = blocked;
+    const channel =
+      kind === "frame" ? IPC_INVOKE.renderEditorExactFrame : IPC_INVOKE.exportEditorComposition;
+    const payload = { manifest, requestId: "cancelled-frame" };
+    const pending = mocks.handlers.get(channel)(trustedEvent, payload);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await mocks.handlers.get(IPC_INVOKE.cancelEditorExport)(trustedEvent, { kind });
+    release({ ok: true, resolvedPath: media });
+    expect(await pending).toMatchObject({ success: false, cancelled: true });
+    expect(mocks.executeProcessingRun).not.toHaveBeenCalled();
+    security.validateReadableFileAsync = async (p) => ({ ok: true, resolvedPath: p });
+    expect(await mocks.handlers.get(channel)(trustedEvent, payload)).toMatchObject({
+      success: true,
+    });
+  });
+  it("invalidates an export while its destination dialog is still open", async () => {
+    const manifest = manifestFor(path.join(tmp, "out.mp4"));
+    manifest.jobs[0].clips[0].input_path = media;
+    let release;
+    mocks.saveDialog.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const pending = mocks.handlers.get(IPC_INVOKE.exportEditorComposition)(trustedEvent, {
+      manifest,
+    });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await mocks.handlers.get(IPC_INVOKE.cancelEditorExport)(trustedEvent, { kind: "export" });
+    release({ canceled: false, filePath: path.join(tmp, "out.mp4") });
+    expect(await pending).toMatchObject({ success: false, cancelled: true });
+    expect(mocks.executeProcessingRun).not.toHaveBeenCalled();
   });
   it("invalidates a proxy when its source identity changed", async () => {
     const result = await mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy)(trustedEvent, {

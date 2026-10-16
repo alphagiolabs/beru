@@ -14,7 +14,7 @@ import {
   updateOverlay,
 } from "../../../shared/editor-timeline.js";
 import { buildCompositionManifest } from "./composition.js";
-import { useTimelineStore } from "./store/useTimelineStore.js";
+import { selectIsDirty, useTimelineStore } from "./store/useTimelineStore.js";
 import {
   applyCanvasPreset,
   appendClipFromAsset,
@@ -23,13 +23,17 @@ import {
 } from "./editor-model.js";
 
 const store = () => useTimelineStore.getState();
+const superseded = () => ({ success: false, canceled: true, superseded: true });
+let openSequence = 0;
 
 export function assetStatusMap(assets = []) {
   return Object.fromEntries(assets.map(({ id, status }) => [id, status]));
 }
 
 export async function importSources(api, paths = null) {
+  const owner = store().documentOwner;
   const result = await api.importEditorVideos(paths ? { paths } : undefined);
+  if (store().documentOwner !== owner) return superseded();
   if (!result?.success) return result;
   if (result.sources.length === 0) return { success: true, imported: 0, errors: result.errors };
   let newIds = [];
@@ -50,8 +54,14 @@ export async function importSources(api, paths = null) {
   return { success: true, imported: result.sources.length, errors: result.errors };
 }
 
-export async function openDocument(api) {
+export async function openDocument(api, { confirmDiscard } = {}) {
+  const owner = store().documentOwner;
+  const sequence = ++openSequence;
+  if (selectIsDirty(store()) && !(await confirmDiscard?.()))
+    return { success: false, canceled: true };
+  if (sequence !== openSequence || store().documentOwner !== owner) return superseded();
   const result = await api.openEditorProject();
+  if (sequence !== openSequence || store().documentOwner !== owner) return superseded();
   if (!result?.success) return result;
   store().open(result.project, {
     filePath: result.filePath,
@@ -61,27 +71,26 @@ export async function openDocument(api) {
 }
 
 export async function saveDocument(api, { saveAs = false } = {}) {
-  const { history, revision, savedRevision, filePath } = store();
+  const { history, revision, savedRevision, filePath, documentOwner } = store();
   const project = history.present;
   const result = await api.saveEditorProject({
     project: { ...project, revision },
     baseRevision: savedRevision ?? undefined,
+    filePath,
     saveAs: saveAs || !filePath,
   });
+  if (store().documentOwner !== documentOwner) return superseded();
   if (result?.success) store().markSaved({ project, revision, filePath: result.filePath });
   return result;
 }
 
-export function writeAutosave(api) {
-  const { history, revision } = store();
-  return api.writeEditorAutosave({ project: { ...history.present, revision } });
-}
-
 export async function relinkLibraryAsset(api, assetId) {
+  const owner = store().documentOwner;
   const asset = store().history.present.assets.find((a) => a.id === assetId);
   const result = await api.pickEditorReplacement({
     kind: asset && isImageAsset(asset) ? "image" : "video",
   });
+  if (store().documentOwner !== owner) return superseded();
   if (!result?.success) return result;
   if (!store().apply((project) => relinkAsset(project, assetId, result.source))) {
     return { success: false, error: store().lastError };
@@ -91,6 +100,7 @@ export async function relinkLibraryAsset(api, assetId) {
 }
 
 export async function createPreviewProxy(api, asset) {
+  const owner = store().documentOwner;
   const result = await api.createEditorPreviewProxy({
     source: {
       path: asset.path,
@@ -99,6 +109,7 @@ export async function createPreviewProxy(api, asset) {
       durationUs: asset.metadata.durationUs,
     },
   });
+  if (store().documentOwner !== owner) return superseded();
   if (result.success) store().setPreviewPath(asset.id, result.path);
   return result;
 }
@@ -126,7 +137,9 @@ export function addImageLayerAt(assetId, startUs) {
 }
 
 export async function importImageLayer(api, startUs) {
+  const owner = store().documentOwner;
   const result = await api.importEditorImage();
+  if (store().documentOwner !== owner) return superseded();
   if (!result?.success) return result;
   let assetId = null;
   const overlayId = applyOverlayOperation((p) => {

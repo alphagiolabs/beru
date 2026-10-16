@@ -5,7 +5,7 @@ import useEditorStore from "../../stores/useEditorStore";
 import { Button } from "../../components/ui/Button";
 import { Select } from "../../components/ui/select";
 import { TooltipProvider } from "../../components/ui/tooltip";
-import { layoutTrack } from "../../../shared/editor-timeline.js";
+import { layoutTrack, projectDurationUs } from "../../../shared/editor-timeline.js";
 import { selectIsDirty, useTimelineStore } from "./store/useTimelineStore.js";
 import { useEditorSession } from "./store/useEditorSession.js";
 import {
@@ -40,7 +40,6 @@ import {
   setTransformOfClip,
   splitClipAtPlayhead,
   updateOverlayOf,
-  writeAutosave,
 } from "./editor-actions.js";
 import EditorLibrary from "./EditorLibrary.jsx";
 import EditorPreview from "./EditorPreview.jsx";
@@ -52,7 +51,6 @@ import { DEFAULT_PX_PER_SECOND, dropIndex } from "./timeline/geometry.js";
 import useExactFrame from "./playback/useExactFrame.js";
 import "./editor.css";
 
-const AUTOSAVE_DELAY_MS = 2000;
 const FRAME_US = 1_000_000 / 30;
 const SECOND_US = 1_000_000;
 const api = window.api;
@@ -74,7 +72,6 @@ export default function EditorWorkspace() {
   const showToast = useEditorStore((s) => s.showToast);
   const requestConfirm = useEditorStore((s) => s.requestConfirm);
   const project = useTimelineStore((s) => s.history.present);
-  const revision = useTimelineStore((s) => s.revision);
   const dirty = useTimelineStore(selectIsDirty);
   const filePath = useTimelineStore((s) => s.filePath);
   const assetStatus = useTimelineStore((s) => s.assetStatus);
@@ -93,7 +90,7 @@ export default function EditorWorkspace() {
   } = useExactFrame(api);
 
   const layout = useMemo(() => layoutTrack(project), [project]);
-  const duration = layout.at(-1)?.endUs ?? 0;
+  const duration = projectDurationUs(project);
   const assetsById = useMemo(
     () => Object.fromEntries(project.assets.map((a) => [a.id, a])),
     [project.assets],
@@ -111,14 +108,6 @@ export default function EditorWorkspace() {
   const notify = (kind, text) => showToast({ kind, text });
 
   useEffect(() => api?.onEditorExportProgress?.(({ percent }) => setExportPercent(percent)), []);
-
-  useEffect(() => {
-    if (!dirty) return undefined;
-    const timer = setTimeout(() => {
-      void writeAutosave(api).catch(() => {});
-    }, AUTOSAVE_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [dirty, revision]);
 
   useEffect(() => {
     if (recoveryChecked || !api?.readEditorAutosave) return;
@@ -140,7 +129,16 @@ export default function EditorWorkspace() {
   }, [requestConfirm, t]);
 
   const handleOpen = async () => {
-    const result = await openDocument(api);
+    const result = await openDocument(api, {
+      confirmDiscard: () =>
+        requestConfirm({
+          title: t("editor.discard.title"),
+          message: t("editor.discard.message"),
+          confirmLabel: t("editor.recover.discard"),
+          cancelLabel: t("common.cancel"),
+          variant: "danger",
+        }),
+    });
     if (result.success) {
       useEditorSession.getState().reset();
       closeExactFrame();

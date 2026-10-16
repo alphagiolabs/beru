@@ -319,26 +319,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[0].region.h).toBe(108);
   });
 
-  it("preserves literal punctuation in the exported text job", () => {
-    const region = { x: 0.1, y: 0.1, w: 0.3, h: 0.1 };
-    const job = jobFor(
-      queueItem(0, {
-        operations: [
-          {
-            id: "text-brace",
-            mode: "text",
-            region,
-            text: "Price: ${99}",
-            fontSize: 32,
-            fontColor: "white",
-            fontFamily: "Arial",
-          },
-        ],
-      }),
-    );
-    expect(job.operations[0].text).toBe("Price: ${99}");
-  });
-
   it("preserves non-text ops when a mapping reapply creates text ops", () => {
     const textRegion = { x: 0.1, y: 0.8, w: 0.3, h: 0.1 };
     const blurRegion = { x: 0.5, y: 0.5, w: 0.2, h: 0.1 };

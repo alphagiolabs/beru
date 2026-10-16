@@ -23,6 +23,6 @@ Aplicar esta mentalidad en cada cambio:
 - **Eliminar código comentado** — el historial de git lo conserva.
 - **Eliminar o resolver TODOs** sin contexto accionable.
 
-Antes de eliminar código, validar contra los falsos positivos de Beru en `docs/dead-code-audit.md`.
+Antes de eliminar código, validar contra los falsos positivos de Beru en `docs/development.md#auditoría-de-código-muerto`.
 
 La simplificación nunca rompe comportamiento ni tests. En caso de duda, dejar el código como está y preguntar.

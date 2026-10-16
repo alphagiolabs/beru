@@ -1,5 +1,5 @@
-import os from "os";
 import policy from "../resources/worker-policy.json" with { type: "json" };
+import os from "os";
 import {
   ENCODE_PROFILES,
   normalizeEncodeProfile,
@@ -9,7 +9,7 @@ import {
 
 const MAX_BATCH_WORKERS = policy.maxWorkers;
 const RAM_PER_JOB_MB = policy.ramPerJobMb;
-const X264_PRESET_RAM_MULT = policy.x264PresetRamMultiplier;
+const X264_PRESET_RAM_MULT = policy.x264PresetRamMultipliers;
 const HEAVY_DECODE_CODECS = new Set(policy.heavyDecodeCodecs);
 const HIGH_BIT_DEPTH_TOKENS = policy.highBitDepthTokens;
 const ENCODER_CAPS = policy.encoderCaps;
@@ -51,19 +51,22 @@ export function estimateJobRamMb({
     perJob = Math.floor(perJob * (X264_PRESET_RAM_MULT[preset] ?? 1.0));
   }
   const codec = String(videoCodec || "").toLowerCase();
-  if (HEAVY_DECODE_CODECS.has(codec)) perJob = Math.floor(perJob * 1.25);
+  if (HEAVY_DECODE_CODECS.has(codec))
+    perJob = Math.floor(perJob * policy.ramMultipliers.heavyDecode);
   const pix = String(pixFmt || "").toLowerCase();
-  if (HIGH_BIT_DEPTH_TOKENS.some((t) => pix.includes(t))) perJob = Math.floor(perJob * 1.5);
-  if (hasVideoFilters) perJob = Math.floor(perJob * 1.5);
-  if (!hardwareAllowed || (profile === "quality" && !hwEncoder)) perJob = Math.floor(perJob * 1.35);
+  if (HIGH_BIT_DEPTH_TOKENS.some((t) => pix.includes(t)))
+    perJob = Math.floor(perJob * policy.ramMultipliers.highBitDepth);
+  if (hasVideoFilters) perJob = Math.floor(perJob * policy.ramMultipliers.filters);
+  if (!hardwareAllowed || (profile === "quality" && !hwEncoder))
+    perJob = Math.floor(perJob * policy.ramMultipliers.softwareQuality);
 
   let pixels = Number(sourcePixels) || 0;
   const w = Number(sourceWidth) || 0;
   const h = Number(sourceHeight) || 0;
   if (w > 0 && h > 0) pixels = w * h;
-  if (pixels >= 3840 * 2160) perJob = Math.floor(perJob * 2.5);
-  else if (pixels >= 1920 * 1080) perJob = Math.floor(perJob * 1.5);
-  return Math.max(64, perJob);
+  if (pixels >= 3840 * 2160) perJob = Math.floor(perJob * policy.ramMultipliers.ultraHd);
+  else if (pixels >= 1920 * 1080) perJob = Math.floor(perJob * policy.ramMultipliers.fullHd);
+  return Math.max(policy.minimumJobRamMb, perJob);
 }
 
 export function memoryCapWorkers({
@@ -92,7 +95,7 @@ export function memoryCapWorkers({
       sourcePixels: maxSourcePixels,
     });
   }
-  const cap = Math.max(1, Math.floor((avail * 0.8) / perJob));
+  const cap = Math.max(1, Math.floor((avail * policy.memoryBudgetFraction) / perJob));
   return Math.max(1, Math.min(cap, desiredWorkers, MAX_BATCH_WORKERS));
 }
 

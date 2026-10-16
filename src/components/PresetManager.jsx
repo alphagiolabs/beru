@@ -36,7 +36,7 @@ export default function PresetManager() {
     if (res?.ok) {
       setName("");
       setFeedback({ kind: "ok", text: t("modal.preset.savedFeedback", { name: res.fileName }) });
-    } else {
+    } else if (!res?.canceled) {
       setFeedback({ kind: "err", text: res?.error || t("header.couldNotSavePreset") });
     }
     scheduleFeedbackClear();

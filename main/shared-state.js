@@ -12,6 +12,12 @@ export const setAppIsQuitting = (quitting) => {
   _appIsQuitting = Boolean(quitting);
 };
 
+let _hasUnexportedWork = false;
+export const getHasUnexportedWork = () => _hasUnexportedWork;
+export const setHasUnexportedWork = (value) => {
+  _hasUnexportedWork = value === true;
+};
+
 export const isDev = !app.isPackaged;
 
 export const DEV_URL =

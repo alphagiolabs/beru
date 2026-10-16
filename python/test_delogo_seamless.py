@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""Seamless delogo: local smoothstep seams without invented grain.
-
-Quality bar for "invisible" logo removal:
-- inpaint / mirror / blur / fill / temporal with feather > 0 composite the
-  cleaned patch through a looped static alpha mask via alphamerge (opaque
-  interior, fading seam) so pixels outside the patch are never touched — no
-  halo.
-- inpaint limits reconstruction smoothing independently of seam width.
-- feather = 0 keeps the exact hard-overlay path (sharp, predictable).
-
-Quantitative guard: on synthetic textured footage with an opaque logo box,
-the seamless inpaint chain must beat the previous whole-patch-boxblur chain
-on halo-ring error while matching or improving interior and seam error.
-"""
 import subprocess
 import sys
 import tempfile
@@ -25,7 +11,9 @@ from delogo_chains import (  # noqa: E402
     _fit_delogo_rect,
     _seamless_feather_widths,
 )
-from processor import build_filter_complex, find_ffmpeg  # noqa: E402
+from filters import build_filter_complex
+from media_probe import find_ffmpeg# noqa: E402
+import filters
 
 FFMPEG = Path(find_ffmpeg())
 _TMP = tempfile.TemporaryDirectory(prefix="beru_delogo_seamless_")
@@ -78,10 +66,6 @@ def test_feathered_methods_use_alpha_seam():
 
 
 def test_inpaint_delogos_the_patch_not_the_frame():
-    """Composite inpaint paths should crop the padded patch first and run
-    ``delogo`` inside it (patch-local coords) — identical output at O(patch)
-    instead of O(frame) per frame. Only when the patch offset is even: odd
-    offsets realign subsampled chroma and must keep the full-frame delogo."""
     op = _op("inpaint", 6)
     op["region"] = {"x": 100, "y": 60, "w": 40, "h": 20}
     chain = _build_delogo_chain(op, None, 0, 640, 360, None)
@@ -130,9 +114,6 @@ def test_frame_edge_feather_uses_the_available_sides():
 
 
 def _old_inpaint_chain(x, y, w, h, feather):
-    """Previous behavior kept as the quality baseline: delogo on the
-    effective box, then a whole-patch boxblur(feather) overlaid on the padded
-    region (halo)."""
     pad = max(2, feather)
     x0, y0 = max(0, x - pad), max(0, y - pad)
     rw, rh = min(VW, x + w + pad) - x0, min(VH, y + h + pad) - y0

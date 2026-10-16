@@ -40,10 +40,12 @@ import { isQuittingForUpdate } from "./updater.js";
 let quitPhase = "running";
 let fatalHandling = false;
 let writingDiagnostic = false;
+let lastRendererReloadAt = 0;
 
 requireWindows();
 
 const MAX_CRASH_LOG_BYTES = 64 * 1024;
+const RENDERER_RELOAD_COOLDOWN_MS = 30_000;
 const FATAL_ERROR_CODES = new Set(["EPIPE", "ENOSPC", "ENOMEM", "EACCES", "EPERM"]);
 const RENDERER_EXIT_REASONS = new Set([
   "clean-exit",
@@ -121,11 +123,15 @@ function mainStackFrames(err) {
   return frames;
 }
 
+function describeError(kind, err) {
+  const code = FATAL_ERROR_CODES.has(err?.code) ? err.code : "unknown";
+  return `${kind} ${code} ${mainStackFrames(err).join(" ")}`;
+}
+
 function onFatalError(kind, err) {
   if (fatalHandling) return;
   fatalHandling = true;
-  const code = FATAL_ERROR_CODES.has(err?.code) ? err.code : "unknown";
-  recordDiagnostic("fatal", `${kind} ${code} ${mainStackFrames(err).join(" ")}`);
+  recordDiagnostic("fatal", describeError(kind, err));
   try {
     sweepOrphanedArtifacts(app.getPath("temp"));
     disposePreviewFrameWorker();
@@ -162,13 +168,18 @@ app.on("will-quit", (event) => {
   interceptQuitIfProcessing(event);
 });
 
-app.on("render-process-gone", (_event, _webContents, details) => {
+app.on("render-process-gone", (_event, webContents, details) => {
   const reason = RENDERER_EXIT_REASONS.has(details?.reason) ? details.reason : "unknown";
   const exitCode = Number.isSafeInteger(details?.exitCode) ? details.exitCode : "unknown";
   recordDiagnostic(
     "renderer-gone",
     `${quitPhase !== "running" ? "requested" : "unexpected"} ${reason} ${exitCode}`,
   );
+  if (quitPhase !== "running" || reason === "clean-exit" || !webContents) return;
+  if (webContents.isDestroyed() || Date.now() - lastRendererReloadAt < RENDERER_RELOAD_COOLDOWN_MS)
+    return;
+  lastRendererReloadAt = Date.now();
+  webContents.reload();
 });
 
 protocol.registerSchemesAsPrivileged([
@@ -216,7 +227,9 @@ app.setName("Beru");
 app.setAppUserModelId("app.beru.desktop");
 
 process.on("uncaughtException", (err) => onFatalError("uncaughtException", err));
-process.on("unhandledRejection", (err) => onFatalError("unhandledRejection", err));
+process.on("unhandledRejection", (err) =>
+  recordDiagnostic("unhandled", describeError("unhandledRejection", err)),
+);
 
 app.whenReady().then(() => {
   registerBeruProtocol();

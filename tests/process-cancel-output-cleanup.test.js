@@ -199,9 +199,9 @@ describe("run output ownership", () => {
     );
     try {
       fs.writeFileSync(second.jobs[0].output_path, "second export");
-      expect(fs.readFileSync(first.complete(1), "utf8")).toBe("first export");
+      expect(fs.readFileSync(await first.complete(1), "utf8")).toBe("first export");
       first.dispose();
-      expect(fs.readFileSync(second.complete(1), "utf8")).toBe("second export");
+      expect(fs.readFileSync(await second.complete(1), "utf8")).toBe("second export");
     } finally {
       first.dispose();
       second.dispose();
@@ -210,15 +210,15 @@ describe("run output ownership", () => {
     expect(fs.readFileSync(path.join(tmpDir, "second.mp4"), "utf8")).toBe("second export");
   });
 
-  it("retries a promotion that Windows refuses while a scanner still holds the file", () => {
-    const run = createRunOutputFiles(runJobs(), tmpDir);
+  it("retries a promotion that Windows refuses while a scanner still holds the file", async () => {
+    const run = createRunOutputFiles(runJobs(), tmpDir, { overwrite: true });
     const rename = vi.spyOn(fs, "renameSync");
     try {
       fs.writeFileSync(run.jobs[0].output_path, "export");
       rename.mockImplementationOnce(() => {
         throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
       });
-      expect(fs.readFileSync(run.complete(1), "utf8")).toBe("export");
+      expect(fs.readFileSync(await run.complete(1), "utf8")).toBe("export");
       expect(rename).toHaveBeenCalledTimes(2);
     } finally {
       rename.mockRestore();
@@ -226,14 +226,14 @@ describe("run output ownership", () => {
     }
   });
 
-  it("reports the error once the file stays locked past the retry budget", () => {
-    const run = createRunOutputFiles(runJobs(), tmpDir);
+  it("keeps the export under a free name after the replacement stays locked past the retry budget", async () => {
+    const run = createRunOutputFiles(runJobs(), tmpDir, { overwrite: true });
     const rename = vi.spyOn(fs, "renameSync").mockImplementation(() => {
       throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
     });
     try {
       fs.writeFileSync(run.jobs[0].output_path, "export");
-      expect(() => run.complete(1)).toThrow("EPERM");
+      expect(fs.readFileSync(await run.complete(1), "utf8")).toBe("export");
       expect(rename).toHaveBeenCalledTimes(6);
     } finally {
       rename.mockRestore();
@@ -241,14 +241,14 @@ describe("run output ownership", () => {
     }
   });
 
-  it("does not retry errors that are not a transient lock", () => {
-    const run = createRunOutputFiles(runJobs(), tmpDir);
+  it("falls back to a safe promotion without retrying a non-transient replacement error", async () => {
+    const run = createRunOutputFiles(runJobs(), tmpDir, { overwrite: true });
     const rename = vi.spyOn(fs, "renameSync").mockImplementation(() => {
       throw Object.assign(new Error("ENOSPC: no space left on device"), { code: "ENOSPC" });
     });
     try {
       fs.writeFileSync(run.jobs[0].output_path, "export");
-      expect(() => run.complete(1)).toThrow("ENOSPC");
+      expect(fs.readFileSync(await run.complete(1), "utf8")).toBe("export");
       expect(rename).toHaveBeenCalledTimes(1);
     } finally {
       rename.mockRestore();

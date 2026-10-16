@@ -1,6 +1,3 @@
-// @ts-check
-// Vite only inlines import.meta.env.VITE_* into the client bundle.
-
 const env = typeof import.meta !== "undefined" ? import.meta.env || {} : {};
 
 function flagRaw(key) {

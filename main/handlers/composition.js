@@ -1,3 +1,4 @@
+import { startExportRun } from "../utils/start-export-run.js";
 import fs from "node:fs/promises";
 import { getMainWindow } from "../shared-state.js";
 import { showOpenDialog, showSaveDialog } from "../utils/dialog-history.js";
@@ -11,23 +12,12 @@ import {
 } from "../../shared/composition-document.js";
 import { restoreSessionPaths } from "../utils/restore-session-paths.js";
 import { unwrapJobManifest } from "../utils/jobManifest.js";
-import { executeProcessingRun } from "../processing-run.js";
-import { validateProcessorAvailableAsync } from "../utils/processor-spawn.js";
-import { validateMediaBinaries } from "../utils/paths.js";
-import { sanitizeBatchJobMedia } from "../utils/process-media-validation.js";
-import { validateBatchOutputPaths } from "../utils/process-output.js";
-import { findUnreadableInputsAsync } from "../utils/process-input-validation.js";
-import {
-  captureProcessingPreparation,
-  isProcessingPreparationCurrent,
-} from "../utils/process-preparation.js";
 
 const label = (labels, key) =>
   typeof labels?.[key] === "string" ? labels[key].slice(0, 100) : "Composition";
 
 export function registerCompositionHandlers(pathSecurity) {
-  handleIpc(IPC_INVOKE.startComposition, async (_event, payload) => {
-    const generation = captureProcessingPreparation();
+  handleIpc(IPC_INVOKE.startComposition, async (_event, payload, options) => {
     const { jobs, manifest, error } = unwrapJobManifest(payload),
       job = jobs?.[0];
     if (
@@ -38,24 +28,7 @@ export function registerCompositionHandlers(pathSecurity) {
       validateCompositionJob(job)
     )
       return { success: false, errorCode: "COMPOSITION_INVALID" };
-    const spawnSpec = await validateProcessorAvailableAsync();
-    if (!spawnSpec.ok) return { success: false, error: spawnSpec.error };
-    const binaries = validateMediaBinaries();
-    if (!binaries.ok) return { success: false, error: binaries.error };
-    const outputDirectory = pathSecurity.getOutputDirectory();
-    if (!outputDirectory) return { success: false, errorCode: "OUTPUT_NOT_SELECTED" };
-    let safeJobs;
-    try {
-      safeJobs = await sanitizeBatchJobMedia([job], pathSecurity, { outputDirectory });
-      await validateBatchOutputPaths(safeJobs);
-      const unreadable = await findUnreadableInputsAsync(safeJobs);
-      if (unreadable.length)
-        return { success: false, errorCode: "MEDIA_UNREADABLE", unreadableInputs: unreadable };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-    if (!isProcessingPreparationCurrent(generation)) return { success: false, cancelled: true };
-    return executeProcessingRun({ manifest, jobs: safeJobs, outputDirectory, spawnSpec });
+    return startExportRun({ manifest, jobs }, pathSecurity, options);
   });
   handleIpc(IPC_INVOKE.saveComposition, async (_event, value, labels) => {
     const document = parseCompositionDocument(value);

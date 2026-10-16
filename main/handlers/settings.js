@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import { getMainWindow } from "../shared-state.js";
+import { getMainWindow, setHasUnexportedWork } from "../shared-state.js";
 import { readSettings, writeSettings, ALLOWED_SETTINGS_KEYS } from "../utils/settings.js";
 import { applyWindowTheme } from "../utils/windowTheme.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
@@ -38,5 +38,10 @@ export function registerSettingsHandlers() {
   handleIpc(IPC_INVOKE.setWindowTheme, async (_event, themeOrColors) => {
     applyWindowTheme(getMainWindow(), themeOrColors);
     return { success: true };
+  });
+
+  handleIpc(IPC_INVOKE.setUnexportedWork, (_event, value) => {
+    setHasUnexportedWork(value);
+    return true;
   });
 }

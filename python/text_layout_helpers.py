@@ -1,7 +1,12 @@
-"""Pure text wrapping, fitting and spacing math for drawtext."""
-
 import re
 import unicodedata
+from typing import NamedTuple
+
+
+class GlyphLayoutOffset(NamedTuple):
+    glyph: str
+    layout_dx: float
+    layout_dy: float
 
 
 def _estimate_char_width(font_size):
@@ -13,7 +18,6 @@ def _estimate_char_width(font_size):
 
 
 def _wrap_text_to_width(text, max_width_px, font_size):
-    """Word-wrap using the same heuristic as src/utils/text-layout.js."""
     raw = str(text or "")
     if not raw or max_width_px <= 0:
         return raw
@@ -63,7 +67,6 @@ def _layout_export_text(
     auto_fit=False,
     truncate="none",
 ):
-    """Wrap / fit / truncate using the same sequence as build_drawtext."""
     raw = str(text or "")
     if isinstance(text_wrap, str):
         text_wrap = text_wrap.lower() not in ("0", "false", "no")
@@ -118,13 +121,7 @@ def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_s
     if region_w <= 0 or region_h <= 0:
         return size
 
-    def _fits(font_size):
-        """True if text at font_size fits within the region.
-
-        Monotonic in font_size: a smaller size never wraps to more lines than a
-        larger one, and both total_h and line_w shrink as size shrinks, so if
-        size S fits every size <= S also fits. That makes binary search valid.
-        """
+    def _estimated_layout_fits(font_size):
         display = _wrap_text_to_width(text, region_w, font_size) if wrap else str(text or "")
         line_count = max(1, display.count("\n") + 1) if display else 1
         longest = max((len(line) for line in display.split("\n")), default=0)
@@ -132,13 +129,13 @@ def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_s
         line_w = longest * _estimate_char_width(font_size)
         return total_h <= region_h and line_w <= region_w
 
-    if _fits(size):
+    if _estimated_layout_fits(size):
         return size
     lo, hi = min_size, size
     best = min_size
     while lo <= hi:
         mid = (lo + hi) // 2
-        if _fits(mid):
+        if _estimated_layout_fits(mid):
             best = mid
             lo = mid + 1
         else:
@@ -147,7 +144,6 @@ def _fit_font_size(text, region_w, region_h, base_size, line_height, wrap, min_s
 
 
 def _text_clusters(text):
-    """Group combining marks and joined emoji so spacing is only added between glyphs."""
     clusters = []
     join_next = False
     for char in text:
@@ -216,18 +212,12 @@ def _text_glyph_positions(
     text_align="left",
     vertical_align="top",
 ):
-    """Layout glyph clusters with letter-spacing (incl. negative) as pixel offsets.
-
-    Returns a list of ``(cluster, x_off, y_off)`` relative to the layout box
-    top-left. Uses the same average-width heuristic as wrap/fit helpers so
-    export tracking stays consistent when drawtext has no native ``spacing``.
-    """
     try:
         spacing_px = float(spacing_px)
         font_size = max(1.0, float(font_size))
         line_height = float(line_height)
     except (TypeError, ValueError):
-        return [(str(text or ""), 0.0, 0.0)]
+        return [GlyphLayoutOffset(str(text or ""), 0.0, 0.0)]
 
     try:
         region_w = float(region_w or 0)
@@ -271,7 +261,7 @@ def _text_glyph_positions(
             x0 = 0.0
         y = y0 + line_index * line_step
         for cluster, dx in positions:
-            out.append((cluster, x0 + dx, y))
+            out.append(GlyphLayoutOffset(cluster, x0 + dx, y))
     return out
 
 
@@ -283,7 +273,6 @@ def _text_bg_enabled(op):
 
 
 def _text_box_pad(op):
-    """Inner text padding when the region background is enabled (matches CSS preview)."""
     if not _text_bg_enabled(op):
         return 0
     try:
@@ -294,7 +283,6 @@ def _text_box_pad(op):
 
 
 def _text_layout_bounds(region, safe_margin, box_pad):
-    """Usable text area inside a region (safe margin + optional box padding)."""
     rx = int(region.get("x", 0))
     ry = int(region.get("y", 0))
     rw = int(region.get("w", 0))
@@ -309,7 +297,6 @@ def _text_layout_bounds(region, safe_margin, box_pad):
 
 
 def _build_region_bg_drawbox(region, bg_color, bg_opacity, enable_clause=""):
-    """Fill the full text region — CSS preview paints inset:0, not a glyph box."""
     x = int(region.get("x", 0))
     y = int(region.get("y", 0))
     w = max(1, int(region.get("w", 0)))

@@ -2,6 +2,7 @@ import { lazy, useEffect, useRef, useState, Suspense } from "react";
 import useEditorStore from "./stores/useEditorStore";
 import useKeyboard from "./hooks/useKeyboard";
 import useProcessing from "./hooks/useProcessing";
+import { connectEditorAutosave } from "./features/editor/store/autosave.js";
 import Header from "./components/Header";
 import AppRail from "./components/AppRail";
 import QueueSidebar from "./components/QueueSidebar";
@@ -38,11 +39,13 @@ export default function App() {
   const isLogoMode = useEditorStore((s) => s.sidebarMode === "logo");
   const t = useT();
   const [mobilePanel, setMobilePanel] = useState("editor");
+  const [pathsReady, setPathsReady] = useState(!api?.restoreSessionPaths);
   const dragDepthRef = useRef(0);
   const DRAG_DEPTH_MAX = 32;
 
   useKeyboard();
   useProcessing(api);
+  useEffect(() => connectEditorAutosave(api), []);
 
   useEffect(() => {
     if (!api?.restoreSessionPaths) return;
@@ -58,8 +61,38 @@ export default function App() {
       }
     }
     if (watermark?.imagePath) imagePaths.push(watermark.imagePath);
-    if (!outputDir && videoPaths.length === 0 && !excelPath) return;
-    void api.restoreSessionPaths({ outputDir, videoPaths, imagePaths, audioPaths, excelPath });
+    if (
+      !outputDir &&
+      videoPaths.length === 0 &&
+      imagePaths.length === 0 &&
+      audioPaths.length === 0 &&
+      !excelPath
+    ) {
+      setPathsReady(true);
+      return;
+    }
+    let mounted = true;
+    void Promise.resolve()
+      .then(() =>
+        api.restoreSessionPaths({ outputDir, videoPaths, imagePaths, audioPaths, excelPath }),
+      )
+      .then((result) => {
+        const count = result?.errors?.length || 0;
+        if (mounted && count > 0)
+          showToast({
+            kind: "warn",
+            text: t("session.restorePathsFailed", { count: String(count) }),
+          });
+      })
+      .catch(() => {
+        if (mounted) showToast({ kind: "warn", text: t("session.restoreFailed") });
+      })
+      .finally(() => {
+        if (mounted) setPathsReady(true);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -166,6 +199,8 @@ export default function App() {
   };
 
   const dropHandlers = { onDragEnter, onDragOver, onDragLeave, onDrop };
+
+  if (!pathsReady) return <PanelLoading label={t("workspace.editor")} />;
 
   return (
     <div

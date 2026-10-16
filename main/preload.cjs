@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld("api", {
   loadSettings: invoke("settings:load"),
   saveSettings: invoke("settings:save"),
   setWindowTheme: invoke("window:setTheme"),
+  setUnexportedWork: invoke("window:setUnexportedWork"),
   getBatchCapacity: invoke("system:getBatchCapacity"),
   listRecent: invoke("recent:list"),
   addRecent: invoke("recent:add"),

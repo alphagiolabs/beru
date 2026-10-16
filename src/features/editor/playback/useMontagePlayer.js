@@ -16,6 +16,8 @@ function createMontageController(elements, latest, setActive, setStatus) {
     seekStart: [null, null],
     ready: [false, false],
     pendingPlay: false,
+    endClock: null,
+    tailClock: null,
   };
 
   const media = (slot) => elements[slot].current;
@@ -47,6 +49,7 @@ function createMontageController(elements, latest, setActive, setStatus) {
     const element = media(slot);
     if (!element || state.pendingSeek[slot] === null) return;
     state.seekStart[slot] = performance.now();
+    if (slot === state.active) state.endClock = null;
     element.currentTime = state.pendingSeek[slot];
     state.pendingSeek[slot] = null;
   }
@@ -111,8 +114,13 @@ function createMontageController(elements, latest, setActive, setStatus) {
   }
 
   function seekActiveTo(projectUs) {
+    state.tailClock = null;
     const entry = entryAt(latest.current.layout, projectUs);
-    if (!entry) return null;
+    if (!entry) {
+      pauseSlot(0);
+      pauseSlot(1);
+      return null;
+    }
     const slot = state.active;
     if (state.clipId[slot] !== entry.clip.id) {
       prepare(slot, entry, projectUs);
@@ -142,6 +150,7 @@ function createMontageController(elements, latest, setActive, setStatus) {
     const to = 1 - from;
     pauseSlot(from);
     state.active = to;
+    state.endClock = null;
     setActive(to);
     if (state.clipId[to] === next.clip.id && state.ready[to]) {
       void media(to)
@@ -153,17 +162,46 @@ function createMontageController(elements, latest, setActive, setStatus) {
     }
   }
 
+  function stepTail(projectUs) {
+    const now = performance.now();
+    state.tailClock ??= { startedAt: now, projectUs };
+    const { duration, onPlayhead, onPlayingChange } = latest.current;
+    const position =
+      state.tailClock.projectUs + Math.round((now - state.tailClock.startedAt) * 1000);
+    onPlayhead(Math.min(position, duration));
+    if (position >= duration) onPlayingChange(false);
+  }
+
   function step() {
+    if (state.tailClock) {
+      stepTail();
+      return;
+    }
     const slot = state.active;
     const element = media(slot);
     const clipId = state.clipId[slot];
     const entry = entryForClip(clipId);
     if (!element || !entry || !state.ready[slot]) return;
-    const { layout, onPlayhead, onPlayingChange } = latest.current;
-    const projectUs = projectUsAtSource(entry, element.currentTime * 1_000_000);
+    const { layout, duration, onPlayhead, onPlayingChange } = latest.current;
+    let projectUs = projectUsAtSource(entry, element.currentTime * 1_000_000);
+    if (element.ended) {
+      state.endClock ??= {
+        startedAt: performance.now(),
+        projectUs: Math.max(projectUs, latest.current.playhead),
+      };
+      projectUs =
+        state.endClock.projectUs +
+        Math.round((performance.now() - state.endClock.startedAt) * 1000);
+    } else {
+      state.endClock = null;
+    }
     const decision = decideAdvance(layout, clipId, projectUs);
     if (decision.kind === "end") {
       pauseSlot(slot);
+      if (duration > entry.endUs) {
+        stepTail(projectUs);
+        return;
+      }
       onPlayhead(entry.endUs);
       onPlayingChange(false);
       return;
@@ -220,14 +258,17 @@ function createMontageController(elements, latest, setActive, setStatus) {
       pauseSlot(0);
       pauseSlot(1);
       state.pendingPlay = false;
+      state.endClock = null;
+      state.tailClock = null;
       return undefined;
     }
     const entry = seekActiveTo(latest.current.playhead);
-    if (!entry) {
+    if (!entry && latest.current.playhead >= latest.current.duration) {
       latest.current.onPlayingChange(false);
       return undefined;
     }
-    tryPlay();
+    if (entry) tryPlay();
+    else stepTail(latest.current.playhead);
     let frame = 0;
     const tick = () => {
       step();
@@ -242,6 +283,7 @@ function createMontageController(elements, latest, setActive, setStatus) {
 
 export function useMontagePlayer({
   layout,
+  duration = layout.at(-1)?.endUs ?? 0,
   sourceUrlFor,
   layerFor,
   frames,
@@ -263,6 +305,7 @@ export function useMontagePlayer({
   useEffect(() => {
     latest.current = {
       layout,
+      duration,
       sourceUrlFor,
       layerFor,
       frames,

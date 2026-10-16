@@ -18,6 +18,11 @@ import { validateMediaBinaries } from "../utils/paths.js";
 import { validateProcessorAvailableAsync } from "../utils/processor-spawn.js";
 import { executeProcessingRun, cancelRun } from "../processing-run.js";
 import {
+  captureProcessingPreparation,
+  isProcessingPreparationCurrent,
+  cancelProcessingPreparation,
+} from "../utils/process-preparation.js";
+import {
   clearAutosave,
   identityChanged,
   inspectAssets,
@@ -45,8 +50,14 @@ const PROXY_CACHE_MAX = 20;
 const autosavePath = () => path.join(app.getPath("userData"), "editor-autosave.json");
 
 export function registerEditorHandlers(pathSecurity) {
-  let activePath = null;
+  const documentPaths = new Set();
   let publishedFrame = null;
+  let autosaveIO = Promise.resolve();
+  const updateAutosave = (operation) => {
+    const result = autosaveIO.then(operation);
+    autosaveIO = result.catch(() => {});
+    return result;
+  };
 
   handleIpc(IPC_INVOKE.openEditorProject, async () => {
     const { canceled, filePaths } = await showOpenDialog(getMainWindow(), {
@@ -59,10 +70,10 @@ export function registerEditorHandlers(pathSecurity) {
     if (!check.ok) return { success: false, error: check.error };
     const loaded = await readEditorDocument(check.resolvedPath);
     if (!loaded.ok) return { success: false, error: loaded.error };
-    activePath = check.resolvedPath;
+    documentPaths.add(check.resolvedPath);
     return {
       success: true,
-      filePath: activePath,
+      filePath: check.resolvedPath,
       project: loaded.project,
       assets: inspectAssets(loaded.project.assets, pathSecurity),
     };
@@ -70,8 +81,9 @@ export function registerEditorHandlers(pathSecurity) {
 
   handleIpc(
     IPC_INVOKE.saveEditorProject,
-    async (_event, { project, baseRevision, saveAs = false }) => {
-      let filePath = activePath;
+    async (_event, { project, baseRevision, filePath = null, saveAs = false }) => {
+      if (!saveAs && filePath && !documentPaths.has(filePath))
+        return { success: false, error: "Ruta de documento no autorizada" };
       const chooseNewPath = saveAs || !filePath;
       if (chooseNewPath) {
         const { canceled, filePath: chosen } = await showSaveDialog(getMainWindow(), {
@@ -89,8 +101,12 @@ export function registerEditorHandlers(pathSecurity) {
       );
       if (!result.ok)
         return { success: false, error: result.error, conflict: result.conflict === true };
-      activePath = filePath;
-      await clearAutosave(autosavePath());
+      documentPaths.add(filePath);
+      await updateAutosave(async () => {
+        const current = await readAutosave(autosavePath());
+        if (current.ok && JSON.stringify(current.autosave?.project) === JSON.stringify(project))
+          await clearAutosave(autosavePath());
+      });
       return { success: true, filePath, revision: result.revision };
     },
   );
@@ -101,19 +117,19 @@ export function registerEditorHandlers(pathSecurity) {
   });
 
   handleIpc(IPC_INVOKE.writeEditorAutosave, async (_event, { project }) => {
-    const result = await writeAutosave(autosavePath(), project);
+    const result = await updateAutosave(() => writeAutosave(autosavePath(), project));
     return result.ok ? { success: true } : { success: false, error: result.error };
   });
 
   handleIpc(IPC_INVOKE.readEditorAutosave, async () => {
-    const result = await readAutosave(autosavePath());
+    const result = await updateAutosave(() => readAutosave(autosavePath()));
     return result.ok
       ? { success: true, autosave: result.autosave }
       : { success: false, error: result.error };
   });
 
   handleIpc(IPC_INVOKE.clearEditorAutosave, async () => {
-    await clearAutosave(autosavePath());
+    await updateAutosave(() => clearAutosave(autosavePath()));
     return { success: true };
   });
 
@@ -148,14 +164,16 @@ export function registerEditorHandlers(pathSecurity) {
   );
 
   handleIpc(IPC_INVOKE.exportEditorComposition, async (_event, { manifest }) => {
-    const ready = await prepareRender(manifest, pathSecurity);
-    if (!ready.ok) return { success: false, error: ready.error };
+    const ready = await prepareRender(manifest, pathSecurity, "editor:export");
+    if (!ready.success) return ready;
 
     const { canceled, filePath } = await showSaveDialog(getMainWindow(), {
       title: "Exportar montaje a MP4",
       defaultPath: "montaje.mp4",
       filters: [{ name: "MP4", extensions: ["mp4"] }],
     });
+    if (!isProcessingPreparationCurrent(ready.preparation))
+      return { success: false, cancelled: true };
     if (canceled || !filePath) return { success: false, canceled: true };
     const output = filePath.toLowerCase().endsWith(".mp4") ? filePath : `${filePath}.mp4`;
     if (jobMediaSources(ready.job).some((source) => samePath(source.path, output))) {
@@ -163,31 +181,33 @@ export function registerEditorHandlers(pathSecurity) {
     }
 
     const result = await renderTo(ready, output, "export", pathSecurity);
-    return result.success ? { ...result, filePath: output } : result;
+    return result.success ? { ...result, filePath: result.path } : result;
   });
 
   handleIpc(IPC_INVOKE.renderEditorExactFrame, async (_event, { manifest, requestId }) => {
     if (typeof requestId !== "string" || !/^[\w-]{1,64}$/.test(requestId)) {
       return { success: false, error: "Identificador de vista inválido" };
     }
-    const ready = await prepareRender(manifest, pathSecurity);
-    if (!ready.ok) return { success: false, error: ready.error };
+    const ready = await prepareRender(manifest, pathSecurity, "editor:frame");
+    if (!ready.success) return ready;
 
     const framesDir = path.join(app.getPath("userData"), "editor-frames");
     const output = path.join(framesDir, `${requestId}.png`);
     await fs.promises.mkdir(framesDir, { recursive: true });
     const result = await renderTo(ready, output, "frame", pathSecurity);
     if (result.success) {
-      if (publishedFrame && publishedFrame !== output)
+      if (publishedFrame && publishedFrame !== result.path)
         await fs.promises.rm(publishedFrame, { force: true }).catch(() => {});
-      publishedFrame = output;
+      publishedFrame = result.path;
     }
-    return result.success ? { success: true, path: output, requestId } : result;
+    return result.success ? { success: true, path: result.path, requestId } : result;
   });
 
-  handleIpc(IPC_INVOKE.cancelEditorExport, async (_event, payload) =>
-    cancelRun({ owner: payload?.kind === "frame" ? "editor:frame" : "editor:export" }),
-  );
+  handleIpc(IPC_INVOKE.cancelEditorExport, async (_event, payload) => {
+    const owner = payload?.kind === "frame" ? "editor:frame" : "editor:export";
+    cancelProcessingPreparation(owner);
+    return cancelRun({ owner });
+  });
 
   handleIpc(IPC_INVOKE.createEditorPreviewProxy, async (_event, { source }) => {
     const problem = sourceProblem(source, pathSecurity);
@@ -200,14 +220,14 @@ export function registerEditorHandlers(pathSecurity) {
     }
 
     const manifest = buildPreviewProxyManifest(source, proxyPath);
-    const ready = await prepareRender(manifest, pathSecurity);
-    if (!ready.ok) return { success: false, error: ready.error };
+    const ready = await prepareRender(manifest, pathSecurity, "editor:proxy");
+    if (!ready.success) return ready;
 
     await fs.promises.mkdir(path.dirname(proxyPath), { recursive: true });
     const result = await renderTo(ready, proxyPath, "proxy", pathSecurity);
     if (!result.success) return result;
     await pruneProxies(path.dirname(proxyPath));
-    return { success: true, path: proxyPath };
+    return { success: true, path: result.path };
   });
 }
 
@@ -307,7 +327,8 @@ function buildPreviewProxyManifest(source, outputPath) {
   ]);
 }
 
-async function prepareRender(payload, pathSecurity) {
+async function prepareRender(payload, pathSecurity, owner) {
+  const preparation = captureProcessingPreparation(owner);
   try {
     const { jobs, manifest, error } = unwrapJobManifest(payload);
     if (error) throw new Error(error);
@@ -330,15 +351,18 @@ async function prepareRender(payload, pathSecurity) {
     const binaries = validateMediaBinaries();
     if (!binaries.ok) throw new Error(binaries.error);
     const spawnSpec = await validateProcessorAvailableAsync();
+    if (!isProcessingPreparationCurrent(preparation)) return { success: false, cancelled: true };
     if (!spawnSpec.ok) throw new Error(spawnSpec.error);
-    return { ok: true, spawnSpec, job, manifest };
+    return { success: true, spawnSpec, job, manifest, preparation };
   } catch (error) {
-    return { ok: false, error: error.message };
+    return { success: false, error: error.message };
   }
 }
 
 async function renderTo(ready, output, kind, pathSecurity) {
   try {
+    if (!isProcessingPreparationCurrent(ready.preparation))
+      return { success: false, cancelled: true };
     const outputDirectory = path.dirname(output);
     const jobs = await sanitizeBatchJobMedia(
       [{ ...ready.job, output_path: output }],
@@ -346,7 +370,9 @@ async function renderTo(ready, output, kind, pathSecurity) {
       { outputDirectory },
     );
     await validateBatchOutputPaths(jobs);
-    return await executeProcessingRun({
+    if (!isProcessingPreparationCurrent(ready.preparation))
+      return { success: false, cancelled: true };
+    const result = await executeProcessingRun({
       manifest: ready.manifest,
       jobs,
       outputDirectory,
@@ -355,6 +381,9 @@ async function renderTo(ready, output, kind, pathSecurity) {
       events:
         kind === "export" ? { [IPC_EVENTS.onJobProgress]: IPC_EVENTS.onEditorExportProgress } : {},
     });
+    return result.success
+      ? { ...result, path: result.outputs.find(({ index }) => index === jobs[0].id).output }
+      : result;
   } catch (error) {
     return { success: false, error: error.message };
   }
