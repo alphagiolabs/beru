@@ -1,6 +1,6 @@
 import { fetchVideoInfos } from "../../utils/video-info.js";
 import { createQueueItem, uid, ensureNormalized } from "../../utils/types";
-import { createOperation } from "../../utils/operation";
+import { cloneOperation, createOperation } from "../../utils/operation";
 import { normalizeClockFields, parseClockStart } from "../../utils/datetime-stamp";
 import { clampRegionToVideo, isRegionUsable } from "../../utils/video-utils";
 import { getLockedDimensions, mergeProbeIntoQueueItem } from "../../utils/video-dimensions";
@@ -24,7 +24,6 @@ import {
 } from "../../utils/stamp-geometry.js";
 import { audioSettingsEqual, normalizeAudio } from "../../utils/audio-settings.js";
 import { normalizeAudioAsset } from "../../../shared/audio-asset.js";
-import { releaseUnownedVideoPaths } from "../../utils/video-path-ownership.js";
 import { normalizeVideoSettings } from "../../../shared/video-settings.js";
 import {
   normalizeTiming,
@@ -84,10 +83,6 @@ export function createQueueSlice(set, get) {
   const pendingThumbnails = new Map();
   let thumbnailFlushQueued = false;
 
-  const releaseVideoPaths = (paths) => {
-    releaseUnownedVideoPaths(paths, get());
-  };
-
   const flushPendingThumbnails = () => {
     thumbnailFlushQueued = false;
     if (pendingThumbnails.size === 0) return;
@@ -121,9 +116,29 @@ export function createQueueSlice(set, get) {
   };
 
   const snapshotItem = (item) => ({
-    operations: get()._cloneOps(item.operations),
+    operations: item.operations.map(cloneOperation),
     ...normalizeVideoSettings(item),
   });
+
+  const editVideoSettings = (videoIdx, item, { recordHistory = true } = {}) => {
+    set((state) => {
+      const queue = [...state.queue];
+      queue[videoIdx] = item;
+      return {
+        queue,
+        ...(recordHistory
+          ? {
+              undoStack: [
+                ...state.undoStack.slice(-(MAX_UNDO_STACK - 1)),
+                snapshotItem(state.queue[videoIdx]),
+              ],
+              redoStack: [],
+            }
+          : {}),
+      };
+    });
+    return true;
+  };
 
   const restoreHistory = (sourceStack, targetStack) => {
     const { [sourceStack]: history, queue, selectedIdx } = get();
@@ -344,7 +359,6 @@ export function createQueueSlice(set, get) {
     },
 
     removeVideo: (idx) => {
-      const removedPath = get().queue[idx]?.path;
       set((s) => {
         const removed = s.queue[idx];
         const next = s.queue.filter((_, i) => i !== idx);
@@ -368,8 +382,6 @@ export function createQueueSlice(set, get) {
           batchSummary: null,
         }).patch;
       });
-      if (removedPath && !get().queue.some((item) => item.path === removedPath))
-        releaseVideoPaths([removedPath]);
     },
 
     clearQueue: () => {
@@ -395,7 +407,6 @@ export function createQueueSlice(set, get) {
         _thumbnailAbortControllers: new Set(),
         thumbnailsByPath: {},
       });
-      releaseVideoPaths(queue.map((item) => item.path));
       return true;
     },
 
@@ -489,16 +500,13 @@ export function createQueueSlice(set, get) {
       const current = normalizeTransform(queue[selectedIdx].transform);
       const next = normalizeTransform({ ...current, ...patch });
       if (transformsEqual(current, next)) return;
-      get()._saveUndo();
       const item = queue[selectedIdx];
       const operations = fitStampsToOutput(
         item.operations,
         itemOutputGeometry(item, current)?.output,
         itemOutputGeometry(item, next)?.output,
       );
-      const updated = [...queue];
-      updated[selectedIdx] = { ...item, transform: next, operations };
-      set({ queue: updated });
+      editVideoSettings(selectedIdx, { ...item, transform: next, operations });
     },
 
     setVideoAudio: (patch, { recordHistory = true } = {}) => {
@@ -507,11 +515,11 @@ export function createQueueSlice(set, get) {
       const current = normalizeAudio(queue[selectedIdx].audio);
       const next = normalizeAudio({ ...current, ...patch });
       if (audioSettingsEqual(current, next)) return false;
-      if (recordHistory) get()._saveUndo();
-      const updated = [...queue];
-      updated[selectedIdx] = { ...updated[selectedIdx], audio: next };
-      set({ queue: updated });
-      return true;
+      return editVideoSettings(
+        selectedIdx,
+        { ...queue[selectedIdx], audio: next },
+        { recordHistory },
+      );
     },
 
     setVideoTiming: (patch) => {
@@ -528,11 +536,7 @@ export function createQueueSlice(set, get) {
         return false;
       const item = { ...queue[selectedIdx], timing: next };
       if (!timingWithinLimit(item)) return false;
-      get()._saveUndo();
-      const updated = [...queue];
-      updated[selectedIdx] = item;
-      set({ queue: updated });
-      return true;
+      return editVideoSettings(selectedIdx, item);
     },
 
     setExternalAudio: (patch, { recordHistory = true } = {}) => {
@@ -542,18 +546,12 @@ export function createQueueSlice(set, get) {
       const next = patch === null ? null : normalizeAudioAsset({ ...current, ...patch });
       if ((patch !== null && !next) || JSON.stringify(current) === JSON.stringify(next))
         return false;
-      if (recordHistory) get()._saveUndo();
-      const updated = [...queue];
-      updated[selectedIdx] = { ...updated[selectedIdx], externalAudio: next };
-      set({ queue: updated });
-      return true;
+      return editVideoSettings(
+        selectedIdx,
+        { ...queue[selectedIdx], externalAudio: next },
+        { recordHistory },
+      );
     },
-
-    _cloneOps: (ops) =>
-      ops.map((op) => ({
-        ...op,
-        region: op.region ? { ...op.region } : null,
-      })),
 
     addOperation: (mode) => {
       const { queue, selectedIdx, currentRegion } = get();

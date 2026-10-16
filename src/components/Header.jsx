@@ -57,7 +57,9 @@ export default function Header() {
   const showToast = useEditorStore((s) => s.showToast);
   const canUndo = useEditorStore((s) => (s.undoStack?.length ?? 0) > 0);
   const canRedo = useEditorStore((s) => (s.redoStack?.length ?? 0) > 0);
-  const capacitySig = useEditorStore((s) => capacityJobsSignature(s.queue, s.templateRegions));
+  const capacitySig = useEditorStore((s) =>
+    capacityJobsSignature(s.queue, s.templateRegions, s.watermark),
+  );
   const t = useT();
   const get = useEditorStore.getState;
   const [testResult, setTestResult] = useState(null);
@@ -71,8 +73,8 @@ export default function Header() {
     let cancelled = false;
     let timer = 0;
     timer = setTimeout(() => {
-      const { queue, templateRegions } = get();
-      const capacityInput = queueCapacityInput(queue, templateRegions);
+      const { queue, templateRegions, watermark } = get();
+      const capacityInput = queueCapacityInput(queue, templateRegions, watermark);
       api
         .getBatchCapacity({
           jobCount: Math.max(1, capacityInput.queueLength),
@@ -116,7 +118,7 @@ export default function Header() {
     if (res.ok) {
       setSavePresetOpen(false);
       flashToast("ok", t("header.savedPresetAs", { name: res.fileName }));
-    } else {
+    } else if (!res.canceled) {
       flashToast("err", res.error || t("header.couldNotSavePreset"));
     }
   };

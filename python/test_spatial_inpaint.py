@@ -1,5 +1,3 @@
-"""Inpaint texture and edge continuity through export and the exact preview."""
-
 import base64
 import subprocess
 import tempfile
@@ -8,12 +6,13 @@ from pathlib import Path
 import numpy as np
 
 import processor
+import media_probe
 from filters import build_filter_complex
 from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 
-FFMPEG = processor.find_ffmpeg()
-processor.FFMPEG = FFMPEG
-processor.FFPROBE = processor.find_ffprobe(FFMPEG)
+FFMPEG = media_probe.find_ffmpeg()
+media_probe.FFMPEG = FFMPEG
+media_probe.FFPROBE = media_probe.find_ffprobe(FFMPEG)
 WIDTH, HEIGHT, FPS = 192, 112, 12
 BOX = {"x": 76, "y": 40, "w": 18, "h": 24}
 OP = {"mode": "delogo", "delogo_method": "inpaint", "region": BOX, "edge_feather": 0}

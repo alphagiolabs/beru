@@ -2,7 +2,7 @@ import { BrowserWindow, dialog } from "electron";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
-import { setMainWindow, isDev, DEV_URL } from "../shared-state.js";
+import { setMainWindow, getHasUnexportedWork, isDev, DEV_URL } from "../shared-state.js";
 import { cancelRun, hasActiveProcessing } from "../processing-run.js";
 import { readSettings } from "./settings.js";
 import {
@@ -82,19 +82,34 @@ export function createWindow() {
   win.on("close", (event) => {
     if (closeConfirmed) return;
     if (updater.isQuittingForUpdate()) return;
-    if (!hasActiveProcessing()) return;
+    const processing = hasActiveProcessing();
+    if (!processing && !getHasUnexportedWork()) return;
 
     event.preventDefault();
     dialog
-      .showMessageBox(win, {
-        type: "warning",
-        buttons: ["Cancelar y salir", "Seguir procesando"],
-        defaultId: 1,
-        cancelId: 1,
-        title: "Beru",
-        message: "Hay un procesamiento en curso. ¿Cancelar y salir?",
-        detail: "Si sales ahora, el lote actual se cancelará.",
-      })
+      .showMessageBox(
+        win,
+        processing
+          ? {
+              type: "warning",
+              buttons: ["Cancelar y salir", "Seguir procesando"],
+              defaultId: 1,
+              cancelId: 1,
+              title: "Beru",
+              message: "Hay un procesamiento en curso. ¿Cancelar y salir?",
+              detail: "Si sales ahora, el lote actual se cancelará.",
+            }
+          : {
+              type: "warning",
+              buttons: ["Salir de todas formas", "Volver"],
+              defaultId: 1,
+              cancelId: 1,
+              title: "Beru",
+              message: "Hay cambios sin guardar o videos sin exportar. ¿Salir de todas formas?",
+              detail:
+                "Guarda el montaje o exporta los videos antes de cerrar para conservar tu trabajo.",
+            },
+      )
       .then(async ({ response }) => {
         if (response !== 0) return;
         closeConfirmed = true;

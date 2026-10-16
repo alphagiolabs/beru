@@ -7,13 +7,14 @@ import {
   cancelTimelineGesture,
   endTimelineGesture,
   importSources,
+  importImageLayer,
   createPreviewProxy,
   openDocument,
   relinkLibraryAsset,
   saveDocument,
   setTransformOfClip,
-  writeAutosave,
 } from "../src/features/editor/editor-actions.js";
+import { writeAutosave } from "../src/features/editor/store/autosave.js";
 import { createHistory } from "../src/features/editor/store/history.js";
 import { selectIsDirty, useTimelineStore } from "../src/features/editor/store/useTimelineStore.js";
 
@@ -43,6 +44,79 @@ function resetStore(project = createEmptyEditorProject()) {
 }
 
 const store = () => useTimelineStore.getState();
+
+describe("document ownership across pending requests", () => {
+  it.each(["save", "videos", "image", "relink", "proxy"])(
+    "ignores a late %s result after another document is opened",
+    async (operation) => {
+      const added = addAsset(createEmptyEditorProject(), source("old.mp4"));
+      store().open(added.project, { filePath: "C:/old.beru-edit.json" });
+      let resolve;
+      const reply = new Promise((done) => {
+        resolve = done;
+      });
+      const api = {
+        saveEditorProject: () => reply,
+        importEditorVideos: () => reply,
+        importEditorImage: () => reply,
+        pickEditorReplacement: () => reply,
+        createEditorPreviewProxy: () => reply,
+      };
+      const pending = {
+        save: () => saveDocument(api),
+        videos: () => importSources(api),
+        image: () => importImageLayer(api, 0),
+        relink: () => relinkLibraryAsset(api, added.assetId),
+        proxy: () => createPreviewProxy(api, added.project.assets[0]),
+      }[operation]();
+      const current = createEmptyEditorProject({ name: "Current document" });
+      store().open(current, { filePath: "C:/current.beru-edit.json" });
+      resolve({
+        success: true,
+        filePath: "C:/old.beru-edit.json",
+        path: "C:/proxy.mp4",
+        sources: [source("late.mp4")],
+        source: source("late.png", { metadata: { durationUs: null, width: 40, height: 40 } }),
+        errors: [],
+      });
+      expect(await pending).toMatchObject({ success: false, canceled: true });
+      expect(store().history.present).toBe(current);
+      expect(store().cleanProject).toBe(current);
+      expect(store().filePath).toBe("C:/current.beru-edit.json");
+      expect(store().assetStatus).toEqual({});
+      expect(store().previewPaths).toEqual({});
+    },
+  );
+
+  it("keeps the latest open request when replies arrive out of order", async () => {
+    resetStore();
+    let resolveFirst;
+    const first = openDocument({
+      openEditorProject: () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    });
+    const current = createEmptyEditorProject({ name: "Second" });
+    await openDocument({
+      openEditorProject: async () => ({
+        success: true,
+        project: current,
+        filePath: "C:/second.json",
+        assets: [],
+      }),
+    });
+    resolveFirst({
+      success: true,
+      project: createEmptyEditorProject(),
+      filePath: "C:/first.json",
+      assets: [],
+    });
+    expect(await first).toMatchObject({ success: false, canceled: true });
+    expect(store().history.present).toBe(current);
+    expect(store().filePath).toBe("C:/second.json");
+  });
+});
 
 describe("importSources", () => {
   beforeEach(() => resetStore());
@@ -164,7 +238,23 @@ describe("saving", () => {
 });
 
 describe("opening", () => {
+  it("preserves a dirty document when discarding its changes is declined", async () => {
+    resetStore();
+    store().apply((p) => setCanvas(p, { width: 800 }));
+    const current = store().history.present;
+    const api = { openEditorProject: vi.fn() };
+    const confirmDiscard = vi.fn(async () => false);
+    expect(await openDocument(api, { confirmDiscard })).toMatchObject({
+      success: false,
+      canceled: true,
+    });
+    expect(confirmDiscard).toHaveBeenCalledOnce();
+    expect(api.openEditorProject).not.toHaveBeenCalled();
+    expect(store().history.present).toBe(current);
+  });
+
   it("replaces the document, keeps the file path and marks media statuses from the open result", async () => {
+    resetStore();
     const added = addAsset(createEmptyEditorProject(), source("open.mp4"));
     const project = insertClip(added.project, { assetId: added.assetId }).project;
     const api = {

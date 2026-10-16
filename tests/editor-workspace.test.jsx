@@ -26,7 +26,13 @@ import EditorWorkspace from "../src/features/editor/EditorWorkspace.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { useTimelineStore } from "../src/features/editor/store/useTimelineStore.js";
 import { createEmptyEditorProject } from "../shared/editor-project.js";
-import { addAsset, addImageOverlay, insertClip, layoutTrack } from "../shared/editor-timeline.js";
+import {
+  addAsset,
+  addImageOverlay,
+  addTextOverlay,
+  insertClip,
+  layoutTrack,
+} from "../shared/editor-timeline.js";
 import { createHistory } from "../src/features/editor/store/history.js";
 import { useEditorSession } from "../src/features/editor/store/useEditorSession.js";
 
@@ -79,6 +85,28 @@ describe("EditorWorkspace", () => {
     expect(container.textContent).toContain("Importa videos para empezar.");
     expect(buttonWithText("Exportar MP4").disabled).toBe(true);
     expect(buttonWithText("Abrir")).toBeTruthy();
+  });
+
+  it("uses the overlay tail for transport and navigation and reveals the canvas after the video", () => {
+    const added = addAsset(createEmptyEditorProject(), {
+      path: "C:/Videos/a.mp4",
+      filename: "a.mp4",
+      metadata: { durationUs: 1_000_000, width: 320, height: 180 },
+    });
+    const project = insertClip(added.project, { assetId: added.assetId }).project;
+    resetDocument(
+      addTextOverlay(project, { startUs: 0, endUs: 3_000_000, text: "Final title" }).project,
+    );
+    useEditorSession.getState().reset();
+    mount();
+    expect(Number(container.querySelector(".editor-scrubber").max)).toBe(3);
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "End" })));
+    expect(useEditorSession.getState().playhead).toBe(3_000_000);
+    act(() => useEditorSession.getState().setPlayhead(2_000_000));
+    expect(container.querySelectorAll(".editor-clip-frame.is-active")).toHaveLength(0);
+    expect(container.querySelector(".editor-canvas .editor-overlay-text").textContent).toBe(
+      "Final title",
+    );
   });
 
   it("explains a missing source and keeps it out of the montage until it is located", () => {

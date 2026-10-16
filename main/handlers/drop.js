@@ -36,7 +36,10 @@ export function registerDropHandlers(pathSecurity) {
         ignoredCount++;
       }
     }
-    pathSecurity.registerAllowedPaths(videoPaths, "video");
-    return { videoPaths, ignoredCount };
+    const allowedPaths = pathSecurity.registerSelectedPaths(videoPaths, "video");
+    return {
+      videoPaths: allowedPaths,
+      ignoredCount: ignoredCount + videoPaths.length - allowedPaths.length,
+    };
   });
 }

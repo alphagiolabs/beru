@@ -24,8 +24,6 @@ export default function DraftNumberInput({
       type="number"
       {...inputProps}
       value={draft ?? value}
-      // React's onChange skips edits that leave the value unchanged (a badInput field stays
-      // ""), so every native edit is read from onInput; onChange only satisfies controlled-input rules.
       onChange={() => {}}
       onInput={(e) => {
         const text = e.target.value;

@@ -1,5 +1,3 @@
-"""Run isolation through processor execution and the NDJSON worker interface."""
-
 import io
 import json
 import os
@@ -78,8 +76,7 @@ class ProcessorContextTests(unittest.TestCase):
                         return True, None
 
                     stdout = io.StringIO()
-                    with patch.object(media_probe, "ffprobe", return_value=info), patch.object(
-                        processor, "_run_ffmpeg", side_effect=run
+                    with patch.object(media_probe, "ffprobe", return_value=info), patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run
                     ), redirect_stdout(stdout):
                         result = processor.process_jobs([job], ctx.ffmpeg_path, ctx=ctx)
                     events = [json.loads(line) for line in stdout.getvalue().splitlines()]
@@ -106,8 +103,7 @@ class ProcessorContextTests(unittest.TestCase):
                 encoders_used[Path(cmd[-1]).name] = cmd[cmd.index("-c:v") + 1]
                 return True, None
 
-            with patch.object(processor, "_run_ffmpeg", side_effect=run), patch.object(
-                processor, "detect_hw_encoder", return_value="h264_nvenc"
+            with patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run), patch.object(encoders, "detect_hw_encoder", return_value="h264_nvenc"
             ), redirect_stdout(io.StringIO()):
                 result = processor.process_jobs(jobs, "ffmpeg", hw_encoder="h264_nvenc")
             self.assertEqual(result["succeeded"], 2, result)
@@ -119,7 +115,7 @@ class ProcessorContextTests(unittest.TestCase):
             first = BatchContext(ffmpeg_path="ffmpeg")
             second = BatchContext(ffmpeg_path="ffmpeg")
             first.cancel_event.set()
-            with patch.object(processor, "_run_ffmpeg", return_value=(True, None)), redirect_stdout(io.StringIO()):
+            with patch.object(ffmpeg_runner, "_run_ffmpeg", return_value=(True, None)), redirect_stdout(io.StringIO()):
                 cancelled = processor.process_jobs([job], "ffmpeg", ctx=first)
                 completed = processor.process_jobs([job], "ffmpeg", ctx=second)
             self.assertEqual(
@@ -160,8 +156,7 @@ class ProcessorContextTests(unittest.TestCase):
                     return real_popen([sys.executable, "-u", "-c", code], **kwargs)
 
                 started = time.monotonic()
-                with patch.object(ffmpeg_runner.subprocess, "Popen", side_effect=launch), patch.object(
-                    processor, "detect_hw_encoder", return_value=gpu
+                with patch.object(ffmpeg_runner.subprocess, "Popen", side_effect=launch), patch.object(encoders, "detect_hw_encoder", return_value=gpu
                 ), redirect_stdout(io.StringIO()):
                     result = processor.process_jobs([job], ctx.ffmpeg_path, max_workers=1, ctx=ctx)
                 for timer in timers:
@@ -197,8 +192,7 @@ class ProcessorContextTests(unittest.TestCase):
                 ctx.cancel_event.set()
                 return False, "Cancelled"
 
-            with patch.object(processor, "_run_ffmpeg", side_effect=run), patch.object(
-                processor, "_get_available_ram_mb", return_value=32_000
+            with patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run), patch.object(capacity, "_get_available_ram_mb", return_value=32_000
             ), redirect_stdout(io.StringIO()):
                 result = processor.process_jobs(jobs, "ffmpeg", max_workers=2, ctx=ctx)
             self.assertEqual(result["cancelled"], 2, result)
@@ -210,7 +204,7 @@ class ProcessorContextTests(unittest.TestCase):
         with redirect_stdout(stdout):
             for _ in range(2):
                 ctx = BatchContext(ffmpeg_path=sys.executable)
-                result = processor._run_ffmpeg_stream(
+                result = ffmpeg_runner._run_ffmpeg_stream(
                     [sys.executable, "-u", "-c", code], 3, 42, 1, ctx=ctx
                 )
                 self.assertEqual(result, (True, None))
@@ -240,9 +234,8 @@ class ProcessorContextTests(unittest.TestCase):
             stdout = io.StringIO()
             with patch.dict(os.environ, {"BERU_WORKERS": "1"}), patch.object(
                 processor.sys, "stdin", stdin
-            ), patch.object(processor, "_init_ffmpeg_globals", return_value=True), patch.object(
-                processor, "detect_hw_encoder", return_value=None
-            ) as detect, patch.object(processor, "_run_ffmpeg", side_effect=run), redirect_stdout(stdout):
+            ), patch.object(processor, "_init_ffmpeg_globals", return_value=True), patch.object(encoders, "detect_hw_encoder", return_value=None
+            ) as detect, patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run), redirect_stdout(stdout):
                 processor.job_worker_main()
                 self.assertEqual(os.environ.get("BERU_WORKERS"), "1")
             events = [json.loads(line) for line in stdout.getvalue().splitlines()]
@@ -271,8 +264,7 @@ class ProcessorContextTests(unittest.TestCase):
             stdout = io.StringIO()
             with patch.object(processor.sys, "stdin", stdin), patch.object(
                 processor, "_init_ffmpeg_globals", return_value=True
-            ), patch.object(processor, "detect_hw_encoder", return_value=None), patch.object(
-                processor, "_run_ffmpeg", return_value=(True, None)
+            ), patch.object(encoders, "detect_hw_encoder", return_value=None), patch.object(ffmpeg_runner, "_run_ffmpeg", return_value=(True, None)
             ), redirect_stdout(stdout):
                 processor.job_worker_main()
             events = [json.loads(line) for line in stdout.getvalue().splitlines()]
@@ -316,8 +308,8 @@ class ProcessorContextTests(unittest.TestCase):
                 commands.append(cmd)
                 return True, None
 
-            with patch.object(processor, "_run_ffmpeg", side_effect=run), patch.object(
-                processor.media_probe.subprocess, "run", side_effect=probe
+            with patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run), patch.object(
+                media_probe.subprocess, "run", side_effect=probe
             ), redirect_stdout(io.StringIO()):
                 for name, binary in zip(("ffmpeg-a", "ffmpeg-b", "ffmpeg-a"), (binaries[0], binaries[1], binaries[0])):
                     ctx = BatchContext(ffmpeg_path=name, ffprobe_path=str(binary))

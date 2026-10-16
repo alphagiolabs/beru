@@ -16,7 +16,7 @@ describe("audit: project configuration", () => {
     expect(changelog.includes(header)).toBe(true);
   });
 
-  it("electron-builder output directory matches the release workflow", () => {
+  it("pins the electron-builder output directory used by release metadata", () => {
     expect(pkg.build.directories.output).toBe("dist-installer");
   });
 });

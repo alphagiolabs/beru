@@ -1,18 +1,9 @@
-"""Regression: when startTime >= endTime (empty/invalid range), the op must be
-disabled — NOT applied for every t. Previously `_build_enable_clause` returned ""
-for e<=s, which callers interpreted as "no time filter" → op applied always.
-The fix: `build_filter_complex` skips the op entirely when the range is empty.
-
-This test drives `build_filter_complex` with a text op where start=10, end=5
-and asserts the resulting filter graph contains NO drawtext for that op.
-"""
-
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from processor import build_filter_complex  # noqa: E402
+from filters import build_filter_complex# noqa: E402
 from op_shared import _is_op_time_disabled  # noqa: E402
 
 

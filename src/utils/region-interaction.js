@@ -2,19 +2,7 @@ import { clampRegionToVideo } from "./video-utils";
 
 const MIN_SIZE = 0.01;
 
-/** @typedef {{ x: number, y: number, w: number, h: number }} Region */
-/** @typedef {"tl"|"tc"|"tr"|"ml"|"mr"|"bl"|"bc"|"br"} HandleId */
-
-export const RESIZE_HANDLES = /** @type {const} */ ([
-  "tl",
-  "tc",
-  "tr",
-  "ml",
-  "mr",
-  "bl",
-  "bc",
-  "br",
-]);
+export const RESIZE_HANDLES = ["tl", "tc", "tr", "ml", "mr", "bl", "bc", "br"];
 
 export function cursorForHandle(handle) {
   const m = {
@@ -30,13 +18,6 @@ export function cursorForHandle(handle) {
   return m[handle] || "move";
 }
 
-/**
- * contentPx is the visible letterboxed content measured in CSS pixels.
- *
- * @param {{ clientX: number, clientY: number }} start
- * @param {{ clientX: number, clientY: number }} now
- * @param {{ width: number, height: number }} contentPx
- */
 export function pointerDeltaToNorm(start, now, contentPx) {
   const w = contentPx?.width || 1;
   const h = contentPx?.height || 1;
@@ -96,30 +77,12 @@ export function applyResize(start, handle, dx, dy, minSize = MIN_SIZE) {
   return clampRegionToVideo(next, 1, 1, minSize);
 }
 
-/**
- * Region after typing a source-pixel value into one of X/Y/W/H. Values are
- * rounded to whole pixels and kept inside the frame; non-finite input yields null.
- *
- * @param {Region} region
- * @param {"x"|"y"|"w"|"h"} key
- * @param {number} px
- * @param {{ w: number, h: number }} dims source presentation size in pixels
- */
 export function regionFromFieldPixels(region, key, px, dims) {
   const dim = key === "x" || key === "w" ? dims?.w : dims?.h;
   if (!Number.isFinite(px) || !(dim > 0)) return null;
   return clampRegionToVideo({ ...region, [key]: Math.round(px) / dim });
 }
 
-/**
- * Re-proportions a region to `aspect` (width / height in source pixels).
- * Keeps the region's width when the frame allows it, otherwise shrinks to fit,
- * and stays centred on the original region inside the frame.
- *
- * @param {Region} region
- * @param {number} aspect
- * @param {{ w: number, h: number }} dims source presentation size in pixels
- */
 export function fitRegionToAspect(region, aspect, dims) {
   if (!region || !(aspect > 0) || !(dims?.w > 0) || !(dims?.h > 0)) return null;
   const W = dims.w;

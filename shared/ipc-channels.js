@@ -26,6 +26,7 @@ export const IPC_INVOKE = {
   loadSettings: "settings:load",
   saveSettings: "settings:save",
   setWindowTheme: "window:setTheme",
+  setUnexportedWork: "window:setUnexportedWork",
   getBatchCapacity: "system:getBatchCapacity",
   listRecent: "recent:list",
   addRecent: "recent:add",

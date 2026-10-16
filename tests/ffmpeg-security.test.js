@@ -5,7 +5,7 @@ import os from "os";
 import path from "path";
 
 const PYTHON = "python";
-const PYTHON_PREFIX = "import sys; sys.path.insert(0, 'python'); import processor; ";
+const PYTHON_PREFIX = "import sys; sys.path.insert(0, 'python'); import filters, media_paths; ";
 
 function runPython(code, args = []) {
   return spawnSync(PYTHON, ["-c", PYTHON_PREFIX + code, ...args], {
@@ -25,7 +25,7 @@ describe("FFmpeg security validation", () => {
         [
           "root, candidate = sys.argv[1:3]",
           "try:",
-          "    processor.validate_media_path(candidate, root, {'.mp4'})",
+          "    media_paths.validate_media_path(candidate, root, {'.mp4'})",
           "except ValueError:",
           "    print('rejected')",
           "else:",
@@ -46,7 +46,7 @@ describe("FFmpeg security validation", () => {
       [
         "op = {'text': 'unsafe\\x00text', 'font_color': 'white', 'region': {'x': 0, 'y': 0, 'w': 400, 'h': 100}}",
         "try:",
-        "    processor.build_drawtext(op)",
+        "    filters.build_drawtext(op)",
         "except ValueError:",
         "    print('rejected')",
         "else:",
@@ -66,7 +66,7 @@ describe("FFmpeg security validation", () => {
         "for text in values:",
         "    op = {'text': text, 'font_color': 'white', 'region': {'x': 0, 'y': 0, 'w': 400, 'h': 100}}",
         "    try:",
-        "        processor.build_drawtext(op)",
+        "        filters.build_drawtext(op)",
         "    except ValueError:",
         "        results.append('rejected')",
         "    else:",
@@ -88,7 +88,7 @@ describe("FFmpeg security validation", () => {
         "    op = dict(base)",
         "    op[field] = 'white:shadowx=999'",
         "    try:",
-        "        processor.build_drawtext(op)",
+        "        filters.build_drawtext(op)",
         "    except ValueError:",
         "        results.append('rejected')",
         "    else:",
@@ -104,7 +104,7 @@ describe("FFmpeg security validation", () => {
   it("normalizes valid rgba colors without FFmpeg separator characters", () => {
     const result = runPython(
       [
-        "value = processor.build_drawtext({'text': 'Safe text', 'font_color': 'rgba(255, 0, 0, 0.5)', 'region': {'x': 0, 'y': 0, 'w': 400, 'h': 100}})",
+        "value = filters.build_drawtext({'text': 'Safe text', 'font_color': 'rgba(255, 0, 0, 0.5)', 'region': {'x': 0, 'y': 0, 'w': 400, 'h': 100}})",
         "print(value)",
       ].join("\n"),
     );
@@ -124,7 +124,7 @@ describe("FFmpeg security validation", () => {
         "results = []",
         "for value in values:",
         "    try:",
-        "        processor._build_watermark_filter(value, 1920, 1080)",
+        "        filters._build_watermark_filter(value, 1920, 1080)",
         "    except ValueError:",
         "        results.append('rejected')",
         "    else:",
@@ -155,7 +155,7 @@ describe("FFmpeg security validation", () => {
           "for operation in operations:",
           "    job = dict(base, operations=[operation])",
           "    try:",
-          "        processor._validated_job_media(job, require_output=False)",
+          "        media_paths._validated_job_media(job, require_output=False)",
           "    except ValueError:",
           "        results.append('rejected')",
           "    else:",

@@ -12,17 +12,8 @@ import {
   normalizeBatchWorkersMode,
   normalizeEncodeProfile,
 } from "../../utils/processing-settings.js";
-import { createJobManifest } from "../../utils/job-manifest.js";
-
-async function persistProcessingSetting(partial, label) {
-  const api = window.api;
-  if (!api?.saveSettings) return;
-  try {
-    await api.saveSettings(partial);
-  } catch (e) {
-    console.error(`[beru] Failed to save ${label}:`, e.message);
-  }
-}
+import { buildJobManifest } from "../../../shared/build-job-manifest.js";
+import { saveSettingsQuietly } from "../../utils/save-settings.js";
 
 const MEDIA_START_BY_KIND = {
   composition: "startComposition",
@@ -44,7 +35,7 @@ export function createProcessingSlice(set, get) {
       const prepared = {
         ok: true,
         jobs: [job],
-        manifest: createJobManifest([job]),
+        manifest: buildJobManifest([job]),
         startPatch: {
           queue: state.queue,
           exportSignatures: state.exportSignatures,
@@ -225,25 +216,25 @@ export function createProcessingSlice(set, get) {
     setEncodeProfile: async (val) => {
       const profile = normalizeEncodeProfile(val);
       set({ encodeProfile: profile });
-      await persistProcessingSetting({ encodeProfile: profile }, "encode profile");
+      await saveSettingsQuietly({ encodeProfile: profile }, "encode profile");
     },
 
     setBatchWorkers: async (val) => {
       const workers = normalizeBatchWorkers(val);
       set({ batchWorkers: workers });
-      await persistProcessingSetting({ batchWorkers: workers }, "batch workers");
+      await saveSettingsQuietly({ batchWorkers: workers }, "batch workers");
     },
 
     setBatchWorkersMode: async (val) => {
       const batchWorkersMode = normalizeBatchWorkersMode(val);
       set({ batchWorkersMode });
-      await persistProcessingSetting({ batchWorkersMode }, "batch workers mode");
+      await saveSettingsQuietly({ batchWorkersMode }, "batch workers mode");
     },
 
     setBatchRetryFailed: async (enabled) => {
       const batchRetryFailed = !!enabled;
       set({ batchRetryFailed });
-      await persistProcessingSetting({ batchRetryFailed }, "batch retry setting");
+      await saveSettingsQuietly({ batchRetryFailed }, "batch retry setting");
     },
 
     setExportFormat: (val) => set({ exportFormat: val }),

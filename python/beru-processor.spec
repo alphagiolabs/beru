@@ -1,5 +1,3 @@
-"""PyInstaller spec for the bundled Beru video processor (Windows x64)."""
-
 from pathlib import Path
 
 block_cipher = None
@@ -9,6 +7,10 @@ profiles_json = project_root / "resources" / "encode-profiles.json"
 
 if not profiles_json.is_file():
     raise SystemExit(f"encode-profiles.json not found: {profiles_json}")
+
+worker_policy_json = project_root / "resources" / "worker-policy.json"
+if not worker_policy_json.is_file():
+    raise SystemExit(f"worker-policy.json not found: {worker_policy_json}")
 
 datas = [(str(project_root / "resources" / name), "resources") for name in (
     "encode-profiles.json", "composition-limits.json", "processing-limits.json", "worker-policy.json",

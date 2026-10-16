@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   hasActiveProcessing: vi.fn(),
   cancelRun: vi.fn(),
   isQuittingForUpdate: vi.fn(),
+  hasUnexportedWork: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -36,6 +37,7 @@ vi.mock("electron", () => ({
 }));
 vi.mock("../main/shared-state.js", () => ({
   setMainWindow: vi.fn(),
+  getHasUnexportedWork: mocks.hasUnexportedWork,
   isDev: false,
   DEV_URL: "http://localhost:5173",
 }));
@@ -73,6 +75,7 @@ describe("main window", () => {
     mocks.hasActiveProcessing.mockReset().mockReturnValue(false);
     mocks.cancelRun.mockReset().mockResolvedValue({ success: true });
     mocks.isQuittingForUpdate.mockReset().mockReturnValue(false);
+    mocks.hasUnexportedWork.mockReset().mockReturnValue(false);
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
@@ -131,6 +134,34 @@ describe("main window", () => {
     expect(mocks.cancelRun.mock.invocationCallOrder[0]).toBeLessThan(
       win.close.mock.invocationCallOrder[0],
     );
+    const reentrant = { preventDefault: vi.fn() };
+    close()(reentrant);
+    expect(reentrant.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("asks before closing with unexported queue work and stays open when declined", async () => {
+    mocks.hasUnexportedWork.mockReturnValue(true);
+    mocks.showMessageBox.mockResolvedValue({ response: 1 });
+    const { win, close } = openWindow();
+    const event = { preventDefault: vi.fn() };
+
+    close()(event);
+    await vi.waitFor(() => expect(mocks.showMessageBox).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(mocks.showMessageBox.mock.calls[0][1].message).toMatch(/sin exportar/);
+    expect(win.close).not.toHaveBeenCalled();
+  });
+
+  it("closes once the user accepts losing unexported queue work", async () => {
+    mocks.hasUnexportedWork.mockReturnValue(true);
+    mocks.showMessageBox.mockResolvedValue({ response: 0 });
+    const { win, close } = openWindow();
+
+    close()({ preventDefault: vi.fn() });
+    await vi.waitFor(() => expect(win.close).toHaveBeenCalledTimes(1));
+
     const reentrant = { preventDefault: vi.fn() };
     close()(reentrant);
     expect(reentrant.preventDefault).not.toHaveBeenCalled();

@@ -91,6 +91,7 @@ export default function EditorPreview({
 
   const { refs, active, status } = useMontagePlayer({
     layout,
+    duration,
     sourceUrlFor,
     layerFor,
     frames: frameRefs,
@@ -102,6 +103,8 @@ export default function EditorPreview({
   });
 
   const totalSeconds = usToSeconds(duration);
+  const videoEnd = layout.at(-1)?.endUs ?? 0;
+  const inTail = duration > videoEnd && playhead >= videoEnd;
   const headEntry = entryAt(layout, playhead);
   const headAssetId = headEntry?.clip.assetId ?? null;
   const headAsset = headAssetId ? assetsById[headAssetId] : null;
@@ -138,7 +141,7 @@ export default function EditorPreview({
               <div
                 key={slot}
                 ref={frameRefs[slot]}
-                className={`editor-clip-frame${active === slot ? " is-active" : ""}`}
+                className={`editor-clip-frame${active === slot && !inTail ? " is-active" : ""}`}
               >
                 <video ref={refs[slot]} className="editor-video" playsInline preload="auto" />
               </div>

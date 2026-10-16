@@ -103,7 +103,6 @@ if (port !== preferredPort) {
 
 const viteBin = path.join(root, "node_modules", "vite", "bin", "vite.js");
 const electronBin = path.join(root, "node_modules", "electron", "cli.js");
-// Solo desarrollo: en una sesion elevada Chromium aborta al iniciar su sandbox.
 const elevationProbe = spawnSync("reg", ["query", "HKU\\S-1-5-19"], {
   stdio: "ignore",
   windowsHide: true,

@@ -1,9 +1,3 @@
-"""Regression: delogo inpaint with feather=0 and a time range (enable_clause)
-applied boxblur=max(1,0)=1, subtly blurring the patch the user explicitly
-asked to keep sharp. The fix: when feather<=0, skip boxblur even with
-enable_clause — overlay the clean patch directly.
-"""
-
 import sys
 from pathlib import Path
 
@@ -64,9 +58,22 @@ def test_mirror_fallback_feather0_with_time_no_boxblur():
     )
 
 
+def test_mosaic_feather0_patch_matches_selection_box():
+    op = _op("mosaic", 0)
+    chain = _build_delogo_chain(op, None, 0, 640, 480, None)
+    assert chain is not None
+    assert "crop=80:60:100:100" in chain
+    assert "scale=84:64:flags=neighbor" not in chain, (
+        f"mosaic patch exceeds the selection box: {chain!r}"
+    )
+    assert "scale=80:60:flags=neighbor" in chain
+    assert "overlay=" in chain
+
+
 if __name__ == "__main__":
     test_inpaint_feather0_with_time_no_boxblur()
     test_inpaint_feather0_no_time_no_boxblur()
     test_inpaint_feather6_with_time_applies_seamless_blend()
     test_mirror_fallback_feather0_with_time_no_boxblur()
+    test_mosaic_feather0_patch_matches_selection_box()
     print("OK: feather=0 with time bounds skips boxblur")

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Robustness tests for delogo: normalized coords, edge cases, temporal removal."""
 import subprocess
 import sys
 import tempfile
@@ -7,7 +6,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from processor import build_filter_complex, _region_to_pixels, _normalize_operation, find_ffmpeg  # noqa: E402
+from filters import build_filter_complex
+from op_shared import _region_to_pixels, _normalize_operation
+from media_probe import find_ffmpeg# noqa: E402
 from delogo_chains import _build_delogo_chain  # noqa: E402
 
 FFMPEG = Path(find_ffmpeg())

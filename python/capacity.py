@@ -1,5 +1,3 @@
-"""Worker-count and RAM-capacity policy for processor batches."""
-
 import json
 import logging
 import os
@@ -16,21 +14,20 @@ from op_shared import _env_int
 
 logger = logging.getLogger("beru")
 
-root = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
-with (root / "resources" / "worker-policy.json").open(encoding="utf-8") as handle:
-    _POLICY = json.load(handle)
+_resource_root = Path(sys._MEIPASS) if getattr(sys, "frozen", False) else Path(__file__).resolve().parent.parent
+with (_resource_root / "resources" / "worker-policy.json").open(encoding="utf-8") as _handle:
+    _POLICY = json.load(_handle)
 
 MAX_WORKERS_CAP = _POLICY["maxWorkers"]
 _ENCODER_CAPS = _POLICY["encoderCaps"]
 _RAM_PER_JOB_MB = _POLICY["ramPerJobMb"]
-_X264_PRESET_RAM_MULT = _POLICY["x264PresetRamMultiplier"]
+_REMUX_JOB_RAM_MB = _POLICY["remuxJobRamMb"]
+_X264_PRESET_RAM_MULT = _POLICY["x264PresetRamMultipliers"]
 _HEAVY_DECODE_CODECS = frozenset(_POLICY["heavyDecodeCodecs"])
 _HIGH_BIT_DEPTH_PIX_TOKENS = tuple(_POLICY["highBitDepthTokens"])
-_REMUX_JOB_RAM_MB = 128
 
 
 def _get_available_ram_mb():
-    """Return available memory in MB, constrained by Windows commit headroom."""
     try:
         import ctypes
         kernel32 = ctypes.windll.kernel32
@@ -61,7 +58,6 @@ def _get_available_ram_mb():
 
 
 def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, source_pixels=0):
-    """Estimate peak RAM (MB) for one job, using job metadata when available."""
     if isinstance(job, dict) and job.get("kind") == "composition":
         return max(_estimate_job_ram_mb(stage, hw_encoder, True,
             stage.get("encode_profile", encode_profile), source_pixels)
@@ -85,26 +81,26 @@ def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, sou
         per_job = int(per_job * _X264_PRESET_RAM_MULT.get(preset, 1.0))
     codec = str((job or {}).get("video_codec") or "").lower()
     if codec in _HEAVY_DECODE_CODECS:
-        per_job = int(per_job * 1.25)
+        per_job = int(per_job * _POLICY["ramMultipliers"]["heavyDecode"])
     pix_fmt = str((job or {}).get("pix_fmt") or "").lower()
     if any(token in pix_fmt for token in _HIGH_BIT_DEPTH_PIX_TOKENS):
-        per_job = int(per_job * 1.5)
+        per_job = int(per_job * _POLICY["ramMultipliers"]["highBitDepth"])
     if has_video_filters:
-        per_job = int(per_job * 1.5)
+        per_job = int(per_job * _POLICY["ramMultipliers"]["filters"])
     if not profile_allows_hardware(profile) or (
         profile == "quality" and not hw_encoder
     ):
-        per_job = int(per_job * 1.35)
+        per_job = int(per_job * _POLICY["ramMultipliers"]["softwareQuality"])
     pixels = source_pixels
     if job:
         w, h = _job_dimensions(job)
         if w > 0 and h > 0:
             pixels = w * h
     if pixels >= 3840 * 2160:
-        per_job = int(per_job * 2.5)
+        per_job = int(per_job * _POLICY["ramMultipliers"]["ultraHd"])
     elif pixels >= 1920 * 1080:
-        per_job = int(per_job * 1.5)
-    return max(64, per_job)
+        per_job = int(per_job * _POLICY["ramMultipliers"]["fullHd"])
+    return max(_POLICY["minimumJobRamMb"], per_job)
 
 
 def _max_estimated_job_ram_mb(jobs, hw_encoder, has_video_filters, encode_profile):
@@ -126,7 +122,6 @@ def _memory_cap_workers(
     encode_profile="balanced",
     jobs=None,
 ):
-    """Clamp worker count based on available RAM."""
     avail_mb = _get_available_ram_mb()
     if avail_mb <= 0:
         return desired_workers
@@ -141,7 +136,7 @@ def _memory_cap_workers(
             encode_profile,
             source_pixels=max_source_pixels,
         )
-    cap = max(1, int((avail_mb * 0.8) / per_job))
+    cap = max(1, int((avail_mb * _POLICY["memoryBudgetFraction"]) / per_job))
     return max(1, min(cap, desired_workers, MAX_WORKERS_CAP))
 
 

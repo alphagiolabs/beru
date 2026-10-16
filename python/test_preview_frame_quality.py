@@ -1,17 +1,15 @@
-"""Lossless exact-preview transport, including source precision and crop size."""
-
 import base64
 import subprocess
 import tempfile
 from pathlib import Path
 
-import processor
+import media_probe
 from processor import render_preview_frame, render_source_frame
 
 
-FFMPEG = processor.find_ffmpeg()
-processor.FFMPEG = FFMPEG
-processor.FFPROBE = processor.find_ffprobe(FFMPEG)
+FFMPEG = media_probe.find_ffmpeg()
+media_probe.FFMPEG = FFMPEG
+media_probe.FFPROBE = media_probe.find_ffprobe(FFMPEG)
 
 
 def run(*args, data=None):

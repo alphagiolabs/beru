@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createEmptyEditorProject, EditorError } from "../../../../shared/editor-project.js";
+import { setVideoPathOwners } from "../../../utils/video-path-ownership.js";
 import {
   beginGesture,
   cancelGesture,
@@ -27,6 +28,7 @@ export const useTimelineStore = create((set, get) => {
   const initial = createEmptyEditorProject();
 
   return {
+    documentOwner: {},
     history: createHistory(initial),
     revision: initial.revision,
     savedRevision: null,
@@ -39,6 +41,7 @@ export const useTimelineStore = create((set, get) => {
 
     open(project, { filePath = null, assetStatus = {} } = {}) {
       set({
+        documentOwner: {},
         history: createHistory(project),
         revision: project.revision,
         savedRevision: project.revision,
@@ -57,6 +60,7 @@ export const useTimelineStore = create((set, get) => {
 
     restoreUnsaved(project) {
       set({
+        documentOwner: {},
         history: createHistory(project),
         revision: project.revision,
         savedRevision: null,
@@ -141,3 +145,15 @@ export const useTimelineStore = create((set, get) => {
 });
 
 export const selectIsDirty = (state) => state.history.present !== state.cleanProject;
+
+useTimelineStore.subscribe((state, previous) => {
+  if (state.history === previous.history) return;
+  const { present, past, future, gesture } = state.history;
+  const projects = [present, ...past, ...future, ...(gesture ? [gesture.base] : [])];
+  const libraries = new Set(projects.map((project) => project.assets));
+  setVideoPathOwners({
+    montage: [...libraries].flatMap((assets) =>
+      assets.filter((asset) => asset.metadata.durationUs != null).map((asset) => asset.path),
+    ),
+  });
+});

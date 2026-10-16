@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { queueCapacityInput } from "../src/utils/batch-capacity.js";
+import { queueCapacityInput, capacityJobsSignature } from "../src/utils/batch-capacity.js";
 
 describe("queueCapacityInput", () => {
   it("uses queue length and source pixels", () => {
@@ -35,5 +35,31 @@ describe("queueCapacityInput", () => {
     const input = queueCapacityInput([], [{ id: "r1" }]);
     expect(input.queueLength).toBe(0);
     expect(input.hasVideoFilters).toBe(true);
+  });
+
+  it.each([
+    { transform: { rotation: 90 } },
+    { transform: { outputHeight: 720 } },
+    { transform: { outputWidth: 3840, outputHeight: 2160, fitMode: "pad" } },
+    { transform: { outputWidth: 1080, outputHeight: 1920, fitMode: "crop" } },
+    { timing: { rate: 2 } },
+    { timing: { repeatCount: 2 } },
+    { trimStart: 1 },
+  ])("refreshes capacity for an encode edit without Operations: %j", (patch) => {
+    const base = { width: 1920, height: 1080, duration: 10, operations: [] };
+    const edited = { ...base, ...patch };
+    expect(queueCapacityInput([edited]).hasVideoFilters).toBe(true);
+    expect(capacityJobsSignature([edited])).not.toBe(capacityJobsSignature([base]));
+  });
+
+  it("tracks an enabled watermark and preserves identity for a resize that cannot enlarge", () => {
+    const queue = [
+      { width: 1920, height: 1080, operations: [], transform: { outputHeight: 2160 } },
+    ];
+    expect(queueCapacityInput(queue).hasVideoFilters).toBe(false);
+    expect(queueCapacityInput(queue, [], { enabled: true }).hasVideoFilters).toBe(true);
+    expect(capacityJobsSignature(queue, [], { enabled: true })).not.toBe(
+      capacityJobsSignature(queue),
+    );
   });
 });

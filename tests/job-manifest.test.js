@@ -5,8 +5,8 @@ import {
   normalizeJob,
   normalizeManifest,
 } from "../shared/job-manifest.js";
-import { createJobManifest } from "../src/utils/job-manifest.js";
-import { createProcessorManifest, unwrapJobManifest } from "../main/utils/jobManifest.js";
+import { buildJobManifest } from "../shared/build-job-manifest.js";
+import { unwrapJobManifest } from "../main/utils/jobManifest.js";
 import { MINIMAL_JOB, MINIMAL_JOB_NORMALIZED, RAW_JOB } from "./fixtures/job-manifest.js";
 
 describe("normalizeJob", () => {
@@ -26,7 +26,7 @@ describe("normalizeJob", () => {
         { input_path: "C:/a.mp4", playback_rate: 2, repeat_count: 3 },
       ],
     };
-    const manifest = createProcessorManifest(createJobManifest([input]), [input]);
+    const manifest = buildJobManifest([input]);
     const job = manifest.jobs[0];
     expect(job).not.toHaveProperty("input_path");
     expect(job).not.toHaveProperty("rotation");
@@ -135,11 +135,12 @@ describe("normalizeManifest", () => {
   });
 });
 
-describe("createJobManifest", () => {
+describe("buildJobManifest", () => {
   it("wraps normalized renderer jobs in a versioned manifest", () => {
-    const manifest = createJobManifest([{ id: 7, encode_profile: "quality" }], {
-      createdAt: "2026-06-05T00:00:00.000Z",
-    });
+    const manifest = buildJobManifest(
+      [{ id: 7, encode_profile: "quality" }],
+      "2026-06-05T00:00:00.000Z",
+    );
 
     expect(manifest).toEqual({
       type: JOB_MANIFEST_TYPE,
@@ -151,18 +152,18 @@ describe("createJobManifest", () => {
   });
 
   it("does not emit a manifest-level profile (resolved per-job by Python)", () => {
-    const manifest = createJobManifest([{ id: 1, encode_profile: "quality" }]);
+    const manifest = buildJobManifest([{ id: 1, encode_profile: "quality" }]);
     expect(manifest).not.toHaveProperty("profile");
   });
 
   it("generates createdAt timestamp when not provided", () => {
-    const manifest = createJobManifest([{ id: 1 }]);
+    const manifest = buildJobManifest([{ id: 1 }]);
     expect(manifest.createdAt).toBeDefined();
     expect(typeof manifest.createdAt).toBe("string");
   });
 
   it("handles empty jobs array", () => {
-    const manifest = createJobManifest([]);
+    const manifest = buildJobManifest([]);
     expect(manifest.jobs).toEqual([]);
   });
 });
@@ -174,9 +175,7 @@ describe("unwrapJobManifest", () => {
       manifest: null,
     });
 
-    const manifest = createJobManifest([{ id: 2 }], {
-      createdAt: "2026-06-05T00:00:00.000Z",
-    });
+    const manifest = buildJobManifest([{ id: 2 }], "2026-06-05T00:00:00.000Z");
     expect(unwrapJobManifest(manifest)).toEqual({
       jobs: manifest.jobs,
       manifest,
@@ -238,11 +237,9 @@ describe("unwrapJobManifest", () => {
   });
 });
 
-describe("createProcessorManifest", () => {
+describe("enriched Job manifests", () => {
   it("reuses the incoming createdAt and normalizes enriched jobs", () => {
-    const manifest = createProcessorManifest({ createdAt: "2026-06-05T00:00:00.000Z" }, [
-      { ...MINIMAL_JOB, id: 1 },
-    ]);
+    const manifest = buildJobManifest([{ ...MINIMAL_JOB, id: 1 }], "2026-06-05T00:00:00.000Z");
     expect(manifest).toEqual({
       type: JOB_MANIFEST_TYPE,
       version: JOB_MANIFEST_VERSION,

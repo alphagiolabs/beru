@@ -61,7 +61,6 @@ const init = () => {
   au.autoDownload = false;
   au.autoInstallOnAppQuit = false;
   au.disableWebInstaller = true;
-  // NsisUpdater.verifySignature needs a logger to report the original error.
   au.logger = {
     info: (...args) => console.log("[updater]", ...args),
     warn: (...args) => console.warn("[updater]", ...args),
@@ -229,7 +228,6 @@ const scheduleInstall = (au) => {
       })
       .catch((error) => abortInstall(error, attempt));
   });
-  // NSIS may fail to spawn without rejecting; unlock for retry if the app stays alive.
   installTimer = setTimeout(() => {
     abortInstall(
       new Error("No se pudo reiniciar para instalar la actualización. Inténtalo de nuevo."),

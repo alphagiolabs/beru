@@ -1,19 +1,9 @@
-"""Regression: `border_width` must be coerced and clamped before it reaches the
-drawtext filtergraph.
-
-It used to be read raw (`op.get("border_width", 0)`) and compared with `> 0`, so
-a non-numeric value from a hand-edited manifest raised a TypeError that escaped
-as a raw traceback instead of a mapped job error. The renderer already clamps
-this field to 0-24 (`src/utils/text-style.js`), so the processor clamps to the
-same range and valid values pass through unchanged.
-"""
-
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from processor import build_drawtext  # noqa: E402
+from filters import build_drawtext# noqa: E402
 
 
 def _text_op(**overrides):

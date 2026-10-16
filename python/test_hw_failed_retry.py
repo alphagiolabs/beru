@@ -1,5 +1,4 @@
-"""A job whose pass1 already burned the GPU fallback must retry pass2 in software."""
-
+import copy
 import io
 import json
 import os
@@ -54,10 +53,10 @@ def test_pass2_runs_software_directly_for_hw_failed_jobs():
                 return False, "x264 [error]: out of memory"
             return True, None
 
-        orig_run = processor._run_ffmpeg
+        orig_run = ffmpeg_runner._run_ffmpeg
         prev_retry = os.environ.get("BERU_RETRY_FAILED")
         os.environ["BERU_RETRY_FAILED"] = "1"
-        processor._run_ffmpeg = fake_run
+        ffmpeg_runner._run_ffmpeg = fake_run
         try:
             result = processor.process_jobs(
                 jobs, "ffmpeg", max_workers=2, hw_encoder="h264_nvenc"
@@ -67,7 +66,7 @@ def test_pass2_runs_software_directly_for_hw_failed_jobs():
             for out, seq in sequences.items():
                 assert seq == ["h264_nvenc", "libx264", "libx264"], (out, seq)
         finally:
-            processor._run_ffmpeg = orig_run
+            ffmpeg_runner._run_ffmpeg = orig_run
             if prev_retry is None:
                 os.environ.pop("BERU_RETRY_FAILED", None)
             else:
@@ -76,12 +75,32 @@ def test_pass2_runs_software_directly_for_hw_failed_jobs():
 
 def _run_batch(jobs, fake_run, **kwargs):
     stdout = io.StringIO()
-    with patch.dict(os.environ, {"BERU_RETRY_FAILED": "1"}), patch.object(
-        processor, "_run_ffmpeg", fake_run
+    with patch.dict(os.environ, {"BERU_RETRY_FAILED": "1"}), patch.object(ffmpeg_runner, "_run_ffmpeg", fake_run
     ), redirect_stdout(stdout):
         result = processor.process_jobs(jobs, "ffmpeg", hw_encoder=None, **kwargs)
     events = [json.loads(line) for line in stdout.getvalue().splitlines() if line.startswith("{")]
     return result, events
+
+
+def test_independent_runs_preserve_manifest_and_retry_hardware():
+    with tempfile.TemporaryDirectory(prefix="beru_hwfailed_runs_") as tmp:
+        jobs = [_make_job(Path(tmp), 0)]
+        manifest = copy.deepcopy(jobs)
+        encoders = []
+
+        def fake_run(cmd, **kwargs):
+            encoder = _encoder_of(cmd)
+            encoders.append(encoder)
+            if encoder != "libx264":
+                return False, "nvenc: no capable devices found"
+            return True, None
+
+        with patch.object(ffmpeg_runner, "_run_ffmpeg", fake_run), redirect_stdout(io.StringIO()):
+            for _ in range(2):
+                result = processor.process_jobs(jobs, "ffmpeg", max_workers=1, hw_encoder="h264_nvenc")
+                assert result["succeeded"] == 1, result
+        assert encoders == ["h264_nvenc", "libx264", "h264_nvenc", "libx264"], encoders
+        assert jobs == manifest, jobs
 
 
 def test_retried_job_reports_only_its_final_outcome():
@@ -186,6 +205,7 @@ def test_explicit_id_does_not_hide_another_jobs_failure():
 
 def main():
     test_pass2_runs_software_directly_for_hw_failed_jobs()
+    test_independent_runs_preserve_manifest_and_retry_hardware()
     test_retried_job_reports_only_its_final_outcome()
     test_timeout_is_not_retried()
     test_unexpected_job_exception_reports_its_error()

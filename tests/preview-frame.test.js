@@ -191,9 +191,9 @@ describe("processor render_preview_frame", () => {
 import json
 import sys
 sys.path.insert(0, "python")
-import processor
-processor.FFMPEG = processor.find_ffmpeg()
-processor.FFPROBE = processor.find_ffprobe(processor.FFMPEG)
+import processor, media_probe
+media_probe.FFMPEG = media_probe.find_ffmpeg()
+media_probe.FFPROBE = media_probe.find_ffprobe(media_probe.FFMPEG)
 print(json.dumps(processor.render_preview_frame({"input_path": "__missing__.mp4"})))
 `;
     const r = spawnSync(PY, [...PY_ARGS, "-c", code], {

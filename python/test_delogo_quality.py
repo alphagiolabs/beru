@@ -1,12 +1,12 @@
-"""Pixel regressions for logo contamination, flicker and blur context."""
-
 import subprocess
 import tempfile
 from pathlib import Path
 
 import numpy as np
 
-from processor import build_filter_complex, find_ffmpeg
+from filters import build_filter_complex
+from media_probe import find_ffmpeg
+import filters
 
 FFMPEG = find_ffmpeg()
 WIDTH, HEIGHT, FRAMES = 320, 180, 12

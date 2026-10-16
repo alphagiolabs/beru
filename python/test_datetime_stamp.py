@@ -8,7 +8,7 @@ from datetime_stamp import (
     shift_clock_epoch,
     split_clock_region,
 )
-from processor import build_filter_complex
+from filters import build_filter_complex
 from text_layout_helpers import _text_box_pad
 
 ROOT = Path(__file__).resolve().parents[1]

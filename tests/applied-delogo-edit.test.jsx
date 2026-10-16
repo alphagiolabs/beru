@@ -157,6 +157,29 @@ describe("AppliedDelogoEditor — seguir editando zonas aplicadas", () => {
     act(() => root.unmount());
   });
 
+  it("undo restores the start of a long intensity gesture and a new edit after undo", () => {
+    setupSelectedOp(blurOp({ blurStrength: 2 }));
+    const root = renderPanel();
+    const change = (value) =>
+      act(() => {
+        const slider = document.querySelector(
+          "[data-applied-region-editor='blur'] input[type='range']",
+        );
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(
+          slider,
+          value,
+        );
+        slider.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    for (let value = 3; value <= 57; value++) change(value);
+    act(() => useEditorStore.getState().undo());
+    expect(useEditorStore.getState().queue[0].operations[0].blurStrength).toBe(2);
+    change(30);
+    act(() => useEditorStore.getState().undo());
+    expect(useEditorStore.getState().queue[0].operations[0].blurStrength).toBe(2);
+    act(() => root.unmount());
+  });
+
   it("el botón Eliminar zona quita la operación", () => {
     const root = renderPanel();
     const deleteBtn = Array.from(

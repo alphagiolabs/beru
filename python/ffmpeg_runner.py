@@ -1,8 +1,3 @@
-"""FFmpeg execution, retries and NDJSON progress.
-
-Cancellation uses the run context, falling back to batch_context defaults.
-"""
-
 import json
 import logging
 import os
@@ -29,6 +24,7 @@ MAX_STDERR_LINES = 256
 MAX_STDERR_CHARS = 48_000
 STALL_TIMEOUT_SEC = 120
 TRACKED_TIMEOUT_DURATION_FACTOR = 20
+UNTRACKED_TIMEOUT_DURATION_FACTOR = 3
 _tr_print_lock = threading.Lock()
 _last_job_progress_emit = {}
 _job_progress_lock = threading.Lock()
@@ -38,7 +34,6 @@ _FFMPEG_FRAME_RE = re.compile(r"(?:^|\s)frame=\s*(\d+)")
 
 
 def _safe_print(msg):
-    """Thread-safe JSON print to stdout."""
     with _tr_print_lock:
         print(msg, flush=True)
 
@@ -48,7 +43,6 @@ def _emit_job_complete(job_id, output_path):
 
 
 def _emit_batch_progress(state, total, fname):
-    """Batch-level progress payload (shared by done/cancelled emission sites)."""
     _safe_print(json.dumps({
         "type": "progress",
         "current": state["completed"],
@@ -60,7 +54,6 @@ def _emit_batch_progress(state, total, fname):
 
 
 def _job_failed_result(job_id, raw_error, *, max_workers=None):
-    """Failed result; the batch emits it once no retry pass will take the Job."""
     user_error = format_processing_error(raw_error, max_workers=max_workers)
     result = {"index": job_id, "status": "failed", "error": user_error}
     if raw_error and raw_error != user_error:
@@ -108,7 +101,6 @@ def _emit_warning(index, code, message):
 
 
 def _is_transient_error(stderr_text):
-    """Heuristic: detect transient FFmpeg errors that warrant a retry."""
     markers = [
         "i/o error",
         "temporary failure", "resource temporarily unavailable",
@@ -119,7 +111,6 @@ def _is_transient_error(stderr_text):
 
 
 class StderrBuffer:
-    """Bounded stderr accumulator with constant-time append and eviction."""
 
     __slots__ = ("_buf", "_chars", "_max_chars")
 
@@ -161,7 +152,6 @@ def _should_retry_failed_job(result, max_workers):
 
 
 def _extract_error_line(stderr_text):
-    """Extract the most relevant error line from FFmpeg stderr."""
     if len(stderr_text) > MAX_STDERR_CHARS:
         stderr_text = stderr_text[-MAX_STDERR_CHARS:]
     lines = stderr_text.split("\n")
@@ -184,7 +174,6 @@ def _extract_error_line(stderr_text):
 
 
 def _output_path_from_ffmpeg_cmd(cmd):
-    """Last non-flag argv token is typically the output file."""
     if not cmd or str(cmd[-1]) == "-":
         return None
     for token in reversed(cmd):
@@ -195,7 +184,6 @@ def _output_path_from_ffmpeg_cmd(cmd):
 
 
 def _input_path_from_ffmpeg_cmd(cmd):
-    """First path argument after -i."""
     if not cmd:
         return None
     args = [str(x) for x in cmd]
@@ -235,7 +223,6 @@ def _kill_ffmpeg_process(proc):
 
 
 def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=None, progress_range=(0, 100), cwd=None):
-    """Run FFmpeg with bounded stderr capture, optional progress parsing, and cancel polling."""
     proc = subprocess.Popen(
         cmd,
         stdin=subprocess.DEVNULL,
@@ -358,15 +345,8 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=N
 
 
 def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None, progress_range=None, cwd=None):
-    """Run ffmpeg with retry for transient failures.
-
-    The timeout scales with video duration when duration_sec is provided:
-    at least timeout_sec, or 3x the video duration (20x for Jobs with
-    progress tracking, which the stall check already guards). A timeout is
-    not transient, so it never triggers a retry.
-    """
     if duration_sec > 0:
-        factor = TRACKED_TIMEOUT_DURATION_FACTOR if job_id is not None else 3
+        factor = TRACKED_TIMEOUT_DURATION_FACTOR if job_id is not None else UNTRACKED_TIMEOUT_DURATION_FACTOR
         timeout_sec = max(timeout_sec, int(duration_sec * factor))
     for attempt in range(MAX_RETRIES + 1):
         if _check_cancelled(ctx):
@@ -414,7 +394,6 @@ def _wait_retry(delay, ctx):
 
 
 def _native_stream_copy(input_path, output_path, *, ctx=None, job_id=None):
-    """Chunked byte copy with cooperative cancellation. Returns (ok, err)."""
     try:
         total_bytes = os.path.getsize(input_path)
         copied_bytes = 0

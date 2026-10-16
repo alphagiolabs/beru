@@ -1,22 +1,12 @@
 import fs from "fs";
 import path from "path";
+import { INPUT_VIDEO_EXTENSIONS } from "../../shared/video-extensions.js";
 
 const EXT_BY_KIND = {
   excel: new Set([".xlsx", ".xls", ".xlsm"]),
   image: new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]),
   audio: new Set([".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".opus", ".aiff", ".aif"]),
-  video: new Set([
-    ".mp4",
-    ".mov",
-    ".avi",
-    ".mkv",
-    ".webm",
-    ".flv",
-    ".wmv",
-    ".m4v",
-    ".mpg",
-    ".mpeg",
-  ]),
+  video: new Set(INPUT_VIDEO_EXTENSIONS.map((extension) => `.${extension}`)),
   project: new Set([".json", ".beru.json"]),
 };
 
@@ -24,7 +14,7 @@ const MAX_BYTES_BY_KIND = {
   excel: 25 * 1024 * 1024,
   image: 15 * 1024 * 1024,
   audio: 1024 * 1024 * 1024,
-  video: 8 * 1024 * 1024 * 1024,
+  video: Number.POSITIVE_INFINITY,
   project: 8 * 1024 * 1024,
 };
 
@@ -34,11 +24,12 @@ export function createPathVerdicts({
   location,
   consent,
   statSync = fs.statSync,
+  protocolStat = statSync,
   warn = console.warn,
 }) {
   const canRead = (resolved) => consent.hasReadConsent(resolved) || location.isUnderRoot(resolved);
 
-  function inspectReadableFile(filePath, kind, { selectedByUser = false } = {}) {
+  function inspectReadableFile(filePath, kind, { selectedByUser = false, statFn = statSync } = {}) {
     const resolved = resolveSafe(filePath);
     if (!resolved) {
       return { ok: false, error: "Ruta inválida" };
@@ -50,7 +41,7 @@ export function createPathVerdicts({
 
     let stat;
     try {
-      stat = statSync(resolved);
+      stat = statFn(resolved);
     } catch {
       return { ok: false, error: "Archivo no encontrado" };
     }
@@ -149,7 +140,7 @@ export function createPathVerdicts({
       : EXT_BY_KIND.audio.has(ext)
         ? "audio"
         : "video";
-    return inspectReadableFile(filePath, kind);
+    return inspectReadableFile(filePath, kind, { statFn: protocolStat });
   }
 
   return {

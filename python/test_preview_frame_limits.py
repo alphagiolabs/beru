@@ -11,7 +11,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import processor
-
+import capacity
+import filters
+import fonts
+import os
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
 
 
@@ -65,7 +68,7 @@ def test_preview_scales_after_operation_filter_graph():
         video.write_bytes(b"fake")
         payload = {"input_path": str(video), "source_width": 1920, "source_height": 1080,
                    "video_duration": 1, "operations": [{"mode": "blur"}]}
-        with patch.object(processor, "build_filter_complex", return_value=(
+        with patch.object(filters, "build_filter_complex", return_value=(
             "[0:v]null[tmp0]", "[tmp0]", []
         )), patch.object(processor.subprocess, "Popen", return_value=FakeProcess(PNG)) as popen:
             result = processor.render_preview_frame(payload)
@@ -83,18 +86,18 @@ def test_windows_commit_budget_caps_automatic_workers_but_not_override():
 
     kernel32 = SimpleNamespace(GlobalMemoryStatusEx=global_memory_status)
     with patch.object(ctypes, "windll", SimpleNamespace(kernel32=kernel32), create=True), \
-         patch.dict(processor.os.environ, {"BERU_WORKERS": "0"}):
-        assert processor._get_available_ram_mb() == 96
-        assert processor.resolve_max_workers(None, 5) == 1
-        with patch.dict(processor.os.environ, {"BERU_WORKERS": "4"}):
-            assert processor.resolve_max_workers(None, 5) == 4
+         patch.dict(os.environ, {"BERU_WORKERS": "0"}):
+        assert capacity._get_available_ram_mb() == 96
+        assert capacity.resolve_max_workers(None, 5) == 1
+        with patch.dict(os.environ, {"BERU_WORKERS": "4"}):
+            assert capacity.resolve_max_workers(None, 5) == 4
 
 
 def test_worker_rejects_oversized_stdin_before_parsing():
     stdin = SimpleNamespace(buffer=io.BytesIO(b"x" * (1024 * 1024 + 1) + b"\n"))
     with patch.object(processor.sys, "stdin", stdin), \
          patch.object(processor, "_init_ffmpeg_globals", return_value=True), \
-         patch.object(processor, "get_system_fonts"), \
+         patch.object(fonts, "get_system_fonts"), \
          patch.object(processor, "render_preview_frame") as render, \
          redirect_stdout(io.StringIO()) as stdout:
         processor.preview_frame_worker_main()

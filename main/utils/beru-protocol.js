@@ -31,15 +31,21 @@ function statFile(filePath) {
   if (statCacheEnabled()) {
     const hit = statCache.get(filePath);
     if (hit && Date.now() - hit.ts <= statCacheTtlMs()) {
-      return { size: hit.size, mtimeMs: hit.mtimeMs };
+      return { size: hit.size, mtimeMs: hit.mtimeMs, isFile: hit.isFile };
     }
   }
   const stat = fs.statSync(filePath);
+  const metadata = { size: stat.size, mtimeMs: stat.mtimeMs, isFile: stat.isFile() };
   if (statCacheEnabled()) {
-    statCache.set(filePath, { size: stat.size, mtimeMs: stat.mtimeMs, ts: Date.now() });
+    statCache.set(filePath, { ...metadata, ts: Date.now() });
     trimOldest(statCache, STAT_CACHE_MAX);
   }
-  return { size: stat.size, mtimeMs: stat.mtimeMs };
+  return metadata;
+}
+
+export function cachedProtocolStat(filePath) {
+  const stat = statFile(filePath);
+  return { isFile: () => stat.isFile, size: stat.size, mtimeMs: stat.mtimeMs };
 }
 
 const VIDEO_CONTENT_TYPES = {
@@ -74,8 +80,6 @@ export function filePathFromBeruUrl(requestUrl) {
   if (/^\/[A-Za-z]:[\\/]/.test(decoded)) {
     return decoded.slice(1);
   }
-  // Backslash UNC: URL pathname adds a leading "/". win32 path.resolve would
-  // turn /\\server\share into <drive>:\server\share and lose the UNC.
   if (/^\/\\\\/.test(decoded)) {
     return decoded.slice(1);
   }

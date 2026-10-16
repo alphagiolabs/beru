@@ -3,31 +3,27 @@ import { createLocationPolicy } from "./security/location-policy.js";
 import { createConsentStore } from "./security/consent.js";
 import { createWriteCapabilities } from "./security/write-capability.js";
 import { createPathVerdicts } from "./security/path-verdicts.js";
-
-/** @typedef {'excel' | 'image' | 'audio' | 'video' | 'project'} ReadKind */
+import { sweepOrphanedExports } from "./utils/process-output.js";
+import { cachedProtocolStat } from "./utils/beru-protocol.js";
 
 export function createPathSecurity(app) {
   const { resolveSafe, resolveSafeAsync, normalizeKey } = createPathResolver();
   const location = createLocationPolicy({ app, resolveSafe, resolveSafeAsync, normalizeKey });
   const consent = createConsentStore({ normalizeKey });
   const writes = createWriteCapabilities({ resolveSafe, location, normalizeKey });
-  const verdicts = createPathVerdicts({ resolveSafe, resolveSafeAsync, location, consent });
+  const verdicts = createPathVerdicts({
+    resolveSafe,
+    resolveSafeAsync,
+    location,
+    consent,
+    protocolStat: cachedProtocolStat,
+  });
 
-  /**
-   * @param {string} filePath
-   * @param {ReadKind} kind
-   * @returns {{ ok: true, resolvedPath: string } | { ok: false, error: string }}
-   */
   function registerAllowedPath(filePath, kind) {
     const check = verdicts.inspectReadableFile(filePath, kind);
     if (!check.ok) return check;
     consent.grantRead(check.resolvedPath, kind);
     return check;
-  }
-
-  function registerAllowedPaths(paths, kind) {
-    if (!Array.isArray(paths)) return;
-    for (const p of paths) registerAllowedPath(p, kind);
   }
 
   function registerSelectedPath(filePath, kind) {
@@ -47,6 +43,7 @@ export function createPathSecurity(app) {
     const check = verdicts.inspectOutputDirectory(directoryPath);
     if (!check.ok) return check;
     consent.selectOutputDirectory(check.resolvedPath);
+    sweepOrphanedExports(check.resolvedPath);
     return check;
   }
 
@@ -60,7 +57,6 @@ export function createPathSecurity(app) {
 
   return {
     registerAllowedPath,
-    registerAllowedPaths,
     registerSelectedPath,
     registerSelectedPaths,
     releaseVideoPaths,

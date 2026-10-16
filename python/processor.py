@@ -2,8 +2,6 @@
 """Batch scheduling, per-job execution and CLI/NDJSON worker entrypoints.
 
 Consumes JSON job manifests and emits progress as NDJSON on stdout.
-Imported helpers remain re-exported for compatibility; wrappers forward
-processor state and patched dependencies to the helper modules.
 """
 
 import os
@@ -32,135 +30,60 @@ import shutil
 import threading
 from collections import deque
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
+import encode_args
+import encoders
+import ffmpeg_runner
 import filters
 import fonts
 import media_probe
 import preview
-from process_lifetime import protect_process_tree
-from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
+import process_lifetime
 
+from batch_errors import is_resource_pressure_error
 from encode_profiles import (
-    ENCODE_PROFILES,
     effective_hw_encoder as resolve_effective_hw_encoder,
     profile_allows_hardware,
 )
-from batch_errors import (
-    format_processing_error,
-    is_hardware_encode_error,
-    is_resource_pressure_error,
-    remove_partial_output,
-)
-
-from op_shared import (
-    _build_enable_clause,
-    _is_op_time_disabled,
-    _normalize_operation,
-    _region_to_pixels,
-)
-from media_paths import (
-    FONT_EXTENSIONS,
-    IMAGE_EXTENSIONS,
-    VIDEO_INPUT_EXTENSIONS,
-    VIDEO_OUTPUT_EXTENSIONS,
-    _path_parent,
-    _validated_job_media,
-    validate_media_path,
-)
-from frame_geometry import normalize_transform
-from audio_settings import audio_filter, normalize_audio
-from clip_timing import playback_rate, tempo_filter, repeat_count, cycle_duration
 from composition import process_composition
-from clip_render import ClipRenderer
+from clip_render import ClipRenderer, HardwareFallbackState
 from stabilization import process_stabilization
-from external_audio import build_external_audio_graph
 from job_classify import (
-    _job_dimensions,
     _job_processing_stages,
     _job_requires_encode,
     _job_takes_copy_path,
     _jobs_allow_hardware,
     _jobs_require_fonts,
-    _parse_trim_window,
 )
 from capacity import (
-    MAX_WORKERS_CAP,
-    _ENCODER_CAPS,
     _REMUX_JOB_RAM_MB,
     _estimate_job_ram_mb,
     _get_available_ram_mb,
     _max_estimated_job_ram_mb,
-    _memory_cap_workers,
     resolve_copy_workers,
     resolve_max_workers,
 )
 from batch_context import BatchContext, _ResourceAdmission, _cancel_event, _check_cancelled
-from encoders import _test_hw_encoder_real, detect_hw_encoder
-from encode_args import (
-    _ANIMATED_IMAGE_EXTS,
-    _AUDIO_COPY_CODECS,
-    _COPY_SAFE_STREAM_TYPES,
-    _FASTSTART_EXTS,
-    build_audio_args,
-)
-from media_probe import find_ffmpeg, find_ffprobe
-from fonts import (
-    FONT_DIRS,
-    _font_name_key,
-    _get_normalized_fonts,
-    _resolve_font,
-    get_system_fonts,
-    reset_caches,
-)
-from filters import (
-    _DRAWTEXT_CACHE,
-    _drawtext_cache_enabled,
-    _drawtext_cache_store,
-    _drawtext_supports,
-    _escape_drawtext_text,
-    _get_drawtext_options,
-    _validate_drawtext_text,
-)
 from ffmpeg_runner import (
-    StderrBuffer,
-    _cleanup_ffmpeg_partial,
     _emit_batch_progress,
     _emit_job_complete,
     _emit_job_failed,
-    _emit_job_progress,
-    _extract_error_line,
-    _input_path_from_ffmpeg_cmd,
-    _is_transient_error,
     _job_cancelled_result,
     _job_failed_result,
-    _kill_ffmpeg_process,
-    _last_job_progress_emit,
-    _native_stream_copy,
-    _output_path_from_ffmpeg_cmd,
     _retry_failed_enabled,
-    _run_ffmpeg,
-    _run_ffmpeg_stream,
     _safe_print,
     _should_retry_failed_job,
-    _should_retry_ffmpeg,
-    MAX_RETRIES,
-    RETRY_DELAYS,
 )
 
-FFMPEG = media_probe.FFMPEG
-FFPROBE = media_probe.FFPROBE
 JOB_MANIFEST_TYPE = "beru-job-manifest"
 JOB_MANIFEST_VERSION = 1
-PREVIEW_MAX_DIMENSION = preview.PREVIEW_MAX_DIMENSION
-PREVIEW_MAX_IMAGE_BYTES = preview.PREVIEW_MAX_IMAGE_BYTES
-PREVIEW_MAX_STDERR_BYTES = preview.PREVIEW_MAX_STDERR_BYTES
 PREVIEW_MAX_REQUEST_BYTES = preview.PREVIEW_MAX_REQUEST_BYTES
 JOB_WORKER_MAX_REQUEST_BYTES = 64 * 1024
 
 
 def setup_logging():
-    """Configure structured logging to rotating file and stderr."""
     logger = logging.getLogger("beru")
     logger.setLevel(logging.DEBUG)
 
@@ -195,182 +118,50 @@ def setup_logging():
 
 logger = setup_logging()
 
-_BATCH_ACTIVE_WORKERS = 1
-_SOFTWARE_FALLBACK_ADMISSION = None
-
-
-def _sync_probe_binaries():
-    """Propagate this module's (possibly patched) seams into the extracted
-    modules: binary paths, the font catalogue provider, and the drawtext
-    cache scalars the test suite mutates on ``processor``."""
-    media_probe.FFMPEG = FFMPEG
-    media_probe.FFPROBE = FFPROBE
-    fonts.get_system_fonts = get_system_fonts
-    mod_globals = globals()
-    if "_DRAWTEXT_OPTIONS_CACHE" in mod_globals:
-        filters._DRAWTEXT_OPTIONS_CACHE = mod_globals["_DRAWTEXT_OPTIONS_CACHE"]
-        filters._DRAWTEXT_OPTIONS_CACHE_FOR = mod_globals.get("_DRAWTEXT_OPTIONS_CACHE_FOR")
-    if "_DRAWTEXT_CACHE_ENABLED" in mod_globals:
-        filters._DRAWTEXT_CACHE_ENABLED = mod_globals["_DRAWTEXT_CACHE_ENABLED"]
-
-
-def ffprobe(path):
-    """Probe wrapper: resolves this module's patchable FFMPEG/FFPROBE."""
-    return media_probe.ffprobe(path, ffprobe_bin=FFPROBE, ffmpeg_bin=FFMPEG)
-
-
-def _ffprobe_via_ffmpeg(path):
-    return media_probe._ffprobe_via_ffmpeg(path, ffmpeg_bin=FFMPEG)
-
-
-def _probe_stream_types(path):
-    """[(codec_type, codec_name)] for each stream; None when ffprobe fails."""
-    return media_probe._probe_stream_types(path, ffprobe_bin=FFPROBE)
-
-
-def _native_copy_eligible(input_path, output_path, *, ctx=None):
-    """Eligibility wrapper so a stubbed ``_probe_stream_types`` still applies."""
-    probe = _probe_stream_types if ctx is None else lambda path: media_probe._probe_stream_types(
-        path, ffprobe_bin=ctx.ffprobe_path
-    )
-    return media_probe._native_copy_eligible(input_path, output_path, probe_fn=probe)
-
-
-def job_video_info(job, input_path, *, ctx=None):
-    """Job-metadata-first probe; ``processor.ffprobe`` patches still apply."""
-    probe = ffprobe if ctx is None else lambda path: media_probe.ffprobe(
-        path, ffprobe_bin=ctx.ffprobe_path, ffmpeg_bin=ctx.ffmpeg_path
-    )
-    return media_probe.job_video_info(job, input_path, probe_fn=probe)
-
 
 def _init_ffmpeg_globals():
-    """Configure module-level FFMPEG/FFPROBE paths. Returns False if ffmpeg is missing."""
-    global FFMPEG, FFPROBE
-
-    ffmpeg_bin = find_ffmpeg()
-    ffprobe_bin = find_ffprobe(ffmpeg_bin)
+    ffmpeg_bin = media_probe.find_ffmpeg()
+    ffprobe_bin = media_probe.find_ffprobe(ffmpeg_bin)
     if not (os.path.isfile(ffmpeg_bin) or shutil.which(ffmpeg_bin)):
         logger.error("ffmpeg not found at %s", ffmpeg_bin)
         return False
 
-    FFMPEG = media_probe.FFMPEG = ffmpeg_bin
-    FFPROBE = media_probe.FFPROBE = ffprobe_bin
-    logger.info("Using ffmpeg: %s", FFMPEG)
-    logger.info("Using ffprobe: %s", FFPROBE)
+    media_probe.FFMPEG = ffmpeg_bin
+    media_probe.FFPROBE = ffprobe_bin
+    logger.info("Using ffmpeg: %s", media_probe.FFMPEG)
+    logger.info("Using ffprobe: %s", media_probe.FFPROBE)
     return True
 
 
-def build_drawtext(op):
-    """Compatibility wrapper: keeps filters' ffmpeg probe on the current binary."""
-    _sync_probe_binaries()
-    return filters.build_drawtext(op)
+def _new_hardware_fallback_states(jobs):
+    return {id(job): HardwareFallbackState() for job in jobs}
 
 
-def _build_watermark_filter(watermark, video_w, video_h):
-    _sync_probe_binaries()
-    return filters._build_watermark_filter(watermark, video_w, video_h)
-
-
-def build_filter_complex(operations, video_w, video_h, watermark=None, _ffmpeg_path=None,
-                         source_pix_fmt=None, temporal_resolver=None, transform=None):
-    """Compatibility wrapper: keeps filters' ffmpeg probe on the active binary."""
-    if _ffmpeg_path is None:
-        _sync_probe_binaries()
-    return filters.build_filter_complex(
-        operations, video_w, video_h, watermark=watermark, ffmpeg_path=_ffmpeg_path,
-        source_pix_fmt=source_pix_fmt, temporal_resolver=temporal_resolver,
-        transform=transform,
-    )
-
-
-def build_filter_thread_args(active_workers=None):
-    """Parallelize filter graph; fewer threads per job when many jobs run at once."""
-    workers = active_workers if active_workers is not None else _BATCH_ACTIVE_WORKERS
-    cpus = os.cpu_count() or 4
-    n = max(1, min(4, cpus // max(1, int(workers))))
-    return ["-filter_threads", str(n), "-filter_complex_threads", str(n)]
-
-
-def resolve_x264_threads(active_workers=None):
-    """Bound libx264 threads per job so CPU fallback batches do not exhaust RAM."""
-    workers = active_workers if active_workers is not None else _BATCH_ACTIVE_WORKERS
-    cpus = os.cpu_count() or 4
-    return max(1, min(8, cpus // max(1, int(workers))))
-
-
-def build_encode_args(ffmpeg_path, profile_name, job, force_software=False,
-                      hw_encoder=None, active_workers=None):
-    """Return ffmpeg video encode argument list for the given profile.
-
-    If hw_encoder is provided (from batch pre-flight), it is used directly
-    without re-detecting.  This avoids re-probing and allows the batch-level
-    pre-flight test to skip a broken GPU path entirely.
-    """
-    profile_key = (profile_name or "balanced").strip().lower()
-    profile = ENCODE_PROFILES.get(profile_key, ENCODE_PROFILES["balanced"])
-    use_hw = not force_software and profile_allows_hardware(profile_name)
-    if hw_encoder is not None and use_hw:
-        hw = hw_encoder
-    elif use_hw:
-        hw = detect_hw_encoder(ffmpeg_path)
-    else:
-        hw = None
-
-    if hw == "h264_nvenc":
-        cq = profile.get("hw_cq", 23)
-        nv_preset = profile.get("nvenc_preset") or "p4"
-        return ["-c:v", "h264_nvenc", "-preset", nv_preset, "-rc", "vbr", "-cq", str(cq)]
-
-    if hw == "h264_qsv":
-        gq = profile.get("hw_cq", 23)
-        return ["-c:v", "h264_qsv", "-global_quality", str(gq)]
-
-    if hw == "h264_mf":
-        # MediaFoundation on Windows: rate control is quality scale.
-        gq = profile.get("hw_cq", 23)
-        return ["-c:v", "h264_mf", "-rate_control", "quality", "-quality", str(gq)]
-
-    if hw == "h264_amf":
-        quality = (
-            "speed" if profile_key == "fast"
-            else "quality" if profile_key == "quality"
-            else "balanced"
-        )
-        return ["-c:v", "h264_amf", "-quality", quality]
-
-    preset = job.get("speed_preset") or profile["preset"]
-    threads = resolve_x264_threads(active_workers)
-    return [
-        "-c:v", "libx264",
-        "-crf", str(profile["crf"]),
-        "-preset", preset,
-        "-threads", str(threads),
-    ]
-
-
-def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None):
-    """Execute one Job attempt; intermediate renders never emit terminal events."""
+def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
+                 hardware_fallback=None):
     job_id = job.get("id", idx) if isinstance(job, dict) else idx
-    workers = ctx.max_workers if ctx else _BATCH_ACTIVE_WORKERS
+    workers = ctx.max_workers if ctx else 1
     if _check_cancelled(ctx):
         return _job_cancelled_result(job_id)
     try:
         if not isinstance(job, dict):
             raise ValueError("Invalid job payload")
+        if ctx is None:
+            encoder = hw_encoder
+            if encoder is None and _job_requires_encode(job) and _jobs_allow_hardware([job]):
+                encoder = encoders.detect_hw_encoder(ffmpeg_path)
+            ctx = BatchContext(ffmpeg_path=ffmpeg_path, hw_encoder=encoder,
+                               cancel_event=_cancel_event)
         if job.get("kind") == "stabilization":
-            process_stabilization(job, ctx.ffmpeg_path if ctx else ffmpeg_path,
-                ctx=ctx, run_ffmpeg=_run_ffmpeg, encode_args=build_encode_args)
+            process_stabilization(job, ctx.ffmpeg_path,
+                ctx=ctx, run_ffmpeg=ffmpeg_runner._run_ffmpeg, encode_args=encode_args.build_encode_args)
         else:
-            renderer = ClipRenderer(ffmpeg_path, retry_job=job, ctx=ctx, hw_encoder=hw_encoder,
-                active_workers=workers, admission=_SOFTWARE_FALLBACK_ADMISSION,
-                run_ffmpeg=_run_ffmpeg, encode_args=build_encode_args,
-                filter_args=build_filter_thread_args, build_filters=build_filter_complex,
-                video_info=job_video_info, native_copy_eligible=_native_copy_eligible,
-                native_copy=_native_stream_copy, detect_encoder=detect_hw_encoder)
+            renderer = ClipRenderer(ctx, hardware_fallback=(
+                hardware_fallback if hardware_fallback is not None else HardwareFallbackState()
+            ))
             if job.get("kind") == "composition":
                 process_composition(job, renderer.ffmpeg_path, ctx=ctx,
-                    render_clip=renderer.render, run_ffmpeg=_run_ffmpeg, encode_args=build_encode_args)
+                    render_clip=renderer.render, run_ffmpeg=ffmpeg_runner._run_ffmpeg, encode_args=encode_args.build_encode_args)
             else:
                 renderer.render({**job, "id": job_id} if "id" not in job else job)
         _emit_job_complete(job_id, job["output_path"])
@@ -388,16 +179,10 @@ def _execute_batch(
     emit_batch_progress=True,
     copy_workers=None,
     defer_retryable=False,
+    fallback_by_parent=None,
 ):
-    """Run one concurrent pass; returns per-job results and failure list.
-
-    With defer_retryable, failures a retry pass will take stay unreported so
-    the renderer never sees an error that a later pass turns into success.
-
-    Stream-copy jobs (no operations, watermark, or trim) run on a separate
-    bounded pool: a remux is pure disk I/O, so it neither deserves an encode
-    slot nor benefits from sharing the encode concurrency cap.
-    """
+    if fallback_by_parent is None:
+        fallback_by_parent = _new_hardware_fallback_states(jobs)
     ffmpeg_path = ctx.ffmpeg_path
     max_workers = ctx.max_workers
     hw_encoder = ctx.hw_encoder
@@ -427,22 +212,14 @@ def _execute_batch(
     }
 
     def _job_ram_estimate_mb(job, pool):
-        """Peak-RAM estimate for the job about to be dispatched."""
         if pool == "copy":
             return _REMUX_JOB_RAM_MB
         profile = job.get("encode_profile", "balanced") if isinstance(job, dict) else "balanced"
-        hw_failed = isinstance(job, dict) and bool(job.get("_hw_failed"))
+        hw_failed = fallback_by_parent[id(job)].hardware_failed
         job_hw = hw_encoder if profile_allows_hardware(profile) and not hw_failed else None
         return _estimate_job_ram_mb(job, job_hw, _job_requires_encode(job), profile)
 
     def _memory_allows_another(job_ram_mb):
-        """RAM gate for dispatching the next job.
-
-        Always admits when no job is running (progress guarantee: even on a
-        permanently tight machine, one job at a time still finishes) and when
-        RAM cannot be measured. Worker sizing happens once at batch start via
-        _memory_cap_workers; this gate handles RAM drifting DURING the batch.
-        """
         if pools["encode"]["outstanding"] + pools["copy"]["outstanding"] <= 0:
             return True
         avail_mb = _get_available_ram_mb()
@@ -451,7 +228,6 @@ def _execute_batch(
         return avail_mb >= job_ram_mb
 
     def _try_acquire(pool_name, job):
-        """Grab a pool slot when concurrency and RAM headroom allow."""
         with admission_cond:
             pool = pools[pool_name]
             if pool["outstanding"] >= pool["cap"]:
@@ -532,6 +308,7 @@ def _execute_batch(
                     fut = executor.submit(
                         _process_one, i, job, ffmpeg_path,
                         ctx=ctx,
+                        hardware_fallback=fallback_by_parent[id(job)],
                     )
                 except Exception:
                     _release_admission(name)
@@ -582,17 +359,17 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
     if ctx is not None and hw_encoder is _HW_ENCODER_UNSET:
         hw_encoder = ctx.hw_encoder
     if ctx is None:
-        ctx = BatchContext(ffmpeg_path=ffmpeg_path, ffprobe_path=FFPROBE)
+        ctx = BatchContext(ffmpeg_path=ffmpeg_path, ffprobe_path=media_probe.FFPROBE)
     ffmpeg_path = ctx.ffmpeg_path
 
     if _jobs_require_fonts(jobs):
-        reset_caches()
-        get_system_fonts()
+        fonts.reset_caches()
+        fonts.get_system_fonts()
 
     if not _jobs_allow_hardware(jobs):
         hw = None
     elif hw_encoder is _HW_ENCODER_UNSET:
-        hw = detect_hw_encoder(ffmpeg_path, env=ctx.env)
+        hw = encoders.detect_hw_encoder(ffmpeg_path, env=ctx.env)
     else:
         hw = hw_encoder
     max_pixels = 0
@@ -670,12 +447,14 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
     )
 
     retry_enabled = _retry_failed_enabled(env=ctx.env) and max_workers > 1
+    fallback_by_parent = _new_hardware_fallback_states(jobs)
     pass1 = _execute_batch(
         jobs,
         ctx,
         emit_batch_progress=True,
         copy_workers=copy_workers,
         defer_retryable=retry_enabled,
+        fallback_by_parent=fallback_by_parent,
     )
     succeeded = pass1["succeeded"]
     failed = pass1["failed"]
@@ -704,6 +483,10 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
         pass2 = _execute_batch(
             retry_candidates,
             retry_ctx,
+            fallback_by_parent={
+                id(retry): fallback_by_parent[id(job)]
+                for retry, (job, _result) in zip(retry_candidates, retry_pairs)
+            },
             emit_batch_progress=False,
             copy_workers=resolve_copy_workers(
                 sum(1 for job in retry_candidates if _job_takes_copy_path(job)), env=ctx.env
@@ -732,23 +515,21 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
     }
 
 
-def render_preview_frame(payload):
-    """Render one video frame with export-equivalent filters.
-
-    Returns a dict: {ok, data_url?, error?, width?, height?, timestamp?}
-    """
+def _render_frame(payload, *, source_only):
+    probe = partial(media_probe.ffprobe_cached, ffmpeg_bin=media_probe.FFMPEG, ffprobe_bin=media_probe.FFPROBE)
     return preview.render_frame(
-        payload, source_only=False, ffmpeg_path=FFMPEG, probe_fn=ffprobe,
-        info_fn=job_video_info, filter_fn=build_filter_complex,
+        payload, source_only=source_only, ffmpeg_path=media_probe.FFMPEG, probe_fn=probe,
+        info_fn=partial(media_probe.job_video_info, probe_fn=probe),
+        filter_fn=partial(filters.build_filter_complex, ffmpeg_path=media_probe.FFMPEG),
     )
+
+
+def render_preview_frame(payload):
+    return _render_frame(payload, source_only=False)
 
 
 def render_source_frame(payload):
-    """Decode one frame straight from a rendered artifact (no filter graph)."""
-    return preview.render_frame(
-        payload, source_only=True, ffmpeg_path=FFMPEG, probe_fn=ffprobe,
-        info_fn=job_video_info, filter_fn=build_filter_complex,
-    )
+    return _render_frame(payload, source_only=True)
 
 
 def preview_frame_worker_main():
@@ -757,7 +538,7 @@ def preview_frame_worker_main():
         print(json.dumps({"type": "ready", "ok": False, "error": "ffmpeg not found"}), flush=True)
         return
 
-    get_system_fonts()
+    fonts.get_system_fonts()
     print(json.dumps({"type": "ready", "ok": True}), flush=True)
 
     while line := sys.stdin.buffer.readline(PREVIEW_MAX_REQUEST_BYTES + 1):
@@ -781,7 +562,6 @@ def preview_frame_worker_main():
 
 
 def _load_jobs_manifest(jobs_path):
-    """Read and validate a jobs manifest file. Returns the jobs list."""
     with open(jobs_path, "r", encoding="utf-8") as f:
         payload = json.load(f)
 
@@ -806,11 +586,10 @@ def _load_jobs_manifest(jobs_path):
 
 
 def _preflight_hw_encoder(jobs, *, verified, ctx=None):
-    """Real-encode probe runs until an encoder verifies; failures re-probe."""
     if not _jobs_allow_hardware(jobs):
         return None, verified
-    hw = detect_hw_encoder(
-        ctx.ffmpeg_path if ctx is not None else FFMPEG,
+    hw = encoders.detect_hw_encoder(
+        ctx.ffmpeg_path if ctx is not None else media_probe.FFMPEG,
         force_test=not verified, env=ctx.env if ctx is not None else None,
     )
     if hw is None:
@@ -849,7 +628,7 @@ def job_worker_main():
             ):
                 raise ValueError("Invalid job request")
             ctx = BatchContext(
-                ffmpeg_path=FFMPEG, ffprobe_path=FFPROBE, jobs_file=jobs_file,
+                ffmpeg_path=media_probe.FFMPEG, ffprobe_path=media_probe.FFPROBE, jobs_file=jobs_file,
                 env={**base_env, **{
                     key: value for key, value in env.items()
                     if isinstance(key, str) and isinstance(value, str)
@@ -859,7 +638,7 @@ def job_worker_main():
             preflight_hw, hw_verified = _preflight_hw_encoder(
                 jobs, verified=hw_verified, ctx=ctx
             )
-            result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
+            result = process_jobs(jobs, media_probe.FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
             _safe_print(json.dumps({"type": "summary", **result}))
             _safe_print(json.dumps({
                 "type": "run_end", "id": request_id,
@@ -877,7 +656,7 @@ def main():
     if sys.platform != "win32":
         raise RuntimeError("Beru solo admite Windows.")
 
-    protect_process_tree()
+    process_lifetime.protect_process_tree()
 
     if len(sys.argv) >= 2 and sys.argv[1] == "--preview-frame-worker":
         preview_frame_worker_main()
@@ -893,7 +672,7 @@ def main():
         sys.exit(1)
 
     if not _init_ffmpeg_globals():
-        print(json.dumps({"type": "error", "error": f"ffmpeg not found at {find_ffmpeg()}"}))
+        print(json.dumps({"type": "error", "error": f"ffmpeg not found at {media_probe.find_ffmpeg()}"}))
         sys.exit(1)
 
     try:
@@ -903,9 +682,9 @@ def main():
         print(json.dumps({"type": "error", "error": str(exc)}))
         sys.exit(1)
 
-    ctx = BatchContext(ffmpeg_path=FFMPEG, ffprobe_path=FFPROBE, jobs_file=sys.argv[1])
+    ctx = BatchContext(ffmpeg_path=media_probe.FFMPEG, ffprobe_path=media_probe.FFPROBE, jobs_file=sys.argv[1])
     preflight_hw, _ = _preflight_hw_encoder(jobs, verified=False, ctx=ctx)
-    result = process_jobs(jobs, FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
+    result = process_jobs(jobs, media_probe.FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
     print(json.dumps({"type": "summary", **result}))
     sys.exit(1 if result["failed"] else 130 if result["cancelled"] else 0)
 

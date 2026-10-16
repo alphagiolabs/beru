@@ -1,12 +1,3 @@
-"""Regression: the drawtext memo cache must be ON by default.
-
-The flag used to be opt-in (`BERU_DRAWTEXT_CACHE` defaulted to "0"), but
-nothing in the repo or the spawned child env ever set it, so every text op
-re-ran wrap + autofit + filter rendering on each retry and second pass.
-`build_drawtext` depends on the op and FFmpeg capabilities, so the default is on;
-the env var remains as an explicit opt-out.
-"""
-
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -16,7 +7,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
 import filters  # noqa: E402
-import processor  # noqa: E402
+import os
 
 
 def _text_op(**overrides):
@@ -37,9 +28,9 @@ def _reset_flag():
 def test_cache_enabled_by_default():
     _reset_flag()
     try:
-        with patch.dict(processor.os.environ, {}, clear=False):
-            processor.os.environ.pop("BERU_DRAWTEXT_CACHE", None)
-            assert processor._drawtext_cache_enabled() is True
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("BERU_DRAWTEXT_CACHE", None)
+            assert filters._drawtext_cache_enabled() is True
     finally:
         _reset_flag()
 
@@ -49,41 +40,40 @@ def test_env_opt_out_disables_cache():
     try:
         for off in ("0", "false", "no", "off"):
             _reset_flag()
-            with patch.dict(processor.os.environ, {"BERU_DRAWTEXT_CACHE": off}):
-                assert processor._drawtext_cache_enabled() is False, off
+            with patch.dict(os.environ, {"BERU_DRAWTEXT_CACHE": off}):
+                assert filters._drawtext_cache_enabled() is False, off
     finally:
         _reset_flag()
 
 
 def test_identical_op_is_memoized():
-    processor._DRAWTEXT_CACHE.clear()
+    filters._DRAWTEXT_CACHE.clear()
     op = _text_op(text="Memoized", border_width=7)
     with patch.object(filters, "_layout_export_text", wraps=filters._layout_export_text) as layout:
-        first = processor.build_drawtext(op)
-        assert processor.build_drawtext(dict(op)) == first
+        first = filters.build_drawtext(op)
+        assert filters.build_drawtext(dict(op)) == first
     assert layout.call_count == 1
 
 
 def test_hit_survives_eviction_horizon():
-    """A hit re-enqueues the key, so hot entries outlive the eviction cap."""
-    processor._DRAWTEXT_CACHE.clear()
+    filters._DRAWTEXT_CACHE.clear()
     saved_max = filters._DRAWTEXT_CACHE_MAX
     filters._DRAWTEXT_CACHE_MAX = 4
     try:
         hot_op = _text_op(text="Hot")
-        processor.build_drawtext(hot_op)
+        filters.build_drawtext(hot_op)
         for i in range(3):
-            processor.build_drawtext(_text_op(text=f"Filler {i}"))
+            filters.build_drawtext(_text_op(text=f"Filler {i}"))
         with patch.object(filters, "_layout_export_text", wraps=filters._layout_export_text) as layout:
-            processor.build_drawtext(dict(hot_op))
+            filters.build_drawtext(dict(hot_op))
             for i in range(3):
-                processor.build_drawtext(_text_op(text=f"Cold {i}"))
+                filters.build_drawtext(_text_op(text=f"Cold {i}"))
             layout.reset_mock()
-            processor.build_drawtext(dict(hot_op))
+            filters.build_drawtext(dict(hot_op))
         assert layout.call_count == 0
     finally:
         filters._DRAWTEXT_CACHE_MAX = saved_max
-        processor._DRAWTEXT_CACHE.clear()
+        filters._DRAWTEXT_CACHE.clear()
 
 
 def test_cache_hit_during_eviction_keeps_both_filters_valid():

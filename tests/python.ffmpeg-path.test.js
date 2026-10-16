@@ -9,7 +9,7 @@ const PY = "python";
 
 describeIfPython("python/processor.py ffmpeg path resolution", () => {
   const PY_CODE_PREFIX =
-    "import sys; sys.stdout.reconfigure(encoding='utf-8'); sys.path.insert(0, 'python'); ";
+    "import sys; sys.stdout.reconfigure(encoding='utf-8'); sys.path.insert(0, 'python'); import os, subprocess, batch_context, capacity, encode_args, encoders, ffmpeg_runner, filters, fonts, job_classify, media_probe; ";
 
   it.each(["test_delogo", "test_delogo_robust", "test_delogo_seamless"])(
     "%s uses the discovered FFmpeg binary instead of assuming a Windows filename",
@@ -42,7 +42,7 @@ job = {"source_width": 3840, "source_height": 2160, "video_codec": "hevc", "pix_
 caps = []
 for available in (2600, 4000):
     capacity._get_available_ram_mb = lambda: available
-    caps.append(processor.resolve_max_workers("h264_qsv", 2, 3840 * 2160, has_video_filters=True, encode_profile="balanced", jobs=[job]))
+    caps.append(capacity.resolve_max_workers("h264_qsv", 2, 3840 * 2160, has_video_filters=True, encode_profile="balanced", jobs=[job]))
 print(json.dumps(caps))
 `,
       ],
@@ -61,7 +61,7 @@ print(json.dumps(caps))
     try {
       const r = spawnSync(
         PY,
-        ["-c", PY_CODE_PREFIX + "import processor; print(processor.find_ffmpeg())"],
+        ["-c", PY_CODE_PREFIX + "import processor; print(media_probe.find_ffmpeg())"],
         {
           env: { ...process.env, BERU_FFMPEG: probe },
           encoding: "utf8",
@@ -95,8 +95,8 @@ def fake_run(cmd, **kwargs):
     captured.append(cmd)
     return Result()
 
-processor.subprocess.run = fake_run
-ok = processor._test_hw_encoder_real("ffmpeg", "h264_qsv")
+subprocess.run = fake_run
+ok = encoders._test_hw_encoder_real("ffmpeg", "h264_qsv")
 print(json.dumps({"ok": ok, "cmd": captured[0]}))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
@@ -113,9 +113,9 @@ print(json.dumps({"ok": ok, "cmd": captured[0]}))
   it("quotes Windows fontfile paths in drawtext filters", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\Windows\\Fonts\\arial.ttf", "arial")}
-processor.os.path.isfile = lambda p: True
-print(processor.build_drawtext({
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\Windows\\Fonts\\arial.ttf", "arial")}
+os.path.isfile = lambda p: True
+print(filters.build_drawtext({
     "mode": "text",
     "text": "Hola",
     "font_family": "Arial",
@@ -136,7 +136,7 @@ print(processor.build_drawtext({
   it("skips empty drawtext filters (ffmpeg EINVAL on text='')", () => {
     const code = `
 import processor
-print(processor.build_drawtext({
+print(filters.build_drawtext({
     "mode": "text",
     "text": "",
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
@@ -150,7 +150,7 @@ print(processor.build_drawtext({
   it("build_filter_complex ignores blank text operations", () => {
     const code = `
 import processor
-graph, last, imgs = processor.build_filter_complex([
+graph, last, imgs = filters.build_filter_complex([
     {"mode": "text", "text": "", "region": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.1}},
     {"mode": "text", "text": "Hola", "region": {"x": 0.2, "y": 0.2, "w": 0.2, "h": 0.1}},
 ], 1920, 1080)
@@ -164,8 +164,8 @@ print(graph is not None and "drawtext" in graph and "Hola" in graph)
   it("fills the full text region with a translucent box layer when bg is enabled (matches CSS preview)", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
-graph, last, imgs = processor.build_filter_complex([
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+graph, last, imgs = filters.build_filter_complex([
     {
         "mode": "text",
         "text": "OT  89898990",
@@ -197,8 +197,8 @@ print(graph)
   it("uses pixel coordinates for normalized text regions in filter graphs", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
-graph, last, imgs = processor.build_filter_complex([
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+graph, last, imgs = filters.build_filter_complex([
     {"mode": "text", "text": "Hola", "font_family": "Arial", "region": {"x": 0.1, "y": 0.2, "w": 0.3, "h": 0.1}},
 ], 1920, 1080)
 print("overlay=192:216" in graph and "x=196" in graph and "y=220" in graph)
@@ -215,10 +215,10 @@ print("overlay=192:216" in graph and "x=196" in graph and "y=220" in graph)
   it("emits drawtext spacing for letter_spacing instead of inserting spaces", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
-processor._DRAWTEXT_OPTIONS_CACHE = {"spacing"}
-processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
-print(processor.build_drawtext({
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+filters._DRAWTEXT_OPTIONS_CACHE = {"spacing"}
+filters._DRAWTEXT_OPTIONS_CACHE_FOR = media_probe.FFMPEG
+print(filters.build_drawtext({
     "mode": "text",
     "text": "ABC",
     "font_family": "Arial",
@@ -243,10 +243,10 @@ print(processor.build_drawtext({
   it("falls back to typographic spacing when drawtext has no spacing option", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
-processor._DRAWTEXT_OPTIONS_CACHE = set()
-processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
-print(processor.build_drawtext({
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+filters._DRAWTEXT_OPTIONS_CACHE = set()
+filters._DRAWTEXT_OPTIONS_CACHE_FOR = media_probe.FFMPEG
+print(filters.build_drawtext({
     "mode": "text",
     "text": "ABC",
     "font_family": "Arial",
@@ -271,10 +271,10 @@ print(processor.build_drawtext({
   it("emits native spacing for negative letter_spacing when supported", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
-processor._DRAWTEXT_OPTIONS_CACHE = {"spacing"}
-processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
-print(processor.build_drawtext({
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+filters._DRAWTEXT_OPTIONS_CACHE = {"spacing"}
+filters._DRAWTEXT_OPTIONS_CACHE_FOR = media_probe.FFMPEG
+print(filters.build_drawtext({
     "mode": "text",
     "text": "ABC",
     "font_family": "Arial",
@@ -298,10 +298,10 @@ print(processor.build_drawtext({
   it("falls back to per-glyph drawtext for negative letter_spacing without native spacing", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
-processor._DRAWTEXT_OPTIONS_CACHE = set()
-processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
-print(processor.build_drawtext({
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+filters._DRAWTEXT_OPTIONS_CACHE = set()
+filters._DRAWTEXT_OPTIONS_CACHE_FOR = media_probe.FFMPEG
+print(filters.build_drawtext({
     "mode": "text",
     "text": "ABC",
     "font_family": "Arial",
@@ -331,8 +331,8 @@ print(processor.build_drawtext({
   it("emits drawtext shadow options for text shadow styles", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
-print(processor.build_drawtext({
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+print(filters.build_drawtext({
     "mode": "text",
     "text": "ABC",
     "font_family": "Arial",
@@ -360,10 +360,10 @@ print(processor.build_drawtext({
   it("omits unsupported drawtext options while preserving letter spacing", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
-processor._DRAWTEXT_OPTIONS_CACHE = set()
-processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
-print(processor.build_drawtext({
+fonts.get_system_fonts = lambda: {"arial": (r"C:\\\\Windows\\\\Fonts\\\\arial.ttf", "arial")}
+filters._DRAWTEXT_OPTIONS_CACHE = set()
+filters._DRAWTEXT_OPTIONS_CACHE_FOR = media_probe.FFMPEG
+print(filters.build_drawtext({
     "mode": "text",
     "text": "ABC",
     "font_family": "Arial",
@@ -391,16 +391,16 @@ print(processor.build_drawtext({
   it("uses the matching font file when weight and italic options are unsupported", () => {
     const code = `
 import processor
-processor.get_system_fonts = lambda: {
+fonts.get_system_fonts = lambda: {
     "arial": (r"C:\\Windows\\Fonts\\arial.ttf", "arial"),
     "arial bold": (r"C:\\Windows\\Fonts\\arialbd.ttf", "arialbd"),
     "arial italic": (r"C:\\Windows\\Fonts\\ariali.ttf", "ariali"),
     "arial bold italic": (r"C:\\Windows\\Fonts\\arialbi.ttf", "arialbi"),
 }
-processor.os.path.isfile = lambda p: True
-processor._DRAWTEXT_OPTIONS_CACHE = set()
-processor._DRAWTEXT_OPTIONS_CACHE_FOR = processor.FFMPEG
-print(processor.build_drawtext({
+os.path.isfile = lambda p: True
+filters._DRAWTEXT_OPTIONS_CACHE = set()
+filters._DRAWTEXT_OPTIONS_CACHE_FOR = media_probe.FFMPEG
+print(filters.build_drawtext({
     "mode": "text",
     "text": "Styled",
     "font_family": "Arial",
@@ -427,9 +427,9 @@ import processor
 os.environ.pop("BERU_WORKERS", None)
 os.environ["BERU_WORKERS_MODE"] = "conservative"
 print(json.dumps([
-    processor.resolve_max_workers("h264_nvenc", 4, consider_memory=False),
-    processor.resolve_max_workers("h264_mf", 4, consider_memory=False),
-    processor.resolve_max_workers(None, 1, consider_memory=False),
+    capacity.resolve_max_workers("h264_nvenc", 4, consider_memory=False),
+    capacity.resolve_max_workers("h264_mf", 4, consider_memory=False),
+    capacity.resolve_max_workers(None, 1, consider_memory=False),
 ]))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
@@ -450,7 +450,7 @@ import os
 import processor
 os.environ.pop("BERU_WORKERS", None)
 os.environ["BERU_WORKERS_MODE"] = "balanced"
-print(json.dumps(processor.resolve_max_workers("h264_nvenc", 8, consider_memory=False)))
+print(json.dumps(capacity.resolve_max_workers("h264_nvenc", 8, consider_memory=False)))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
       encoding: "utf8",
@@ -466,9 +466,9 @@ import processor
 
 jobs = [{"input_path": "in.mp4", "output_path": "out.mp4", "operations": []}]
 print(json.dumps({
-    "fonts": processor._jobs_require_fonts(jobs),
-    "hardware": processor._jobs_allow_hardware(jobs),
-    "encode": processor._job_requires_encode(jobs[0]),
+    "fonts": job_classify._jobs_require_fonts(jobs),
+    "hardware": job_classify._jobs_allow_hardware(jobs),
+    "encode": job_classify._job_requires_encode(jobs[0]),
 }))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
@@ -483,9 +483,9 @@ print(json.dumps({
 import json
 import processor
 job = {"operations": [], "encode_profile": "balanced", **json.loads(${JSON.stringify(JSON.stringify(trim))})}
-print(json.dumps({"encode": processor._job_requires_encode(job),
-                  "hardware": processor._jobs_allow_hardware([job]),
-                  "copy": processor._job_takes_copy_path(job)}))
+print(json.dumps({"encode": job_classify._job_requires_encode(job),
+                  "hardware": job_classify._jobs_allow_hardware([job]),
+                  "copy": job_classify._job_takes_copy_path(job)}))
 `;
       const result = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
       expect(result.status, result.stderr).toBe(0);
@@ -504,7 +504,7 @@ import threading
 import time
 import processor
 
-gate = processor._ResourceAdmission(2, 0)
+gate = batch_context._ResourceAdmission(2, 0)
 state = {"active": 0, "peak": 0}
 lock = threading.Lock()
 
@@ -542,9 +542,9 @@ import os
 import processor
 os.environ.pop("BERU_WORKERS", None)
 os.environ["BERU_WORKERS_MODE"] = "balanced"
-processor.os.cpu_count = lambda: 16
+os.cpu_count = lambda: 16
 print(json.dumps({
-    "filtered_quality": processor.resolve_max_workers(
+    "filtered_quality": capacity.resolve_max_workers(
         "h264_nvenc",
         8,
         1920 * 1080,
@@ -552,7 +552,7 @@ print(json.dumps({
         has_video_filters=True,
         encode_profile="quality",
     ),
-    "no_filters": processor.resolve_max_workers(
+    "no_filters": capacity.resolve_max_workers(
         "h264_nvenc",
         8,
         1920 * 1080,
@@ -560,7 +560,7 @@ print(json.dumps({
         has_video_filters=False,
         encode_profile="quality",
     ),
-    "software_filtered_quality": processor.resolve_max_workers(
+    "software_filtered_quality": capacity.resolve_max_workers(
         None,
         8,
         1920 * 1080,
@@ -568,7 +568,7 @@ print(json.dumps({
         has_video_filters=True,
         encode_profile="quality",
     ),
-    "filtered_uquality": processor.resolve_max_workers(
+    "filtered_uquality": capacity.resolve_max_workers(
         "h264_nvenc",
         8,
         1920 * 1080,
@@ -601,7 +601,7 @@ print(json.dumps({
         [
           "-c",
           PY_CODE_PREFIX +
-            "import processor; print(processor.find_ffprobe(r'" +
+            "import processor; print(media_probe.find_ffprobe(r'" +
             ffmpegProbe.replace(/\\/g, "\\\\") +
             "'))",
         ],
@@ -632,7 +632,7 @@ print(json.dumps({
     delete env.BERU_FFPROBE;
     const r = spawnSync(
       PY,
-      ["-c", PY_CODE_PREFIX + "import processor; print(processor.FFMPEG, processor.FFPROBE)"],
+      ["-c", PY_CODE_PREFIX + "print(media_probe.FFMPEG, media_probe.FFPROBE)"],
       { env, encoding: "utf8" },
     );
     if (r.status !== 0) {
@@ -659,8 +659,8 @@ def fake_process(idx, job, ffmpeg_path, **kwargs):
         return {"index": job_id, "status": "failed", "error": "nvenc init failed"}
     return {"index": job_id, "status": "succeeded"}
 
-processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: "h264_nvenc"
-processor.get_system_fonts = lambda: {}
+encoders.detect_hw_encoder = lambda _ffmpeg, **kwargs: "h264_nvenc"
+fonts.get_system_fonts = lambda: {}
 processor._process_one = fake_process
 os.environ["BERU_RETRY_FAILED"] = "1"
 jobs = [{"id": 3, "input_path": "C:/tmp/a.mp4", "output_path": "C:/tmp/out.mp4", "operations": [{"mode": "blur"}]}]
@@ -698,8 +698,8 @@ def fake_run(cmd, **kwargs):
         return False, "x264 [error]: malloc of size 11619264 failed"
     return True, None
 
-processor.os.cpu_count = lambda: 8
-processor._run_ffmpeg = fake_run
+os.cpu_count = lambda: 8
+ffmpeg_runner._run_ffmpeg = fake_run
 os.environ["BERU_RETRY_FAILED"] = "1"
 with tempfile.TemporaryDirectory() as temp:
     source = Path(temp) / "in.mp4"
@@ -745,8 +745,8 @@ def fake_process(idx, job, ffmpeg_path, **kwargs):
         active["n"] -= 1
     return {"index": job.get("id", idx), "status": "succeeded"}
 
-processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: None
-processor.get_system_fonts = lambda: {}
+encoders.detect_hw_encoder = lambda _ffmpeg, **kwargs: None
+fonts.get_system_fonts = lambda: {}
 processor._process_one = fake_process
 jobs = [{"id": i, "input_path": f"C:/tmp/{i}.mp4", "operations": [{"mode": "blur"}]} for i in range(8)]
 result = processor.process_jobs(jobs, "ffmpeg", max_workers=2)
@@ -770,22 +770,22 @@ import threading
 import time
 import processor
 
-processor._cancel_event.clear()
+batch_context._cancel_event.clear()
 
 def trigger_cancel():
     time.sleep(0.2)
-    processor._cancel_event.set()
+    batch_context._cancel_event.set()
 
 threading.Thread(target=trigger_cancel, daemon=True).start()
 started = time.perf_counter()
-ok, err = processor._run_ffmpeg_stream(
+ok, err = ffmpeg_runner._run_ffmpeg_stream(
     [sys.executable, "-c", "import time; time.sleep(1.5)"],
     timeout_sec=5,
     job_id=4,
     duration_sec=1.0,
 )
 elapsed = time.perf_counter() - started
-processor._cancel_event.clear()
+batch_context._cancel_event.clear()
 print(json.dumps({"ok": ok, "err": err, "elapsed": elapsed}))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
@@ -815,11 +815,10 @@ def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
         f.write(b"partial")
     return False, "x264 [error]: malloc of size 11619264 failed"
 
-processor._run_ffmpeg = fake_run
-processor._BATCH_ACTIVE_WORKERS = 4
+ffmpeg_runner._run_ffmpeg = fake_run
 job = {"id": 9, "input_path": inp.name, "output_path": out, "operations": []}
 try:
-    result = processor._process_one(0, job, "ffmpeg")
+    result = processor._process_one(0, job, "ffmpeg", ctx=batch_context.BatchContext(ffmpeg_path="ffmpeg", max_workers=4))
     exists_after = os.path.exists(out)
 finally:
     os.unlink(inp.name)
@@ -845,9 +844,8 @@ print(json.dumps({"result": result, "exists_after": exists_after}))
 import json
 import processor
 
-processor.os.cpu_count = lambda: 16
-processor._BATCH_ACTIVE_WORKERS = 4
-args = processor.build_encode_args("ffmpeg", "quality", {}, force_software=True)
+os.cpu_count = lambda: 16
+args = encode_args.build_encode_args("ffmpeg", "quality", {}, force_software=True, active_workers=4)
 threads_idx = args.index("-threads")
 print(json.dumps({
     "threads": args[threads_idx + 1],
@@ -872,9 +870,8 @@ print(json.dumps({
 import json
 import processor
 
-processor.os.cpu_count = lambda: 16
-processor._BATCH_ACTIVE_WORKERS = 2
-args = processor.build_encode_args(
+os.cpu_count = lambda: 16
+args = encode_args.build_encode_args(
     "ffmpeg",
     "quality",
     {},
@@ -899,9 +896,8 @@ print(json.dumps(args))
 import json
 import processor
 
-processor.os.cpu_count = lambda: 16
-processor._BATCH_ACTIVE_WORKERS = 2
-args = processor.build_encode_args(
+os.cpu_count = lambda: 16
+args = encode_args.build_encode_args(
     "ffmpeg",
     "quality",
     {},
@@ -927,9 +923,8 @@ print(json.dumps(args))
 import json
 import processor
 
-processor.os.cpu_count = lambda: 16
-processor._BATCH_ACTIVE_WORKERS = 2
-args = processor.build_encode_args(
+os.cpu_count = lambda: 16
+args = encode_args.build_encode_args(
     "ffmpeg",
     "uquality",
     {},
@@ -954,7 +949,7 @@ print(json.dumps(args))
 import json
 import processor
 
-args = processor.build_encode_args(
+args = encode_args.build_encode_args(
     "ffmpeg",
     "quality",
     {},
@@ -987,8 +982,8 @@ def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
     calls.append(cmd)
     return True, None
 
-processor._run_ffmpeg = fake_run
-processor.job_video_info = lambda job, input_path, **kwargs: {
+ffmpeg_runner._run_ffmpeg = fake_run
+media_probe.job_video_info = lambda job, input_path, **kwargs: {
     "width": 1920,
     "height": 1080,
     "duration": 1.0,
@@ -1061,8 +1056,8 @@ import processor
 def fail_probe(_path):
     raise AssertionError("ffprobe should not be called")
 
-processor.ffprobe = fail_probe
-info = processor.job_video_info({
+media_probe.ffprobe = fail_probe
+info = media_probe.job_video_info({
     "width": 1920,
     "height": 1080,
     "source_width": 1920,
@@ -1114,8 +1109,8 @@ def fake_probe(_path):
         "video_codec": "h264",
     }
 
-processor.ffprobe = fake_probe
-info = processor.job_video_info({
+media_probe.ffprobe = fake_probe
+info = media_probe.job_video_info({
     "width": 1920,
     "height": 1080,
     "source_width": 1920,
@@ -1144,8 +1139,8 @@ import processor
 def fail_probe(_path):
     raise AssertionError("ffprobe should not be called")
 
-processor.ffprobe = fail_probe
-info = processor.job_video_info({
+media_probe.ffprobe = fail_probe
+info = media_probe.job_video_info({
     "source_width": 1280,
     "source_height": 720,
     "video_duration": 0,
@@ -1191,9 +1186,9 @@ def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
         return True, None
     return False, "Error while filtering: h264_nvenc: encoder init failed"
 
-processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: "h264_nvenc"
-processor.get_system_fonts = lambda: {}
-processor.job_video_info = lambda job, input_path, **kwargs: {
+encoders.detect_hw_encoder = lambda _ffmpeg, **kwargs: "h264_nvenc"
+fonts.get_system_fonts = lambda: {}
+media_probe.job_video_info = lambda job, input_path, **kwargs: {
     "width": 320,
     "height": 180,
     "duration": 1.0,
@@ -1203,7 +1198,7 @@ processor.job_video_info = lambda job, input_path, **kwargs: {
     "audio_channels": 1,
     "video_codec": "h264",
 }
-processor._run_ffmpeg = fake_run
+ffmpeg_runner._run_ffmpeg = fake_run
 job = {
     "id": 2,
     "input_path": tmp.name,
@@ -1276,10 +1271,10 @@ try:
             "output_path": "C:/tmp/out.mp4",
             "operations": [{"mode": "blur"}],
         }], f)
-    processor.find_ffmpeg = lambda: ffmpeg.name
-    processor.find_ffprobe = lambda _ffmpeg, **kwargs: ffprobe.name
-    processor.detect_hw_encoder = lambda _ffmpeg, force_test=False, **kwargs: "h264_nvenc" if force_test else None
-    processor.get_system_fonts = lambda: {}
+    media_probe.find_ffmpeg = lambda: ffmpeg.name
+    media_probe.find_ffprobe = lambda _ffmpeg, **kwargs: ffprobe.name
+    encoders.detect_hw_encoder = lambda _ffmpeg, force_test=False, **kwargs: "h264_nvenc" if force_test else None
+    fonts.get_system_fonts = lambda: {}
     processor.process_jobs = fake_process_jobs
     sys.argv = ["processor.py", jobs_path]
     try:
@@ -1310,7 +1305,7 @@ print(json.dumps(seen))
   it("bounds stderr buffer while streaming progress", () => {
     const code = `
 import processor
-buf = processor.StderrBuffer()
+buf = ffmpeg_runner.StderrBuffer()
 for i in range(500):
     buf.append("x" * 200 + "\\n")
 print(len(buf), len(buf.join()))
@@ -1326,8 +1321,8 @@ print(len(buf), len(buf.join()))
     const code = `
 import json
 import processor
-processor.detect_hw_encoder = lambda _ffmpeg, **kwargs: None
-processor.get_system_fonts = lambda: {}
+encoders.detect_hw_encoder = lambda _ffmpeg, **kwargs: None
+fonts.get_system_fonts = lambda: {}
 processor._process_one = lambda idx, job, ffmpeg_path, **kwargs: {"index": job.get("id", idx), "status": "succeeded"}
 result = processor.process_jobs([{"id": 7, "input_path": "C:/tmp/a.mp4"}], "ffmpeg", max_workers=1)
 print("RESULT", json.dumps(result, sort_keys=True))

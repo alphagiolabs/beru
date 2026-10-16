@@ -1,11 +1,28 @@
 {
   "maxWorkers": 16,
   "encoderCaps": {
-    "conservative": { "h264_mf": 1, "h264_nvenc": 2, "h264_qsv": 2, "h264_amf": 2 },
-    "balanced": { "h264_mf": 1, "h264_nvenc": 5, "h264_qsv": 5, "h264_amf": 4 }
+    "conservative": {
+      "h264_mf": 1,
+      "h264_nvenc": 2,
+      "h264_qsv": 2,
+      "h264_amf": 2
+    },
+    "balanced": {
+      "h264_mf": 1,
+      "h264_nvenc": 5,
+      "h264_qsv": 5,
+      "h264_amf": 4
+    }
   },
-  "ramPerJobMb": { "software": 512, "nvenc": 256, "qsv": 192, "amf": 128, "mf": 64 },
-  "x264PresetRamMultiplier": {
+  "ramPerJobMb": {
+    "software": 512,
+    "nvenc": 256,
+    "qsv": 192,
+    "amf": 128,
+    "mf": 64
+  },
+  "remuxJobRamMb": 128,
+  "x264PresetRamMultipliers": {
     "ultrafast": 0.6,
     "superfast": 0.7,
     "veryfast": 0.8,
@@ -17,5 +34,15 @@
     "veryslow": 2.2
   },
   "heavyDecodeCodecs": ["hevc", "h265", "av1", "vp9", "prores", "wmv3"],
-  "highBitDepthTokens": ["p10", "p12", "p16", "10le", "10be", "12le", "12be", "16le", "16be"]
+  "highBitDepthTokens": ["p10", "p12", "p16", "10le", "10be", "12le", "12be", "16le", "16be"],
+  "ramMultipliers": {
+    "heavyDecode": 1.25,
+    "highBitDepth": 1.5,
+    "filters": 1.5,
+    "softwareQuality": 1.35,
+    "ultraHd": 2.5,
+    "fullHd": 1.5
+  },
+  "memoryBudgetFraction": 0.8,
+  "minimumJobRamMb": 64
 }

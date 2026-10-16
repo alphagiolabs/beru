@@ -8,7 +8,6 @@ _FONT_NOT_FOUND_MSG = (
 
 
 def is_hardware_encode_error(stderr_text):
-    """Detect hardware encoder failures and related GPU/resource errors."""
     if not stderr_text:
         return False
     lower = stderr_text.lower()
@@ -32,7 +31,6 @@ def is_hardware_encode_error(stderr_text):
 
 
 def is_resource_pressure_error(stderr_text):
-    """Detect memory/resource pressure where fewer workers may succeed."""
     if not stderr_text:
         return False
     lower = stderr_text.lower()
@@ -48,7 +46,6 @@ def is_resource_pressure_error(stderr_text):
 
 
 def remove_partial_output(output_path, input_path=None, logger=None):
-    """Delete an incomplete output file after failed/cancelled processing."""
     if not output_path:
         return False
     try:
@@ -66,7 +63,6 @@ def remove_partial_output(output_path, input_path=None, logger=None):
 
 
 def format_processing_error(raw_error, *, max_workers=None):
-    """Map low-level FFmpeg/Python errors to user-facing Spanish messages."""
     raw = str(raw_error or "").strip()
     lower = raw.lower()
     if not raw:
@@ -87,7 +83,6 @@ def format_processing_error(raw_error, *, max_workers=None):
         )
     if "no space left" in lower:
         return "No hay espacio libre suficiente en el disco de salida."
-    # POSIX EPERM is permission (file locked / ACL), not GPU.
     if (
         "permission denied" in lower
         or "access is denied" in lower

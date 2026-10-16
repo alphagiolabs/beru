@@ -1,9 +1,3 @@
-"""Compare Temporal with its former coordinate median on controlled/real clips.
-
-python python/temporal_quality_benchmark.py --input clean.mp4 --output .tmp/motion
-Metrics use lossless RGB; the four-column MP4s are review copies only.
-"""
-
 import argparse
 import json
 import subprocess
@@ -13,9 +7,11 @@ from pathlib import Path
 
 import numpy as np
 
-from delogo_chains import _build_padded_region, _seamless_overlay_tail
+from delogo_chains import (
+    FramePatchBounds, PatchLocalLogoBounds, _build_padded_region, _seamless_overlay_tail,
+)
 from filters import build_filter_complex
-from processor import find_ffmpeg
+from media_probe import find_ffmpeg
 from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 
 FFMPEG = find_ffmpeg()
@@ -107,14 +103,11 @@ def former_graph(box, width, height, radius, feather):
             "clean",
             "d0",
             0,
-            bx,
-            by,
-            bw,
-            bh,
-            (x - bx, y - by, w, h),
-            feather,
-            "",
-            "yuv444p",
+            frame_patch=FramePatchBounds(bx, by, bw, bh),
+            logo=PatchLocalLogoBounds(x - bx, y - by, w, h),
+            feather=feather,
+            enable_clause="",
+            pixel_format="yuv444p",
         )
     )
 

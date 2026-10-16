@@ -138,7 +138,8 @@ describe("main process crash diagnostics", () => {
     ].join("\n");
 
     main.processEvents.get("unhandledRejection")(error);
-    expect(main.getLog()).toContain("fatal unhandledRejection unknown");
+    expect(main.getLog()).toContain("unhandled unhandledRejection unknown");
+    expect(main.quit).not.toHaveBeenCalled();
     expect(main.getLog()).toContain("main/handlers/process.js:21:3");
     expect(main.getLog()).toContain("main/main.js:60:4");
     expect(main.getLog()).not.toMatch(/private-value|user-secret|secret\.js|ignored\.js/);
@@ -179,6 +180,21 @@ describe("main process crash diagnostics", () => {
     expect(main.getLog()).toMatch(/renderer-gone.*requested.*clean-exit.*0/);
     expect(main.getLog()).not.toContain("private-value");
     expect(main.quit).not.toHaveBeenCalled();
+  });
+
+  it("reloads a crashed renderer once per cooldown and never during quit", () => {
+    const main = startMain();
+    const webContents = { isDestroyed: () => false, reload: vi.fn() };
+    main.appEvents.get("render-process-gone")(null, webContents, { reason: "crashed" });
+    main.appEvents.get("render-process-gone")(null, webContents, { reason: "crashed" });
+    expect(webContents.reload).toHaveBeenCalledTimes(1);
+
+    const quitting = startMain();
+    const closing = { isDestroyed: () => false, reload: vi.fn() };
+    quitting.appEvents.get("before-quit")({ preventDefault: vi.fn() });
+    quitting.appEvents.get("render-process-gone")(null, closing, { reason: "crashed" });
+    quitting.appEvents.get("render-process-gone")(null, closing, { reason: "clean-exit" });
+    expect(closing.reload).not.toHaveBeenCalled();
   });
 
   it("bounds the local log and never serializes unknown renderer input", () => {

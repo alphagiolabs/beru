@@ -19,14 +19,6 @@ function sourcePixels(region, dims) {
   };
 }
 
-/**
- * Frame size after applying the crops in `operations`, in order.
- * Pass the chain up to the operation of interest (inclusive).
- *
- * @param {Array<{mode: string, region: object, startTime?: number|null, endTime?: number|null}>} operations
- * @param {{ w: number, h: number }} dims source presentation size in pixels
- * @returns {{ width: number, height: number }}
- */
 export function frameAfterCrops(operations, dims) {
   const { width, height } = frameRectAfterCrops(operations, dims);
   return { width, height };

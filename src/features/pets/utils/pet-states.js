@@ -1,6 +1,3 @@
-/** @typedef {"idle" | "running-right" | "running-left" | "waving" | "jumping" | "failed" | "waiting" | "running" | "review"} PetStateId */
-
-/** @type {ReadonlyArray<{ id: PetStateId, labelKey: string, row: number, frames: number, durationMs: number }>} */
 export const petStates = [
   { id: "idle", labelKey: "petState.idle", row: 0, frames: 6, durationMs: 1100 },
   { id: "running-right", labelKey: "petState.running-right", row: 1, frames: 8, durationMs: 1060 },
@@ -18,7 +15,6 @@ export const defaultPetState = petStates[0];
 export const ATLAS_SHEET_WIDTH = 1536;
 export const ATLAS_SHEET_HEIGHT = 1872;
 
-/** @param {PetStateId} stateId */
 export function resolvePetState(stateId) {
   return petStates.find((item) => item.id === stateId) ?? defaultPetState;
 }

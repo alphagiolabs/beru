@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Job worker: NDJSON framing, per-request env, cached hw preflight."""
 import io
 import json
 import sys
@@ -11,6 +10,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import processor  # noqa: E402
+import encoders
 
 
 def _stdin_with(*lines):
@@ -54,8 +54,7 @@ def _run_worker(stdin, *, process_jobs=None, detect_hw=None):
         processor, "_init_ffmpeg_globals", return_value=True
     ), patch.object(
         processor, "process_jobs", side_effect=process_jobs
-    ) as pj, patch.object(
-        processor, "detect_hw_encoder", side_effect=detect_hw or (lambda *a, **k: "h264_fake")
+    ) as pj, patch.object(encoders, "detect_hw_encoder", side_effect=detect_hw or (lambda *a, **k: "h264_fake")
     ) as det:
         with redirect_stdout(stdout):
             processor.job_worker_main()

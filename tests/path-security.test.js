@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { createPathSecurity } from "../main/pathSecurity.js";
+import { createRunOutputFiles } from "../main/utils/process-output.js";
 
 const fakeApp = {
   getPath: (name) => {
@@ -57,6 +58,7 @@ describe("pathSecurity", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     try {
       fs.rmSync(path.dirname(tmpFile), { recursive: true, force: true });
     } catch {}
@@ -102,6 +104,50 @@ describe("pathSecurity", () => {
     expect(fs.readFileSync(path.join(orphan, "0.mp4"), "utf8")).toBe("partial");
     expect(fs.existsSync(tmpFile)).toBe(true);
   });
+
+  it.each(["dead", "alive", "recent", "unknown-file", "recovery"])(
+    "cleans only old, identified staging with a dead owner: %s",
+    async (scenario) => {
+      const outputDirectory = path.dirname(tmpFile);
+      const now = Date.now();
+      const clock = vi
+        .spyOn(Date, "now")
+        .mockReturnValue(scenario === "recent" ? now : now - 2 * 24 * 60 * 60 * 1000);
+      const run = createRunOutputFiles(
+        [{ output_path: path.join(outputDirectory, "clip.mp4") }],
+        outputDirectory,
+      );
+      clock.mockRestore();
+      const staged = run.jobs[0].output_path;
+      fs.writeFileSync(staged, "partial");
+      if (scenario === "unknown-file")
+        fs.writeFileSync(path.join(path.dirname(staged), "personal.txt"), "keep");
+      if (scenario === "recovery") {
+        const rename = vi.spyOn(fs, "renameSync").mockImplementation(() => {
+          throw new Error("EPERM");
+        });
+        const link = vi.spyOn(fs, "linkSync").mockImplementation(() => {
+          throw new Error("EPERM");
+        });
+        const copy = vi.spyOn(fs.promises, "copyFile").mockImplementation(() => {
+          throw new Error("EPERM");
+        });
+        await expect(run.complete(0)).rejects.toThrow(staged);
+        rename.mockRestore();
+        link.mockRestore();
+        copy.mockRestore();
+        run.dispose();
+      }
+      vi.spyOn(process, "kill").mockImplementation(() => {
+        if (scenario === "alive") return true;
+        throw Object.assign(new Error("No such process"), { code: "ESRCH" });
+      });
+
+      expect(security.registerOutputDirectory(outputDirectory).ok).toBe(true);
+      expect(fs.existsSync(staged)).toBe(scenario !== "dead");
+      expect(fs.existsSync(tmpFile)).toBe(true);
+    },
+  );
 
   it("cannot allow-list outside-root paths via register then validateReadableFile", () => {
     const trustedRoot = fs.mkdtempSync(path.join(os.tmpdir(), "beru-trusted-"));

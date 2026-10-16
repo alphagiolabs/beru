@@ -1,5 +1,3 @@
-"""Conservative translation compensation using only unmasked context."""
-
 from collections import deque
 import numpy as np
 
@@ -122,7 +120,6 @@ def _compensate(target, neighbors, box, guard):
             continue
         stack = np.stack(samples)
         count = np.sum(~np.isnan(stack[..., 0]), axis=0)
-        # A fallback sample prevents all-NaN warnings without influencing valid donors.
         missing = count == 0
         stack[0, missing] = filled[top:bottom, x : x + w][missing]
         median = np.nanmedian(stack, axis=0)

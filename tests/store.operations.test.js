@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMockApi, installMockApi, makeQueueItem, resetEditorState } from "./helpers/store.js";
+import { hasUnexportedWork } from "../src/utils/session-persist.js";
+import { applyJobDone, buildExportJob } from "../src/utils/export-pipeline.js";
 
-const mockApi = installMockApi(createMockApi());
+const mockApi = installMockApi({ ...createMockApi(), setUnexportedWork: vi.fn(async () => true) });
 
 const { default: useEditorStore } = await import("../src/stores/useEditorStore.js");
 
@@ -119,5 +121,52 @@ describe("operation editing (undo + addOperation)", () => {
     });
     expect(s.currentRegion).toMatchObject({ x: 0.103, y: 0.055, w: 0.621, h: 0.098 });
     expect(s.tempClock.clockLayout).toBe("single");
+  });
+});
+
+describe("export currency after editing", () => {
+  beforeEach(() => {
+    resetEditorState(useEditorStore, mockApi, {
+      queue: [makeQueueItem({ duration: 4, audioCodec: "aac" })],
+      selectedIdx: 0,
+      undoStack: [],
+      redoStack: [],
+      encodeProfile: "balanced",
+      watermark: { enabled: false },
+      outputDir: "C:/out",
+    });
+    const state = useEditorStore.getState();
+    const job = buildExportJob(state.queue[0], 0, {
+      outputPath: state.outputPathsForAll()[0],
+      encodeProfile: state.encodeProfile,
+      watermark: null,
+    });
+    useEditorStore.setState(
+      applyJobDone({
+        ...state,
+        progressTotal: 1,
+        exportSignatures: { 0: JSON.stringify(job) },
+        msg: { index: 0, output: "C:/out/sample__2.mp4" },
+      }),
+    );
+  });
+
+  it("warns about edits after export and recognizes undo back to the exported state", () => {
+    expect(hasUnexportedWork(useEditorStore.getState())).toBe(false);
+    useEditorStore.getState().setVideoAudio({ gain: 0.5 });
+    expect(hasUnexportedWork(useEditorStore.getState())).toBe(true);
+    expect(useEditorStore.getState().queue[0].exportedOutputPath).toBe("C:/out/sample__2.mp4");
+    useEditorStore.getState().undo();
+    expect(hasUnexportedWork(useEditorStore.getState())).toBe(false);
+  });
+
+  it.each([
+    { encodeProfile: "quality" },
+    { outputDir: "C:/other" },
+    { watermark: { enabled: true, type: "text", text: "New mark" } },
+  ])("detects changes to export settings: %j", (patch) => {
+    useEditorStore.setState(patch);
+    expect(hasUnexportedWork(useEditorStore.getState())).toBe(true);
+    expect(mockApi.setUnexportedWork).toHaveBeenLastCalledWith(true);
   });
 });

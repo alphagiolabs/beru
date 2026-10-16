@@ -46,9 +46,6 @@ export function getFfmpegPath() {
   return resolveBinary("ffmpeg");
 }
 
-/**
- * @returns {{ ok: true, ffmpegPath: string, ffprobePath: string } | { ok: false, error: string }}
- */
 export function validateMediaBinaries() {
   const reinstallHint = isDev
     ? "Ejecute «npm install» en la carpeta del proyecto para descargar los binarios incluidos."

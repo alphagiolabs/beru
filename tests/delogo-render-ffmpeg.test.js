@@ -205,7 +205,7 @@ describe("quick logo kernels against real FFmpeg export", () => {
       edge_feather: feather,
       blur_strength: strength,
     };
-    const code = `import sys,json; sys.path.insert(0,'python'); from processor import build_filter_complex; print(build_filter_complex([json.loads(sys.argv[1])],96,64)[0])`;
+    const code = `import sys,json; sys.path.insert(0,'python'); from filters import build_filter_complex; print(build_filter_complex([json.loads(sys.argv[1])],96,64)[0])`;
     const graph = run("python", ["-c", code, JSON.stringify(op)])
       .toString()
       .trim();

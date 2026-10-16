@@ -31,11 +31,6 @@ function generateThemeId() {
   return `t-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-/**
- * @param {string} themeRef - preset id or custom:<uuid>
- * @param {Array<{ id: string, name: string, tokens: Record<string, string> }>} customThemes
- * @returns {{ id: string, nameKey?: string, name?: string, tokens: Record<string, string>, isCustom: boolean } | null}
- */
 export function resolveTheme(themeRef, customThemes = []) {
   if (!themeRef) return null;
 
@@ -137,10 +132,6 @@ function legacyThemeToSlot(theme) {
   return theme === "light" ? 1 : 2;
 }
 
-/**
- * @param {object} settings
- * @returns {{ themeActiveSlot: 1|2, themeSlot1: string, themeSlot2: string, customThemes: object[], activeThemeRef: string, theme: string }}
- */
 export function migrateThemeSettings(settings = {}) {
   let themeSlot1 = settings.themeSlot1;
   let themeSlot2 = settings.themeSlot2;

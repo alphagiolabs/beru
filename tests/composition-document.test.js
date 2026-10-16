@@ -104,6 +104,7 @@ it("keeps source consent until the last queue or composition owner is removed", 
       selectedIdx: 0,
       isProcessing: false,
     });
+    release.mockClear();
     useEditorStore.getState().addCompositionEntry(0);
     const id = useEditorStore.getState().composition.entries[0].id;
     useEditorStore.getState().removeVideo(0);

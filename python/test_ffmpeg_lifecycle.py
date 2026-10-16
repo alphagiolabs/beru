@@ -1,5 +1,3 @@
-"""Failure injection at the FFmpeg process and worker protocol boundaries."""
-
 import io
 import json
 import subprocess
@@ -14,6 +12,8 @@ from unittest.mock import patch
 
 import ffmpeg_runner
 import processor
+import media_probe
+import process_lifetime
 import temporal_pipeline
 from batch_context import BatchContext
 
@@ -93,7 +93,7 @@ class FFmpegLifecycleTests(unittest.TestCase):
             code = f"from pathlib import Path; import sys; Path({cmd[-1]!r}).write_bytes(b'export'); sys.exit({9 if cmd[-1].endswith('0.mkv') else 0})"
             return self.launch(code, **kwargs)
         stdout = io.StringIO()
-        with patch.object(processor, "_native_copy_eligible", return_value=False), patch.object(ffmpeg_runner.subprocess, "Popen", side_effect=launch), redirect_stdout(stdout):
+        with patch.object(media_probe, "_native_copy_eligible", return_value=False), patch.object(ffmpeg_runner.subprocess, "Popen", side_effect=launch), redirect_stdout(stdout):
             summary = processor.process_jobs(jobs, "fake-ffmpeg", max_workers=1, hw_encoder=None)
         self.assertEqual((summary["succeeded"], summary["failed"]), (1, 1))
         events = [json.loads(line) for line in stdout.getvalue().splitlines()]
@@ -114,7 +114,7 @@ class FFmpegLifecycleTests(unittest.TestCase):
 
     def test_cli_exit_code_reflects_the_batch_outcome(self):
         for failed, cancelled, expected in ((1, 0, 1), (0, 1, 130), (0, 0, 0)):
-            with self.subTest(expected=expected), patch.object(processor.sys, "argv", ["processor.py", "m.json"]), patch.object(processor, "protect_process_tree"), patch.object(processor, "_init_ffmpeg_globals", return_value=True), patch.object(processor, "_load_jobs_manifest", return_value=[]), patch.object(processor, "process_jobs", return_value={"failed": failed, "cancelled": cancelled}), redirect_stdout(io.StringIO()):
+            with self.subTest(expected=expected), patch.object(processor.sys, "argv", ["processor.py", "m.json"]), patch.object(process_lifetime, "protect_process_tree"), patch.object(processor, "_init_ffmpeg_globals", return_value=True), patch.object(processor, "_load_jobs_manifest", return_value=[]), patch.object(processor, "process_jobs", return_value={"failed": failed, "cancelled": cancelled}), redirect_stdout(io.StringIO()):
                 with self.assertRaises(SystemExit) as exit_result:
                     processor.main()
                 self.assertEqual(exit_result.exception.code, expected)

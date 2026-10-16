@@ -73,7 +73,6 @@ export default function useRegionGesture({ videoEl, onChange, onCommit, enabled 
   const beginSession = useCallback(
     (e, region, mode, handle) => {
       if (!enabled || !region) return false;
-      // Pointer Events: touch/pen often report button 0 on down.
       if (typeof e.button === "number" && e.button !== 0) return false;
 
       const video = videoEl?.current;

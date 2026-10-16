@@ -1,5 +1,3 @@
-"""Pixel and timing contracts through the real Temporal export/preview pipeline."""
-
 import base64
 import json
 import subprocess
@@ -11,14 +9,15 @@ from pathlib import Path
 import numpy as np
 
 import processor
+import media_probe
 from batch_context import BatchContext
 from filters import build_filter_complex
 from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 
-FFMPEG = processor.find_ffmpeg()
-FFPROBE = processor.find_ffprobe(FFMPEG)
-processor.FFMPEG = FFMPEG
-processor.FFPROBE = FFPROBE
+FFMPEG = media_probe.find_ffmpeg()
+FFPROBE = media_probe.find_ffprobe(FFMPEG)
+media_probe.FFMPEG = FFMPEG
+media_probe.FFPROBE = FFPROBE
 WIDTH, HEIGHT, FPS = 192, 112, 25
 BOX = {"x": 76, "y": 40, "w": 18, "h": 24}
 OP = {

@@ -1,11 +1,9 @@
-"""Compare exported text pixels with FFmpeg's literal UTF-8 textfile input."""
-
 import os
 import subprocess
 import tempfile
 from pathlib import Path
 
-from processor import build_filter_complex
+from filters import build_filter_complex
 
 
 ROOT = Path(__file__).resolve().parents[1]

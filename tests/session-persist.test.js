@@ -5,6 +5,7 @@ import {
   SESSION_PERSIST_KEYS,
   buildSessionSnapshot,
   hasPersistedFieldChanged,
+  hasUnexportedWork,
   parseSessionSnapshot,
   readSessionSnapshotFromStorage,
   writeSessionSnapshotToStorage,
@@ -222,5 +223,13 @@ describe("session-persist", () => {
   it("does not treat sidebarMode as a persisted session field", () => {
     expect(SESSION_PERSIST_KEYS).not.toContain("sidebarMode");
     expect(hasPersistedFieldChanged({ sidebarMode: "a" }, { sidebarMode: "b" })).toBe(false);
+  });
+});
+
+describe("hasUnexportedWork", () => {
+  it("flags a queue until every video has been exported", () => {
+    expect(hasUnexportedWork({ queue: [] })).toBe(false);
+    expect(hasUnexportedWork({ queue: [{ status: "done" }, { status: "idle" }] })).toBe(true);
+    expect(hasUnexportedWork({ queue: [{ status: "done" }, { status: "done" }] })).toBe(false);
   });
 });

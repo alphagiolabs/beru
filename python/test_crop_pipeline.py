@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Permanent crop updates frame size and forces even dimensions."""
 import sys
 import subprocess
 import tempfile
@@ -8,7 +7,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from processor import build_filter_complex  # noqa: E402
+from filters import build_filter_complex# noqa: E402
 from media_probe import find_ffmpeg  # noqa: E402
 
 FFMPEG = find_ffmpeg()

@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { useMontagePlayer } from "../src/features/editor/playback/useMontagePlayer.js";
 import { appendClipFromAsset, setClipRange } from "../src/features/editor/editor-model.js";
 import { createEmptyEditorProject } from "../shared/editor-project.js";
-import { addAsset, layoutTrack } from "../shared/editor-timeline.js";
+import { addAsset, insertClip, layoutTrack, setClipSpeed } from "../shared/editor-timeline.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -120,6 +120,7 @@ describe("montage player", () => {
     act(() => root?.unmount());
     container?.remove();
     frames = [];
+    vi.restoreAllMocks();
   });
 
   function mount(props, strict = false) {
@@ -209,6 +210,92 @@ describe("montage player", () => {
     load(first);
     expect(first.currentTime).toBe(1);
   });
+
+  it.each([false, true])(
+    "finishes frame padding at source EOF (following clip=%s)",
+    (following) => {
+      const added = addAsset(createEmptyEditorProject(), {
+        path: "C:/one-second.mp4",
+        filename: "one-second.mp4",
+        metadata: { durationUs: SECOND },
+      });
+      const inserted = insertClip(added.project, { assetId: added.assetId });
+      let project = setClipSpeed(inserted.project, inserted.clipId, 1.75);
+      if (following) project = insertClip(project, { assetId: added.assetId }).project;
+      const layout = layoutTrack(project);
+      const onPlayhead = vi.fn();
+      const onPlayingChange = vi.fn();
+      const clock = vi.spyOn(performance, "now").mockReturnValue(1000);
+      const view = mount({
+        layout,
+        sourceUrlFor: () => "https://media.test/one-second.mp4",
+        playing: false,
+        playhead: 0,
+        onPlayhead,
+        onPlayingChange,
+      });
+      const [first, second] = view.el;
+      act(() => load(first));
+      view.rerender({ playing: true });
+      act(() => settle(first));
+      first.currentTime = 1;
+      Object.defineProperty(first, "ended", { configurable: true, value: true });
+      runFrame();
+      expect(onPlayhead).toHaveBeenLastCalledWith(571429);
+      if (following) act(() => load(second));
+      clock.mockReturnValue(1040);
+      runFrame();
+      if (following) {
+        expect(view.active()).toBe(1);
+        expect(second.paused).toBe(false);
+      } else {
+        expect(onPlayhead).toHaveBeenLastCalledWith(600000);
+        expect(onPlayingChange).toHaveBeenLastCalledWith(false);
+        expect(first.paused).toBe(true);
+      }
+    },
+  );
+
+  it.each(["continue", "seek"])(
+    "plays the overlay tail through its full duration after %s",
+    (mode) => {
+      const added = addAsset(createEmptyEditorProject(), {
+        path: "C:/one-second.mp4",
+        filename: "one-second.mp4",
+        metadata: { durationUs: SECOND },
+      });
+      const project = insertClip(added.project, { assetId: added.assetId }).project;
+      const onPlayhead = vi.fn(),
+        onPlayingChange = vi.fn();
+      const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+      const props = {
+        layout: layoutTrack(project),
+        duration: 3 * SECOND,
+        sourceUrlFor: () => "https://media.test/clip.mp4",
+        playing: false,
+        playhead: mode === "seek" ? 2 * SECOND : 0,
+        onPlayhead,
+        onPlayingChange,
+      };
+      const player = mount(props);
+      act(() => load(player.el[0]));
+      player.rerender({ playing: true });
+      if (mode === "continue") {
+        act(() => settle(player.el[0]));
+        player.el[0].currentTime = 1;
+        runFrame();
+      }
+      expect(onPlayingChange).not.toHaveBeenCalledWith(false);
+      now.mockReturnValue(1500);
+      runFrame();
+      expect(onPlayhead).toHaveBeenLastCalledWith(mode === "seek" ? 2.5 * SECOND : 1.5 * SECOND);
+      expect(player.el[0].paused).toBe(true);
+      now.mockReturnValue(3000);
+      runFrame();
+      expect(onPlayhead).toHaveBeenLastCalledWith(3 * SECOND);
+      expect(onPlayingChange).toHaveBeenLastCalledWith(false);
+    },
+  );
 
   it("reports a missing source instead of loading it", () => {
     const { layout } = twoClipMontage();

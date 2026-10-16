@@ -69,7 +69,6 @@ vi.mock("../main/utils/renderer.js", () => ({
 }));
 vi.mock("../main/utils/jobManifest.js", () => ({
   unwrapJobManifest: (jobs) => ({ jobs, manifest: null }),
-  createProcessorManifest: (_manifest, jobs) => ({ jobs }),
 }));
 vi.mock("../main/utils/process-input-validation.js", () => ({
   findUnreadableInputsAsync: async () => [],

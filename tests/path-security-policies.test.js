@@ -236,6 +236,11 @@ describe("path verdicts", () => {
     expect(verdicts.inspectReadableFile("x.xlsx", "excel").error).toBe("Archivo demasiado grande");
   });
 
+  it("accepts long recordings beyond 8 GB", () => {
+    const verdicts = makeVerdicts({ statSync: () => statFile(40 * 1024 * 1024 * 1024) });
+    expect(verdicts.inspectReadableFile("x.mp4", "video").ok).toBe(true);
+  });
+
   it("shell paths allow directories but still require a known location", () => {
     const verdicts = makeVerdicts({ statSync: () => statDir() });
     expect(verdicts.inspectShellPath("some-dir").ok).toBe(true);

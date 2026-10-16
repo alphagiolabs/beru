@@ -1,15 +1,9 @@
-"""Regression: _extract_error_line returned lines[-2] when no line contained
-"error". This assumed a trailing newline (lines[-1] would be ""). Without a
-trailing newline, lines[-1] is the useful line and lines[-2] is noise — the
-user saw the wrong error message. The fix: return the last non-empty line.
-"""
-
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 
-from processor import _extract_error_line  # noqa: E402
+from ffmpeg_runner import _extract_error_line# noqa: E402
 
 
 def test_no_error_word_with_trailing_newline():

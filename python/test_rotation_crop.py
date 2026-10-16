@@ -1,17 +1,16 @@
-"""Cropping uses the same display orientation as FFmpeg and preview decoding."""
-
 import subprocess
 import struct
 import tempfile
 from pathlib import Path
 
 import processor
+import media_probe
 from media_probe import ffprobe as probe
 
 
 def test_rotated_crop():
-    ffmpeg = processor.find_ffmpeg()
-    ffprobe = processor.find_ffprobe(ffmpeg)
+    ffmpeg = media_probe.find_ffmpeg()
+    ffprobe = media_probe.find_ffprobe(ffmpeg)
     with tempfile.TemporaryDirectory(prefix="beru_rotation_") as temp:
         folder = Path(temp)
         source, rotated, output = [folder / name for name in ("source.mp4", "rotated.mp4", "output.mp4")]

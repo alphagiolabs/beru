@@ -12,7 +12,7 @@ import { startJobRun } from "./utils/job-worker.js";
 import { probeVideo } from "./utils/video-cache.js";
 import { readSettings } from "./utils/settings.js";
 import { runWithConcurrency } from "./utils/concurrency.js";
-import { createProcessorManifest } from "./utils/jobManifest.js";
+import { buildJobManifest } from "../shared/build-job-manifest.js";
 import { translateProcessorErrorMessage } from "./utils/process-input-validation.js";
 import { IPC_EVENTS, emitRunEvent } from "../shared/ipc-channels.js";
 
@@ -28,8 +28,13 @@ const isCurrent = (run) => activeRun === run && !run.result;
 const isInterrupted = (run) => !isCurrent(run) || run.cancellation || getAppIsQuitting();
 const isChildAlive = (proc) => Boolean(proc && proc.exitCode == null && proc.signalCode == null);
 
+function eventChannel(run, channel) {
+  if (channel === IPC_EVENTS.onRunStarted || channel === IPC_EVENTS.onFinished) return channel;
+  return run.events ? run.events[channel] : channel;
+}
+
 function emit(run, channel, payload) {
-  const target = run.events ? run.events[channel] : channel;
+  const target = eventChannel(run, channel);
   if (target && isCurrent(run)) emitRunEvent(sendToRenderer, target, run.runId, payload);
 }
 
@@ -69,7 +74,10 @@ function finish(run, result, channel, payload) {
       cancelled: outcomes.filter((job) => job.status === "cancelled").length,
     });
   }
-  run.result = { ...result, runId: run.runId };
+  const outputs = [...(run.jobs ?? [])]
+    .filter(([, job]) => job.status === "succeeded")
+    .map(([index, { output, outputStat }]) => ({ index, output, outputStat }));
+  run.result = { ...result, runId: run.runId, outputs };
   clearTimeout(run.watchdog);
   run.detachChild?.();
   run.abortController.abort();
@@ -79,7 +87,7 @@ function finish(run, result, channel, payload) {
   if (activeRun === run) {
     activeRun = null;
     setMediaProcessingActive(false);
-    const target = run.events ? run.events[channel] : channel;
+    const target = eventChannel(run, channel);
     if (target) emitRunEvent(sendToRenderer, target, run.runId, payload);
   }
   run.resolve(run.result);
@@ -101,7 +109,7 @@ function stopIfInterrupted(run) {
 }
 
 function armWatchdog(run) {
-  run.watchdog = setTimeout(() => {
+  run.watchdog = setTimeout(async () => {
     if (!isCurrent(run)) return;
     if (
       run.phase === "preparing" ||
@@ -114,11 +122,28 @@ function armWatchdog(run) {
     }
     const error =
       "El procesamiento se interrumpió de forma inesperada. Puedes volver a intentarlo.";
+    await Promise.all(run.promotions.values());
+    if (!isCurrent(run) || run.cancellation) return;
     console.error("[beru] Processing lock watchdog fired for run " + run.runId);
     emitError(run, error);
     finish(run, { success: false, code: 1, error });
   }, PROCESSING_LOCK_MAX_MS);
   run.watchdog?.unref?.();
+}
+
+async function completeOutput(run, msg) {
+  try {
+    const output = await run.outputFiles.complete(msg.index);
+    const { size, mtimeMs, ctimeMs } = fs.statSync(output);
+    const outputStat = { size, mtimeMs, ctimeMs };
+    run.jobs.set(msg.index, { status: "succeeded", output, outputStat });
+    emit(run, IPC_EVENTS.onComplete, { ...msg, output, outputStat });
+  } catch (err) {
+    run.outputError = true;
+    run.lastError = "No se pudo guardar la exportación: " + err.message;
+    run.jobs.set(msg.index, { status: "failed", error: run.lastError });
+    emit(run, IPC_EVENTS.onJobError, { type: "error", index: msg.index, error: run.lastError });
+  }
 }
 
 function dispatchProcessorLine(run, line) {
@@ -137,21 +162,7 @@ function dispatchProcessorLine(run, line) {
     if (msg.type === "progress") emit(run, IPC_EVENTS.onProgress, msg);
     else if (msg.type === "job_progress") emit(run, IPC_EVENTS.onJobProgress, msg);
     else if (msg.type === "complete") {
-      try {
-        const output = run.outputFiles.complete(msg.index);
-        const { size, mtimeMs, ctimeMs } = fs.statSync(output);
-        run.jobs.set(msg.index, { status: "succeeded" });
-        emit(run, IPC_EVENTS.onComplete, {
-          ...msg,
-          output,
-          outputStat: { size, mtimeMs, ctimeMs },
-        });
-      } catch (err) {
-        run.outputError = true;
-        run.lastError = "No se pudo guardar la exportación: " + err.message;
-        run.jobs.set(msg.index, { status: "failed", error: run.lastError });
-        emit(run, IPC_EVENTS.onJobError, { type: "error", index: msg.index, error: run.lastError });
-      }
+      if (!run.promotions.has(msg.index)) run.promotions.set(msg.index, completeOutput(run, msg));
     } else if (msg.type === "cancelled") {
       run.jobs.set(msg.index, { status: "cancelled" });
       emit(run, IPC_EVENTS.onJobCancelled, msg);
@@ -213,7 +224,8 @@ async function enrichJobVideoInfo(job) {
 
 function watchWorker(run, worker) {
   const proc = worker.proc;
-  const end = (code) => {
+  const end = async (code) => {
+    await Promise.all(run.promotions.values());
     if (!isCurrent(run) || run.cancellation) return;
     settlePendingJobs(run);
     const jobFailure = [...run.jobs.values()].find((result) => result.status !== "succeeded");
@@ -233,15 +245,16 @@ function watchWorker(run, worker) {
     });
   };
   const onClose = (code) => {
-    if (!run.termination) end(code || 1);
+    if (!run.termination) void end(code || 1).catch(onError);
   };
   const onError = (err) => {
     if (!isCurrent(run) || run.cancellation || run.termination) return;
     const error = translateProcessorErrorMessage(err.message);
     run.lastError = error;
-    const termination = proc.pid && isChildAlive(proc) ? stopWorker(run, 0) : Promise.resolve();
+    const termination = proc.pid && isChildAlive(proc) ? stopWorker(run) : Promise.resolve();
     termination
-      .then(() => {
+      .then(async () => {
+        await Promise.all(run.promotions.values());
         if (!isCurrent(run) || run.cancellation) return;
         emitError(run, error);
         finish(run, { success: false, code: 1, error });
@@ -270,15 +283,15 @@ function watchWorker(run, worker) {
       if (outcome.error) run.lastError = outcome.error;
       if (outcome.died && isChildAlive(proc)) {
         run.phase = "stopping";
-        await stopWorker(run, 0);
+        await stopWorker(run);
       }
-      end(outcome.died ? outcome.code || 1 : outcome.ok ? 0 : 1);
+      await end(outcome.died ? outcome.code || 1 : outcome.ok ? 0 : 1);
     })
     .catch(onError);
 }
 
-async function prepareAndStart(run, { manifest, jobs, outputDirectory, spawnSpec }) {
-  run.outputFiles = createRunOutputFiles(jobs, outputDirectory);
+async function prepareAndStart(run, { manifest, jobs, outputDirectory, spawnSpec, overwrite }) {
+  run.outputFiles = createRunOutputFiles(jobs, outputDirectory, { overwrite });
   run.jobs = new Map(jobs.map((job, index) => [Number.isInteger(job.id) ? job.id : index, null]));
   const artifacts = await createCancelArtifacts(app.getPath("temp"));
   if (stopIfInterrupted(run)) {
@@ -300,7 +313,7 @@ async function prepareAndStart(run, { manifest, jobs, outputDirectory, spawnSpec
   if (stopIfInterrupted(run)) return;
   await fs.promises.writeFile(
     artifacts.manifestPath,
-    JSON.stringify(createProcessorManifest(manifest, enrichedJobs)),
+    JSON.stringify(buildJobManifest(enrichedJobs, manifest?.createdAt)),
   );
   if (stopIfInterrupted(run)) return;
   run.phase = "starting";
@@ -320,6 +333,7 @@ async function prepareAndStart(run, { manifest, jobs, outputDirectory, spawnSpec
     },
     onLine: (line) => dispatchProcessorLine(run, line),
   });
+  run.workerDone = worker?.done;
   if (stopIfInterrupted(run)) return;
   if (!worker) return finishCancelled(run);
   run.proc = worker.proc;
@@ -335,6 +349,8 @@ export function executeProcessingRun(options) {
       success: false,
       error: "Ya hay un proceso en ejecución",
       code: "already_processing",
+      runId: activeRun.runId,
+      owner: activeRun.owner,
     });
   const run = {
     runId: Date.now() + "-" + randomBytes(16).toString("hex"),
@@ -344,6 +360,7 @@ export function executeProcessingRun(options) {
     proc: null,
     artifacts: null,
     outputFiles: null,
+    promotions: new Map(),
     abortController: new AbortController(),
     result: null,
     cancellation: null,
@@ -354,7 +371,7 @@ export function executeProcessingRun(options) {
   activeRun = run;
   setMediaProcessingActive(true);
   armWatchdog(run);
-  emit(run, IPC_EVENTS.onRunStarted);
+  emit(run, IPC_EVENTS.onRunStarted, run.owner ? { owner: run.owner } : undefined);
   prepareAndStart(run, options).catch((err) => {
     if (stopIfInterrupted(run)) return;
     const error = translateProcessorErrorMessage(err.message);
@@ -396,9 +413,8 @@ async function killTreeOrChild(proc) {
   }
 }
 
-async function terminateRunProcess(proc, graceMs = CANCEL_KILL_GRACE_MS) {
-  const closedDuringGrace = await waitForProcessClose(proc, graceMs);
-  if (closedDuringGrace) {
+async function terminateRunProcess(proc) {
+  if (!isChildAlive(proc)) {
     await killTreeOrChild(proc);
     return;
   }
@@ -416,13 +432,42 @@ async function terminateRunProcess(proc, graceMs = CANCEL_KILL_GRACE_MS) {
   }
 }
 
-function stopWorker(run, graceMs) {
+function stopWorker(run) {
   if (!run.termination)
-    run.termination = terminateRunProcess(run.proc, graceMs).catch((err) => {
-      run.termination = null;
-      throw err;
-    });
+    run.termination = Promise.resolve()
+      .then(() => terminateRunProcess(run.proc))
+      .catch((err) => {
+        run.termination = null;
+        throw err;
+      });
   return run.termination;
+}
+
+async function cancelWorker(run) {
+  if (run.termination) return run.termination;
+  const outcome = await new Promise((resolve) => {
+    const proc = run.proc;
+    const settle = (value) => {
+      clearTimeout(timer);
+      proc.removeListener("close", onClose);
+      resolve(value);
+    };
+    const onClose = () => settle("closed");
+    const timer = setTimeout(() => settle("timeout"), CANCEL_KILL_GRACE_MS);
+    proc.once("close", onClose);
+    run.workerDone?.then(
+      (result) =>
+        settle(
+          typeof result?.ok === "boolean" && !result.died && !result.error
+            ? "acknowledged"
+            : "timeout",
+        ),
+      () => settle("timeout"),
+    );
+    if (!isChildAlive(proc)) settle("closed");
+  });
+  if (outcome === "closed") await killTreeOrChild(run.proc);
+  else if (outcome !== "acknowledged") await stopWorker(run);
 }
 
 export async function cancelRun({ owner } = {}) {
@@ -435,9 +480,10 @@ export async function cancelRun({ owner } = {}) {
     });
     run.abortController.abort();
     run.artifacts?.markCancelled();
-    const termination = run.proc?.pid ? stopWorker(run) : Promise.resolve();
+    const termination = run.proc?.pid ? cancelWorker(run) : Promise.resolve();
     termination
-      .then(() => {
+      .then(async () => {
+        await Promise.all(run.promotions.values());
         finishCancelled(run);
         resolveCancellation({ success: true, idle: false });
       })

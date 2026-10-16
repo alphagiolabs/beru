@@ -1,7 +1,5 @@
 import { THEME_TOKEN_KEYS } from "./tokens.js";
 
-/** @typedef {{ id: string, nameKey: string, tokens: Record<string, string> }} ThemePreset */
-
 function t(tokens) {
   const out = {};
   for (const key of THEME_TOKEN_KEYS) {
@@ -10,7 +8,6 @@ function t(tokens) {
   return out;
 }
 
-/** @type {ThemePreset[]} */
 export const THEME_PRESETS = [
   {
     id: "beru-dark",
@@ -938,7 +935,6 @@ export const THEME_PRESETS = [
   },
 ];
 
-/** @type {Map<string, ThemePreset>} */
 const PRESET_BY_ID = new Map(THEME_PRESETS.map((p) => [p.id, p]));
 
 export function getPresetById(id) {

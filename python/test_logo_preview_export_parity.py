@@ -1,5 +1,3 @@
-"""Real FFmpeg characterization of logo preview, export, timing and text."""
-
 import base64
 import json
 import shutil
@@ -8,11 +6,13 @@ import tempfile
 from pathlib import Path
 
 import processor
+import filters
+import media_probe
 from temporal_pipeline import TemporalPatchResolver, extra_media_input_args
 from delogo_chains import _clamp_delogo_rect
 
-FFMPEG = Path(processor.find_ffmpeg())
-FFPROBE = Path(processor.find_ffprobe(str(FFMPEG)))
+FFMPEG = Path(media_probe.find_ffmpeg())
+FFPROBE = Path(media_probe.find_ffprobe(str(FFMPEG)))
 
 
 def run(*args, input_bytes=None):
@@ -52,12 +52,12 @@ def render_export(src, dst, operations, duration=2):
 
 def _render_export(src, dst, operations, duration, directory):
     width, height = dimensions(src)
-    info = processor.ffprobe(str(src))
+    info = media_probe.ffprobe(str(src), ffmpeg_bin=str(FFMPEG), ffprobe_bin=str(FFPROBE))
     resolver = TemporalPatchResolver(str(src), directory, str(FFMPEG), info["frame_rate"],
                                      source_format=info.get("pix_fmt"))
-    graph, label, image_paths = processor.build_filter_complex(
+    graph, label, image_paths = filters.build_filter_complex(
         operations, width, height, source_pix_fmt=info.get("pix_fmt"),
-        temporal_resolver=resolver,
+        temporal_resolver=resolver, ffmpeg_path=str(FFMPEG),
     )
     args = [str(FFMPEG), "-v", "error", "-y", "-i", str(src)]
     for img in image_paths:
@@ -95,8 +95,8 @@ def test_preview_export_parity():
     assert (FFMPEG.is_file() or shutil.which(str(FFMPEG))) and (
         FFPROBE.is_file() or shutil.which(str(FFPROBE))
     ), "FFmpeg and ffprobe required"
-    processor.FFMPEG = str(FFMPEG)
-    processor.FFPROBE = str(FFPROBE)
+    media_probe.FFMPEG = str(FFMPEG)
+    media_probe.FFPROBE = str(FFPROBE)
     with tempfile.TemporaryDirectory(prefix="beru_logo_parity_") as temp:
         folder = Path(temp)
         for width, height in ((320, 180), (180, 320)):
@@ -194,7 +194,7 @@ def test_preview_export_parity():
             odd_op = {"mode": "delogo", "delogo_method": "blur", "edge_feather": 0,
                       "blur_strength": 30,
                       "region": {"x": 51, "y": 61, "w": 33, "h": 21}}
-            odd_graph, odd_label, _ = processor.build_filter_complex([odd_op], width, height)
+            odd_graph, odd_label, _ = filters.build_filter_complex([odd_op], width, height)
             actual_raw = run(str(FFMPEG), "-v", "error", "-ss", "1.2", "-i", str(src),
                              "-filter_complex", odd_graph, "-map", odd_label,
                              "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1")
@@ -224,7 +224,6 @@ def _preview_rgb(src, width, height, timestamp, operations):
 
 
 def _source_rgb(src, width, height, timestamp):
-    """Decode the artifact frame for `timestamp` straight from the file."""
     args = [str(FFMPEG), "-v", "error", "-ss", str(timestamp), "-i", str(src),
             "-frames:v", "1", "-vf", f"scale={width}:{height}",
             "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1"]
@@ -234,18 +233,11 @@ def _source_rgb(src, width, height, timestamp):
 
 
 def test_preview_export_strict_parity():
-    """Preview must activate the same ops on the same frames as the export.
-
-    Every comparison decodes pixels; JPEG bytes are never the oracle. The
-    preview path is MJPEG (lossy) while the export fixture is lossless FFV1,
-    so a wrong enable window lands at MAE ~30+, well above the ~1-6 codec
-    noise seen when parity holds.
-    """
     assert (FFMPEG.is_file() or shutil.which(str(FFMPEG))) and (
         FFPROBE.is_file() or shutil.which(str(FFPROBE))
     ), "FFmpeg and ffprobe required"
-    processor.FFMPEG = str(FFMPEG)
-    processor.FFPROBE = str(FFPROBE)
+    media_probe.FFMPEG = str(FFMPEG)
+    media_probe.FFPROBE = str(FFPROBE)
     width, height = 320, 180
     fps = 10
     with tempfile.TemporaryDirectory(prefix="beru_strict_parity_") as temp:

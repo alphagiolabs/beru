@@ -1,5 +1,3 @@
-"""Keep processor descendants owned even after an abrupt Windows process exit."""
-
 import ctypes
 import os
 import threading
@@ -58,7 +56,7 @@ def protect_process_tree():
         if not job:
             raise ctypes.WinError(ctypes.get_last_error())
         limits = ExtendedLimits()
-        limits.basic.flags = 0x00002000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        limits.basic.flags = 0x00002000
         if not kernel.SetInformationJobObject(job, 9, ctypes.byref(limits), ctypes.sizeof(limits)):
             raise ctypes.WinError(ctypes.get_last_error())
         if not kernel.AssignProcessToJobObject(job, kernel.GetCurrentProcess()):
@@ -69,7 +67,6 @@ def protect_process_tree():
         for parent in parents:
             kernel.CloseHandle(parent)
         raise
-    # The non-inheritable handle stays open until this processor exits.
     _job_handle = job
 
     def watch_parent(parent):

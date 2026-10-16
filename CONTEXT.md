@@ -18,6 +18,12 @@ Beru is a batch video editor. Excel rows drive text overlays onto a queue of vid
 
 Changing trim or restoring history cannot extend edited timing beyond 7200 seconds. A rejected change preserves the current QueueItem and both history stacks; neutral timing remains valid for longer sources.
 
+**Timeline Editor Session** — The montage has a document owner that changes on open or recovery. Pending imports, relinks, proxies and saves apply only to their original owner; competing opens keep the latest request. Saves name their previously selected document path explicitly, so a late save cannot redirect another document's writes. Opening another document requires discarding unsaved changes. Unsaved montage work participates in the window-close warning, and autosave belongs to the application lifetime across workspace switches. Autosave IO is ordered; a completed save only removes an identical saved snapshot. Playback retains the final source frame while a monotonic clock completes the segment's frame-rounded duration before advancing or stopping.
+
+Preview transport and navigation use the full project duration, including overlays beyond the last clip. That trailing interval shows the canvas background and active overlays, with a monotonic clock for playback and seeking.
+
+Media read ownership is tracked separately for the queue, composition and montage. Releasing one consumer preserves paths retained by another; montage ownership includes undo, redo and active gesture snapshots. Replacing a document releases paths that no consumer still needs.
+
 **Operation** — An overlay or region effect on a video (`text`, `blur`, `crop`, `delogo`, `image`). Factory, export filter, and Job wire format live in `src/utils/operation.js`. UI uses camelCase; `operationToJobPayload` emits snake_case plus pixel Regions for the Processor.
 
 **Fechero** — Operation `datetime`: a date/time stamp that advances with the source timeline. It is drawn last, on the output frame after crops, rotation, flips and resize, so its region is normalized to that frame and Jobs send it normalized; it never deforms, rotates or mirrors. Changing the output size rescales it by the new height (shrinking to fit the width) without stretching. The live preview maps it onto the source view (`stamp-geometry.js`), so bars, crop and rotation only show in the rendered preview, which the Fechero workspace opens on its rendered frame. `clockStart` is the wall clock (no zone) of the source's first frame; Jobs carry it as `clock_start_epoch` seconds and FFmpeg formats it as UTC, so the exporting machine's zone never shifts it. Operations run before trim and retiming, so a trimmed export shows the real time of each source frame, a retimed one advances at that rate, and repetition repeats the clock. Each digit is an FFmpeg `eif` expansion so the text-spacing fallback still applies. `single` (one box) is the default; `split` layout draws date and time in separate boxes whose widths `splitClockRegion`/`split_clock_region` share by character count. Exact preview adds its `-ss` seek to the epoch, since the seek restarts filter `t` at 0. Not linked to Excel.
@@ -50,9 +56,19 @@ The renderer routes each run's results to either the queue or a derived-media ar
 
 Per-Job errors use the manifest identity, including negative derived-media IDs, and keep the run active until its terminal outcome. They do not terminate the renderer's run before the Processor releases execution capacity.
 
+Run-started and run-finished events are shared even when the editor routes Job progress privately. An editor-owned run occupies the common processing state without adopting queue results or changing batch counters; its terminal event releases that state.
+
+Terminal run results include confirmed output paths and file identities, including alternate names chosen to preserve existing files. Editor exports, frames and proxies consume those confirmed paths. Preparation cancellation invalidates pending work before a run starts; an editor owner can cancel its preparation independently, while general processing cancellation invalidates every owner.
+
+Export preparation for video batches, composition and stabilization shares `startExportRun` in main. Kind validation stays in each handler; processor availability, media authorization, readable inputs, output collisions and cancellation belong to that shared flow. Cancellation invalidates preparation before a run exists, including the final asynchronous output check.
+
+An export's currency is separate from the last run's status. `hasUnexportedWork` compares the current Job against its confirmed `exportSignature`, including edits, encode profile, watermark and requested output path. The confirmed artifact is retained when editing; undo back to the exported state makes it current again. An alternative filename allocated while promoting the artifact does not change the requested Job signature. Legacy in-memory completions without a signature retain their status-based behavior.
+
 **Processor** — Packaged Python (`processor.py` / `beru-processor.exe`) that builds the FFmpeg filter graph and encodes. Each Processing Run owns its execution settings, media tools, cancellation, progress and software fallback capacity. Retry passes keep that run's cancellation and progress while reducing concurrency; subsequent runs start with independent execution state.
 
 `ClipRenderer` prepares a `VideoPlan` for copy or encode and renders intermediate media without terminal events. Composition and repetition consume this interface without re-entering the Job dispatcher. One Job executor emits completion or cancellation; the batch emits a failed Job only after its retry policy is settled. All renders within a Job share hardware failure state, and temporal, cycle and composition intermediates live in the run's scratch directory.
+
+`ClipRenderer` receives the Job and its `BatchContext`; it owns the use of probe, filter, encode and media execution modules. Tests and performance tools substitute dependencies in their owning modules. `processor.py` coordinates execution without copying patched font/filter state between modules. Video and thread arguments belong to `encode_args.py`, with concurrency supplied explicitly.
 
 **Exact Preview** — A rendered frame of the selected video at its current time, including applied Operations and a valid logo draft. A frame belongs to that video, time and editing state; obsolete results cannot replace it or reopen a closed preview. A previous frame may remain visible as stale while its replacement is prepared. Comparison offers live, before, after and side-by-side views in logo editing; edits return to live. Closing ends pending updates until another explicit render or, in logo editing, a change to the frame's content or time.
 
@@ -63,3 +79,5 @@ Per-Job errors use the manifest identity, including negative derived-media IDs, 
 **Session** — Persistence adapter for the live Queue (and related editor fields) in sessionStorage. Not a Project file.
 
 **Encode profile** — Named encode settings from `resources/encode-profiles.json` (`fast`, `balanced`, `quality`, `uquality`).
+
+Worker caps and RAM estimation constants share `resources/worker-policy.json` between main and Python. The resource participates in the processor build fingerprint and PyInstaller data. Renderer capacity inputs include geometry, timing, trim, Operations, TemplateRegions and enabled watermark; the capacity signature is derived from those same inputs. Memory measurement remains specific to each runtime.

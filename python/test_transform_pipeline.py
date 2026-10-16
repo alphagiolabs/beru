@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Rotation, flips and output height through real ffmpeg, checked on corner colours.
-
-Source: 160x90 with red (TL), lime (TR), blue (BL), yellow (BR). Quarter turns and flips
-move those colours by the rules of each transform; the expected layouts below follow them.
-"""
 import subprocess
 import json
 import sys
@@ -137,7 +132,6 @@ def run_preview():
 
 
 def check_regions_follow_the_transform():
-    """Operations are placed in source coordinates; the transform then moves the result."""
     with tempfile.TemporaryDirectory(prefix="beru-regions-geometry-") as directory:
         source = str(Path(directory) / "logo.mp4")
         subprocess.run(
@@ -161,7 +155,6 @@ def check_regions_follow_the_transform():
 
 
 def check_export_without_upscale():
-    """Presets at/above source height preserve the video through the real batch CLI."""
     with tempfile.TemporaryDirectory(prefix="beru-export-geometry-") as directory:
         root = Path(directory)
         source = make_corners(directory, "corners.mp4")

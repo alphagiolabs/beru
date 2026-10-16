@@ -1,11 +1,12 @@
-"""Clip rendering and intermediate media; Job terminal events belong to the caller."""
-
 import logging
 import math
 import os
 import tempfile
 from dataclasses import dataclass
 
+import encode_args
+import ffmpeg_runner
+import filters
 import media_probe
 from audio_settings import audio_filter, normalize_audio
 from batch_context import _check_cancelled
@@ -35,6 +36,15 @@ def _temporal_budget_seconds(env=None):
     return max(30, min(7200, seconds))
 
 
+def _probe_has_media(info):
+    return bool(info) and bool(info.get("width") or info.get("duration"))
+
+
+@dataclass
+class HardwareFallbackState:
+    hardware_failed: bool = False
+
+
 @dataclass
 class VideoPlan:
     job: dict
@@ -48,34 +58,22 @@ class VideoPlan:
 
 
 class ClipRenderer:
-    """One Job's renders share its hardware failure state and run resources."""
-
-    def __init__(self, ffmpeg_path, *, retry_job, ctx, hw_encoder, active_workers, admission,
-                 run_ffmpeg, encode_args, filter_args, build_filters, video_info,
-                 native_copy_eligible, native_copy, detect_encoder):
+    def __init__(self, ctx, *, hardware_fallback):
         self.ctx = ctx
-        self.retry_job = retry_job
-        self.run_directory = os.path.dirname(os.path.abspath(ctx.jobs_file)) if ctx and ctx.jobs_file else None
-        self.ffmpeg_path = ctx.ffmpeg_path if ctx else ffmpeg_path
-        self.hw_encoder = ctx.hw_encoder if ctx else hw_encoder
-        self.workers = ctx.max_workers if ctx else active_workers
-        self.admission = ctx.sw_fallback_admission if ctx else admission
-        self.run_ffmpeg = run_ffmpeg
-        self.encode_args = encode_args
-        self.filter_args = filter_args
-        self.build_filters = build_filters
-        self.video_info = video_info
-        self.native_copy_eligible = native_copy_eligible
-        self.native_copy = native_copy
-        self.detect_encoder = detect_encoder
+        self.hardware_fallback = hardware_fallback
+        self.run_directory = os.path.dirname(os.path.abspath(ctx.jobs_file)) if ctx.jobs_file else None
+        self.ffmpeg_path = ctx.ffmpeg_path
+        self.hw_encoder = ctx.hw_encoder
+        self.workers = ctx.max_workers
+        self.admission = ctx.sw_fallback_admission
 
     def _check_cancelled(self):
         if _check_cancelled(self.ctx):
             raise RuntimeError("Cancelled")
 
     def _probe(self, path):
-        return media_probe.ffprobe(path, ffmpeg_bin=self.ffmpeg_path,
-            ffprobe_bin=self.ctx.ffprobe_path if self.ctx else media_probe.find_ffprobe(self.ffmpeg_path))
+        return media_probe.ffprobe_cached(path, ffmpeg_bin=self.ffmpeg_path,
+            ffprobe_bin=self.ctx.ffprobe_path)
 
     def render(self, job, *, progress_range=None, force_video_encode=False):
         self._check_cancelled()
@@ -124,8 +122,11 @@ class ClipRenderer:
         audio = normalize_audio(job)
         external = job.get("external_audio")
         source_info = self._probe(job["input_path"]) if external or rate != 1 or audio["muted"] or audio["gain"] != 1 else {}
-        media_job = {**job, "audio_codec": source_info.get("audio_codec", ""),
-                     "audio_channels": source_info.get("audio_channels", 0)} if source_info else job
+        if _probe_has_media(source_info):
+            media_job = {**job, "audio_codec": source_info.get("audio_codec", ""),
+                         "audio_channels": source_info.get("audio_channels", 0)}
+        else:
+            media_job = job
         external_info = self._probe(external["path"]) if external else None
         if not force_video_encode and _job_takes_copy_path(media_job):
             return self._copy_plan(media_job, source_info, external_info)
@@ -149,7 +150,8 @@ class ClipRenderer:
         audio_af = audio_filter(job)
         cmd = self._command(job)
         if job.get("external_audio"):
-            info = {**self.video_info(job, job["input_path"], ctx=self.ctx), **source_info}
+            base_info = media_probe.job_video_info(job, job["input_path"], probe_fn=self._probe)
+            info = {**base_info, **(source_info if _probe_has_media(source_info) else {})}
             graph, label, channels, duration = self._external_plan(job, 1, info, external_info)
             cmd += ["-i", job["external_audio"]["path"], "-filter_complex", graph, "-map", "0:v:0", "-c:v", "copy"]
             cmd += build_audio_args(output, "", channels, force_encode=True, audio_map=label)
@@ -174,9 +176,9 @@ class ClipRenderer:
 
     def _encode_plan(self, raw_job, job, source_info, external_info, trim_start, trim_end, rate, temporal_directory,
                      *, patch_range=None):
-        info = self.video_info(job, job["input_path"], ctx=self.ctx)
+        info = media_probe.job_video_info(job, job["input_path"], probe_fn=self._probe)
         if rate != 1:
-            info = {**info, **source_info}
+            info = {**info, **(source_info if _probe_has_media(source_info) else {})}
         width, height = _job_dimensions(job, info)
         duration = float(info.get("duration") or 0)
         output_duration = duration
@@ -187,13 +189,14 @@ class ClipRenderer:
         temporal_fps = float(info.get("frame_rate") or 0)
         if temporal_directory and temporal_fps <= 0:
             temporal_fps = float(self._probe(job["input_path"]).get("frame_rate") or 0)
-        total_frames = math.ceil(duration * temporal_fps) if duration > 0 and temporal_fps > 0 else None
+        duration_probe = float(info.get("duration") or 0)
+        total_frames = math.ceil(duration_probe * temporal_fps) if duration_probe > 0 and temporal_fps > 0 else None
         resolver = TemporalPatchResolver(job["input_path"], temporal_directory, self.ffmpeg_path,
             temporal_fps, source_format=info.get("pix_fmt"), ctx=self.ctx,
             job_id=raw_job.get("id"), progress_range=patch_range, total_frames=total_frames,
             timeout=_temporal_budget_seconds(self.ctx.env if self.ctx else None)) if temporal_directory else None
-        graph, label, image_paths = self.build_filters(operations, width, height,
-            watermark=job.get("watermark"), _ffmpeg_path=self.ffmpeg_path, source_pix_fmt=info.get("pix_fmt"),
+        graph, label, image_paths = filters.build_filter_complex(operations, width, height,
+            watermark=job.get("watermark"), ffmpeg_path=self.ffmpeg_path, source_pix_fmt=info.get("pix_fmt"),
             temporal_resolver=resolver, transform=normalize_transform(job))
         watermark = job.get("watermark")
         if not graph and (operations or isinstance(watermark, dict) and watermark.get("enabled")):
@@ -230,10 +233,12 @@ class ClipRenderer:
         for path in image_paths:
             cmd += extra_media_input_args(path, duration=duration, image_fps=1)
         if job.get("external_audio"):
-            audio_graph, audio_label, channels, target = self._external_plan(job, len(image_paths) + 1, {**info, **source_info}, external_info)
+            audio_graph, audio_label, channels, target = self._external_plan(
+                job, len(image_paths) + 1,
+                {**info, **(source_info if _probe_has_media(source_info) else {})}, external_info)
             cmd += ["-i", job["external_audio"]["path"]]
             graph = f"{graph};{audio_graph}" if graph else audio_graph
-        cmd += self.filter_args(self.workers)
+        cmd += encode_args.build_filter_thread_args(self.workers)
         if graph:
             cmd += ["-filter_complex", graph]
         cmd += ["-map", label or "0:v:0"]
@@ -254,11 +259,11 @@ class ClipRenderer:
     def _encoding_plan(self, job, command, duration, timeout, *, reserve_software=False):
         profile = job.get("encode_profile", "balanced")
         encoder = None
-        if not self.retry_job.get("_hw_failed") and profile_allows_hardware(profile):
-            encoder = self.hw_encoder if self.ctx or self.hw_encoder is not None else self.detect_encoder(self.ffmpeg_path)
-        software_args = self.encode_args(self.ffmpeg_path, profile, job, force_software=True, active_workers=self.workers)
+        if not self.hardware_fallback.hardware_failed and profile_allows_hardware(profile):
+            encoder = self.hw_encoder
+        software_args = encode_args.build_encode_args(self.ffmpeg_path, profile, job, force_software=True, active_workers=self.workers)
         software_command = command + software_args + self._output_args(job["output_path"])
-        hardware_command = command + self.encode_args(self.ffmpeg_path, profile, job,
+        hardware_command = command + encode_args.build_encode_args(self.ffmpeg_path, profile, job,
             hw_encoder=encoder, active_workers=self.workers) + self._output_args(job["output_path"]) if encoder else software_command
         return VideoPlan(job, hardware_command, duration, timeout, encoder, software_command,
                          reserve_software=reserve_software)
@@ -268,7 +273,7 @@ class ClipRenderer:
         if admission is not None and not admission.acquire():
             raise RuntimeError("Cancelled")
         try:
-            return self.run_ffmpeg(plan.software_command if software else plan.command,
+            return ffmpeg_runner._run_ffmpeg(plan.software_command if software else plan.command,
                 timeout_sec=plan.timeout, job_id=plan.job.get("id"), duration_sec=plan.duration, ctx=self.ctx,
                 **({"progress_range": progress_range} if progress_range is not None else {}))
         finally:
@@ -279,8 +284,12 @@ class ClipRenderer:
         job = plan.job
         try:
             self._check_cancelled()
-            if plan.native_copy and progress_range is None and self.native_copy_eligible(job["input_path"], job["output_path"], ctx=self.ctx):
-                ok, error = self.native_copy(job["input_path"], job["output_path"], ctx=self.ctx, job_id=job.get("id"))
+            if (plan.native_copy and progress_range is None
+                    and media_probe._native_copy_eligible(
+                        job["input_path"], job["output_path"],
+                        probe_fn=lambda path: media_probe._probe_stream_types(
+                            path, ffprobe_bin=self.ctx.ffprobe_path))):
+                ok, error = ffmpeg_runner._native_stream_copy(job["input_path"], job["output_path"], ctx=self.ctx, job_id=job.get("id"))
                 if ok:
                     logger.info("Job %s: native copy -> %s", job.get("id"), os.path.basename(job["output_path"]))
                     return
@@ -290,7 +299,7 @@ class ClipRenderer:
                 logger.warning("Native copy failed, remuxing instead: %s", error)
             ok, error = self._run(plan, progress_range)
             if not ok and plan.encoder and is_hardware_encode_error(error):
-                self.retry_job["_hw_failed"] = True
+                self.hardware_fallback.hardware_failed = True
                 logger.warning("Job %s: hardware path failed, retrying with libx264", job.get("id"))
                 ok, error = self._run(plan, progress_range, software=True)
             if not ok:
@@ -329,5 +338,5 @@ class ClipRenderer:
                 cmd += ["-an"]
             cmd += ["-t", f"{total:.6f}", "-pix_fmt", cycle_info.get("pix_fmt") or "yuv420p"]
             plan = self._encoding_plan(job, cmd, total, 600,
-                reserve_software=bool(self.retry_job.get("_hw_failed") and self.hw_encoder))
+                reserve_software=bool(self.hardware_fallback.hardware_failed and self.hw_encoder))
             self._execute(plan, (middle, end))

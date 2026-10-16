@@ -1,7 +1,3 @@
-"""Stream-copy jobs run on a separate bounded I/O pool, and eligible inputs
-take a native byte-copy path that skips the ffmpeg remux + faststart rewrite.
-"""
-
 import os
 import tempfile
 import threading
@@ -9,6 +5,11 @@ import time
 from pathlib import Path
 
 import processor
+import ffmpeg_runner
+import batch_context
+import capacity
+import job_classify
+import media_probe
 
 
 def _box(box_type, payload):
@@ -41,7 +42,9 @@ def _make_job(folder, idx, **overrides):
 
 
 class _Stub:
-    """Save/replace/restore processor module attributes."""
+
+    _owners = {"_run_ffmpeg": ffmpeg_runner, "_native_copy_eligible": media_probe,
+               "_probe_stream_types": media_probe}
 
     def __init__(self, **attrs):
         self._attrs = attrs
@@ -49,38 +52,38 @@ class _Stub:
 
     def __enter__(self):
         for name, value in self._attrs.items():
-            self._orig[name] = getattr(processor, name)
-            setattr(processor, name, value)
+            self._orig[name] = getattr(self._owners[name], name)
+            setattr(self._owners[name], name, value)
         return self
 
     def __exit__(self, *exc):
         for name, value in self._orig.items():
-            setattr(processor, name, value)
+            setattr(self._owners[name], name, value)
 
 
 def test_copy_path_classification():
-    assert processor._job_takes_copy_path({"operations": []})
-    assert processor._job_takes_copy_path({"trim_start": 0, "trim_end": None})
-    assert not processor._job_takes_copy_path({"operations": [{"mode": "blur"}]})
-    assert not processor._job_takes_copy_path({"watermark": {"enabled": True}})
-    assert not processor._job_takes_copy_path({"trim_start": 1})
-    assert not processor._job_takes_copy_path({"trim_end": 5})
-    assert not processor._job_takes_copy_path({"trim_start": "abc"})
-    assert not processor._job_takes_copy_path("not a dict")
+    assert job_classify._job_takes_copy_path({"operations": []})
+    assert job_classify._job_takes_copy_path({"trim_start": 0, "trim_end": None})
+    assert not job_classify._job_takes_copy_path({"operations": [{"mode": "blur"}]})
+    assert not job_classify._job_takes_copy_path({"watermark": {"enabled": True}})
+    assert not job_classify._job_takes_copy_path({"trim_start": 1})
+    assert not job_classify._job_takes_copy_path({"trim_end": 5})
+    assert not job_classify._job_takes_copy_path({"trim_start": "abc"})
+    assert not job_classify._job_takes_copy_path("not a dict")
 
 
 def test_resolve_copy_workers():
     prev = os.environ.get("BERU_COPY_WORKERS")
     try:
         os.environ.pop("BERU_COPY_WORKERS", None)
-        assert processor.resolve_copy_workers(0) == 0
-        assert processor.resolve_copy_workers(1) == 1
-        assert processor.resolve_copy_workers(9) == 2
+        assert capacity.resolve_copy_workers(0) == 0
+        assert capacity.resolve_copy_workers(1) == 1
+        assert capacity.resolve_copy_workers(9) == 2
         os.environ["BERU_COPY_WORKERS"] = "4"
-        assert processor.resolve_copy_workers(9) == 4
-        assert processor.resolve_copy_workers(3) == 3
+        assert capacity.resolve_copy_workers(9) == 4
+        assert capacity.resolve_copy_workers(3) == 3
         os.environ["BERU_COPY_WORKERS"] = "999"
-        assert processor.resolve_copy_workers(99) == processor.MAX_WORKERS_CAP
+        assert capacity.resolve_copy_workers(99) == capacity.MAX_WORKERS_CAP
     finally:
         if prev is None:
             os.environ.pop("BERU_COPY_WORKERS", None)
@@ -89,9 +92,6 @@ def test_resolve_copy_workers():
 
 
 def test_split_pools_overlap():
-    """Copies ahead of encodes must not occupy encode slots: with the old
-    shared pool the leading copies would fill every worker and the encodes
-    would wait, so `encodes_started` would never fire."""
     with tempfile.TemporaryDirectory(prefix="beru_pools_") as tmp:
         folder = Path(tmp)
         blur = {"mode": "blur", "region": {"x": 8, "y": 8, "w": 32, "h": 32}}
@@ -119,7 +119,7 @@ def test_split_pools_overlap():
                     active[cls] -= 1
             return True, None
 
-        processor._cancel_event.clear()
+        batch_context._cancel_event.clear()
         with _Stub(_run_ffmpeg=fake_run, _native_copy_eligible=lambda *a, **k: False):
             result = processor.process_jobs(
                 jobs, "ffmpeg", max_workers=2, hw_encoder=None
@@ -144,8 +144,8 @@ def test_native_copy_eligibility():
         out_mkv = folder / "out.mkv"
 
         def eligible(src, dst, streams):
-            with _Stub(_probe_stream_types=lambda p, s=streams: s):
-                return processor._native_copy_eligible(str(src), str(dst))
+            with _Stub(_probe_stream_types=lambda p, s=streams, **kwargs: s):
+                return media_probe._native_copy_eligible(str(src), str(dst))
 
         va = [("video", "h264"), ("audio", "aac")]
         assert eligible(fast, out_mp4, va)
@@ -176,9 +176,9 @@ def test_native_copy_end_to_end():
         def forbidden(*a, **k):
             raise AssertionError("eligible copy must not spawn ffmpeg")
 
-        processor._cancel_event.clear()
+        batch_context._cancel_event.clear()
         with _Stub(
-            _probe_stream_types=lambda p: [("video", "h264"), ("audio", "aac")],
+            _probe_stream_types=lambda p, **kwargs: [("video", "h264"), ("audio", "aac")],
             _run_ffmpeg=forbidden,
         ):
             result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
@@ -201,10 +201,10 @@ def test_native_copy_falls_back_to_remux():
             calls.append(cmd)
             return True, None
 
-        processor._cancel_event.clear()
+        batch_context._cancel_event.clear()
         with _Stub(
             _run_ffmpeg=fake_run,
-            _probe_stream_types=lambda p: [("video", "h264"), ("audio", "aac")],
+            _probe_stream_types=lambda p, **kwargs: [("video", "h264"), ("audio", "aac")],
         ):
             result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
 
@@ -229,16 +229,16 @@ def test_native_copy_cancelled_midway():
             "operations": [],
         }
 
-        def probe_then_cancel(path):
-            processor._cancel_event.set()
+        def probe_then_cancel(path, **kwargs):
+            batch_context._cancel_event.set()
             return [("video", "h264"), ("audio", "aac")]
 
-        processor._cancel_event.clear()
+        batch_context._cancel_event.clear()
         try:
             with _Stub(_probe_stream_types=probe_then_cancel):
                 result = processor._process_one(0, job, "ffmpeg", hw_encoder=None)
         finally:
-            processor._cancel_event.clear()
+            batch_context._cancel_event.clear()
 
         assert result["status"] == "cancelled", result
         assert not out.exists()
@@ -253,7 +253,7 @@ def test_cancelled_remux_reports_cancelled():
         job["input_path"] = str(src)
         job["output_path"] = str(folder / "out0.mp4")
 
-        processor._cancel_event.clear()
+        batch_context._cancel_event.clear()
         with _Stub(
             _run_ffmpeg=lambda *a, **k: (False, "Cancelled"),
             _native_copy_eligible=lambda *a, **k: False,

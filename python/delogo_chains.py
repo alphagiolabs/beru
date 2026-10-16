@@ -1,7 +1,6 @@
-"""Delogo filter-chain builders using shared operation helpers."""
-
 import logging
 import os
+from typing import NamedTuple
 
 from color_validation import _validate_drawtext_color
 from op_shared import (
@@ -19,6 +18,20 @@ _DELOGO_SOURCE_FORMATS = frozenset({
 })
 
 
+class FramePatchBounds(NamedTuple):
+    x: int
+    y: int
+    width: int
+    height: int
+
+
+class PatchLocalLogoBounds(NamedTuple):
+    left: int
+    top: int
+    width: int
+    height: int
+
+
 def _delogo_overlay_opts(x, y, enable_clause, pixel_format=None):
     formats = {"yuv422p": "yuv422", "yuvj422p": "yuv422",
                "yuv444p": "yuv444", "yuvj444p": "yuv444",
@@ -29,7 +42,6 @@ def _delogo_overlay_opts(x, y, enable_clause, pixel_format=None):
 
 
 def _clamp_delogo_rect(x, y, w, h, video_w, video_h):
-    """Clamp a selected logo box without changing its visible frame edges."""
     if video_w <= 0 or video_h <= 0 or w <= 0 or h <= 0:
         return None
     left = max(0, int(x))
@@ -42,11 +54,6 @@ def _clamp_delogo_rect(x, y, w, h, video_w, video_h):
 
 
 def _build_boxblur_filter(luma_radius, chroma_radius=None, power=1):
-    """Build a boxblur whose radii stay valid for the runtime pixel format.
-
-    ``power`` counts blur passes; 3 passes approximate the gaussian the live
-    canvas preview draws (sigma ~= radius), so exports match the preview.
-    """
     luma = max(0, int(luma_radius))
     chroma = luma if chroma_radius is None else max(0, int(chroma_radius))
     return (
@@ -68,7 +75,6 @@ def _fit_delogo_rect(x, y, w, h, video_w, video_h):
 
 
 def _seamless_feather_widths(feather, left, top, right, bottom):
-    """Clamp each alpha ramp to the context available on that frame side."""
     f = max(0, int(feather or 0))
     return tuple(max(0, min(f, int(side))) for side in (left, top, right, bottom))
 
@@ -78,7 +84,6 @@ def _with_enable(filter_str, enable_clause):
 
 
 def _seamless_opacity_expr(left, top, w, h, feather_widths):
-    """Opaque logo core with smoothstep ramps only in logo-free context."""
     left_f, top_f, right_f, bottom_f = feather_widths
     right_edge = left + w - 1
     bottom_edge = top + h - 1
@@ -95,13 +100,11 @@ def _seamless_opacity_expr(left, top, w, h, feather_widths):
 
 
 def _build_padded_region(x, y, w, h, video_w, video_h, pad, *, aligned=False):
-    """Return (x0, y0, rw, rh) for a feather/context pad around the logo box."""
     x0 = max(0, x - pad)
     y0 = max(0, y - pad)
     x1 = min(video_w, x + w + pad)
     y1 = min(video_h, y + h + pad)
     if aligned:
-        # Preserve the chroma grid without moving odd selections on YUV420.
         x0 -= x0 % 2
         y0 -= y0 % 2
         x1 = min(video_w, x1 + x1 % 2)
@@ -114,10 +117,6 @@ def _build_padded_region(x, y, w, h, video_w, video_h, pad, *, aligned=False):
 
 
 def _build_cleanup_filter(method, op, rw, rh, enable_clause=""):
-    """Single-input cleanup filters for a cropped patch (rw x rh).
-
-    Mirror and inpaint have dedicated context builders.
-    """
     if method == "mosaic":
         block = _coerce_int(op.get("mosaic_size"), 12, 4, 80)
         return (
@@ -145,11 +144,6 @@ def _build_cleanup_filter(method, op, rw, rh, enable_clause=""):
 
 
 def _build_mirror_patch(side, x, y, w, h, video_w, video_h, in_label, out_label):
-    """Sample pixels adjacent to the logo box and mirror them into the patch.
-
-    Matches the live-preview logic: reflect the strip beside the selection
-    over the logo area (same approach as online logo removers on uniform bg).
-    """
     side = (side or "right").lower()
     in_pad = f"[{in_label}]"
     out_pad = f"[{out_label}]"
@@ -196,21 +190,15 @@ def _build_mirror_patch(side, x, y, w, h, video_w, video_h, in_label, out_label)
     )
 
 
-def _seamless_overlay_tail(clean_label, s, idx, x0, y0, rw, rh, box, feather, enable_clause,
+def _seamless_overlay_tail(clean_label, s, idx, *, frame_patch: FramePatchBounds,
+                           logo: PatchLocalLogoBounds, feather, enable_clause,
                            pixel_format=None):
-    """Composite a cleaned patch with an alpha-feathered seam.
-
-    ``box`` is the (left, top, w, h) logo box in crop-local coords. The box
-    stays fully opaque (the frame still shows the logo there); only the
-    surrounding context cross-fades, so pixels outside the patch are never
-    touched (no halo) and no logo pixels leak back in. Falls back to a hard
-    overlay when no ramp fits.
-    """
-    left, top, w, h = box
+    x0, y0, rw, rh = frame_patch
+    left, top, w, h = logo
     feather_widths = _seamless_feather_widths(
         feather, left, top, rw - (left + w), rh - (top + h)
     )
-    if not any(feather_widths) and box == (0, 0, rw, rh):
+    if not any(feather_widths) and logo == (0, 0, rw, rh):
         return f"[full{s}][{clean_label}]overlay={_delogo_overlay_opts(x0, y0, enable_clause, pixel_format)}[tmp{idx}]"
     opacity = _seamless_opacity_expr(left, top, w, h, feather_widths)
     if pixel_format is None or "10" not in pixel_format:
@@ -229,8 +217,6 @@ def _seamless_overlay_tail(clean_label, s, idx, x0, y0, rw, rh, box, feather, en
             f"[color{s}][mask{s}]alphamerge=shortest=1[soft{s}];"
             f"[full{s}][soft{s}]overlay={_delogo_overlay_opts(x0, y0, enable_clause, pixel_format)}[tmp{idx}]"
         )
-    # alphamerge accepts only 8-bit inputs; blend retains native precision.
-    # SW/SH map chroma-plane coordinates to luma-pixel mask coordinates.
     opacity = opacity.replace("X", "(X/SW)").replace("Y", "(Y/SH)")
     clean_format = f"[{clean_label}]format={pixel_format}[precision{s}];"
     clean_label = f"precision{s}"
@@ -264,8 +250,9 @@ def _inpaint_filter_graph(src, s, idx, x, y, w, h, x0, y0, rw, rh, feather, enab
             f"{src}split[full{s}][work{s}];"
             f"{work}"
         ) + _seamless_overlay_tail(
-            f"crop{s}", s, idx, x0, y0, rw, rh, (x - x0, y - y0, w, h),
-            0, enable_clause, pixel_format,
+            f"crop{s}", s, idx, frame_patch=FramePatchBounds(x0, y0, rw, rh),
+            logo=PatchLocalLogoBounds(x - x0, y - y0, w, h),
+            feather=0, enable_clause=enable_clause, pixel_format=pixel_format,
         )
     head = (
         f"{src}split[full{s}][work{s}];"
@@ -273,8 +260,9 @@ def _inpaint_filter_graph(src, s, idx, x, y, w, h, x0, y0, rw, rh, feather, enab
         f"[crop{s}]{_with_enable(_build_boxblur_filter(2, 1), enable_clause)}[clean{s}];"
     )
     return head + _seamless_overlay_tail(
-        f"clean{s}", s, idx, x0, y0, rw, rh, (x - x0, y - y0, w, h),
-        feather, enable_clause, pixel_format,
+        f"clean{s}", s, idx, frame_patch=FramePatchBounds(x0, y0, rw, rh),
+        logo=PatchLocalLogoBounds(x - x0, y - y0, w, h),
+        feather=feather, enable_clause=enable_clause, pixel_format=pixel_format,
     )
 
 
@@ -295,21 +283,14 @@ def _blur_filter_graph(src, s, idx, op, x, y, w, h, video_w, video_h, feather, e
         f"crop={rw}:{rh}:{x0 - bx}:{y0 - by}[clean{s}];"
     )
     return head + _seamless_overlay_tail(
-        f"clean{s}", s, idx, x0, y0, rw, rh, (x - x0, y - y0, w, h),
-        feather, enable_clause, pixel_format,
+        f"clean{s}", s, idx, frame_patch=FramePatchBounds(x0, y0, rw, rh),
+        logo=PatchLocalLogoBounds(x - x0, y - y0, w, h),
+        feather=feather, enable_clause=enable_clause, pixel_format=pixel_format,
     )
 
 
 def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=None,
                          source_pix_fmt=None, *, temporal_patch=None):
-    """Build delogo filter chain (split → clean → overlay).
-
-    - temporal: composite a compensated patch, or use spatial reconstruction.
-    - mosaic / blur / fill: clean the (optionally padded) crop.
-    - inpaint: FFmpeg delogo on aligned context (interpolates from edges).
-    - mirror: reflect adjacent pixels into the logo box (uniform backgrounds).
-    - cover: overlay a user image scaled/padded to the logo box.
-    """
     region = op.get("region") or {}
     x = int(region.get("x", 0))
     y = int(region.get("y", 0))
@@ -342,8 +323,10 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
         timing = f"setpts=PTS+{patch.start:.8f}/TB" if patch.start else "null"
         head = f"{src}null[full{s}];[{input_idx}:v]{timing}[clean{s}];"
         return head + _seamless_overlay_tail(
-            f"clean{s}", s, idx, patch.x, patch.y, patch.width, patch.height,
-            (x - patch.x, y - patch.y, w, h), feather, enable_clause, source_pix_fmt,
+            f"clean{s}", s, idx,
+            frame_patch=FramePatchBounds(patch.x, patch.y, patch.width, patch.height),
+            logo=PatchLocalLogoBounds(x - patch.x, y - patch.y, w, h),
+            feather=feather, enable_clause=enable_clause, pixel_format=source_pix_fmt,
         )
 
     if method == "temporal":
@@ -411,8 +394,9 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
                 f"{mirror_chain};"
             )
             return head + _seamless_overlay_tail(
-                f"clean{s}", s, idx, mx, my, mw, mh, (x - mx, y - my, w, h),
-                feather, enable_clause, source_pix_fmt,
+                f"clean{s}", s, idx, frame_patch=FramePatchBounds(mx, my, mw, mh),
+                logo=PatchLocalLogoBounds(x - mx, y - my, w, h),
+                feather=feather, enable_clause=enable_clause, pixel_format=source_pix_fmt,
             )
         return blur_fallback()
 
@@ -435,9 +419,9 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
     x0, y0, rw, rh = _build_padded_region(
         x, y, w, h, video_w, video_h, max(2, feather), aligned=True
     )
-    cleanup = _build_cleanup_filter(method, op, rw, rh, enable_clause)
 
     if feather <= 0:
+        cleanup = _build_cleanup_filter(method, op, w, h, enable_clause)
         return (
             f"{src}split[full{s}][work{s}];"
             f"[work{s}]crop={w}:{h}:{x}:{y}[crop{s}];"
@@ -445,12 +429,15 @@ def _build_delogo_chain(op, prev_label, idx, video_w, video_h, img_input_index=N
             f"[full{s}][clean{s}]overlay={_delogo_overlay_opts(x, y, enable_clause, source_pix_fmt)}[tmp{idx}]"
         )
 
+    cleanup = _build_cleanup_filter(method, op, rw, rh, enable_clause)
+
     head = (
         f"{src}split[full{s}][work{s}];"
         f"[work{s}]crop={rw}:{rh}:{x0}:{y0}[crop{s}];"
         f"[crop{s}]{cleanup}[clean{s}];"
     )
     return head + _seamless_overlay_tail(
-        f"clean{s}", s, idx, x0, y0, rw, rh, (x - x0, y - y0, w, h),
-        feather, enable_clause, source_pix_fmt,
+        f"clean{s}", s, idx, frame_patch=FramePatchBounds(x0, y0, rw, rh),
+        logo=PatchLocalLogoBounds(x - x0, y - y0, w, h),
+        feather=feather, enable_clause=enable_clause, pixel_format=source_pix_fmt,
     )

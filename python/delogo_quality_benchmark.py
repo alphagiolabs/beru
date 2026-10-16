@@ -16,7 +16,8 @@ from pathlib import Path
 import numpy as np
 
 from delogo_chains import _build_delogo_chain
-from processor import find_ffmpeg
+from media_probe import find_ffmpeg
+import filters
 
 FFMPEG = find_ffmpeg()
 FPS, FRAMES = 12, 24
@@ -88,7 +89,6 @@ def video(path, output, filters=None):
 
 
 def tune_existing(output):
-    """Compare settings against the same clean ROI, without changing presets."""
     existing = json.loads((output / "metrics.json").read_text(encoding="utf-8"))
     settings = [("blur", strength, feather, 0)
                 for strength in (20, 30, 45, 60) for feather in (2, 6)]

@@ -61,10 +61,6 @@ async function applySession(supabase, set, nextSession, isCurrent) {
   }
 }
 
-/**
- * Defer Supabase calls until onAuthStateChange releases its lock to avoid deadlock.
- * @see https://supabase.com/docs/guides/troubleshooting/why-is-my-supabase-api-call-not-returning-PGzXw0
- */
 function ensureAuthListener(supabase, set, beginSession, invalidateActions) {
   if (_authListenerRegistered || !supabase) return;
   _authListenerRegistered = true;

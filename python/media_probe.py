@@ -1,14 +1,10 @@
-"""FFmpeg/ffprobe discovery and media probing.
-
-Owns binary paths initialized from env and updated by processor._init_ffmpeg_globals.
-"""
-
 import json
 import logging
 import os
 import re
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 from encode_args import _AUDIO_COPY_CODECS, _COPY_SAFE_STREAM_TYPES, _FASTSTART_EXTS
@@ -19,9 +15,12 @@ logger = logging.getLogger("beru")
 FFMPEG = os.environ.get("BERU_FFMPEG", "ffmpeg.exe")
 FFPROBE = os.environ.get("BERU_FFPROBE", "ffprobe.exe")
 
+_PROBE_CACHE = {}
+_PROBE_CACHE_MAX = 128
+_PROBE_CACHE_LOCK = threading.Lock()
+
 
 def find_ffmpeg():
-    """Locate ffmpeg binary - bundled, env var, or system PATH."""
     env_ffmpeg = os.environ.get("BERU_FFMPEG")
     if env_ffmpeg and os.path.isfile(env_ffmpeg):
         return env_ffmpeg
@@ -40,7 +39,6 @@ def find_ffmpeg():
 
 
 def find_ffprobe(ffmpeg_bin):
-    """Locate ffprobe alongside ffmpeg, bundled resources, or system PATH."""
     env_ffprobe = os.environ.get("BERU_FFPROBE")
     if env_ffprobe and os.path.isfile(env_ffprobe):
         return env_ffprobe
@@ -63,14 +61,6 @@ def find_ffprobe(ffmpeg_bin):
 
 
 def _safe_float(value, default=0.0):
-    """Coerce an ffprobe field to float.
-
-    ffprobe emits the string 'N/A' (and sometimes empty strings) for fields it
-    cannot measure (bit_rate, duration on some streams). A bare float() would
-    raise ValueError and, because ffprobe() wraps the whole parse in a single
-    try/except, discard an otherwise-valid probe and fall back to the slow
-    regex parse — or report zero dimensions for a readable file.
-    """
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -78,7 +68,6 @@ def _safe_float(value, default=0.0):
 
 
 def _safe_int(value, default=0):
-    """Coerce an ffprobe field to int, tolerating 'N/A' / None / float strings."""
     try:
         return int(float(value))
     except (TypeError, ValueError):
@@ -86,7 +75,6 @@ def _safe_int(value, default=0):
 
 
 def _parse_frame_rate(rate_str):
-    """Parse ffprobe frame rate string (e.g. '30000/1001' or '30') to float."""
     if not rate_str:
         return 0.0
     try:
@@ -138,7 +126,6 @@ def _parse_channel_layout(audio_line):
 
 
 def _ffprobe_via_ffmpeg(path, *, ffmpeg_bin=None):
-    """Fallback when ffprobe returns no JSON (common on some Windows builds)."""
     empty = _empty_probe_result()
     candidate = FFMPEG if ffmpeg_bin is None else ffmpeg_bin
     ffmpeg_path = candidate if candidate and os.path.isfile(candidate) else find_ffmpeg()
@@ -221,7 +208,6 @@ def _display_dimensions(width, height, rotation):
 
 
 def ffprobe(path, *, ffprobe_bin=None, ffmpeg_bin=None):
-    """Get comprehensive video metadata for quality-preserving export."""
     empty = _empty_probe_result()
     if not path or not os.path.exists(path):
         return empty
@@ -284,8 +270,39 @@ def ffprobe(path, *, ffprobe_bin=None, ffmpeg_bin=None):
     return _ffprobe_via_ffmpeg(path, ffmpeg_bin=ffmpeg_bin)
 
 
+def _probe_cache_key(path):
+    stat = os.stat(path)
+    return os.path.normcase(os.path.abspath(path)), stat.st_size, stat.st_mtime_ns
+
+
+def ffprobe_cached(path, *, ffprobe_bin=None, ffmpeg_bin=None):
+    if not path:
+        return ffprobe(path, ffprobe_bin=ffprobe_bin, ffmpeg_bin=ffmpeg_bin)
+    try:
+        key = (*_probe_cache_key(path),
+               FFPROBE if ffprobe_bin is None else os.fspath(ffprobe_bin),
+               FFMPEG if ffmpeg_bin is None else os.fspath(ffmpeg_bin))
+    except OSError:
+        return ffprobe(path, ffprobe_bin=ffprobe_bin, ffmpeg_bin=ffmpeg_bin)
+    with _PROBE_CACHE_LOCK:
+        hit = _PROBE_CACHE.get(key)
+        if hit is not None:
+            return dict(hit)
+    result = ffprobe(path, ffprobe_bin=ffprobe_bin, ffmpeg_bin=ffmpeg_bin)
+    if result.get("width") or result.get("duration"):
+        with _PROBE_CACHE_LOCK:
+            _PROBE_CACHE[key] = dict(result)
+            while len(_PROBE_CACHE) > _PROBE_CACHE_MAX:
+                _PROBE_CACHE.pop(next(iter(_PROBE_CACHE)))
+    return result
+
+
+def reset_probe_cache():
+    with _PROBE_CACHE_LOCK:
+        _PROBE_CACHE.clear()
+
+
 def _probe_stream_types(path, *, ffprobe_bin=None):
-    """[(codec_type, codec_name)] for each stream; None when ffprobe fails."""
     probe_bin = FFPROBE if ffprobe_bin is None else ffprobe_bin
     if not probe_bin or not os.path.isfile(probe_bin):
         return None
@@ -366,7 +383,6 @@ def _native_copy_eligible(input_path, output_path, *, probe_fn=None):
 
 
 def job_video_info(job, input_path, *, probe_fn=None):
-    """Use metadata from the job when Electron already probed the file."""
     jw, jh = _job_dimensions(job)
     duration = float(job.get("video_duration") or 0)
     frame_rate = float(job.get("frame_rate") or 0)
