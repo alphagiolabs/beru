@@ -198,7 +198,7 @@ describe("renderer onRunWarning", () => {
     expect(state().showToast).toHaveBeenCalledTimes(1);
     const toast = state().showToast.mock.calls[0][0];
     expect(toast.kind).toBe("warn");
-    expect(toast.text).toContain("timestamps variables");
+    expect(toast.text).toContain("timestamps irregulares");
   });
 
   it("falls back to the processor message for unknown codes", () => {

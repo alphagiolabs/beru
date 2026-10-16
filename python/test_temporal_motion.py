@@ -225,27 +225,10 @@ def test_static_and_variable_timing(folder):
     _, moving = texture()
     vfr = source(folder, "variable", moving, timing="setpts='(N+floor(N/3))*0.04/TB'")
     temporal = export(vfr, folder, "variable-temporal", [OP])
-    spatial = folder / "variable-spatial.mkv"
-    run(
-        FFMPEG,
-        "-v",
-        "error",
-        "-y",
-        "-i",
-        vfr,
-        "-vf",
-        "delogo=x=74:y=38:w=22:h=28",
-        "-fps_mode",
-        "passthrough",
-        "-c:v",
-        "ffv1",
-        "-pix_fmt",
-        "yuv444p",
-        spatial,
-    )
+    constant = export(source(folder, "constant", moving), folder, "constant-temporal", [OP])
     assert np.array_equal(
-        decode(temporal)[:, 40:64, 76:94], decode(spatial)[:, 40:64, 76:94]
-    ), "VFR should use a safe spatial repair"
+        decode(temporal)[:, 40:64, 76:94], decode(constant)[:, 40:64, 76:94]
+    ), "Each VFR frame must receive the patch built from that same frame"
 
     def timestamps(path):
         return json.loads(
@@ -272,9 +255,14 @@ def test_static_and_variable_timing(folder):
     ])
     assert timestamps(bounded_vfr) == timestamps(vfr), "Bounded repair changed VFR timing"
     active = [0.4 <= float(frame["best_effort_timestamp_time"]) <= 0.64 for frame in timestamps(vfr)]
+    native = decode(vfr)
+    bounded = decode(bounded_vfr)
     assert np.array_equal(
-        decode(bounded_vfr)[active, 40:64, 76:94], decode(spatial)[active, 40:64, 76:94]
-    ), "A bounded VFR operation must retain the safe spatial fallback"
+        bounded[[not on for on in active]], native[[not on for on in active]]
+    ), "A bounded VFR repair leaked outside its interval"
+    assert np.abs(
+        bounded[active, 40:64, 76:94].astype(float) - decode(temporal)[active, 40:64, 76:94]
+    ).mean() < 10, "A bounded VFR repair must follow the variable timing"
 
 
 def test_high_depth_and_actual_job(folder):

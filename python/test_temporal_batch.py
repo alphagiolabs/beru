@@ -158,12 +158,20 @@ def test_cancellation_and_progress(folder):
 
 def test_variable_timing_and_budget(folder):
     _, marked = texture()
-    for name, timing, kwargs, code in (
-        ("vfr", "setpts=if(gte(N\\,10)\\,PTS+0.2/TB\\,PTS)", {}, "patch_skipped_timing"),
-        ("timeout", None, {"timeout": 0.01}, "patch_skipped_budget"),
-        ("disk", None, {}, "patch_skipped_budget"),
+    vfr = source(folder, "vfr", marked,
+                 timing="setpts=if(gte(N\\,10)\\,PTS+0.2/TB\\,PTS)")
+    assert_parity(vfr, folder / "vfr-parity", OPS, "yuv444p")
+    regular = source(folder, "regular", marked)
+    irregular = folder / "irregular.mkv"
+    run(FFMPEG, "-v", "error", "-y", "-i", regular,
+        "-vf", "settb=1/1000,setpts=(N-0.9*mod(N\\,2))*0.04/TB",
+        "-fps_mode", "passthrough", "-enc_time_base", "1:1000",
+        "-c:v", "ffv1", "-pix_fmt", "yuv444p", irregular)
+    for name, src, kwargs, code in (
+        ("irregular", irregular, {}, "patch_skipped_timing"),
+        ("timeout", regular, {"timeout": 0.01}, "patch_skipped_budget"),
+        ("disk", regular, {}, "patch_skipped_budget"),
     ):
-        src = source(folder, name, marked, timing=timing)
         output = folder / f"{name}-output"
         budget_file = None
         if name == "disk":
