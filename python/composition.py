@@ -4,8 +4,9 @@ import tempfile
 from fractions import Fraction
 
 import media_probe
-from batch_context import _check_cancelled
-from batch_errors import is_hardware_encode_error, remove_partial_output
+from batch_context import check_cancelled
+from batch_errors import ProcessingCancelled
+from clip_render import ClipRenderer, VideoPlan
 from clip_timing import MAX_OUTPUT_DURATION_SECONDS, cycle_duration, repeat_count, playback_rate
 from composition_graph import build_filter_graph, seek_args
 from composition_limits import validate_composition_job
@@ -37,7 +38,9 @@ def _frame_clips(clips, infos, durations, at_us, fps):
     return [], [], []
 
 
-def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encode_args):
+def process_composition(job, *, ctx, hardware_fallback):
+    renderer = ClipRenderer(ctx, hardware_fallback=hardware_fallback)
+    ffmpeg_path = ctx.ffmpeg_path
     validate_composition_job(job)
     job = _validated_job_media(job, require_output=True)
     fps = job["composition_fps"]
@@ -56,8 +59,8 @@ def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encod
     os.makedirs(os.path.dirname(output) or ".", exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="beru-composition-", dir=run_directory) as directory:
         for index, original in enumerate(job["clips"]):
-            if _check_cancelled(ctx):
-                raise RuntimeError("Cancelled")
+            if check_cancelled(ctx):
+                raise ProcessingCancelled()
             clip = original
             info = media_probe.ffprobe_cached(clip["input_path"], ffmpeg_bin=ffmpeg_path, ffprobe_bin=probe_bin)
             if not info.get("width") or not info.get("height") or info.get("color_transfer") in ("smpte2084", "arib-std-b67"):
@@ -68,7 +71,7 @@ def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encod
             duration = math.ceil(duration * fps - 1e-8) / fps
             if _needs_intermediate(clip):
                 destination = os.path.join(directory, f"edited-{index}.mkv")
-                render_clip({**clip, "id": job_id, "output_path": destination, "output_root": directory,
+                renderer.render({**clip, "id": job_id, "output_path": destination, "output_root": directory,
                              "rotation": 0, "flip_h": False, "flip_v": False},
                             progress_range=(0, 10), force_video_encode=True)
                 clip = {**clip, "input_path": destination, "input_root": directory, "trim_start": 0,
@@ -97,26 +100,17 @@ def process_composition(job, ffmpeg_path, *, ctx, render_clip, run_ffmpeg, encod
         cmd += ["-filter_complex_threads", "1", "-/filter_complex", graph_path, "-map", "[vout]"]
         if frame:
             cmd += ["-frames:v", "1", "-f", "image2", "-c:v", "png", output]
-            ok, error = run_ffmpeg(cmd, job_id=job_id, duration_sec=1 / fps, ctx=ctx, cwd=workdir)
+            plan = VideoPlan(job, cmd, 1 / fps, 600, cwd=workdir)
         else:
             cmd += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-ac", "2", "-ar", "48000",
                     "-pix_fmt", "yuv420p", "-r", str(Fraction(fps).limit_denominator(1_000_000)), "-t", f"{total:.9f}",
                     "-colorspace", "bt709", "-color_trc", "bt709", "-color_primaries", "bt709", "-color_range", "tv"]
-            if os.path.splitext(output)[1].lower() in (".mp4", ".mov"):
-                cmd += ["-movflags", "+faststart"]
-            force_software = bool(job.get("_hw_failed"))
-            options = encode_args(ffmpeg_path, job.get("encode_profile", "balanced"), job,
-                                  force_software=force_software, hw_encoder=ctx.hw_encoder if ctx else None,
-                                  active_workers=ctx.max_workers if ctx else 1)
-            ok, error = run_ffmpeg(cmd + options + [output], job_id=job_id, duration_sec=total,
-                                  ctx=ctx, progress_range=(10 if any(_needs_intermediate(c) for c in job["clips"]) else 0, 100), cwd=workdir)
-            if not ok and not _check_cancelled(ctx) and is_hardware_encode_error(error or ""):
-                options = encode_args(ffmpeg_path, job.get("encode_profile", "balanced"), job,
-                                      force_software=True, active_workers=ctx.max_workers if ctx else 1)
-                ok, error = run_ffmpeg(cmd + options + [output], job_id=job_id, duration_sec=total, ctx=ctx, cwd=workdir)
-        if not ok:
-            remove_partial_output(output)
-            if "No space left on device" in (error or ""):
-                error = "No hay espacio suficiente en el disco para exportar."
-            raise RuntimeError(error)
+            plan = renderer.encoding_plan(job, cmd, total, 600, cwd=workdir)
+        progress_range = (10 if any(_needs_intermediate(c) for c in job["clips"]) else 0, 100)
+        try:
+            renderer.execute(plan, progress_range=None if frame else progress_range)
+        except RuntimeError as exc:
+            if "No space left on device" in str(exc):
+                raise RuntimeError("No hay espacio suficiente en el disco para exportar.") from exc
+            raise
     return {"index": job_id, "status": "succeeded"}

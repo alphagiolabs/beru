@@ -48,7 +48,7 @@ def _job():
 def _run_worker(stdin, *, process_jobs=None, detect_hw=None):
     stdout = io.StringIO()
     if process_jobs is None:
-        def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None, ctx=None):
+        def process_jobs(jobs, ffmpeg_path=None, max_workers=None, *, hw_encoder=None, ctx=None):
             return {"total": 1, "succeeded": 1, "failed": 0, "cancelled": 0, "workers": 1}
     with patch.object(processor.sys, "stdin", stdin), patch.object(
         processor, "_init_ffmpeg_globals", return_value=True

@@ -9,19 +9,12 @@ import { validateCompositionJob } from "../../shared/composition-settings.js";
 import { normalizeJob, jobMediaSources } from "../../shared/job-manifest.js";
 import { buildJobManifest } from "../../shared/build-job-manifest.js";
 import { unwrapJobManifest } from "../utils/jobManifest.js";
-import { sanitizeBatchJobMedia } from "../utils/process-media-validation.js";
-import { validateBatchOutputPaths } from "../utils/process-output.js";
+import { startExportRun } from "../utils/start-export-run.js";
 import { handleIpc } from "../utils/ipc.js";
 import { probeVideo } from "../utils/video-cache.js";
 import { runMediaTask } from "../utils/media-task-pool.js";
-import { validateMediaBinaries } from "../utils/paths.js";
-import { validateProcessorAvailableAsync } from "../utils/processor-spawn.js";
-import { executeProcessingRun, cancelRun } from "../processing-run.js";
-import {
-  captureProcessingPreparation,
-  isProcessingPreparationCurrent,
-  cancelProcessingPreparation,
-} from "../utils/process-preparation.js";
+import { cancelRun } from "../processing-run.js";
+import { cancelProcessingPreparation } from "../utils/process-preparation.js";
 import {
   clearAutosave,
   identityChanged,
@@ -164,23 +157,23 @@ export function registerEditorHandlers(pathSecurity) {
   );
 
   handleIpc(IPC_INVOKE.exportEditorComposition, async (_event, { manifest }) => {
-    const ready = await prepareRender(manifest, pathSecurity, "editor:export");
-    if (!ready.success) return ready;
-
-    const { canceled, filePath } = await showSaveDialog(getMainWindow(), {
-      title: "Exportar montaje a MP4",
-      defaultPath: "montaje.mp4",
-      filters: [{ name: "MP4", extensions: ["mp4"] }],
-    });
-    if (!isProcessingPreparationCurrent(ready.preparation))
-      return { success: false, cancelled: true };
-    if (canceled || !filePath) return { success: false, canceled: true };
-    const output = filePath.toLowerCase().endsWith(".mp4") ? filePath : `${filePath}.mp4`;
-    if (jobMediaSources(ready.job).some((source) => samePath(source.path, output))) {
-      return { success: false, error: "La salida no puede reemplazar una fuente del montaje" };
-    }
-
-    const result = await renderTo(ready, output, "export", pathSecurity);
+    const result = await renderTo(
+      manifest,
+      async (job) => {
+        const { canceled, filePath } = await showSaveDialog(getMainWindow(), {
+          title: "Exportar montaje a MP4",
+          defaultPath: "montaje.mp4",
+          filters: [{ name: "MP4", extensions: ["mp4"] }],
+        });
+        if (canceled || !filePath) return { success: false, canceled: true };
+        const output = filePath.toLowerCase().endsWith(".mp4") ? filePath : `${filePath}.mp4`;
+        if (jobMediaSources(job).some((source) => samePath(source.path, output)))
+          return { success: false, error: "La salida no puede reemplazar una fuente del montaje" };
+        return { success: true, output, outputDirectory: path.dirname(output) };
+      },
+      "export",
+      pathSecurity,
+    );
     return result.success ? { ...result, filePath: result.path } : result;
   });
 
@@ -188,13 +181,17 @@ export function registerEditorHandlers(pathSecurity) {
     if (typeof requestId !== "string" || !/^[\w-]{1,64}$/.test(requestId)) {
       return { success: false, error: "Identificador de vista inválido" };
     }
-    const ready = await prepareRender(manifest, pathSecurity, "editor:frame");
-    if (!ready.success) return ready;
-
     const framesDir = path.join(app.getPath("userData"), "editor-frames");
     const output = path.join(framesDir, `${requestId}.png`);
-    await fs.promises.mkdir(framesDir, { recursive: true });
-    const result = await renderTo(ready, output, "frame", pathSecurity);
+    const result = await renderTo(
+      manifest,
+      async () => {
+        await fs.promises.mkdir(framesDir, { recursive: true });
+        return { success: true, output, outputDirectory: framesDir };
+      },
+      "frame",
+      pathSecurity,
+    );
     if (result.success) {
       if (publishedFrame && publishedFrame !== result.path)
         await fs.promises.rm(publishedFrame, { force: true }).catch(() => {});
@@ -220,18 +217,23 @@ export function registerEditorHandlers(pathSecurity) {
     }
 
     const manifest = buildPreviewProxyManifest(source, proxyPath);
-    const ready = await prepareRender(manifest, pathSecurity, "editor:proxy");
-    if (!ready.success) return ready;
-
-    await fs.promises.mkdir(path.dirname(proxyPath), { recursive: true });
-    const result = await renderTo(ready, proxyPath, "proxy", pathSecurity);
+    const result = await renderTo(
+      manifest,
+      async () => {
+        const outputDirectory = path.dirname(proxyPath);
+        await fs.promises.mkdir(outputDirectory, { recursive: true });
+        return { success: true, output: proxyPath, outputDirectory };
+      },
+      "proxy",
+      pathSecurity,
+    );
     if (!result.success) return result;
     await pruneProxies(path.dirname(proxyPath));
     return { success: true, path: result.path };
   });
 }
 
-export function sourceDescriptor(filePath, stat, info) {
+function sourceDescriptor(filePath, stat, info) {
   return {
     path: filePath,
     filename: path.basename(filePath),
@@ -279,12 +281,12 @@ async function describeMedia(filePath, kind) {
   return { ok: true, source: sourceDescriptor(filePath, stat, info) };
 }
 
-export function previewProxyName(source) {
+function previewProxyName(source) {
   const key = `${source.path.toLowerCase()}|${source.sizeBytes}|${Math.round(source.mtimeMs)}`;
   return `${createHash("sha1").update(key).digest("hex").slice(0, 20)}.mp4`;
 }
 
-export async function pruneProxies(dir, max = PROXY_CACHE_MAX) {
+async function pruneProxies(dir) {
   const names = await fs.promises.readdir(dir).catch(() => []);
   const proxies = await Promise.all(
     names
@@ -298,7 +300,7 @@ export async function pruneProxies(dir, max = PROXY_CACHE_MAX) {
   const stale = proxies
     .filter(Boolean)
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
-    .slice(max);
+    .slice(PROXY_CACHE_MAX);
   await Promise.all(stale.map(({ file }) => fs.promises.rm(file, { force: true }).catch(() => {})));
 }
 
@@ -327,8 +329,7 @@ function buildPreviewProxyManifest(source, outputPath) {
   ]);
 }
 
-async function prepareRender(payload, pathSecurity, owner) {
-  const preparation = captureProcessingPreparation(owner);
+async function renderTo(payload, selectOutput, kind, pathSecurity) {
   try {
     const { jobs, manifest, error } = unwrapJobManifest(payload);
     if (error) throw new Error(error);
@@ -336,51 +337,35 @@ async function prepareRender(payload, pathSecurity, owner) {
     const job = jobs[0];
     const problem = validateCompositionJob(job);
     if (problem) throw new Error(problem);
-    for (const clip of job.clips) {
-      const problem = sourceProblem(
-        { sizeBytes: null, mtimeMs: null, ...clip.source_identity, path: clip.input_path },
-        pathSecurity,
-      );
-      if (problem) throw new Error(problem);
-    }
-    for (const overlay of job.overlays ?? []) {
-      if (overlay.kind !== "image") continue;
-      const problem = sourceProblem(overlay.source, pathSecurity, "image");
-      if (problem) throw new Error(problem);
-    }
-    const binaries = validateMediaBinaries();
-    if (!binaries.ok) throw new Error(binaries.error);
-    const spawnSpec = await validateProcessorAvailableAsync();
-    if (!isProcessingPreparationCurrent(preparation)) return { success: false, cancelled: true };
-    if (!spawnSpec.ok) throw new Error(spawnSpec.error);
-    return { success: true, spawnSpec, job, manifest, preparation };
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-}
-
-async function renderTo(ready, output, kind, pathSecurity) {
-  try {
-    if (!isProcessingPreparationCurrent(ready.preparation))
-      return { success: false, cancelled: true };
-    const outputDirectory = path.dirname(output);
-    const jobs = await sanitizeBatchJobMedia(
-      [{ ...ready.job, output_path: output }],
+    const result = await startExportRun(
+      {
+        jobs,
+        manifest,
+        owner: `editor:${kind}`,
+        events:
+          kind === "export"
+            ? { [IPC_EVENTS.onJobProgress]: IPC_EVENTS.onEditorExportProgress }
+            : {},
+        existingOutputPolicy: "preserve",
+        selectOutput: () => selectOutput(job),
+        validateSources: () => {
+          for (const clip of job.clips) {
+            const problem = sourceProblem(
+              { sizeBytes: null, mtimeMs: null, ...clip.source_identity, path: clip.input_path },
+              pathSecurity,
+            );
+            if (problem) return problem;
+          }
+          for (const overlay of job.overlays ?? []) {
+            if (overlay.kind !== "image") continue;
+            const problem = sourceProblem(overlay.source, pathSecurity, "image");
+            if (problem) return problem;
+          }
+          return null;
+        },
+      },
       pathSecurity,
-      { outputDirectory },
     );
-    await validateBatchOutputPaths(jobs);
-    if (!isProcessingPreparationCurrent(ready.preparation))
-      return { success: false, cancelled: true };
-    const result = await executeProcessingRun({
-      manifest: ready.manifest,
-      jobs,
-      outputDirectory,
-      spawnSpec: ready.spawnSpec,
-      owner: `editor:${kind}`,
-      events:
-        kind === "export" ? { [IPC_EVENTS.onJobProgress]: IPC_EVENTS.onEditorExportProgress } : {},
-    });
     return result.success
       ? { ...result, path: result.outputs.find(({ index }) => index === jobs[0].id).output }
       : result;

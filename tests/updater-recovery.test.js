@@ -6,7 +6,7 @@ describe("download recovery", () => {
   afterEach(() => vi.useRealTimers());
 
   it("keeps the download locked during retries and reports the final rejection once", async () => {
-    const harness = createUpdaterHarness();
+    const harness = await createUpdaterHarness();
     harness.init();
     harness.emit("update-available", { version: "1.6.99" });
     const download = harness.updater.startDownload();
@@ -42,7 +42,7 @@ describe("download recovery", () => {
   it.each(["ERR_UPDATER_INVALID_SIGNATURE", "ERR_CHECKSUM_MISMATCH"])(
     "rejects %s immediately without retrying an untrusted download",
     async (code) => {
-      const harness = createUpdaterHarness();
+      const harness = await createUpdaterHarness();
       harness.init();
       harness.emit("update-available", { version: "1.6.99" });
       const download = harness.updater.startDownload();

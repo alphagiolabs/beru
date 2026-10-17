@@ -41,7 +41,7 @@ import json, processor, capacity
 job = {"source_width": 3840, "source_height": 2160, "video_codec": "hevc", "pix_fmt": "yuv420p10le"}
 caps = []
 for available in (2600, 4000):
-    capacity._get_available_ram_mb = lambda: available
+    capacity.get_available_ram_mb = lambda: available
     caps.append(capacity.resolve_max_workers("h264_qsv", 2, 3840 * 2160, has_video_filters=True, encode_profile="balanced", jobs=[job]))
 print(json.dumps(caps))
 `,
@@ -466,9 +466,9 @@ import processor
 
 jobs = [{"input_path": "in.mp4", "output_path": "out.mp4", "operations": []}]
 print(json.dumps({
-    "fonts": job_classify._jobs_require_fonts(jobs),
-    "hardware": job_classify._jobs_allow_hardware(jobs),
-    "encode": job_classify._job_requires_encode(jobs[0]),
+    "fonts": job_classify.jobs_require_fonts(jobs),
+    "hardware": job_classify.jobs_allow_hardware(jobs),
+    "encode": job_classify.job_requires_encode(jobs[0]),
 }))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
@@ -483,9 +483,9 @@ print(json.dumps({
 import json
 import processor
 job = {"operations": [], "encode_profile": "balanced", **json.loads(${JSON.stringify(JSON.stringify(trim))})}
-print(json.dumps({"encode": job_classify._job_requires_encode(job),
-                  "hardware": job_classify._jobs_allow_hardware([job]),
-                  "copy": job_classify._job_takes_copy_path(job)}))
+print(json.dumps({"encode": job_classify.job_requires_encode(job),
+                  "hardware": job_classify.jobs_allow_hardware([job]),
+                  "copy": job_classify.job_takes_copy_path(job)}))
 `;
       const result = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
       expect(result.status, result.stderr).toBe(0);
@@ -504,7 +504,7 @@ import threading
 import time
 import processor
 
-gate = batch_context._ResourceAdmission(2, 0)
+gate = batch_context.ResourceAdmission(2, 0)
 state = {"active": 0, "peak": 0}
 lock = threading.Lock()
 
@@ -653,7 +653,7 @@ calls = []
 
 def fake_process(idx, job, ffmpeg_path, **kwargs):
     ctx = kwargs["ctx"]
-    calls.append({"workers": ctx.max_workers, "encoder": ctx.hw_encoder})
+    calls.append({"workers": ctx.scheduling.max_workers, "encoder": ctx.scheduling.hw_encoder})
     job_id = job.get("id", idx)
     if len(calls) == 1:
         return {"index": job_id, "status": "failed", "error": "nvenc init failed"}
@@ -770,22 +770,25 @@ import threading
 import time
 import processor
 
-batch_context._cancel_event.clear()
+batch_context.default_cancel_event.clear()
 
 def trigger_cancel():
     time.sleep(0.2)
-    batch_context._cancel_event.set()
+    batch_context.default_cancel_event.set()
 
 threading.Thread(target=trigger_cancel, daemon=True).start()
 started = time.perf_counter()
-ok, err = ffmpeg_runner._run_ffmpeg_stream(
-    [sys.executable, "-c", "import time; time.sleep(1.5)"],
-    timeout_sec=5,
-    job_id=4,
-    duration_sec=1.0,
-)
+try:
+    ok, err = ffmpeg_runner._run_ffmpeg_stream(
+        [sys.executable, "-c", "import time; time.sleep(1.5)"],
+        timeout_sec=5,
+        job_id=4,
+        duration_sec=1.0,
+    )
+except processor.ProcessingCancelled as exc:
+    ok, err = False, str(exc)
 elapsed = time.perf_counter() - started
-batch_context._cancel_event.clear()
+batch_context.default_cancel_event.clear()
 print(json.dumps({"ok": ok, "err": err, "elapsed": elapsed}))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
@@ -818,7 +821,7 @@ def fake_run(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None):
 ffmpeg_runner._run_ffmpeg = fake_run
 job = {"id": 9, "input_path": inp.name, "output_path": out, "operations": []}
 try:
-    result = processor._process_one(0, job, "ffmpeg", ctx=batch_context.BatchContext(ffmpeg_path="ffmpeg", max_workers=4))
+    result = processor._process_one(0, job, "ffmpeg", ctx=batch_context.BatchContext(ffmpeg_path="ffmpeg", scheduling=batch_context.BatchScheduling(max_workers=4)))
     exists_after = os.path.exists(out)
 finally:
     os.unlink(inp.name)
@@ -1257,9 +1260,9 @@ ffprobe.close()
 
 seen = {}
 
-def fake_process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=None, ctx=None):
+def fake_process_jobs(jobs, ffmpeg_path=None, max_workers=None, *, hw_encoder=None, ctx=None):
     seen["jobs"] = jobs
-    seen["ffmpeg_path"] = ffmpeg_path
+    seen["ffmpeg_path"] = ctx.ffmpeg_path
     seen["hw_encoder"] = hw_encoder
     return {"total": len(jobs), "succeeded": len(jobs), "failed": 0, "cancelled": 0}
 

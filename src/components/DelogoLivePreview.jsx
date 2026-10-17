@@ -12,6 +12,7 @@ import { useThrottledVideoDraw } from "./video-preview/use-throttled-video-draw.
 import { isOpActive } from "../utils/operation.js";
 import { beruLocalUrl } from "../utils/beru-url.js";
 import { useT } from "../i18n/useT";
+import { createPreviewRequests } from "../utils/preview-requests.js";
 
 const previewWorkspaces = new WeakMap();
 const MAX_WORKSPACE_CANVASES = 8;
@@ -421,7 +422,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   const [coverImgData, setCoverImgData] = useState(null);
   const [drawRevision, setDrawRevision] = useState(0);
   const bridgeRef = useRef(null);
-  const drawTokenRef = useRef(0);
+  const [draws] = useState(createPreviewRequests);
   const getBridge = useCallback(() => {
     if (!bridgeRef.current)
       bridgeRef.current = createDelogoRenderBridge({
@@ -430,8 +431,8 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
     return bridgeRef.current;
   }, []);
   const invalidateDraw = useCallback(() => {
-    drawTokenRef.current++;
-  }, []);
+    draws.invalidate();
+  }, [draws]);
 
   const visible = !!(
     operation ||
@@ -441,20 +442,23 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
 
   useEffect(
     () => () => {
+      invalidateDraw();
       bridgeRef.current?.release();
       bridgeRef.current = null;
     },
-    [],
+    [invalidateDraw],
   );
 
   useEffect(() => {
     if (!isCanvas) {
+      invalidateDraw();
       bridgeRef.current?.reset();
     }
-  }, [isCanvas]);
+  }, [isCanvas, invalidateDraw]);
 
   const videoSrc = videoRef?.current?.currentSrc || videoRef?.current?.src || "";
   useEffect(() => {
+    invalidateDraw();
     bridgeRef.current?.reset();
   }, [
     currentRegion,
@@ -467,6 +471,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
     temporalRadius,
     startTime,
     endTime,
+    invalidateDraw,
   ]);
 
   useEffect(() => {
@@ -504,14 +509,14 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
 
   const paint = useCallback(
     (ctx, video, region, screen, frame) => {
-      const token = ++drawTokenRef.current;
       const clock = video.currentTime;
-      const source = video.currentSrc || video.src;
-      const isCurrent = () =>
-        drawTokenRef.current === token &&
-        !video.seeking &&
-        (video.currentSrc || video.src) === source &&
-        (!video.paused || video.currentTime === clock);
+      const { isCurrent } = draws.begin(
+        { source: video.currentSrc || video.src, clock },
+        (owner) =>
+          video.seeking ||
+          (video.currentSrc || video.src) !== owner.source ||
+          (video.paused && video.currentTime !== owner.clock),
+      );
       const timestamp = frame?.mediaTime ?? clock;
       const active = isOpActive({ startTime, endTime }, video.currentTime);
       canvasRef.current.style.visibility = active ? "visible" : "hidden";
@@ -580,6 +585,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
       startTime,
       endTime,
       getBridge,
+      draws,
     ],
   );
   const afterDraw = useCallback((screen) => {

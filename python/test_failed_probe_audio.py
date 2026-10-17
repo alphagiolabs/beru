@@ -1,8 +1,6 @@
 import sys
-import threading
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
@@ -10,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 import clip_render
 import media_probe
 from audio_settings import audio_filter
+from batch_context import BatchContext
 
 
 def _job(**overrides):
@@ -29,15 +28,7 @@ def _job(**overrides):
 
 
 def _renderer():
-    ctx = SimpleNamespace(
-        cancel_event=threading.Event(),
-        jobs_file=None,
-        ffmpeg_path="ffmpeg",
-        ffprobe_path="ffprobe",
-        hw_encoder=None,
-        max_workers=1,
-        sw_fallback_admission=None,
-    )
+    ctx = BatchContext(ffmpeg_path="ffmpeg", ffprobe_path="ffprobe")
     return clip_render.ClipRenderer(ctx, hardware_fallback=clip_render.HardwareFallbackState())
 
 

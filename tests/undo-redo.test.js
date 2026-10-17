@@ -229,10 +229,16 @@ describe("undo / redo", () => {
   });
 
   it("undo stack stays bounded at MAX_UNDO_STACK (50)", () => {
-    useEditorStore.setState({ queue: [queueItem()], selectedIdx: 0 });
+    const region = { x: 0, y: 0.1, w: 0.1, h: 0.1 };
+    useEditorStore.setState({
+      queue: [queueItem({ operations: [{ id: "op", mode: "blur", region }] })],
+      selectedIdx: 0,
+    });
     for (let i = 0; i < 80; i++) {
-      useEditorStore.getState()._saveUndo();
+      useEditorStore.getState().updateOperationRegion(0, { ...region, x: i / 100 });
     }
-    expect(useEditorStore.getState().undoStack.length).toBeLessThanOrEqual(50);
+    expect(useEditorStore.getState().undoStack).toHaveLength(50);
+    useEditorStore.getState().undo();
+    expect(useEditorStore.getState().queue[0].operations[0].region.x).toBe(0.78);
   });
 });

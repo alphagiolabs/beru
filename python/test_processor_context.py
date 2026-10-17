@@ -17,7 +17,9 @@ import encoders
 import media_probe
 import capacity
 import processor
-from batch_context import BatchContext
+import batch_context
+from batch_context import BatchContext, BatchScheduling, check_cancelled
+from batch_errors import ProcessingCancelled
 
 
 def make_job(folder, *, encode=True):
@@ -38,13 +40,117 @@ def make_job(folder, *, encode=True):
 
 
 class ProcessorContextTests(unittest.TestCase):
+    def test_cancellation_is_identified_by_type_instead_of_error_text(self):
+        job = {"id": -2, "kind": "stabilization", "output_path": "unused.mp4"}
+        for error, expected in ((RuntimeError("Cancelled"), "failed"), (ProcessingCancelled(), "cancelled")):
+            with self.subTest(expected=expected), redirect_stdout(io.StringIO()) as stdout, patch.object(
+                processor, "process_stabilization", side_effect=error
+            ):
+                ctx = BatchContext(ffmpeg_path="ffmpeg")
+                result = processor._process_one(0, job, ctx.ffmpeg_path, ctx=ctx)
+                self.assertEqual(result["status"], expected, result)
+                events = [json.loads(line) for line in stdout.getvalue().splitlines()]
+                self.assertEqual([event["index"] for event in events if event["type"] == "cancelled"],
+                                 [-2] if expected == "cancelled" else [])
+                if expected == "failed":
+                    self.assertIn("Cancelled", result.get("raw_error", result["error"]))
+
+    def test_cancel_sentinel_requires_its_run_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest = Path(tmp) / "jobs.json"
+            manifest.with_suffix(".cancel").touch()
+            ctx = BatchContext(ffmpeg_path="ffmpeg", jobs_file=str(manifest))
+            self.assertFalse(check_cancelled())
+            self.assertTrue(check_cancelled(ctx))
+            self.assertTrue(ctx.cancel_event.is_set())
+
+    def test_context_and_direct_tools_cannot_compete(self):
+        ctx = BatchContext(ffmpeg_path="run-ffmpeg")
+        with self.assertRaisesRegex(ValueError, "conflicts with ctx"):
+            processor.process_jobs([], "other-ffmpeg", ctx=ctx)
+
+    def test_completed_output_survives_a_late_cancellation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp))
+            ctx = BatchContext(ffmpeg_path="ffmpeg")
+
+            def run(cmd, **kwargs):
+                Path(cmd[-1]).write_bytes(b"complete")
+                ctx.cancel_event.set()
+                return True, None
+
+            with patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run), redirect_stdout(io.StringIO()):
+                result = processor.process_jobs([job], ctx=ctx, max_workers=1)
+            self.assertEqual(result["succeeded"], 1, result)
+            self.assertEqual(Path(job["output_path"]).read_bytes(), b"complete")
+
+    def test_batches_derive_scheduling_without_mutating_the_supplied_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            job = make_job(Path(tmp))
+            ctx = BatchContext(ffmpeg_path="run-ffmpeg", scheduling=BatchScheduling(hw_encoder="h264_nvenc"))
+            original = ctx.scheduling
+            encoders_used = []
+
+            def run(cmd, **kwargs):
+                encoders_used.append((cmd[0], cmd[cmd.index("-c:v") + 1], kwargs["ctx"].scheduling.max_workers))
+                return True, None
+
+            with patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run), redirect_stdout(io.StringIO()):
+                for encoder, workers in (("h264_nvenc", 2), (None, 1)):
+                    result = processor.process_jobs([job], ctx=ctx, hw_encoder=encoder, max_workers=workers)
+                    self.assertEqual(result["succeeded"], 1, result)
+                    self.assertIs(ctx.scheduling, original)
+            self.assertEqual(encoders_used, [("run-ffmpeg", "h264_nvenc", 2), ("run-ffmpeg", "libx264", 1)])
+            self.assertEqual((original.hw_encoder, original.max_workers, original.sw_fallback_admission),
+                             ("h264_nvenc", 1, None))
+
+    def test_composition_shares_hardware_failure_across_stages_and_retry_passes(self):
+        info = {"width": 64, "height": 64, "duration": 1, "frame_rate": 30, "pix_fmt": "yuv420p"}
+        for intermediate in (False, True):
+            with self.subTest(intermediate=intermediate), tempfile.TemporaryDirectory() as tmp:
+                folder = Path(tmp)
+                clip = make_job(folder, encode=intermediate)
+                job = {"id": -1, "kind": "composition", "clips": [clip],
+                       "canvas": {"width": 64, "height": 64, "fit": "contain"},
+                       "composition_fps": 30, "output_path": str(folder / "output.mp4")}
+                ctx = BatchContext(ffmpeg_path="ffmpeg", jobs_file=str(folder / "jobs.json"),
+                                   env={"BERU_RETRY_FAILED": "1"})
+                encoders_used = []
+                final_attempts = []
+
+                def run(cmd, **kwargs):
+                    encoder = cmd[cmd.index("-c:v") + 1]
+                    encoders_used.append(encoder)
+                    Path(cmd[-1]).write_bytes(b"partial")
+                    if encoder == "h264_nvenc":
+                        return False, "nvenc: no capable devices found"
+                    if cmd[-1] == job["output_path"]:
+                        final_attempts.append(kwargs["ctx"].scheduling.max_workers)
+                        if len(final_attempts) == 1:
+                            return False, "x264 [error]: out of memory"
+                    return True, None
+
+                with patch.object(media_probe, "ffprobe", return_value=info), patch.object(
+                    ffmpeg_runner, "_run_ffmpeg", side_effect=run
+                ), redirect_stdout(io.StringIO()) as stdout:
+                    result = processor.process_jobs([job], ctx=ctx, max_workers=2, hw_encoder="h264_nvenc")
+                self.assertEqual(result["succeeded"], 1, result)
+                self.assertEqual(encoders_used[0], "h264_nvenc")
+                self.assertTrue(all(encoder == "libx264" for encoder in encoders_used[1:]), encoders_used)
+                self.assertEqual(final_attempts, [2, 1])
+                events = [json.loads(line) for line in stdout.getvalue().splitlines()]
+                self.assertEqual([(event["type"], event["index"]) for event in events
+                                  if event["type"] in ("complete", "error", "cancelled")], [("complete", -1)])
+                self.assertEqual(Path(job["output_path"]).read_bytes(), b"partial")
+                self.assertFalse(list(folder.glob("beru-composition-*")))
+
     def test_composition_capacity_accounts_for_later_sources_and_output_canvas(self):
         small={"width":64,"height":64,"encode_profile":"fast"}
         large={"width":3840,"height":2160,"video_codec":"hevc","pix_fmt":"yuv420p10le","encode_profile":"fast"}
         for clips,canvas in (([small,large],{"width":64,"height":64}),
                              ([small,small],{"width":3840,"height":2160})):
             job={"kind":"composition","clips":clips,"canvas":canvas,"encode_profile":"fast"}
-            with self.subTest(canvas=canvas), patch.object(capacity,"_get_available_ram_mb",return_value=2000):
+            with self.subTest(canvas=canvas), patch.object(capacity,"get_available_ram_mb",return_value=2000):
                 workers=capacity._memory_cap_workers(None,0,4,True,"fast",jobs=[job])
                 self.assertEqual(workers,1,"A composition must not schedule concurrent stages beyond its RAM budget")
 
@@ -78,7 +184,7 @@ class ProcessorContextTests(unittest.TestCase):
                     stdout = io.StringIO()
                     with patch.object(media_probe, "ffprobe", return_value=info), patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run
                     ), redirect_stdout(stdout):
-                        result = processor.process_jobs([job], ctx.ffmpeg_path, ctx=ctx)
+                        result = processor.process_jobs([job], ctx=ctx)
                     events = [json.loads(line) for line in stdout.getvalue().splitlines()]
                     terminals = [event for event in events if event["type"] in ("complete", "error", "cancelled")]
                     self.assertEqual([(event["type"], event["index"]) for event in terminals],
@@ -116,8 +222,8 @@ class ProcessorContextTests(unittest.TestCase):
             second = BatchContext(ffmpeg_path="ffmpeg")
             first.cancel_event.set()
             with patch.object(ffmpeg_runner, "_run_ffmpeg", return_value=(True, None)), redirect_stdout(io.StringIO()):
-                cancelled = processor.process_jobs([job], "ffmpeg", ctx=first)
-                completed = processor.process_jobs([job], "ffmpeg", ctx=second)
+                cancelled = processor.process_jobs([job], ctx=first)
+                completed = processor.process_jobs([job], ctx=second)
             self.assertEqual(
                 {key: cancelled[key] for key in ("total", "succeeded", "failed", "cancelled")},
                 {"total": 1, "succeeded": 0, "failed": 0, "cancelled": 1},
@@ -133,9 +239,9 @@ class ProcessorContextTests(unittest.TestCase):
             with self.subTest(path=path), tempfile.TemporaryDirectory() as tmp:
                 folder = Path(tmp)
                 job = make_job(folder, encode=path != "remux")
-                ctx = BatchContext(ffmpeg_path="run-ffmpeg", cancel_event=threading.Event())
                 gpu = "h264_nvenc" if path == "fallback" else None
-                ctx.hw_encoder = gpu
+                ctx = BatchContext(ffmpeg_path="run-ffmpeg", cancel_event=threading.Event(),
+                                   scheduling=BatchScheduling(hw_encoder=gpu))
                 timers = []
 
                 def launch(cmd, **kwargs):
@@ -158,7 +264,7 @@ class ProcessorContextTests(unittest.TestCase):
                 started = time.monotonic()
                 with patch.object(ffmpeg_runner.subprocess, "Popen", side_effect=launch), patch.object(encoders, "detect_hw_encoder", return_value=gpu
                 ), redirect_stdout(io.StringIO()):
-                    result = processor.process_jobs([job], ctx.ffmpeg_path, max_workers=1, ctx=ctx)
+                    result = processor.process_jobs([job], max_workers=1, ctx=ctx)
                 for timer in timers:
                     timer.join()
                 ctx.cancel_event.clear()
@@ -172,7 +278,7 @@ class ProcessorContextTests(unittest.TestCase):
             job = make_job(folder)
             jobs = [job, {**job, "id": 43, "output_path": str(folder / "other.mkv")}]
             ctx = BatchContext(
-                ffmpeg_path="ffmpeg", hw_encoder="h264_nvenc",
+                ffmpeg_path="ffmpeg", scheduling=BatchScheduling(hw_encoder="h264_nvenc"),
                 env={"BERU_WORKERS": "1", "BERU_RETRY_FAILED": "0"},
             )
             second_gpu_failed = threading.Event()
@@ -192,9 +298,11 @@ class ProcessorContextTests(unittest.TestCase):
                 ctx.cancel_event.set()
                 return False, "Cancelled"
 
-            with patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run), patch.object(capacity, "_get_available_ram_mb", return_value=32_000
+            with patch.object(ffmpeg_runner, "_run_ffmpeg", side_effect=run), patch.object(
+                processor, "get_available_ram_mb", return_value=32_000
+            ), patch.object(batch_context, "get_available_ram_mb", return_value=32_000), patch.object(capacity, "get_available_ram_mb", return_value=32_000
             ), redirect_stdout(io.StringIO()):
-                result = processor.process_jobs(jobs, "ffmpeg", max_workers=2, ctx=ctx)
+                result = processor.process_jobs(jobs, max_workers=2, ctx=ctx)
             self.assertEqual(result["cancelled"], 2, result)
             self.assertEqual(calls, {"gpu": 2, "software": 1})
 
@@ -313,7 +421,7 @@ class ProcessorContextTests(unittest.TestCase):
             ), redirect_stdout(io.StringIO()):
                 for name, binary in zip(("ffmpeg-a", "ffmpeg-b", "ffmpeg-a"), (binaries[0], binaries[1], binaries[0])):
                     ctx = BatchContext(ffmpeg_path=name, ffprobe_path=str(binary))
-                    result = processor.process_jobs([job], "other-ffmpeg", ctx=ctx)
+                    result = processor.process_jobs([job], ctx=ctx)
                     self.assertEqual(result["succeeded"], 1, result)
             self.assertEqual([cmd[0] for cmd in commands], ["ffmpeg-a", "ffmpeg-b", "ffmpeg-a"])
             self.assertEqual([":spacing=3" in cmd[cmd.index("-filter_complex") + 1] for cmd in commands], [True, False, True])

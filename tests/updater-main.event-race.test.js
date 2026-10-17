@@ -4,8 +4,8 @@ import { createUpdaterHarness } from "./updater-main.harness.mjs";
 describe("main/updater.js event race guard", () => {
   let harness;
 
-  beforeEach(() => {
-    harness = createUpdaterHarness();
+  beforeEach(async () => {
+    harness = await createUpdaterHarness();
   });
 
   it("does not wipe pendingVersion when update-not-available arrives after update-available", async () => {

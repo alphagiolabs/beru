@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter } from "events";
+import { spawnSync } from "node:child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
 import { pathToFileURL } from "url";
 import { IPC_EVENTS, IPC_INVOKE, emitRunEvent } from "../shared/ipc-channels.js";
 import { createProcessingRun } from "../src/utils/processing-run.js";
+import { RUN_EVENTS, RUN_WARNING_KEYS, WORKER_EVENTS } from "../shared/run-events.js";
+import es from "../src/i18n/messages/es.json";
+import en from "../src/i18n/messages/en.json";
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map(),
@@ -220,6 +224,160 @@ describe("run-scoped process events", () => {
     expect(send).toHaveBeenCalledWith(IPC_EVENTS.onProgress, { percent: 50, runId: "run-1" });
     emitRunEvent(send, IPC_EVENTS.onRunStarted, "run-2");
     expect(send).toHaveBeenLastCalledWith(IPC_EVENTS.onRunStarted, { runId: "run-2" });
+  });
+
+  it("routes real Python event payloads through main and renderer against the shared contract", async () => {
+    const result = spawnSync(
+      process.env.BERU_PYTHON || "python",
+      [
+        "-B",
+        "-c",
+        `
+import ast, io, json, sys
+from contextlib import redirect_stdout
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+sys.path.insert(0, "python")
+import ffmpeg_runner as events
+import processor
+import temporal_pipeline
+from test_job_worker import _run_worker, _stdin_with
+
+summary = processor.process_jobs([], "unused", max_workers=1, hw_encoder=None)
+output = io.StringIO()
+with redirect_stdout(output):
+    events.emit_batch_progress({"completed": 1, "succeeded": 1, "failed": 0}, 3, "a.mp4")
+    events._emit_job_progress(0, 100, None)
+    for code in temporal_pipeline._PATCH_SKIP_MESSAGES:
+        temporal_pipeline.TemporalPatchResolver._warn_patch_skipped(
+            SimpleNamespace(job_id=0, _defer_reason=code))
+    events.emit_job_complete(0, "out.mp4")
+    events.emit_job_failed({"index": 1, "error": "Invalid media"})
+    events.job_cancelled_result(2)
+with patch.object(processor, "_load_jobs_manifest", return_value=[]):
+    lines, _, _ = _run_worker(_stdin_with(
+        {"id": 1, "jobs_file": "unused.json"}, {"id": 2, "jobs_file": 7}),
+        process_jobs=lambda *a, **k: {**summary, "total": 3, "succeeded": 1, "failed": 1, "cancelled": 1})
+
+types = set()
+for name in ("ffmpeg_runner.py", "processor.py"):
+    for node in ast.walk(ast.parse(Path("python", name).read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values):
+                if (isinstance(key, ast.Constant) and key.value == "type"
+                        and isinstance(value, ast.Constant) and isinstance(value.value, str)):
+                    types.add(value.value)
+print(json.dumps({"events": [json.loads(line) for line in output.getvalue().splitlines()] + lines,
+                  "types": sorted(types), "warnings": list(temporal_pipeline._PATCH_SKIP_MESSAGES)}))
+`,
+      ],
+      { encoding: "utf8", timeout: 15_000 },
+    );
+    expect(result.status, result.stderr || result.error?.message).toBe(0);
+    const producer = JSON.parse(result.stdout);
+    const contracts = Object.values(RUN_EVENTS);
+    expect(producer.types).toEqual(
+      [...contracts.map((event) => event.type), ...Object.values(WORKER_EVENTS)].sort(),
+    );
+    const messages = producer.events.filter(
+      (msg) => !Object.values(WORKER_EVENTS).includes(msg.type),
+    );
+    expect([...new Set(messages.map((msg) => msg.type))].sort()).toEqual(
+      contracts.map((event) => event.type).sort(),
+    );
+    for (const msg of messages) {
+      const contract = contracts.find((event) => event.type === msg.type);
+      for (const field of contract.requiredFields)
+        expect(msg, `${msg.type}.${field}`).toHaveProperty(field);
+    }
+    expect(producer.warnings.sort()).toEqual(Object.keys(RUN_WARNING_KEYS).sort());
+    for (const key of Object.values(RUN_WARNING_KEYS)) {
+      expect(es).toHaveProperty(key);
+      expect(en).toHaveProperty(key);
+    }
+
+    const outputDir = tmpDir();
+    const jobs = ["a", "b", "c"].map((name, id) => ({
+      id,
+      input_path: `${name}.mp4`,
+      output_path: path.join(outputDir, `${name}.mp4`),
+      video_info_probed: true,
+    }));
+    let state = {
+      queue: jobs.map((job) => ({ path: job.input_path, status: "idle" })),
+      jobProgress: {},
+      exportSignatures: {},
+      showToast: vi.fn(),
+    };
+    const set = (patch) => {
+      state = { ...state, ...(typeof patch === "function" ? patch(state) : patch) };
+    };
+    const renderer = createProcessingRun(set, () => state);
+    const subscriptions = new Map();
+    const api = Object.fromEntries(
+      Object.entries(IPC_EVENTS).map(([name, channel]) => [
+        name,
+        (handler) => {
+          subscriptions.set(channel, handler);
+          return () => subscriptions.delete(channel);
+        },
+      ]),
+    );
+    const disconnect = renderer.connect(api);
+    mocks.sendToRenderer.mockImplementation((channel, payload) =>
+      subscriptions.get(channel)?.(payload),
+    );
+    let pending;
+    try {
+      pending = mocks.handlers.get(IPC_INVOKE.startProcessing)(trustedSenderEvent, jobs);
+      await vi.waitFor(() => expect(mocks.emitLine).toBeTypeOf("function"));
+      fs.writeFileSync(mocks.jobs[0].output_path, "exported");
+      const runError = messages.find(
+        (msg) => msg.type === RUN_EVENTS.error.type && msg.index == null,
+      );
+      for (const msg of messages.filter((msg) => msg !== runError)) {
+        mocks.emitLine(JSON.stringify(msg));
+        if (msg.type === RUN_EVENTS.progress.type) expect(state.progressDone).toBe(msg.current);
+        if (msg.type === RUN_EVENTS.jobProgress.type)
+          await vi.waitFor(() => expect(state.jobProgress[0] ?? state.queue[0].progress).toBe(100));
+      }
+      mocks.resolveDone({ ok: false });
+      const outcome = await pending;
+      for (const event of contracts) {
+        const subscription = event.jobSubscription || event.subscription;
+        expect(subscriptions.has(IPC_EVENTS[subscription]), subscription).toBe(true);
+        expect(calls(IPC_EVENTS[subscription]).length, subscription).toBeGreaterThan(0);
+      }
+      for (const [, payload] of mocks.sendToRenderer.mock.calls)
+        expect(payload.runId).toBe(outcome.runId);
+      expect(state.queue.map((job) => job.status)).toEqual(["done", "error", "idle"]);
+      expect(state.batchSummary).toMatchObject({ total: 3, succeeded: 1, failed: 1, cancelled: 1 });
+      expect(state.isProcessing).toBe(false);
+      expect(calls(IPC_EVENTS.onError)).toHaveLength(0);
+      expect(
+        state.showToast.mock.calls
+          .filter(([toast]) => toast.kind === "warn")
+          .map(([toast]) => toast.text),
+      ).toEqual(Object.values(RUN_WARNING_KEYS).map((key) => es[key]));
+
+      mocks.done = new Promise((resolve) => {
+        mocks.resolveDone = resolve;
+      });
+      mocks.emitLine = null;
+      pending = mocks.handlers.get(IPC_INVOKE.startProcessing)(trustedSenderEvent, jobs);
+      await vi.waitFor(() => expect(mocks.emitLine).toBeTypeOf("function"));
+      mocks.emitLine(JSON.stringify(runError));
+      expect(state.isProcessing).toBe(false);
+      expect(state.showToast).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "err" }));
+      mocks.resolveDone({ ok: false });
+      expect(await pending).toMatchObject({ success: false });
+      expect(calls(IPC_EVENTS.onError)).toHaveLength(1);
+    } finally {
+      mocks.resolveDone({ ok: false });
+      await pending;
+      disconnect();
+    }
   });
 
   it("every event a run emits is run-scoped and carries that run's runId", async () => {

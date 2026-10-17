@@ -1,0 +1,249 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "half-even-up",
+      "frame": {
+        "width": 203,
+        "height": 400
+      },
+      "transform": {
+        "outputHeight": 200
+      },
+      "expected": {
+        "width": 102,
+        "height": 200,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 102,
+          "h": 200
+        }
+      }
+    },
+    {
+      "id": "half-even-down",
+      "frame": {
+        "width": 201,
+        "height": 400
+      },
+      "transform": {
+        "outputHeight": 200
+      },
+      "expected": {
+        "width": 100,
+        "height": 200,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 100,
+          "h": 200
+        }
+      }
+    },
+    {
+      "id": "minimum-even-frame",
+      "frame": {
+        "width": 90,
+        "height": 160
+      },
+      "transform": {
+        "outputHeight": 1
+      },
+      "expected": {
+        "width": 2,
+        "height": 2,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 2,
+          "h": 2
+        }
+      }
+    },
+    {
+      "id": "rotation-before-downsize",
+      "frame": {
+        "width": 640,
+        "height": 480
+      },
+      "transform": {
+        "rotation": 90,
+        "outputHeight": 320
+      },
+      "expected": {
+        "width": 240,
+        "height": 320,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 240,
+          "h": 320
+        }
+      }
+    },
+    {
+      "id": "pad-with-even-offset",
+      "frame": {
+        "width": 101,
+        "height": 80
+      },
+      "transform": {
+        "outputWidth": 80,
+        "outputHeight": 80,
+        "fitMode": "pad"
+      },
+      "expected": {
+        "width": 80,
+        "height": 80,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 8,
+          "w": 80,
+          "h": 62
+        }
+      }
+    },
+    {
+      "id": "crop-negative-odd-offset",
+      "frame": {
+        "width": 103,
+        "height": 80
+      },
+      "transform": {
+        "outputWidth": 80,
+        "outputHeight": 80,
+        "fitMode": "crop"
+      },
+      "expected": {
+        "width": 80,
+        "height": 80,
+        "resized": true,
+        "content": {
+          "x": -12,
+          "y": 0,
+          "w": 102,
+          "h": 80
+        }
+      }
+    },
+    {
+      "id": "aspect-at-tolerance",
+      "frame": {
+        "width": 1000,
+        "height": 1000
+      },
+      "transform": {
+        "outputWidth": 1010,
+        "outputHeight": 1000,
+        "fitMode": "pad"
+      },
+      "expected": {
+        "width": 1010,
+        "height": 1000,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 1010,
+          "h": 1000
+        }
+      }
+    },
+    {
+      "id": "aspect-outside-tolerance",
+      "frame": {
+        "width": 1000,
+        "height": 1000
+      },
+      "transform": {
+        "outputWidth": 1012,
+        "outputHeight": 1000,
+        "fitMode": "pad"
+      },
+      "expected": {
+        "width": 1012,
+        "height": 1000,
+        "resized": true,
+        "content": {
+          "x": 6,
+          "y": 0,
+          "w": 1000,
+          "h": 1000
+        }
+      }
+    },
+    {
+      "id": "unknown-fit-defaults-to-pad",
+      "frame": {
+        "width": 101,
+        "height": 80
+      },
+      "transform": {
+        "outputWidth": 80,
+        "outputHeight": 80,
+        "fitMode": "unknown"
+      },
+      "expected": {
+        "width": 80,
+        "height": 80,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 8,
+          "w": 80,
+          "h": 62
+        }
+      }
+    },
+    {
+      "id": "legacy-height-does-not-enlarge",
+      "frame": {
+        "width": 100,
+        "height": 80
+      },
+      "transform": {
+        "outputHeight": 200
+      },
+      "expected": {
+        "width": 100,
+        "height": 80,
+        "resized": false,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 100,
+          "h": 80
+        }
+      }
+    },
+    {
+      "id": "odd-explicit-size",
+      "frame": {
+        "width": 100,
+        "height": 80
+      },
+      "transform": {
+        "outputWidth": 81,
+        "outputHeight": 83,
+        "fitMode": "stretch"
+      },
+      "expected": {
+        "width": 80,
+        "height": 82,
+        "resized": true,
+        "content": {
+          "x": 0,
+          "y": 0,
+          "w": 80,
+          "h": 82
+        }
+      }
+    }
+  ]
+}

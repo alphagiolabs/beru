@@ -261,6 +261,47 @@ describe("process:start with a fake job worker", () => {
     expect(runModule.hasActiveProcessing()).toBe(false);
   });
 
+  it("cancels synchronous preparation before allocating any run artifacts and permits a retry", async () => {
+    const requested = path.join(outputDir, "out.mp4");
+    fs.writeFileSync(requested, "previous export");
+    registerProcessHandlers({
+      getOutputDirectory: () => {
+        void mocks.handlers.get("process:cancel")(trustedSenderEvent);
+        return null;
+      },
+    });
+    expect(
+      await mocks.handlers.get("process:start")(trustedSenderEvent, [
+        { kind: "video", id: 0, input_path: "clip.mp4", output_path: requested },
+      ]),
+    ).toMatchObject({ success: false, cancelled: true });
+    expect(calls(IPC_EVENTS.onRunStarted)).toHaveLength(0);
+    expect(runModule.hasActiveProcessing()).toBe(false);
+    expect(fs.readdirSync(outputDir)).toEqual(["out.mp4"]);
+    expect(fs.readdirSync(mocks.tempRoot)).toEqual([]);
+    expect(fs.readFileSync(requested, "utf8")).toBe("previous export");
+
+    registerProcessHandlers({ getOutputDirectory: () => outputDir });
+    const retry = mocks.handlers.get("process:start")(trustedSenderEvent, [
+      {
+        kind: "video",
+        id: 0,
+        input_path: "clip.mp4",
+        output_path: path.join(outputDir, "retry.mp4"),
+      },
+    ]);
+    await vi.waitFor(() => expect(mocks.emitLine).toBeTypeOf("function"));
+    fs.writeFileSync(mocks.jobs[0].output_path, "new export");
+    mocks.emitLine('{"type":"complete","index":0}');
+    mocks.resolveDone({ ok: true });
+    expect(await retry).toMatchObject({ success: true });
+    expect(calls(IPC_EVENTS.onRunStarted)).toHaveLength(1);
+    expect(fs.readFileSync(requested, "utf8")).toBe("previous export");
+    expect(fs.readFileSync(path.join(outputDir, "retry.mp4"), "utf8")).toBe("new export");
+    expect(fs.readdirSync(outputDir).sort()).toEqual(["out.mp4", "retry.mp4"]);
+    expect(fs.readdirSync(mocks.tempRoot)).toEqual([]);
+  });
+
   it.each([
     { trim_start: 1, trim_end: 9 },
     { watermark: { enabled: true, type: "text", text: "WM" } },
@@ -344,6 +385,7 @@ describe("process:start with a fake job worker", () => {
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     artifactsDir = artifactsDirOf();
     fs.writeFileSync(mocks.jobs[0].output_path, "exported");
+    mocks.emitLine('{"type":"future_stage","stage":"encoding"}');
     mocks.emitLine('{"type":"complete","index":7}');
     mocks.resolveDone({ ok: true });
     const result = await pending;
@@ -635,7 +677,7 @@ describe("process:start with a fake job worker", () => {
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
     mocks.proc.exitCode = 1;
     try {
-      await vi.advanceTimersByTimeAsync(runModule.PROCESSING_LOCK_MAX_MS + 1);
+      await vi.advanceTimersToNextTimerAsync();
       expect(result).toMatchObject({ success: false, error: expect.stringMatching(/interrumpió/) });
       expect(runModule.hasActiveProcessing()).toBe(false);
       expect(calls("process:error")).toHaveLength(1);
@@ -659,7 +701,7 @@ describe("process:start with a fake job worker", () => {
     await vi.waitFor(() =>
       expect(phase === "running" ? runModule.getPythonProcess() : artifactsDirOf()).toBeTruthy(),
     );
-    await vi.advanceTimersByTimeAsync(runModule.PROCESSING_LOCK_MAX_MS + 1);
+    await vi.advanceTimersToNextTimerAsync();
     expect(runModule.hasActiveProcessing()).toBe(true);
     expect(calls("process:error")).toHaveLength(0);
     if (phase === "running") {
@@ -670,7 +712,7 @@ describe("process:start with a fake job worker", () => {
       releaseDrain();
       await pending;
     }
-    await vi.advanceTimersByTimeAsync(runModule.PROCESSING_LOCK_MAX_MS + 1);
+    await vi.advanceTimersToNextTimerAsync();
     expect(calls("process:error")).toHaveLength(0);
     vi.useRealTimers();
   });

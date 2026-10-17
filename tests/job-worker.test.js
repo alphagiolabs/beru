@@ -20,6 +20,7 @@ vi.mock("../main/utils/kill-process-tree.js", () => ({
 }));
 
 import { disposeJobWorker, startJobRun } from "../main/utils/job-worker.js";
+import { RUN_EVENTS } from "../shared/run-events.js";
 
 const SPAWN_SPEC = { command: "processor", args: [] };
 
@@ -75,28 +76,48 @@ describe("job worker protocol", () => {
     expect(replacement.proc).not.toBe(proc);
   });
 
-  it("keeps a slow export alive while it reports progress", async () => {
-    vi.useFakeTimers();
-    try {
-      const { proc, run } = await readyWorker();
-      let settled = false;
-      run.done.then(() => {
-        settled = true;
-      });
-      for (let i = 0; i < 3; i++) {
-        await vi.advanceTimersByTimeAsync(4 * 60_000);
-        proc.stdout.write('{"type":"job_progress","index":0,"percent":0}\n');
+  it.each([...Object.values(RUN_EVENTS).map((event) => event.type), "future_stage"])(
+    "keeps a slow export alive on %s events",
+    async (type) => {
+      vi.useFakeTimers();
+      try {
+        const { proc, run } = await readyWorker();
+        let settled = false;
+        run.done.then(() => {
+          settled = true;
+        });
+        for (let i = 0; i < 3; i++) {
+          await vi.advanceTimersByTimeAsync(4 * 60_000);
+          proc.stdout.write(`${JSON.stringify({ type, index: 0, percent: 0 })}\n`);
+        }
+        expect(settled).toBe(false);
+        expect(proc.kill).not.toHaveBeenCalled();
+        proc.stdout.write(
+          `${JSON.stringify({ type: "run_end", id: requestLine(proc).id, ok: true })}\n`,
+        );
+        expect(await run.done).toMatchObject({ ok: true });
+      } finally {
+        vi.useRealTimers();
       }
-      expect(settled).toBe(false);
-      expect(proc.kill).not.toHaveBeenCalled();
-      proc.stdout.write(
-        `${JSON.stringify({ type: "run_end", id: requestLine(proc).id, ok: true })}\n`,
-      );
-      expect(await run.done).toMatchObject({ ok: true });
-    } finally {
-      vi.useRealTimers();
-    }
-  });
+    },
+  );
+
+  it.each(['{"type":""}', '{"type":"  "}', '{"type":7}', "[]", "null", '{"message":"log"}'])(
+    "does not treat a malformed envelope as keepalive: %s",
+    async (line) => {
+      vi.useFakeTimers();
+      try {
+        const { proc, run } = await readyWorker();
+        await vi.advanceTimersByTimeAsync(4 * 60_000);
+        proc.stdout.write(`${line}\n`);
+        await vi.advanceTimersByTimeAsync(60_000 + 1);
+        expect(await run.done).toMatchObject({ died: true });
+        expect(proc.kill).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
   it("does not let an obsolete run_end settle a newer request", async () => {
     const first = await readyWorker();
     const firstId = requestLine(first.proc).id;

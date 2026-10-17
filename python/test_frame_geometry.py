@@ -13,7 +13,7 @@ from frame_geometry import (  # noqa: E402
     output_dimensions,
     output_layout,
 )
-from job_classify import _job_takes_copy_path  # noqa: E402
+from job_classify import job_takes_copy_path  # noqa: E402
 
 CASES = json.loads((HERE.parent / "tests" / "fixtures" / "output-geometry-cases.json").read_text(encoding="utf-8"))
 
@@ -57,11 +57,11 @@ def test_invalid_values_fall_back_to_identity():
 
 def test_any_geometry_change_leaves_the_stream_copy_path():
     base = {"operations": [], "input_path": "a.mp4"}
-    assert _job_takes_copy_path(base)
-    assert not _job_takes_copy_path({**base, "rotation": 90})
-    assert not _job_takes_copy_path({**base, "flip_v": True})
-    assert not _job_takes_copy_path({**base, "output_height": 480})
-    assert _job_takes_copy_path({**base, "rotation": 0, "flip_h": False, "output_height": None})
+    assert job_takes_copy_path(base)
+    assert not job_takes_copy_path({**base, "rotation": 90})
+    assert not job_takes_copy_path({**base, "flip_v": True})
+    assert not job_takes_copy_path({**base, "output_height": 480})
+    assert job_takes_copy_path({**base, "rotation": 0, "flip_h": False, "output_height": None})
 
 
 if __name__ == "__main__":

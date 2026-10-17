@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createMockApi, installMockApi, resetEditorState } from "./helpers/store.js";
 
 const mockApi = installMockApi(createMockApi());
@@ -8,17 +8,31 @@ const { default: useEditorStore } = await import("../src/stores/useEditorStore.j
 describe("projectSlice + editorStyleSlice", () => {
   beforeEach(() => resetEditorState(useEditorStore, mockApi));
 
+  it("loads a recent project through the same project boundary and retains its path", async () => {
+    const filePath = "C:\\projects\\recent.beru";
+    mockApi.loadProjectFromPath = vi.fn(async () => ({
+      success: true,
+      data: { type: "beru-project", textStyle: { fontWeight: 700 } },
+    }));
+    mockApi.addRecent = vi.fn(async () => ({ success: true, recent: [] }));
+    const result = await useEditorStore.getState().loadProjectFromPath(filePath);
+    expect(result).toMatchObject({ ok: true, filePath, warnings: [] });
+    expect(mockApi.loadProjectFromPath).toHaveBeenCalledWith(filePath);
+    expect(mockApi.addRecent).toHaveBeenCalledWith({ path: filePath, name: "" });
+    expect(useEditorStore.getState().fontWeight).toBe(700);
+  });
+
   it.each([null, undefined, "invalid"])(
     "clears the previous watermark when a project has no watermark (%s)",
-    (watermark) => {
+    async (watermark) => {
       useEditorStore.setState({
         watermark: { enabled: true, text: "OLD", imagePath: "old.png", imageV: "stale" },
       });
-      const result = useEditorStore.getState()._applyProject({
-        type: "beru-project",
-        version: "1.3.0",
-        watermark,
-      });
+      mockApi.loadProject = vi.fn(async () => ({
+        success: true,
+        data: { type: "beru-project", version: "1.3.0", watermark },
+      }));
+      const result = await useEditorStore.getState().loadProject();
       expect(result.ok).toBe(true);
       expect(useEditorStore.getState().watermark).toMatchObject({
         enabled: false,
@@ -29,7 +43,7 @@ describe("projectSlice + editorStyleSlice", () => {
     },
   );
 
-  it("round-trips advanced text style fields in project and preset data", () => {
+  it("round-trips advanced text style fields in project and preset data", async () => {
     useEditorStore.setState({
       fontWeight: 900,
       letterSpacing: 6,
@@ -88,7 +102,8 @@ describe("projectSlice + editorStyleSlice", () => {
       truncate: "none",
     });
 
-    const result = useEditorStore.getState()._applyProject({ ...project, excel: null });
+    mockApi.loadProject = vi.fn(async () => ({ success: true, data: { ...project, excel: null } }));
+    const result = await useEditorStore.getState().loadProject();
 
     expect(result.ok).toBe(true);
     expect(useEditorStore.getState()).toEqual(

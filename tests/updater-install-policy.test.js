@@ -3,7 +3,7 @@ import { createUpdaterHarness } from "./updater-main.harness.mjs";
 
 describe("updater install authorization", () => {
   it("keeps automatic install disabled after a download until the user requests install", async () => {
-    const harness = createUpdaterHarness();
+    const harness = await createUpdaterHarness();
     harness.init();
     harness.emit("update-available", { version: "1.6.99" });
     const downloading = harness.updater.startDownload();

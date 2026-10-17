@@ -47,6 +47,9 @@ describe("Escape cierra modales sin tocar el estado de atrás", () => {
       showTableEditor: false,
       showMappingModal: false,
       showPetPalette: false,
+      showCompositionModal: false,
+      showStabilizationModal: false,
+      sidebarMode: "logo",
       confirmDialog: null,
       currentRegion: { ...REGION },
       selectedOperationIdx: 0,
@@ -90,6 +93,71 @@ describe("Escape cierra modales sin tocar el estado de atrás", () => {
   it("sin modales sigue limpiando la región activa", () => {
     pressEscape();
     expect(useEditorStore.getState().currentRegion).toBeNull();
+  });
+
+  it("cierra solo el modal prioritario antes de limpiar la región", () => {
+    useEditorStore.setState({ showSettings: true, showWatermarkModal: true });
+    pressEscape();
+    expect(useEditorStore.getState().showSettings).toBe(false);
+    expect(useEditorStore.getState().showWatermarkModal).toBe(true);
+    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
+    pressEscape();
+    expect(useEditorStore.getState().showWatermarkModal).toBe(false);
+    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
+    pressEscape();
+    expect(useEditorStore.getState().currentRegion).toBeNull();
+  });
+
+  it.each([
+    { confirmDialog: { message: "confirm" } },
+    { showPetPalette: true },
+    { showCompositionModal: true },
+    { showStabilizationModal: true },
+  ])("delega Escape y bloquea atajos con un modal que tiene su propio cierre (%j)", (modal) => {
+    useEditorStore.setState({ showSettings: true, ...modal });
+    pressEscape();
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })));
+    expect(useEditorStore.getState().showSettings).toBe(true);
+    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
+  });
+
+  it("desenfoca la celda de tabla antes de cerrar el modal", () => {
+    useEditorStore.setState({ showTableEditor: true });
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.focus();
+    act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(document.activeElement).not.toBe(input);
+    expect(useEditorStore.getState().showTableEditor).toBe(true);
+    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
+    pressEscape();
+    expect(useEditorStore.getState().showTableEditor).toBe(false);
+    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
+    input.remove();
+  });
+
+  it("sincroniza el texto editado con Excel al cerrar la tabla con Escape", () => {
+    useEditorStore.setState({
+      showTableEditor: true,
+      sidebarMode: "batch",
+      queue: [
+        createQueueItem({
+          path: "C:\\videos\\a.mp4",
+          filename: "a.mp4",
+          operations: [
+            { id: "text", mode: "text", batchRegionId: "slot", region: REGION, text: "Edited" },
+          ],
+        }),
+      ],
+      templateRegions: [{ id: "slot", label: "TITLE", region: REGION }],
+      excelRows: [{ id: "a", title: "Previous" }],
+      excelMapping: { idColumn: "id", columns: { slot: "title" } },
+      excelRowIndexByFilename: { a: 0 },
+    });
+    pressEscape();
+    expect(useEditorStore.getState().showTableEditor).toBe(false);
+    expect(useEditorStore.getState().excelRows[0].title).toBe("Edited");
+    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
   });
 });
 

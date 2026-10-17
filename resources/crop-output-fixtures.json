@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "dims": {
+    "w": 100,
+    "h": 80
+  },
+  "cases": [
+    {
+      "id": "identity",
+      "operations": [],
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 80
+      }
+    },
+    {
+      "id": "odd-size-rounds-down",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.1,
+            "y": 0.125,
+            "w": 0.51,
+            "h": 0.6375
+          }
+        }
+      ],
+      "expected": {
+        "x": 10,
+        "y": 10,
+        "width": 50,
+        "height": 50
+      }
+    },
+    {
+      "id": "source-coordinate-remapping",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.1,
+            "y": 0.125,
+            "w": 0.8,
+            "h": 0.75
+          }
+        },
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.4,
+            "y": 0.375,
+            "w": 0.5,
+            "h": 0.5
+          }
+        }
+      ],
+      "expected": {
+        "x": 40,
+        "y": 30,
+        "width": 50,
+        "height": 40
+      }
+    },
+    {
+      "id": "crop-clipped-at-top-left",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.2,
+            "y": 0.25,
+            "w": 0.6,
+            "h": 0.5
+          }
+        },
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0,
+            "y": 0,
+            "w": 0.5,
+            "h": 0.5
+          }
+        }
+      ],
+      "expected": {
+        "x": 20,
+        "y": 20,
+        "width": 30,
+        "height": 20
+      }
+    },
+    {
+      "id": "nonintersecting-crop-skipped",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.2,
+            "y": 0.25,
+            "w": 0.6,
+            "h": 0.5
+          }
+        },
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0,
+            "y": 0,
+            "w": 0.1,
+            "h": 0.125
+          }
+        }
+      ],
+      "expected": {
+        "x": 20,
+        "y": 20,
+        "width": 60,
+        "height": 40
+      }
+    },
+    {
+      "id": "timed-zoom-does-not-remap-next",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.1,
+            "y": 0.125,
+            "w": 0.8,
+            "h": 0.75
+          },
+          "startTime": 1,
+          "endTime": 3
+        },
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.5,
+            "y": 0,
+            "w": 0.5,
+            "h": 1
+          }
+        }
+      ],
+      "expected": {
+        "x": 50,
+        "y": 0,
+        "width": 50,
+        "height": 80
+      }
+    },
+    {
+      "id": "disabled-time-window",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.1,
+            "y": 0.125,
+            "w": 0.8,
+            "h": 0.75
+          },
+          "startTime": 4,
+          "endTime": 2
+        }
+      ],
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 80
+      }
+    },
+    {
+      "id": "one-pixel-crop-skipped",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0,
+            "y": 0,
+            "w": 0.01,
+            "h": 0.5
+          }
+        }
+      ],
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 80
+      }
+    },
+    {
+      "id": "half-pixel-wire-rounding",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.105,
+            "y": 0,
+            "w": 0.795,
+            "h": 1
+          }
+        }
+      ],
+      "expected": {
+        "x": 11,
+        "y": 0,
+        "width": 80,
+        "height": 80
+      }
+    },
+    {
+      "id": "source-edge-clamp",
+      "operations": [
+        {
+          "mode": "crop",
+          "region": {
+            "x": 0.9,
+            "y": 0.875,
+            "w": 0.5,
+            "h": 0.5
+          }
+        }
+      ],
+      "expected": {
+        "x": 90,
+        "y": 70,
+        "width": 10,
+        "height": 10
+      }
+    },
+    {
+      "id": "noncrop-does-not-change-frame",
+      "operations": [
+        {
+          "mode": "blur",
+          "region": {
+            "x": 0,
+            "y": 0,
+            "w": 0.5,
+            "h": 0.5
+          }
+        }
+      ],
+      "expected": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 80
+      }
+    }
+  ]
+}

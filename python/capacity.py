@@ -9,7 +9,7 @@ from encode_profiles import (
     effective_hw_encoder as resolve_effective_hw_encoder,
     profile_allows_hardware,
 )
-from job_classify import _job_dimensions, _job_processing_stages
+from job_classify import _job_dimensions, job_processing_stages
 from op_shared import _env_int
 
 logger = logging.getLogger("beru")
@@ -21,13 +21,13 @@ with (_resource_root / "resources" / "worker-policy.json").open(encoding="utf-8"
 MAX_WORKERS_CAP = _POLICY["maxWorkers"]
 _ENCODER_CAPS = _POLICY["encoderCaps"]
 _RAM_PER_JOB_MB = _POLICY["ramPerJobMb"]
-_REMUX_JOB_RAM_MB = _POLICY["remuxJobRamMb"]
+REMUX_JOB_RAM_MB = _POLICY["remuxJobRamMb"]
 _X264_PRESET_RAM_MULT = _POLICY["x264PresetRamMultipliers"]
 _HEAVY_DECODE_CODECS = frozenset(_POLICY["heavyDecodeCodecs"])
 _HIGH_BIT_DEPTH_PIX_TOKENS = tuple(_POLICY["highBitDepthTokens"])
 
 
-def _get_available_ram_mb():
+def get_available_ram_mb():
     try:
         import ctypes
         kernel32 = ctypes.windll.kernel32
@@ -57,11 +57,11 @@ def _get_available_ram_mb():
     return 0
 
 
-def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, source_pixels=0):
+def estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, source_pixels=0):
     if isinstance(job, dict) and job.get("kind") == "composition":
-        return max(_estimate_job_ram_mb(stage, hw_encoder, True,
+        return max(estimate_job_ram_mb(stage, hw_encoder, True,
             stage.get("encode_profile", encode_profile), source_pixels)
-            for stage in _job_processing_stages(job))
+            for stage in job_processing_stages(job))
     if isinstance(job, dict) and job.get("kind") == "canvas":
         hw_encoder = None
     profile = (encode_profile or "balanced").strip().lower()
@@ -103,10 +103,10 @@ def _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile, sou
     return max(_POLICY["minimumJobRamMb"], per_job)
 
 
-def _max_estimated_job_ram_mb(jobs, hw_encoder, has_video_filters, encode_profile):
+def max_estimated_job_ram_mb(jobs, hw_encoder, has_video_filters, encode_profile):
     return max(
         (
-            _estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile)
+            estimate_job_ram_mb(job, hw_encoder, has_video_filters, encode_profile)
             for job in jobs
             if isinstance(job, dict)
         ),
@@ -122,14 +122,14 @@ def _memory_cap_workers(
     encode_profile="balanced",
     jobs=None,
 ):
-    avail_mb = _get_available_ram_mb()
+    avail_mb = get_available_ram_mb()
     if avail_mb <= 0:
         return desired_workers
-    per_job = _max_estimated_job_ram_mb(
+    per_job = max_estimated_job_ram_mb(
         jobs or [], hw_encoder, has_video_filters, encode_profile
     )
     if per_job <= 0:
-        per_job = _estimate_job_ram_mb(
+        per_job = estimate_job_ram_mb(
             None,
             hw_encoder,
             has_video_filters,

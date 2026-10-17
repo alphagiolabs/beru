@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import useEditorStore from "../stores/useEditorStore";
+import { selectTopmostModal } from "../stores/slices/uiSlice.js";
 import { isTypingTarget } from "../utils/is-typing-target";
 
 const TOOL_KEYS = {
@@ -17,36 +18,14 @@ export default function useKeyboard() {
       const { key, ctrlKey, metaKey, shiftKey, altKey } = e;
       const cmd = ctrlKey || metaKey;
 
-      if (store.showCompositionModal || store.showStabilizationModal) return;
+      const modal = selectTopmostModal(store);
+      if (modal === "showCompositionModal" || modal === "showStabilizationModal") return;
       if (store.sidebarMode === "editor" && key !== "Escape") return;
 
-      if (key === "Escape") {
-        if (store.confirmDialog || store.showPetPalette) return;
-        if (store.showSettings) {
-          store.setShowSettings(false);
-          return;
-        }
-        if (store.updateModalOpen) {
-          store.setUpdateModalOpen(false);
-          return;
-        }
-        if (store.showWatermarkModal) {
-          store.setShowWatermarkModal(false);
-          return;
-        }
-        if (store.showMappingModal) {
-          store.setShowMappingModal(false);
-          return;
-        }
-        if (store.showTableEditor) {
-          if (isTypingTarget(e.target)) e.target.blur();
-          else store.setShowTableEditor(false);
-          return;
-        }
-        if (store.showShortcuts) {
-          store.setShowShortcuts(false);
-          return;
-        }
+      if (key === "Escape" && modal) {
+        if (modal === "showTableEditor" && isTypingTarget(e.target)) e.target.blur();
+        else store.closeTopmostModal();
+        return;
       }
 
       if (isTypingTarget(e.target)) return;
@@ -63,18 +42,7 @@ export default function useKeyboard() {
         return;
       }
 
-      if (
-        store.confirmDialog ||
-        store.showShortcuts ||
-        store.showTableEditor ||
-        store.showMappingModal ||
-        store.showSettings ||
-        store.showWatermarkModal ||
-        store.updateModalOpen ||
-        store.showPetPalette
-      ) {
-        return;
-      }
+      if (modal) return;
 
       if (key === "?" && !cmd) {
         e.preventDefault();

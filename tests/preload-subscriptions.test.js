@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import { runInNewContext } from "node:vm";
 import path from "node:path";
 import { IPC_INVOKE, IPC_EVENTS } from "../shared/ipc-channels.js";
+import { RUN_EVENTS, RUN_LIFECYCLE } from "../shared/run-events.js";
 
 const preloadSource = readFileSync(path.join(process.cwd(), "main", "preload.cjs"), "utf8");
 
@@ -62,6 +63,17 @@ function loadApi() {
 }
 
 describe("ipc channel contract (shared/ipc-channels.js)", () => {
+  it("exposes exactly the canonical run subscriptions on process IPC channels", () => {
+    const subscriptions = Object.values(RUN_EVENTS).flatMap((event) =>
+      [event.subscription, event.jobSubscription].filter(Boolean),
+    );
+    expect([...subscriptions, ...Object.values(RUN_LIFECYCLE)].sort()).toEqual(
+      Object.keys(IPC_EVENTS)
+        .filter((name) => IPC_EVENTS[name].startsWith("process:"))
+        .sort(),
+    );
+  });
+
   it("ipcMain.register* functions register exactly the IPC_INVOKE channels", () => {
     const registered = [...mocks.handlers.keys()].sort();
     expect(registered).toEqual(Object.values(IPC_INVOKE).sort());

@@ -87,7 +87,7 @@ def test_windows_commit_budget_caps_automatic_workers_but_not_override():
     kernel32 = SimpleNamespace(GlobalMemoryStatusEx=global_memory_status)
     with patch.object(ctypes, "windll", SimpleNamespace(kernel32=kernel32), create=True), \
          patch.dict(os.environ, {"BERU_WORKERS": "0"}):
-        assert capacity._get_available_ram_mb() == 96
+        assert capacity.get_available_ram_mb() == 96
         assert capacity.resolve_max_workers(None, 5) == 1
         with patch.dict(os.environ, {"BERU_WORKERS": "4"}):
             assert capacity.resolve_max_workers(None, 5) == 4

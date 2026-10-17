@@ -45,9 +45,9 @@ def test_text_watermark_positions_match_the_selected_frame_edges():
 
 def test_stream_copy_gate_requires_no_watermark():
     wm = {"enabled": True, "type": "text", "text": "WM"}
-    assert not job_classify._job_takes_copy_path({"operations": [], "watermark": wm})
-    assert job_classify._job_takes_copy_path({"operations": []})
-    assert job_classify._job_takes_copy_path({"watermark": {"enabled": False}})
+    assert not job_classify.job_takes_copy_path({"operations": [], "watermark": wm})
+    assert job_classify.job_takes_copy_path({"operations": []})
+    assert job_classify.job_takes_copy_path({"watermark": {"enabled": False}})
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ def _job_dimensions(job, info=None):
     return w, h
 
 
-def _job_processing_stages(job):
+def job_processing_stages(job):
     """Resource policy considers each sequential composition stage independently."""
     if job.get("kind") != "composition":
         return [job]
@@ -34,7 +34,7 @@ def _job_processing_stages(job):
     }]
 
 
-def _job_takes_copy_path(job):
+def job_takes_copy_path(job):
     """True when _process_one takes the stream-copy path (no ops, watermark,
     trim, or geometry change). Schedulers use this to route I/O-bound jobs to the
     copy pool. Invalid trims fail inside _process_one before the copy branch, so
@@ -62,15 +62,15 @@ def _job_takes_copy_path(job):
     return trim_start <= 0 and trim_end is None
 
 
-def _job_requires_encode(job):
-    return isinstance(job, dict) and not _job_takes_copy_path(job)
+def job_requires_encode(job):
+    return isinstance(job, dict) and not job_takes_copy_path(job)
 
 
-def _jobs_require_fonts(jobs):
+def jobs_require_fonts(jobs):
     for job in jobs:
         if not isinstance(job, dict):
             continue
-        if job.get("kind") == "composition" and _jobs_require_fonts(job.get("clips", [])):
+        if job.get("kind") == "composition" and jobs_require_fonts(job.get("clips", [])):
             return True
         operations = job.get("operations", [])
         if any(op.get("mode") in ("text", "datetime") for op in operations if isinstance(op, dict)):
@@ -85,9 +85,9 @@ def _jobs_require_fonts(jobs):
     return False
 
 
-def _jobs_allow_hardware(jobs):
+def jobs_allow_hardware(jobs):
     return any(
-        _job_requires_encode(job)
+        job_requires_encode(job)
         and profile_allows_hardware(job.get("encode_profile", "balanced"))
         for job in jobs
         if isinstance(job, dict)

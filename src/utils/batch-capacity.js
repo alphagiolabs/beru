@@ -1,5 +1,6 @@
 import { normalizeTransform } from "../../shared/video-transform.js";
 import { clipTimeline } from "../../shared/clip-timeline.js";
+import { filterOperationsForExport } from "./operation.js";
 
 function requiresEncode(item, sourceHeight) {
   const transform = normalizeTransform(item.transform);
@@ -8,7 +9,7 @@ function requiresEncode(item, sourceHeight) {
   const trimmed =
     duration > 0 && timing.end > timing.start && (timing.start > 0 || timing.end < duration);
   return (
-    (item.operations || []).length > 0 ||
+    filterOperationsForExport(item.operations).length > 0 ||
     transform.rotation !== 0 ||
     transform.flipH ||
     transform.flipV ||

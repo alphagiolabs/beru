@@ -140,6 +140,45 @@ describe("ffmpeg strict preview staleness", () => {
     expect(requests[1].job.timestamp).toBe(1.5);
   });
 
+  it("keeps the newer manual request pending when an older render finishes first", async () => {
+    act(() => window.dispatchEvent(new Event("beru:preview:renderFrame")));
+    act(() => window.dispatchEvent(new Event("beru:preview:renderFrame")));
+    expect(requests).toHaveLength(2);
+    await act(async () =>
+      requests[0].resolve({ ok: true, data_url: "data:image/jpeg;base64,OLD" }),
+    );
+    expect(document.querySelector(STRICT_IMG)).toBeNull();
+    await act(async () =>
+      requests[1].resolve({ ok: true, data_url: "data:image/jpeg;base64,NEW" }),
+    );
+    expect(document.querySelector(STRICT_IMG)?.getAttribute("src")).toContain("NEW");
+  });
+
+  it("rejects a render after a seek even before the media event arrives", async () => {
+    act(() => window.dispatchEvent(new Event("beru:preview:renderFrame")));
+    document.querySelector("video").currentTime = 1.5;
+    await act(async () =>
+      requests[0].resolve({ ok: true, data_url: "data:image/jpeg;base64,OLD" }),
+    );
+    expect(document.querySelector(STRICT_IMG)).toBeNull();
+  });
+
+  it("rejects the unrotated frame and renders the current video transform", async () => {
+    act(() => window.dispatchEvent(new Event("beru:preview:renderFrame")));
+    act(() => useEditorStore.getState().setVideoTransform({ rotation: 90 }));
+    await act(async () =>
+      requests[0].resolve({ ok: true, data_url: "data:image/jpeg;base64,OLD" }),
+    );
+    expect(document.querySelector(STRICT_IMG)).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(450));
+    expect(requests).toHaveLength(2);
+    expect(JSON.stringify(requests[1].job)).not.toBe(JSON.stringify(requests[0].job));
+    await act(async () =>
+      requests[1].resolve({ ok: true, data_url: "data:image/jpeg;base64,ROTATED" }),
+    );
+    expect(document.querySelector(STRICT_IMG)?.getAttribute("src")).toContain("ROTATED");
+  });
+
   it("rejects the first frame if edits arrive before the debounce starts its replacement", async () => {
     act(() => window.dispatchEvent(new Event("beru:preview:renderFrame")));
     act(() => useEditorStore.setState({ queue: queueWithOps([blurOp(60)]) }));

@@ -12,7 +12,6 @@ import { createWatermarkSlice } from "./slices/watermarkSlice.js";
 import { createAuthSlice } from "./slices/authSlice.js";
 import { createPetSlice } from "./slices/petSlice.js";
 import { createCompositionSlice } from "./slices/compositionSlice.js";
-import { createStabilizationSlice } from "./slices/stabilizationSlice.js";
 import { namingInputs } from "../utils/export-pipeline.js";
 import { setVideoPathOwners } from "../utils/video-path-ownership.js";
 import { selectIsDirty, useTimelineStore } from "../features/editor/store/useTimelineStore.js";
@@ -60,7 +59,6 @@ const useEditorStore = createWithEqualityFn(
     ...createAuthSlice(set, get),
     ...createPetSlice(set, get),
     ...createCompositionSlice(set, get),
-    ...createStabilizationSlice(set, get),
     ...(_restoredSession || {}),
   }),
   Object.is,

@@ -1,6 +1,7 @@
 import { createQueueResults, createArtifactResults } from "./processing-results.js";
 import { tStatic } from "./format-message.js";
 import { fileName } from "../../shared/file-name.js";
+import { RUN_EVENTS, RUN_LIFECYCLE, RUN_WARNING_KEYS } from "../../shared/run-events.js";
 
 export function createProcessingRun(set, get) {
   let current = null;
@@ -127,14 +128,8 @@ export function createProcessingRun(set, get) {
     set((state) => run.target.result(state, kind, msg, previous));
   }
 
-  const WARNING_KEYS = {
-    patch_skipped_timing: "errors.patchSkippedTiming",
-    patch_skipped_budget: "errors.patchSkippedBudget",
-    patch_skipped_too_large: "errors.patchSkippedTooLarge",
-  };
-
   const handlers = {
-    onRunStarted: (msg) => {
+    [RUN_LIFECYCLE.started]: (msg) => {
       const runId = msg?.runId;
       if (!runId || retiredRunIds.has(runId)) return;
       if (current?.runId === runId) return;
@@ -156,11 +151,11 @@ export function createProcessingRun(set, get) {
         isProcessing: true,
       });
     },
-    onProgress: (msg) => {
+    [RUN_EVENTS.progress.subscription]: (msg) => {
       const run = eventRun(msg);
       if (run?.target) set((state) => run.target.progress(state, msg));
     },
-    onJobProgress: (msg) => {
+    [RUN_EVENTS.jobProgress.subscription]: (msg) => {
       const run = eventRun(msg);
       if (!run || !isJob(run, msg?.index) || run.results.has(msg.index)) return;
       pendingProgress.set(msg.index, msg);
@@ -171,14 +166,14 @@ export function createProcessingRun(set, get) {
         ? requestAnimationFrame(flushProgress)
         : setTimeout(flushProgress, 50);
     },
-    onComplete: (msg) => jobResult("done", msg),
-    onJobError: (msg) => jobResult("error", msg),
-    onJobCancelled: (msg) => jobResult("cancelled", msg),
-    onSummary: (msg) => {
+    [RUN_EVENTS.complete.subscription]: (msg) => jobResult("done", msg),
+    [RUN_EVENTS.error.jobSubscription]: (msg) => jobResult("error", msg),
+    [RUN_EVENTS.cancelled.subscription]: (msg) => jobResult("cancelled", msg),
+    [RUN_EVENTS.summary.subscription]: (msg) => {
       const run = eventRun(msg);
       if (run?.target) set((state) => run.target.summary(state, msg));
     },
-    onFinished: (msg) => {
+    [RUN_LIFECYCLE.finished]: (msg) => {
       const run = eventRun(msg);
       if (!run) return;
       finish(run, {
@@ -187,17 +182,17 @@ export function createProcessingRun(set, get) {
         error: msg?.error,
       });
     },
-    onRunWarning: (msg) => {
+    [RUN_EVENTS.warning.subscription]: (msg) => {
       const run = eventRun(msg);
       if (!run || run.outcome) return;
       const lang = get().language || "es";
-      const key = msg?.code && WARNING_KEYS[msg.code];
+      const key = msg?.code && RUN_WARNING_KEYS[msg.code];
       get().showToast({
         kind: "warn",
         text: (key ? tStatic(key, {}, lang) : msg?.message) || tStatic("errors.unknown", {}, lang),
       });
     },
-    onError: (msg) => {
+    [RUN_EVENTS.error.subscription]: (msg) => {
       const payload = typeof msg === "string" ? { error: msg } : msg;
       const run = eventRun(payload);
       if (run) finish(run, { success: false, error: payload?.error });

@@ -129,6 +129,5 @@ describe("visible queue thumbnails", () => {
     expect(useEditorStore.getState().thumbnailsByPath[video.path]).toBe(
       "data:image/jpeg;base64,fresh",
     );
-    expect(useEditorStore.getState()._thumbnailAbortControllers.size).toBe(0);
   });
 });

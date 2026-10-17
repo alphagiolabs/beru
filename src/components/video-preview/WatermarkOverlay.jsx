@@ -24,7 +24,7 @@ export default function WatermarkOverlay({ watermark, videoRef }) {
     },
     "bottom-right": { right: margin, bottom: margin },
   };
-  const posStyle = posMap[pos] || posMap["bottom-right"];
+  const posStyle = Object.hasOwn(posMap, pos) ? posMap[pos] : posMap["bottom-right"];
   const boxStyle = {
     position: "absolute",
     left: 0,

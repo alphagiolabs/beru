@@ -103,24 +103,5 @@ export function createSettingsSlice(set, get) {
         set((s) => ({ recent: s.recent.filter((r) => r.path !== filePath) }));
       }
     },
-
-    loadProjectFromPath: async (filePath) => {
-      const api = window.api;
-      if (!api?.loadProjectFromPath)
-        return { ok: false, code: "api_unavailable", error: "API no disponible" };
-      const res = await api.loadProjectFromPath(filePath);
-      if (res.canceled) return { ok: false, canceled: true };
-      if (!res.success) {
-        if (res.missing) {
-          get().removeRecent(filePath);
-        }
-        return { ok: false, error: res.error };
-      }
-      const r = get()._applyProject(res.data);
-      if (r.ok) {
-        get().addRecent(filePath, res.data?.savedAt ? `${res.data.savedAt}` : "");
-      }
-      return { ok: r.ok, error: r.error, warnings: r.warnings, filePath };
-    },
   };
 }

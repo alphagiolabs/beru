@@ -39,6 +39,44 @@ function templateState(data) {
 }
 
 export function createProjectSlice(set, get) {
+  const applyProject = (data) => {
+    if (!isProjectOrPreset(data)) {
+      return { ok: false, code: "not_project", error: "Archivo no es un proyecto Beru" };
+    }
+    const warnings = [];
+    const excel = data.excel || null;
+    set(
+      (state) =>
+        reconcileBatchExport(
+          state,
+          {
+            ...templateState(data),
+            excelPath: excel?.path || null,
+            excelHeaders: Array.isArray(excel?.headers) ? excel.headers.map((h) => String(h)) : [],
+            excelRows: Array.isArray(excel?.rows)
+              ? excel.rows.filter((r) => r !== null && typeof r === "object")
+              : [],
+            excelMapping:
+              excel?.mapping && typeof excel.mapping === "object"
+                ? {
+                    idColumn: excel.mapping.idColumn ?? null,
+                    columns: excel.mapping.columns || {},
+                  }
+                : { idColumn: null, columns: {} },
+          },
+          { applyExcel: Boolean(excel) },
+        ).patch,
+    );
+    if (data.version && !COMPATIBLE_PROJECT_VERSIONS.has(data.version)) {
+      warnings.push({
+        code: "project_version",
+        version: data.version,
+        expected: PROJECT_VERSION,
+      });
+    }
+    return { ok: true, warnings };
+  };
+
   return {
     presets: [],
 
@@ -162,6 +200,25 @@ export function createProjectSlice(set, get) {
       return { ok: true, fileName: res.fileName, filePath: res.filePath };
     },
 
+    loadProjectFromPath: async (filePath) => {
+      const api = window.api;
+      if (!api?.loadProjectFromPath)
+        return { ok: false, code: "api_unavailable", error: "API no disponible" };
+      const res = await api.loadProjectFromPath(filePath);
+      if (res.canceled) return { ok: false, canceled: true };
+      if (!res.success) {
+        if (res.missing) {
+          get().removeRecent(filePath);
+        }
+        return { ok: false, error: res.error };
+      }
+      const r = applyProject(res.data);
+      if (r.ok) {
+        get().addRecent(filePath, res.data?.savedAt ? `${res.data.savedAt}` : "");
+      }
+      return { ok: r.ok, error: r.error, warnings: r.warnings, filePath };
+    },
+
     loadProject: async () => {
       const api = window.api;
       if (!api?.loadProject)
@@ -169,49 +226,9 @@ export function createProjectSlice(set, get) {
       const res = await api.loadProject();
       if (res.canceled) return { ok: false, canceled: true };
       if (!res.success) return { ok: false, error: res.error };
-      const r = get()._applyProject(res.data);
+      const r = applyProject(res.data);
       if (r.ok) get().addRecent(res.filePath, res.data?.savedAt);
       return { ok: r.ok, error: r.error, filePath: res.filePath, warnings: r.warnings };
-    },
-
-    _applyProject: (data) => {
-      if (!isProjectOrPreset(data)) {
-        return { ok: false, code: "not_project", error: "Archivo no es un proyecto Beru" };
-      }
-      const warnings = [];
-      const excel = data.excel || null;
-      set(
-        (state) =>
-          reconcileBatchExport(
-            state,
-            {
-              ...templateState(data),
-              excelPath: excel?.path || null,
-              excelHeaders: Array.isArray(excel?.headers)
-                ? excel.headers.map((h) => String(h))
-                : [],
-              excelRows: Array.isArray(excel?.rows)
-                ? excel.rows.filter((r) => r !== null && typeof r === "object")
-                : [],
-              excelMapping:
-                excel?.mapping && typeof excel.mapping === "object"
-                  ? {
-                      idColumn: excel.mapping.idColumn ?? null,
-                      columns: excel.mapping.columns || {},
-                    }
-                  : { idColumn: null, columns: {} },
-            },
-            { applyExcel: Boolean(excel) },
-          ).patch,
-      );
-      if (data.version && !COMPATIBLE_PROJECT_VERSIONS.has(data.version)) {
-        warnings.push({
-          code: "project_version",
-          version: data.version,
-          expected: PROJECT_VERSION,
-        });
-      }
-      return { ok: true, warnings };
     },
 
     applyPreset: (data) => {

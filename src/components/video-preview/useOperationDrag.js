@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import useEditorStore from "../../stores/useEditorStore";
 import useRegionGesture from "../../hooks/useRegionGesture";
-import { isInOutputView, regionToScreen, videoPointerDelta } from "../../utils/video-utils";
-import { getContentPx } from "../../utils/region-interaction";
+import { regionToScreen } from "../../utils/video-utils";
 import { REGION_EDIT_MODES } from "./utils";
 import { scaleTextStyleToRegion } from "../../utils/text-style";
 import {
@@ -10,17 +9,6 @@ import {
   outputRegionOnSource,
   sourceRegionToOutput,
 } from "../../utils/stamp-geometry";
-
-function dragDelta(video, start, e) {
-  if (isInOutputView(video)) {
-    const delta = videoPointerDelta(video, { clientX: start.mouseX, clientY: start.mouseY }, e);
-    if (delta) return delta;
-  }
-  return {
-    dx: (e.clientX - start.mouseX) / (start.contentW || 1),
-    dy: (e.clientY - start.mouseY) / (start.contentH || 1),
-  };
-}
 
 function stampGeometryOf(op) {
   if (op?.mode !== "datetime") return null;
@@ -32,6 +20,7 @@ function stampGeometryOf(op) {
 export default function useOperationDrag({
   videoRef,
   sel,
+  selectedIdx,
   sidebarMode,
   activeTool,
   currentRegion,
@@ -39,110 +28,61 @@ export default function useOperationDrag({
   showFfmpegPreview,
   showFfmpegOverlay,
 }) {
-  const updateOperationRegion = useEditorStore((s) => s.updateOperationRegion);
-  const [draggingOp, setDraggingOp] = useState(null);
-  const [dragStart, setDragStart] = useState(null);
-  const [draggingBatchText, setDraggingBatchText] = useState(null);
-  const [batchTextDragStart, setBatchTextDragStart] = useState(null);
-  const draggingRef = useRef({ image: null, batch: null });
+  const dragOwner = useRef(null);
+  const moveOperation = useCallback((region, dx, dy) => {
+    const geo = dragOwner.current?.stampGeometry;
+    let moved = { x: region.x + dx, y: region.y + dy };
+    if (geo) {
+      const { rect } = outputRegionOnSource(region, geo);
+      moved = sourceRegionToOutput({ ...rect, x: rect.x + dx, y: rect.y + dy }, geo);
+    }
+    return {
+      ...region,
+      x: Math.max(0, Math.min(1 - region.w, moved.x)),
+      y: Math.max(0, Math.min(1 - region.h, moved.y)),
+    };
+  }, []);
+  const patchDraggedRegion = useCallback((region) => {
+    const owner = dragOwner.current;
+    if (!owner) return;
+    const st = useEditorStore.getState();
+    if (st.selectedIdx !== owner.videoIdx) return;
+    const op = st.queue[owner.videoIdx]?.operations?.[owner.opIdx];
+    if (
+      !op ||
+      op.id !== owner.op.id ||
+      ["x", "y", "w", "h"].every((key) => op.region[key] === region[key])
+    )
+      return;
+    st.updateOperation(owner.videoIdx, owner.opIdx, { region }, { recordHistory: !owner.recorded });
+    owner.recorded = true;
+    if (owner.regionId != null) st.setCurrentRegionDraft(region);
+  }, []);
+  const moveGesture = useRegionGesture({
+    videoEl: videoRef,
+    owner: `${selectedIdx}:${sel?.path}:${sidebarMode}:${activeTool}`,
+    enabled: activeTool !== "pan",
+    input: "mouse",
+    pauseOnStart: false,
+    moveRegion: moveOperation,
+    onChange: patchDraggedRegion,
+    onCommit: patchDraggedRegion,
+  });
 
   const handleImageDragStart = (op, opIdx, e) => {
-    e.stopPropagation();
-    const video = videoRef.current;
-    if (!video) return;
-    const content = getContentPx(video);
-    if (!content) return;
     const st = useEditorStore.getState();
+    if (!moveGesture.beginMove(e, op.region)) return;
+    dragOwner.current = { op, opIdx, videoIdx: st.selectedIdx, stampGeometry: stampGeometryOf(op) };
     if (st.selectedOperationIdx !== opIdx) st.selectOperation(opIdx);
-    st._saveUndo?.();
-    setDraggingOp({ op, opIdx });
-    setDragStart({
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      regionX: op.region.x,
-      regionY: op.region.y,
-      contentW: content.width,
-      contentH: content.height,
-      stampGeometry: stampGeometryOf(op),
-    });
   };
-
-  const handleImageDragMove = useCallback(
-    (e) => {
-      if (!draggingOp || !dragStart) return;
-      const { dx: normalizedDeltaX, dy: normalizedDeltaY } = dragDelta(
-        videoRef.current,
-        dragStart,
-        e,
-      );
-      const geo = dragStart.stampGeometry;
-      if (geo) {
-        const start = { ...draggingOp.op.region, x: dragStart.regionX, y: dragStart.regionY };
-        const { rect } = outputRegionOnSource(start, geo);
-        const moved = sourceRegionToOutput(
-          { ...rect, x: rect.x + normalizedDeltaX, y: rect.y + normalizedDeltaY },
-          geo,
-        );
-        const { w, h } = draggingOp.op.region;
-        updateOperationRegion(
-          draggingOp.opIdx,
-          {
-            ...draggingOp.op.region,
-            x: Math.max(0, Math.min(1 - w, moved.x)),
-            y: Math.max(0, Math.min(1 - h, moved.y)),
-          },
-          { recordHistory: false },
-        );
-        return;
-      }
-
-      const newX = Math.max(
-        0,
-        Math.min(1 - draggingOp.op.region.w, dragStart.regionX + normalizedDeltaX),
-      );
-      const newY = Math.max(
-        0,
-        Math.min(1 - draggingOp.op.region.h, dragStart.regionY + normalizedDeltaY),
-      );
-
-      updateOperationRegion(
-        draggingOp.opIdx,
-        {
-          ...draggingOp.op.region,
-          x: newX,
-          y: newY,
-        },
-        { recordHistory: false },
-      );
-    },
-    [draggingOp, dragStart, updateOperationRegion, videoRef],
-  );
-
-  const handleImageDragEnd = useCallback(() => {
-    setDraggingOp(null);
-    setDragStart(null);
-  }, []);
 
   const handleRegionOpDragStart = (opIdx, e) => {
     e.stopPropagation();
-    const video = videoRef.current;
-    if (!video || showFfmpegPreview) return;
-    const content = getContentPx(video);
-    if (!content) return;
+    if (showFfmpegPreview) return;
     const st = useEditorStore.getState();
     const op = st.queue[st.selectedIdx]?.operations?.[opIdx];
     if (!op?.region) return;
-    if (st.selectedOperationIdx !== opIdx) st.selectOperation(opIdx);
-    st._saveUndo?.();
-    setDraggingOp({ op, opIdx });
-    setDragStart({
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      regionX: op.region.x,
-      regionY: op.region.y,
-      contentW: content.width,
-      contentH: content.height,
-    });
+    handleImageDragStart(op, opIdx, e);
   };
 
   const selectedRegionOp = useMemo(() => {
@@ -170,27 +110,33 @@ export default function useOperationDrag({
   ]);
 
   const resizeStart = useRef(null);
+  const pendingHistory = useRef(false);
   const patchSelectedRegionOp = useCallback((region) => {
     const st = useEditorStore.getState();
     const idx = st.selectedOperationIdx;
     if (idx == null) return;
     const geo = stampGeometryOf(st.queue[st.selectedIdx]?.operations?.[idx]);
     if (geo) region = sourceRegionToOutput(region, geo);
+    const op = st.queue[st.selectedIdx]?.operations?.[idx];
+    if (!op || ["x", "y", "w", "h"].every((key) => op.region[key] === region[key])) return;
+    const recordHistory = pendingHistory.current;
+    pendingHistory.current = false;
     const start = resizeStart.current;
     if (!start) {
-      st.updateOperationRegion(idx, region, { recordHistory: false });
+      st.updateOperationRegion(idx, region, { recordHistory });
       return;
     }
     st.updateOperation(
       st.selectedIdx,
       idx,
       { region: { ...region }, ...scaleTextStyleToRegion(start, start.region, region) },
-      { recordHistory: false },
+      { recordHistory },
     );
   }, []);
 
   const selectedRegionOpGesture = useRegionGesture({
     videoEl: videoRef,
+    owner: `${selectedIdx}:${sel?.path}:${selectedOperationIdx}:${selectedRegionOp?.op.id}`,
     enabled: !!selectedRegionOp,
     onChange: patchSelectedRegionOp,
     onCommit: patchSelectedRegionOp,
@@ -201,13 +147,13 @@ export default function useOperationDrag({
     () => ({
       ...selectedRegionOpGesture,
       beginMove: (e, region) => {
-        useEditorStore.getState()._saveUndo?.();
+        pendingHistory.current = true;
         resizeStart.current = null;
         selectedRegionOpGesture.beginMove(e, region);
       },
       beginResize: (e, region, handle) => {
         const st = useEditorStore.getState();
-        st._saveUndo?.();
+        pendingHistory.current = true;
         const op = st.queue[st.selectedIdx]?.operations?.[st.selectedOperationIdx];
         resizeStart.current = op?.mode === "datetime" ? { ...op, region: { ...op.region } } : null;
         selectedRegionOpGesture.beginResize(e, region, handle);
@@ -217,12 +163,11 @@ export default function useOperationDrag({
         const opId = st.queue[st.selectedIdx]?.operations?.[st.selectedOperationIdx]?.id;
         const owner = `${st.selectedIdx}:${opId}`;
         const snap = keyboardSnapshot.current;
-        if (snap?.stack !== st.undoStack || snap.owner !== owner) {
-          st._saveUndo?.();
-          keyboardSnapshot.current = { stack: useEditorStore.getState().undoStack, owner };
-        }
+        pendingHistory.current = snap?.stack !== st.undoStack || snap.owner !== owner;
         resizeStart.current = null;
         selectedRegionOpGesture.nudge(region, dxPx, dyPx);
+        if (!pendingHistory.current)
+          keyboardSnapshot.current = { stack: useEditorStore.getState().undoStack, owner };
       },
       endNudge: () => {
         keyboardSnapshot.current = null;
@@ -236,12 +181,9 @@ export default function useOperationDrag({
     : null;
 
   const handleBatchTextDragStart = (tr, e) => {
-    e.preventDefault();
-    e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
     if (!video.paused) video.pause();
-
     const state = useEditorStore.getState();
     const videoIdx = state.selectedIdx;
     const item = state.queue[videoIdx];
@@ -252,89 +194,15 @@ export default function useOperationDrag({
     const op = opIdx >= 0 ? useEditorStore.getState().queue[videoIdx]?.operations?.[opIdx] : null;
     if (!op?.region) return;
 
-    const content = getContentPx(video);
-    if (!content) return;
-
-    useEditorStore.getState()._saveUndo?.();
-    setDraggingBatchText({ videoIdx, opIdx, regionId: tr.id });
-    setBatchTextDragStart({
-      mouseX: e.clientX,
-      mouseY: e.clientY,
-      region: { ...op.region },
-      contentW: content.width,
-      contentH: content.height,
-    });
+    if (moveGesture.beginMove(e, op.region))
+      dragOwner.current = { videoIdx, opIdx, op, regionId: tr.id };
   };
 
-  const handleBatchTextDragMove = useCallback(
-    (e) => {
-      if (!draggingBatchText || !batchTextDragStart) return;
-      const startRegion = batchTextDragStart.region;
-      const { dx: deltaX, dy: deltaY } = dragDelta(videoRef.current, batchTextDragStart, e);
-      const nextRegion = {
-        ...startRegion,
-        x: Math.max(0, Math.min(1 - startRegion.w, startRegion.x + deltaX)),
-        y: Math.max(0, Math.min(1 - startRegion.h, startRegion.y + deltaY)),
-      };
-
-      useEditorStore
-        .getState()
-        .updateOperation(
-          draggingBatchText.videoIdx,
-          draggingBatchText.opIdx,
-          { region: nextRegion },
-          { recordHistory: false },
-        );
-      useEditorStore.setState({ currentRegion: nextRegion });
-    },
-    [draggingBatchText, batchTextDragStart, videoRef],
-  );
-
-  const handleBatchTextDragEnd = useCallback(() => {
-    setDraggingBatchText(null);
-    setBatchTextDragStart(null);
-  }, []);
-
-  draggingRef.current.image = { move: handleImageDragMove, end: handleImageDragEnd };
-  draggingRef.current.batch = { move: handleBatchTextDragMove, end: handleBatchTextDragEnd };
-
-  useEffect(() => {
-    let raf = 0;
-    let pending = null;
-    const flush = () => {
-      raf = 0;
-      const e = pending;
-      pending = null;
-      if (!e) return;
-      draggingRef.current.image?.move(e);
-      draggingRef.current.batch?.move(e);
-    };
-    const onMouseMove = (e) => {
-      pending = { clientX: e.clientX, clientY: e.clientY };
-      if (raf) return;
-      raf = requestAnimationFrame(flush);
-    };
-    const onMouseUp = () => {
-      if (raf) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-      flush();
-      draggingRef.current.image?.end();
-      draggingRef.current.batch?.end();
-    };
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
   return {
-    draggingOp,
-    draggingBatchText,
+    draggingOp:
+      moveGesture.active && dragOwner.current?.regionId == null ? dragOwner.current : null,
+    draggingBatchText:
+      moveGesture.active && dragOwner.current?.regionId != null ? dragOwner.current : null,
     handleImageDragStart,
     handleRegionOpDragStart,
     handleBatchTextDragStart,

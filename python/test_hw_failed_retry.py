@@ -53,11 +53,9 @@ def test_pass2_runs_software_directly_for_hw_failed_jobs():
                 return False, "x264 [error]: out of memory"
             return True, None
 
-        orig_run = ffmpeg_runner._run_ffmpeg
-        prev_retry = os.environ.get("BERU_RETRY_FAILED")
-        os.environ["BERU_RETRY_FAILED"] = "1"
-        ffmpeg_runner._run_ffmpeg = fake_run
-        try:
+        with patch.dict(os.environ, {"BERU_RETRY_FAILED": "1"}), patch.object(
+            ffmpeg_runner, "_run_ffmpeg", fake_run
+        ):
             result = processor.process_jobs(
                 jobs, "ffmpeg", max_workers=2, hw_encoder="h264_nvenc"
             )
@@ -65,12 +63,6 @@ def test_pass2_runs_software_directly_for_hw_failed_jobs():
             assert result["failed"] == 0, result
             for out, seq in sequences.items():
                 assert seq == ["h264_nvenc", "libx264", "libx264"], (out, seq)
-        finally:
-            ffmpeg_runner._run_ffmpeg = orig_run
-            if prev_retry is None:
-                os.environ.pop("BERU_RETRY_FAILED", None)
-            else:
-                os.environ["BERU_RETRY_FAILED"] = prev_retry
 
 
 def _run_batch(jobs, fake_run, **kwargs):

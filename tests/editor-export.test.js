@@ -49,8 +49,7 @@ vi.mock("../main/processing-run.js", () => ({
   cancelRun: mocks.cancelRun,
 }));
 vi.mock("../main/utils/media-task-pool.js", () => ({ runMediaTask: async (fn) => fn() }));
-const { previewProxyName, pruneProxies, registerEditorHandlers, sourceDescriptor } =
-  await import("../main/handlers/editor.js");
+const { registerEditorHandlers } = await import("../main/handlers/editor.js");
 const { identityChanged } = await import("../main/utils/editor-document-io.js");
 function manifestFor(outputPath) {
   return {
@@ -189,6 +188,32 @@ describe("shared processing lifecycle", () => {
     expect(fs.existsSync(first.path)).toBe(false);
     expect(fs.existsSync(third.path)).toBe(true);
   });
+  it.each(["export", "frame", "proxy"])(
+    "rejects an empty source during %s preparation before acquiring a run",
+    async (kind) => {
+      fs.writeFileSync(media, "");
+      const manifest = manifestFor(path.join(tmp, "out.mp4"));
+      manifest.jobs[0].clips[0].input_path = media;
+      mocks.saveDialog.mockResolvedValue({ canceled: false, filePath: path.join(tmp, "out.mp4") });
+      if (kind === "frame") manifest.jobs[0].frame = { atUs: 0 };
+      const channel =
+        kind === "export"
+          ? IPC_INVOKE.exportEditorComposition
+          : kind === "frame"
+            ? IPC_INVOKE.renderEditorExactFrame
+            : IPC_INVOKE.createEditorPreviewProxy;
+      const payload =
+        kind === "proxy"
+          ? { source: { path: media, sizeBytes: 0, mtimeMs: null, durationUs: 1e6 } }
+          : { manifest, requestId: "empty-source" };
+      expect(await mocks.handlers.get(channel)(trustedEvent, payload)).toMatchObject({
+        success: false,
+        errorCode: "MEDIA_UNREADABLE",
+        unreadableInputs: [{ inputPath: media, code: "empty" }],
+      });
+      expect(mocks.executeProcessingRun).not.toHaveBeenCalled();
+    },
+  );
   it("cancels only the requested Editor owner through the shared lifecycle", async () => {
     const cancel = mocks.handlers.get(IPC_INVOKE.cancelEditorExport);
     await cancel(trustedEvent, { kind: "frame" });
@@ -257,7 +282,7 @@ describe("shared processing lifecycle", () => {
     expect(mocks.executeProcessingRun).not.toHaveBeenCalled();
   });
   it("keeps the most recently used proxies", async () => {
-    const dir = path.join(tmp, "proxies");
+    const dir = path.join(tmp, "editor-proxies");
     fs.mkdirSync(dir);
     for (const [i, name] of ["old", "mid", "new"].entries()) {
       const file = path.join(dir, name + ".mp4");
@@ -265,12 +290,30 @@ describe("shared processing lifecycle", () => {
       const time = new Date(Date.now() - (3 - i) * 60000);
       fs.utimesSync(file, time, time);
     }
-    await pruneProxies(dir, 2);
-    expect(fs.readdirSync(dir).sort()).toEqual(["mid.mp4", "new.mp4"]);
+    const recent = Array.from({ length: 17 }, (_, i) => `recent-${i}.mp4`);
+    for (const name of recent) fs.writeFileSync(path.join(dir, name), "p");
+    const stat = fs.statSync(media);
+    const result = await mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy)(trustedEvent, {
+      source: { path: media, sizeBytes: stat.size, mtimeMs: stat.mtimeMs, durationUs: 1e6 },
+    });
+    expect(result.success).toBe(true);
+    expect(fs.readdirSync(dir).sort()).toEqual(
+      ["mid.mp4", "new.mp4", ...recent, path.basename(result.path)].sort(),
+    );
   });
-  it("keys proxies by source identity", () => {
-    const source = { path: "C:/Videos/a.mov", sizeBytes: 10, mtimeMs: 5 };
-    expect(previewProxyName(source)).not.toBe(previewProxyName({ ...source, sizeBytes: 11 }));
+  it("keys proxies by source identity", async () => {
+    const stat = fs.statSync(media);
+    const source = { path: media, sizeBytes: stat.size, mtimeMs: stat.mtimeMs, durationUs: 1e6 };
+    const createProxy = mocks.handlers.get(IPC_INVOKE.createEditorPreviewProxy);
+    const first = await createProxy(trustedEvent, { source });
+    fs.appendFileSync(media, "edit");
+    fs.utimesSync(media, stat.atime, stat.mtime);
+    const second = await createProxy(trustedEvent, {
+      source: { ...source, sizeBytes: fs.statSync(media).size },
+    });
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    expect(first.path).not.toBe(second.path);
   });
 });
 
@@ -442,19 +485,38 @@ describe("import and export handlers", () => {
 });
 
 describe("export helpers", () => {
-  it("describes an imported source with its identity and probed metadata", () => {
-    const descriptor = sourceDescriptor(
-      "C:/Videos/a.mp4",
-      { size: 2048, mtimeMs: 1700000000000.4 },
-      { duration: 8.5, width: 1920, height: 1080, audioCodec: "aac" },
-    );
-    expect(descriptor).toEqual({
-      path: "C:/Videos/a.mp4",
-      filename: "a.mp4",
-      sizeBytes: 2048,
-      mtimeMs: 1700000000000.4,
-      metadata: { durationUs: 8_500_000, width: 1920, height: 1080, hasAudio: true },
-    });
+  it("describes an imported source with its identity and probed metadata", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "beru-source-descriptor-"));
+    try {
+      const media = path.join(tmp, "a.mp4");
+      fs.writeFileSync(media, Buffer.alloc(2048));
+      fs.utimesSync(media, 1700000000, 1700000000.0004);
+      const stat = fs.statSync(media);
+      mocks.probe.mockResolvedValue({
+        duration: 8.5,
+        width: 1920,
+        height: 1080,
+        audioCodec: "aac",
+      });
+      registerEditorHandlers({
+        registerSelectedPath: (filePath) => ({ ok: true, resolvedPath: filePath }),
+      });
+      const result = await mocks.handlers.get(IPC_INVOKE.importEditorVideos)(trustedEvent, {
+        paths: [media],
+      });
+      expect(result.success).toBe(true);
+      expect(result.sources).toEqual([
+        {
+          path: media,
+          filename: "a.mp4",
+          sizeBytes: 2048,
+          mtimeMs: stat.mtimeMs,
+          metadata: { durationUs: 8_500_000, width: 1920, height: 1080, hasAudio: true },
+        },
+      ]);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   it("detects a source whose size or modification time moved since import", () => {
