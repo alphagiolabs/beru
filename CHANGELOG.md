@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.47] - 2026-10-17
+
 ### Added
 
 - Ediciones por video de giro, flips, tamaño, ganancia, silencio, audio externo, velocidad y repeticiones, con historial y restauración de Session.
@@ -23,9 +25,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tamaño de salida libre** — Ancho y alto exactos por video (también para agrandar), con candado de proporción, presets de proporción (Original, 16:9, 4:3, 1:1, 9:16) y de resolución (1080p, 720p, 480p) y modos Barras / Estirar / Recortar. Una proporción que difiere hasta un 1 % llena el cuadro sin barras finas (848×478 → 1920×1080). El Fechero se dibuja sobre el cuadro final: no se deforma, no rota ni se voltea, y acompaña los cambios de tamaño.
 - La vista en vivo muestra el cuadro de salida (tamaño, barras, estirado, recorte, rotación y volteo) fuera de las herramientas de logo, y las regiones se dibujan y arrastran sobre él.
 - **Ancho de letra** — Las capas de texto y el Fechero pueden estirarse en horizontal (50–300 %) sin cambiar su altura, en la preview y en la exportación.
+- **Cierre con confirmación** — Cerrar la ventana con trabajo sin guardar o con un proceso activo muestra el diálogo de Beru en lugar del cuadro nativo del sistema. Los diálogos destructivos enfocan primero el botón seguro.
+
+### Changed
+
+- Processing Run concentra eventos, respuesta IPC y cancelación; Batch Export reconstruye coincidencias de Excel sin perder las ediciones por video.
+- El procesador usa un contexto por ejecución y la preview exacta concentra vigencia, temporizadores y comparación.
+- Electron, electron-builder, Vite y Vitest se actualizan para corregir las vulnerabilidades de dependencias. El desarrollo requiere Node.js 22.12 o posterior.
+- **`isOpActive` movido al módulo Operation** — La semántica "op activa en t" vive ahora en `src/utils/operation.js` (antes `video-preview/utils.js`) y se fija con `resources/op-active-fixtures.json`, un contrato compartido que consumen Vitest y `python/test_op_active_fixtures.py`. Los bounds no numéricos se ignoran igual que `float()` en Python.
+- **Modales unificados** — Los modales comparten el botón de cierre y el diseño de diálogo descritos en `DESIGN.md`.
+- Se elimina la CLI de shadcn, que no se importaba desde el código (unos 205 paquetes de desarrollo menos), y `http-cache-semantics` pasa a 4.3.0 por un aviso de max-stale.
 
 ### Fixed
 
+- **Actualizaciones de Windows** — Descargar solo versiones confirmadas por el servidor, conservar las notas y el progreso al recuperar la ventana y permitir reintentos tras errores de red o instalación. La instalación espera a que termine la cancelación del procesamiento.
+- **Publicación coherente** — Validar versión, tag, CHANGELOG, lockfile, instalador y SHA512 de los metadatos. CI prepara la release como borrador y la publica después de verificar los archivos subidos; rechaza sobrescribir releases publicadas.
 - **Exportación ya renderizada en Windows** — Si el antivirus retiene el archivo recién escrito, el paso que lo mueve a su nombre final reintenta unas décimas de segundo antes de dar error. Afecta a Batch y al Editor; antes una exportación completa podía marcarse como fallida.
 - **Títulos del Editor de varias líneas** — Cada línea se alinea dentro del bloque según la alineación elegida, igual que en la vista previa.
 - **Recorte del Editor con clips al final de la fuente** — El recorte entra por el inicio del clip en lugar de decodificar la fuente desde su primer fotograma.
@@ -35,25 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vista previa del Editor sin pista de video** — Un archivo que se carga sin video decodificable (HEVC) muestra el aviso y el botón de proxy, en lugar de quedar como listo.
 - **Línea de tiempo del Editor en ventanas bajas** — La columna central y la biblioteca se desplazan, así que la línea de tiempo ya no queda cortada por el borde de la ventana.
 - **Contraste del Editor en el tema claro** — El aviso de la vista previa vacía pasa de 2,8:1 a 12,6:1 de contraste. Un destino ocupado por otro programa o un disco lleno se informan con un mensaje claro.
-
-### Changed
-
-- Processing Run concentra eventos, respuesta IPC y cancelación; Batch Export reconstruye coincidencias de Excel sin perder las ediciones por video.
-- El procesador usa un contexto por ejecución y la preview exacta concentra vigencia, temporizadores y comparación.
-- Electron, electron-builder, Vite y Vitest se actualizan para corregir las vulnerabilidades de dependencias. El desarrollo requiere Node.js 22.12 o posterior.
-- **`isOpActive` movido al módulo Operation** — La semántica "op activa en t" vive ahora en `src/utils/operation.js` (antes `video-preview/utils.js`) y se fija con `resources/op-active-fixtures.json`, un contrato compartido que consumen Vitest y `python/test_op_active_fixtures.py`. Los bounds no numéricos se ignoran igual que `float()` en Python.
-
-### Fixed
-
 - Las cajas de fondo translúcidas de texto conservan el tinte del video al exportar, como en la preview; antes FFmpeg desplazaba el color del fondo dentro de la caja.
 - Los errores por Job de composición y estabilización conservan la ejecución activa hasta su cierre; las respuestas de preview obsoletas y los cambios que exceden el límite de duración se descartan.
-
-## [1.6.47] - 2026-10-02
-
-### Fixed
-
-- **Actualizaciones de Windows** — Descargar solo versiones confirmadas por el servidor, conservar las notas y el progreso al recuperar la ventana y permitir reintentos tras errores de red o instalación. La instalación espera a que termine la cancelación del procesamiento.
-- **Publicación coherente** — Validar versión, tag, CHANGELOG, lockfile, instalador y SHA512 de los metadatos. CI prepara la release como borrador y la publica después de verificar los archivos subidos; rechaza sobrescribir releases publicadas.
 
 ## [1.6.46] - 2026-07-13
 
