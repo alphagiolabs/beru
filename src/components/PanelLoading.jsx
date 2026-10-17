@@ -1,6 +1,6 @@
-import { Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useT } from "../i18n/useT";
-import { Button } from "./ui/Button";
+import { ModalCloseButton } from "./ui/ModalCloseButton";
 
 export default function PanelLoading({ label, onClose }) {
   const t = useT();
@@ -23,15 +23,7 @@ export default function PanelLoading({ label, onClose }) {
         onClick={(event) => event.stopPropagation()}
       >
         {status}
-        <Button
-          type="button"
-          variant="tertiary"
-          size="icon"
-          onClick={onClose}
-          aria-label={t("common.close")}
-        >
-          <X size={16} aria-hidden="true" />
-        </Button>
+        <ModalCloseButton onClick={onClose} label={t("common.close")} />
       </div>
     </div>
   );

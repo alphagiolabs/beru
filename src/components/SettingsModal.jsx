@@ -1,9 +1,10 @@
 import { useMemo, Suspense } from "react";
-import { X, Palette, Users, PawPrint } from "lucide-react";
+import { Palette, Users, PawPrint } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
 import { Button } from "./ui/Button";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
+import { ModalCloseButton } from "./ui/ModalCloseButton";
 import PanelLoading from "./PanelLoading";
 import { PetdexPanel, UserManagementPanel, AppearancePanel } from "./settings/settings-panels";
 
@@ -50,16 +51,7 @@ export default function SettingsModal() {
           </div>
           <TooltipProvider>
             <Tooltip label={t("common.close")}>
-              <Button
-                type="button"
-                className="settings-modal-close"
-                onClick={close}
-                aria-label={t("common.close")}
-                variant="tertiary"
-                size="icon"
-              >
-                <X size={15} />
-              </Button>
+              <ModalCloseButton onClick={close} label={t("common.close")} />
             </Tooltip>
           </TooltipProvider>
         </div>

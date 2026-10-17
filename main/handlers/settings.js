@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import { getMainWindow, setHasUnexportedWork } from "../shared-state.js";
 import { readSettings, writeSettings, ALLOWED_SETTINGS_KEYS } from "../utils/settings.js";
 import { applyWindowTheme } from "../utils/windowTheme.js";
+import { resolveCloseConfirm } from "../utils/closeConfirm.js";
 import { IPC_INVOKE } from "../../shared/ipc-channels.js";
 import { handleIpc, isTrustedSender } from "../utils/ipc.js";
 
@@ -44,4 +45,8 @@ export function registerSettingsHandlers() {
     setHasUnexportedWork(value);
     return true;
   });
+
+  handleIpc(IPC_INVOKE.resolveCloseConfirm, (_event, { id, ack, confirmed } = {}) =>
+    resolveCloseConfirm(id, { ack: ack === true, confirmed: confirmed === true }),
+  );
 }

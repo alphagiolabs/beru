@@ -7,7 +7,9 @@ import {
   Undo2,
   Redo2,
   FlaskConical,
-  X,
+  Loader2,
+  CheckCircle2,
+  AlertTriangle,
   FolderOpen,
   ExternalLink,
   Save,
@@ -23,6 +25,8 @@ import { Button } from "./ui/Button";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { Select } from "./ui/select";
 import { fileName } from "../../shared/file-name.js";
+
+const TEST_RESULT_TONE = { running: "neutral", ok: "success", error: "danger" };
 
 const api = window.api;
 const WORKER_COUNTS = [1, 2, 3, 4, 5, 6, 8];
@@ -63,10 +67,20 @@ export default function Header() {
   const t = useT();
   const get = useEditorStore.getState;
   const [testResult, setTestResult] = useState(null);
+  const testResultClosable = testResult != null && testResult.status !== "running";
   const [autoWorkerHint, setAutoWorkerHint] = useState(5);
   const [savePresetOpen, setSavePresetOpen] = useState(false);
   const [savePresetName, setSavePresetName] = useState("");
   const savePresetInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!testResultClosable) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setTestResult(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [testResultClosable]);
 
   useEffect(() => {
     if (!api?.getBatchCapacity) return undefined;
@@ -452,75 +466,66 @@ export default function Header() {
           className="cap-modal-overlay"
           onClick={() => testResult.status !== "running" && setTestResult(null)}
         >
-          <div className="cap-modal-panel max-w-[420px] p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                {testResult.status === "running" && t("modal.testResult.running")}
-                {testResult.status === "ok" && t("modal.testResult.ok")}
-                {testResult.status === "error" && t("modal.testResult.error")}
-              </h3>
-              {testResult.status !== "running" && (
-                <Button
-                  onClick={() => setTestResult(null)}
-                  variant="secondary"
-                  size="icon"
-                  title={t("common.close")}
-                >
-                  <X size={14} />
-                </Button>
-              )}
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="test-result-title"
+            className={`cap-modal-panel cap-dialog cap-dialog--${TEST_RESULT_TONE[testResult.status]}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="cap-dialog-content">
+              <div className="cap-dialog-icon" aria-hidden="true">
+                {testResult.status === "running" && (
+                  <Loader2 size={16} className="panel-loading-spinner" />
+                )}
+                {testResult.status === "ok" && <CheckCircle2 size={16} strokeWidth={2.25} />}
+                {testResult.status === "error" && <AlertTriangle size={16} strokeWidth={2.25} />}
+              </div>
+              <div className="min-w-0">
+                <h2 id="test-result-title" className="cap-dialog-title">
+                  {testResult.status === "running" && t("modal.testResult.running")}
+                  {testResult.status === "ok" && t("modal.testResult.ok")}
+                  {testResult.status === "error" && t("modal.testResult.error")}
+                </h2>
+                {testResult.status === "running" && (
+                  <p className="cap-dialog-message">{t("modal.testResult.processingWith")}</p>
+                )}
+                {testResult.status === "ok" && (
+                  <p className="cap-dialog-message">{testResult.outputPath}</p>
+                )}
+                {testResult.status === "error" && (
+                  <p className="cap-dialog-message cap-dialog-message--error">
+                    {testResult.error || t("modal.testResult.unknownError")}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {testResult.status === "running" && (
-              <div
-                className="flex items-center gap-2 text-[12px]"
-                style={{ color: "var(--text-secondary)" }}
-              >
-                <div
-                  className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin"
-                  style={{ borderColor: "var(--accent)", borderTopColor: "transparent" }}
-                />
-                {t("modal.testResult.processingWith")}
+            {testResult.status === "ok" && (
+              <div className="cap-dialog-actions">
+                <Button
+                  onClick={() => api?.showItemInFolder(testResult.outputPath)}
+                  variant="secondary"
+                  size="md"
+                >
+                  <FolderOpen size={14} /> {t("common.showInFolder")}
+                </Button>
+                <Button
+                  onClick={() => api?.openPath(testResult.outputPath)}
+                  variant="primary"
+                  size="md"
+                >
+                  <ExternalLink size={14} /> {t("modal.testResult.openVideo")}
+                </Button>
               </div>
             )}
 
-            {testResult.status === "ok" && (
-              <>
-                <p className="text-[11px] mb-3 break-all" style={{ color: "var(--text-dim)" }}>
-                  {testResult.outputPath}
-                </p>
-                <div className="flex gap-2 justify-end">
-                  <Button
-                    onClick={() => api?.openPath(testResult.outputPath)}
-                    variant="primary"
-                    size="sm"
-                    className="text-[11px]"
-                  >
-                    <ExternalLink size={12} /> {t("modal.testResult.openVideo")}
-                  </Button>
-                  <Button
-                    onClick={() => api?.showItemInFolder(testResult.outputPath)}
-                    variant="secondary"
-                    size="sm"
-                    className="text-[11px]"
-                  >
-                    <FolderOpen size={12} /> {t("common.showInFolder")}
-                  </Button>
-                </div>
-              </>
-            )}
-
             {testResult.status === "error" && (
-              <>
-                <p className="text-[11px] mb-3" style={{ color: "var(--text-rose)" }}>
-                  {testResult.error || t("modal.testResult.unknownError")}
-                </p>
-                <div className="flex justify-end">
-                  <Button onClick={() => setTestResult(null)} variant="secondary" size="sm">
-                    {t("common.close")}
-                  </Button>
-                </div>
-              </>
+              <div className="cap-dialog-actions">
+                <Button onClick={() => setTestResult(null)} variant="secondary" size="md">
+                  {t("common.close")}
+                </Button>
+              </div>
             )}
           </div>
         </div>
@@ -528,23 +533,17 @@ export default function Header() {
 
       {savePresetOpen && (
         <div className="cap-modal-overlay" onClick={() => setSavePresetOpen(false)}>
-          <div className="cap-modal-panel max-w-[380px] p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-                {t("modal.savePreset.title")}
-              </h3>
-              <Button
-                onClick={() => setSavePresetOpen(false)}
-                variant="secondary"
-                size="icon"
-                title={t("common.close")}
-              >
-                <X size={14} />
-              </Button>
-            </div>
-            <p className="text-[11px] mb-3" style={{ color: "var(--text-dim)" }}>
-              {t("modal.savePreset.desc")}
-            </p>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="save-preset-title"
+            className="cap-modal-panel cap-dialog"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="save-preset-title" className="cap-dialog-title mt-0">
+              {t("modal.savePreset.title")}
+            </h2>
+            <p className="cap-dialog-message">{t("modal.savePreset.desc")}</p>
             <input
               ref={savePresetInputRef}
               type="text"
@@ -555,24 +554,20 @@ export default function Header() {
                 if (e.key === "Escape") setSavePresetOpen(false);
               }}
               placeholder={t("modal.savePreset.placeholder")}
-              className="w-full px-2 py-1.5 rounded text-[12px] mb-3 outline-none"
-              style={{
-                background: "var(--bg-app)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border)",
-              }}
+              aria-label={t("modal.savePreset.title")}
+              className="cap-input cap-dialog-field"
             />
-            <div className="flex gap-2 justify-end">
-              <Button onClick={() => setSavePresetOpen(false)} variant="secondary" size="sm">
+            <div className="cap-dialog-actions">
+              <Button onClick={() => setSavePresetOpen(false)} variant="secondary" size="md">
                 {t("common.cancel")}
               </Button>
               <Button
                 onClick={handleSavePresetSubmit}
                 disabled={!savePresetName.trim()}
                 variant="primary"
-                size="sm"
+                size="md"
               >
-                <BookmarkPlus size={12} /> {t("common.save")}
+                <BookmarkPlus size={14} /> {t("common.save")}
               </Button>
             </div>
           </div>

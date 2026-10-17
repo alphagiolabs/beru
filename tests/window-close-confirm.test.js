@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   cancelRun: vi.fn(),
   isQuittingForUpdate: vi.fn(),
   hasUnexportedWork: vi.fn(),
+  rendererReady: false,
+  send: vi.fn(),
 }));
 
 vi.mock("electron", () => ({
@@ -19,6 +21,9 @@ vi.mock("electron", () => ({
         once: vi.fn(),
         getURL: vi.fn(() => ""),
         setWindowOpenHandler: vi.fn(),
+        isLoading: () => !mocks.rendererReady,
+        isCrashed: () => false,
+        send: mocks.send,
       };
       this.close = vi.fn();
       this.setMenu = vi.fn();
@@ -58,6 +63,7 @@ vi.mock("../main/updater.js", () => ({
 }));
 
 import { createWindow } from "../main/utils/window.js";
+import { resolveCloseConfirm } from "../main/utils/closeConfirm.js";
 
 const CONFIRM_CANCEL_AND_EXIT = 0;
 const KEEP_PROCESSING = 1;
@@ -76,6 +82,8 @@ describe("main window", () => {
     mocks.cancelRun.mockReset().mockResolvedValue({ success: true });
     mocks.isQuittingForUpdate.mockReset().mockReturnValue(false);
     mocks.hasUnexportedWork.mockReset().mockReturnValue(false);
+    mocks.rendererReady = false;
+    mocks.send.mockReset();
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
@@ -165,5 +173,44 @@ describe("main window", () => {
     const reentrant = { preventDefault: vi.fn() };
     close()(reentrant);
     expect(reentrant.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("asks through the in-app dialog when the renderer is ready", async () => {
+    mocks.rendererReady = true;
+    mocks.hasUnexportedWork.mockReturnValue(true);
+    const { win, close } = openWindow();
+
+    close()({ preventDefault: vi.fn() });
+    const [channel, { id, processing }] = mocks.send.mock.calls[0];
+    expect(channel).toBe("window:confirmClose");
+    expect(processing).toBe(false);
+
+    const repeated = { preventDefault: vi.fn() };
+    close()(repeated);
+    expect(repeated.preventDefault).toHaveBeenCalledTimes(1);
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+
+    resolveCloseConfirm(id, { ack: true });
+    resolveCloseConfirm(id, { confirmed: true });
+    await vi.waitFor(() => expect(win.close).toHaveBeenCalledTimes(1));
+    expect(mocks.showMessageBox).not.toHaveBeenCalled();
+  });
+
+  it("stays open when the in-app dialog is declined", async () => {
+    mocks.rendererReady = true;
+    mocks.hasActiveProcessing.mockReturnValue(true);
+    const { win, close } = openWindow();
+
+    close()({ preventDefault: vi.fn() });
+    const { id } = mocks.send.mock.calls[0][1];
+    resolveCloseConfirm(id, { ack: true });
+    resolveCloseConfirm(id, { confirmed: false });
+    await vi.waitFor(() => expect(mocks.send).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mocks.cancelRun).not.toHaveBeenCalled();
+    expect(win.close).not.toHaveBeenCalled();
+    close()({ preventDefault: vi.fn() });
+    expect(mocks.send).toHaveBeenCalledTimes(2);
   });
 });

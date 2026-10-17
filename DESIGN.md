@@ -78,6 +78,7 @@ Reutilizar antes de crear. Todas viven en `src/components/ui/` o `src/components
 | `SegmentedToolbar`            | `inspector/SegmentedToolbar.jsx` | Alternar entre 2–4 modos.                                                                               |
 | `.cap-input`                  | `index.css`                      | Inputs de texto y número.                                                                               |
 | `.inspector-empty`            | `index.css`                      | Estado vacío: icono, título y una línea de ayuda.                                                       |
+| `ModalCloseButton`            | `ui/ModalCloseButton.jsx`        | Botón X de cualquier modal o diálogo.                                                                   |
 
 ### Tooltip
 
@@ -132,6 +133,14 @@ Orden de izquierda a derecha, separado por espacio (`gap`) y divisores de 1px:
 5. Toolbar de iconos (`tertiary`, `size="icon"`), en subgrupos separados por `.app-header-subdivider`: historial, proyecto y presets, app.
 
 Por debajo de 1180px las acciones se desplazan en horizontal. No añadir botones de texto nuevos al header; si la acción es secundaria, va a la toolbar de iconos o a un menú.
+
+### Modales y diálogos
+
+- Contenedor: `.cap-modal-overlay` > `.cap-modal-panel` (radio 12px, borde suavizado, sombra y entrada `scale(0.96)`). No redefinir radio, borde ni sombra en el modal concreto; solo ancho y alto.
+- Modal con contenido (formularios, listas): cabecera `.cap-modal-titlebar` con `h2.cap-modal-title`, `.cap-modal-subtitle` opcional y `ModalCloseButton`. El cuerpo usa `px-5` para alinearse con el título.
+- Diálogo corto (confirmar, avisar, pedir un nombre): `.cap-modal-panel.cap-dialog` con `.cap-dialog-content` (icono `.cap-dialog-icon` + título y mensaje) y `.cap-dialog-actions` al final. Sin botón X: se cierra con Esc, clic fuera o el botón secundario. Tono del icono: `--danger`, `--success`, `--neutral` o ámbar por defecto.
+- Acciones a la derecha: secundaria primero, primaria al final, ambas `size="md"`. En diálogos destructivos el foco inicial va al botón seguro.
+- Para confirmaciones usar `requestConfirm` del store, que renderiza `ConfirmDialog`.
 
 ### Panel de propiedades
 

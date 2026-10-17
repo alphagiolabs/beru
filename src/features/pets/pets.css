@@ -109,48 +109,8 @@
 }
 
 .pet-palette-modal {
-  @apply w-full max-w-[460px] overflow-hidden flex flex-col rounded-2xl;
+  @apply w-full max-w-[460px] overflow-hidden flex flex-col;
   max-height: min(74vh, 600px);
-  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-}
-
-.pet-palette-head {
-  @apply flex items-center justify-between gap-3 px-5 py-3.5;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-  background: color-mix(in srgb, var(--bg-surface) 30%, transparent);
-}
-
-.pet-palette-head-brand {
-  @apply flex items-center gap-2.5;
-}
-
-.pet-palette-head-brand span {
-  @apply text-[14px] font-semibold tracking-tight;
-  color: var(--text-primary);
-}
-
-.pet-palette-head-brand svg {
-  @apply flex-shrink-0;
-  color: var(--text-brand);
-}
-
-.pet-palette-close {
-  @apply inline-flex items-center justify-center rounded-xl transition-all duration-200;
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  min-height: 30px;
-  padding: 0;
-  color: var(--text-dim);
-  border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-  background: color-mix(in srgb, var(--bg-elevated) 40%, transparent);
-}
-
-.pet-palette-close:hover {
-  color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--border) 70%, var(--text-dim));
-  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
-  transform: scale(1.05);
 }
 
 .pet-palette-search {

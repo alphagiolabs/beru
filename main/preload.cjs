@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld("api", {
   saveSettings: invoke("settings:save"),
   setWindowTheme: invoke("window:setTheme"),
   setUnexportedWork: invoke("window:setUnexportedWork"),
+  resolveCloseConfirm: invoke("window:resolveCloseConfirm"),
+  onCloseConfirm: (cb) => subscribe("window:confirmClose", cb),
   getBatchCapacity: invoke("system:getBatchCapacity"),
   listRecent: invoke("recent:list"),
   addRecent: invoke("recent:add"),

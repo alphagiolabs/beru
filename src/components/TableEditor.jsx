@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { findTextOpForRegion } from "../utils/text-style";
 import { useT } from "../i18n/useT";
 import { Button } from "./ui/Button";
+import { ModalCloseButton } from "./ui/ModalCloseButton";
 import TableEditorPreview from "./table-editor/TableEditorPreview";
 import TableEditorFocusPanel from "./table-editor/TableEditorFocusPanel";
 import TableEditorGrid from "./table-editor/TableEditorGrid";
@@ -292,17 +293,10 @@ export default function TableEditor() {
               <FileSpreadsheet size={14} />
               <span>{t("table.exportExcel")}</span>
             </Button>
-            <Button
-              type="button"
-              variant="tertiary"
-              size="icon"
-              className="te-icon-btn"
+            <ModalCloseButton
               onClick={() => get().setShowTableEditor(false)}
-              aria-label={t("table.close")}
-              title={t("table.close")}
-            >
-              <X size={16} />
-            </Button>
+              label={t("table.close")}
+            />
           </div>
         </header>
 

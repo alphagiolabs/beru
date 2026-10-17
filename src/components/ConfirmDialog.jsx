@@ -9,10 +9,13 @@ export default function ConfirmDialog() {
   const dialog = useEditorStore((s) => s.confirmDialog);
   const resolveConfirm = useEditorStore((s) => s.resolveConfirm);
   const confirmBtnRef = useRef(null);
+  const cancelBtnRef = useRef(null);
+  const isDanger = dialog?.variant === "danger";
 
   useEffect(() => {
     if (!dialog) return undefined;
-    confirmBtnRef.current?.focus();
+    // Destructive dialogs start on the safe choice so Enter never discards work.
+    (isDanger ? cancelBtnRef : confirmBtnRef).current?.focus();
 
     const onKey = (e) => {
       if (e.key === "Escape") {
@@ -22,13 +25,11 @@ export default function ConfirmDialog() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [dialog, resolveConfirm]);
+  }, [dialog, isDanger, resolveConfirm]);
 
   if (!dialog) return null;
 
-  const { title, message, confirmLabel, cancelLabel, variant = "default" } = dialog;
-
-  const isDanger = variant === "danger";
+  const { title, message, confirmLabel, cancelLabel } = dialog;
 
   return (
     <div
@@ -39,37 +40,31 @@ export default function ConfirmDialog() {
       className="cap-modal-overlay cap-modal-overlay--stack"
       onClick={() => resolveConfirm(false)}
     >
-      <div className="cap-modal-panel max-w-[420px]" onClick={(e) => e.stopPropagation()}>
-        <div className="cap-modal-header">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-            style={{
-              background: isDanger ? "rgba(244,63,94,0.12)" : "rgba(251,191,36,0.12)",
-              color: isDanger ? "var(--text-rose)" : "var(--text-amber)",
-            }}
-          >
-            <AlertTriangle size={20} strokeWidth={2.25} />
+      <div
+        className={`cap-modal-panel cap-dialog${isDanger ? " cap-dialog--danger" : ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="cap-dialog-content">
+          <div className="cap-dialog-icon" aria-hidden="true">
+            <AlertTriangle size={16} strokeWidth={2.25} />
           </div>
-          <h2
-            id="confirm-dialog-title"
-            className="text-sm font-semibold leading-snug"
-            style={{ color: "var(--text-primary)" }}
-          >
-            {title || t("dialog.confirmTitle")}
-          </h2>
+          <div className="min-w-0">
+            <h2 id="confirm-dialog-title" className="cap-dialog-title">
+              {title || t("dialog.confirmTitle")}
+            </h2>
+            <p id="confirm-dialog-message" className="cap-dialog-message">
+              {message}
+            </p>
+          </div>
         </div>
 
-        <p id="confirm-dialog-message" className="cap-modal-body">
-          {message}
-        </p>
-
-        <div className="cap-modal-footer">
+        <div className="cap-dialog-actions">
           <Button
+            ref={cancelBtnRef}
             type="button"
             onClick={() => resolveConfirm(false)}
             variant="secondary"
             size="md"
-            className="!text-[12px] !px-4 !py-2"
           >
             {cancelLabel || t("common.cancel")}
           </Button>
@@ -79,7 +74,6 @@ export default function ConfirmDialog() {
             onClick={() => resolveConfirm(true)}
             variant={isDanger ? "danger" : "primary"}
             size="md"
-            className="!text-[12px] !px-4 !py-2"
           >
             {confirmLabel || t("common.continue")}
           </Button>
