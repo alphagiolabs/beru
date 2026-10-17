@@ -123,6 +123,7 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
       const dx = e.clientX - d.x;
       const dy = e.clientY - d.y;
       const clamped = clampPan(d.panX + dx, d.panY + dy, zoomRef.current);
+      if (clamped.x === panRef.current.x && clamped.y === panRef.current.y) return;
       panRef.current = clamped;
       pendingPanRef.current = clamped;
       if (panRafRef.current != null) return;

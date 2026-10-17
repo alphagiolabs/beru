@@ -11,7 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 
-from batch_context import _check_cancelled
+from batch_context import check_cancelled
+from batch_errors import ProcessingCancelled
 from encode_args import _ANIMATED_IMAGE_EXTS
 from delogo_chains import (
     _build_boxblur_filter,
@@ -239,7 +240,7 @@ class TemporalPatchResolver:
         if timing is None:
             if os.path.exists(prepared.patch.path):
                 os.unlink(prepared.patch.path)
-            if self._defer_reason and not _check_cancelled(self.ctx):
+            if self._defer_reason and not check_cancelled(self.ctx):
                 self._warn_patch_skipped()
             return None
         prepared.patch.start, prepared.patch.steps = timing
@@ -305,7 +306,7 @@ class TemporalPatchResolver:
             if timing is None:
                 if os.path.exists(item.patch.path):
                     os.unlink(item.patch.path)
-                if self._defer_reason and not _check_cancelled(self.ctx):
+                if self._defer_reason and not check_cancelled(self.ctx):
                     self._warn_patch_skipped()
                 patches[index] = None
             else:
@@ -434,11 +435,11 @@ class TemporalPatchResolver:
                         next_beat = time.monotonic() + 15
                         self._report_patch_frames(self._frames_seen)
                     if (
-                        _check_cancelled(self.ctx)
+                        check_cancelled(self.ctx)
                         or time.monotonic() > deadline
                         or disk_bytes > 512 * 1024 * 1024
                     ):
-                        if not _check_cancelled(self.ctx):
+                        if not check_cancelled(self.ctx):
                             timed_out.set()
                         stop.set()
                         stop_processes()
@@ -452,8 +453,8 @@ class TemporalPatchResolver:
             offset = 0.0
             size = width * height * 6
             while True:
-                if _check_cancelled(self.ctx):
-                    raise RuntimeError("Cancelled")
+                if check_cancelled(self.ctx):
+                    raise ProcessingCancelled()
                 data = processes[0].stdout.read(size)
                 if not data:
                     return
@@ -597,15 +598,15 @@ class TemporalPatchResolver:
             for thread in workers:
                 while thread.is_alive() and not stop.is_set():
                     thread.join(timeout=0.1)
-            if _check_cancelled(self.ctx):
-                raise RuntimeError("Cancelled")
+            if check_cancelled(self.ctx):
+                raise ProcessingCancelled()
             if timed_out.is_set():
                 raise RuntimeError("Temporal preparation exceeded its budget")
             for proc in processes:
                 code = proc.wait(timeout=30)
                 if code != 0:
-                    if _check_cancelled(self.ctx):
-                        raise RuntimeError("Cancelled")
+                    if check_cancelled(self.ctx):
+                        raise ProcessingCancelled()
                     with error_lock:
                         detail = background_error[0] if background_error else errors.join()[-2000:]
                     raise RuntimeError(f"Temporal FFmpeg exited with code {code}: {detail}")
@@ -619,7 +620,7 @@ class TemporalPatchResolver:
         except Exception as exc:
             if background_error:
                 raise RuntimeError(background_error[0]) from exc
-            if timed_out.is_set() and not _check_cancelled(self.ctx):
+            if timed_out.is_set() and not check_cancelled(self.ctx):
                 self._defer_reason = "patch_skipped_budget"
                 logger.info(
                     "Temporal: preparation exceeded its time/disk budget; using spatial repair"

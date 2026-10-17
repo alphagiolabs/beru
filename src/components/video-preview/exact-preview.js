@@ -2,6 +2,7 @@ import useEditorStore from "../../stores/useEditorStore";
 import { buildLogoPreviewJob } from "../../utils/delogo-ops";
 import { isRegionUsable } from "../../utils/video-utils";
 import { clipTimeline } from "../../../shared/clip-timeline.js";
+import { createPreviewRequests } from "../../utils/preview-requests.js";
 import {
   createJobSignatureCache,
   jobInputEntriesEqual,
@@ -51,8 +52,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
     stale: false,
     compareMode: "live",
   };
-  let generation = 0;
-  let request = null;
+  const requests = createPreviewRequests();
   let renderedSignature = null;
   let lastSignature = null;
   let dismissedSignature = null;
@@ -79,8 +79,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
   }
 
   function invalidate() {
-    generation += 1;
-    request = null;
+    requests.invalidate();
     publish({ loading: false });
   }
 
@@ -160,7 +159,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
     const changed = next !== lastSignature;
     lastSignature = next;
     if (changed) dismissedSignature = null;
-    const obsoleteRequest = request?.signature && request.signature !== next;
+    const obsoleteRequest = requests.pending?.signature && requests.pending.signature !== next;
     if (obsoleteRequest) invalidate();
     if (renderedSignature && next === renderedSignature) {
       clearTimer();
@@ -172,7 +171,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
     if (
       !next ||
       next === dismissedSignature ||
-      request ||
+      requests.pending ||
       (videoRef.current && !videoRef.current.paused)
     )
       return;
@@ -204,15 +203,16 @@ export function createExactPreview({ videoRef, onChange, t }) {
       return;
     }
     enabled = true;
-    const token = ++generation;
-    request = { signature: null };
+    const request = requests.begin(
+      { signature: null },
+      (owner) => owner.signature !== null && signature() !== owner.signature,
+    );
     dismissedSignature = null;
     publish({ loading: true, error: null });
     if (!keepFrame) {
       renderedSignature = null;
       publish({ url: null, stale: false, artifact: false });
     }
-    const current = () => !disposed && token === generation;
     try {
       const video = videoRef.current;
       if (video && !video.paused) video.pause();
@@ -221,7 +221,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
         try {
           await editor.refreshMissingVideoInfo?.(api);
         } catch {}
-        if (!current()) return;
+        if (!request.isCurrent()) return;
       }
       const live = useEditorStore.getState();
       const draft = logoDraft(live);
@@ -232,9 +232,8 @@ export function createExactPreview({ videoRef, onChange, t }) {
         return;
       }
       const sig = JSON.stringify(job);
-      request.signature = sig;
+      request.owner.signature = sig;
       lastSignature = sig;
-      const valid = () => current() && signature() === sig;
       const { timestamp: _timestamp, ...exportShape } = baseJob;
       const liveItem = live.queue[idx];
       const timeline = clipTimeline(liveItem);
@@ -263,12 +262,12 @@ export function createExactPreview({ videoRef, onChange, t }) {
           ),
           expected_stat: liveItem.exportedOutputStat,
         });
-        if (!valid()) return;
+        if (!request.isCurrent()) return;
         artifact = !!result?.ok;
       }
       if (!result?.ok) {
         result = await api.renderPreviewFrame(job);
-        if (!valid()) return;
+        if (!request.isCurrent()) return;
         artifact = false;
       }
       if (result?.ok && result.data_url) {
@@ -281,12 +280,9 @@ export function createExactPreview({ videoRef, onChange, t }) {
         });
       } else if (!result?.cancelled) fail(result?.error || t("logo.renderError"));
     } catch (error) {
-      if (current()) fail(error.message || t("logo.renderError"));
+      if (request.isCurrent()) fail(error.message || t("logo.renderError"));
     } finally {
-      if (current()) {
-        request = null;
-        publish({ loading: false });
-      }
+      if (request.finish()) publish({ loading: false });
     }
   }
 
@@ -334,7 +330,7 @@ export function createExactPreview({ videoRef, onChange, t }) {
     dispose() {
       disposed = true;
       clearTimer();
-      generation += 1;
+      requests.invalidate();
       unsubscribe();
       for (const event of mediaEvents) video?.removeEventListener(event, synchronize);
       window.removeEventListener("beru:preview:renderFrame", onRender);

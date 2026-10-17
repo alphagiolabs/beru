@@ -33,16 +33,14 @@ from dataclasses import replace
 from functools import partial
 from pathlib import Path
 
-import encode_args
 import encoders
-import ffmpeg_runner
 import filters
 import fonts
 import media_probe
 import preview
 import process_lifetime
 
-from batch_errors import is_resource_pressure_error
+from batch_errors import ProcessingCancelled, is_resource_pressure_error
 from encode_profiles import (
     effective_hw_encoder as resolve_effective_hw_encoder,
     profile_allows_hardware,
@@ -51,30 +49,30 @@ from composition import process_composition
 from clip_render import ClipRenderer, HardwareFallbackState
 from stabilization import process_stabilization
 from job_classify import (
-    _job_processing_stages,
-    _job_requires_encode,
-    _job_takes_copy_path,
-    _jobs_allow_hardware,
-    _jobs_require_fonts,
+    job_processing_stages,
+    job_requires_encode,
+    job_takes_copy_path,
+    jobs_allow_hardware,
+    jobs_require_fonts,
 )
 from capacity import (
-    _REMUX_JOB_RAM_MB,
-    _estimate_job_ram_mb,
-    _get_available_ram_mb,
-    _max_estimated_job_ram_mb,
+    REMUX_JOB_RAM_MB,
+    estimate_job_ram_mb,
+    get_available_ram_mb,
+    max_estimated_job_ram_mb,
     resolve_copy_workers,
     resolve_max_workers,
 )
-from batch_context import BatchContext, _ResourceAdmission, _cancel_event, _check_cancelled
+from batch_context import BatchContext, BatchScheduling, ResourceAdmission, default_cancel_event, check_cancelled
 from ffmpeg_runner import (
-    _emit_batch_progress,
-    _emit_job_complete,
-    _emit_job_failed,
-    _job_cancelled_result,
-    _job_failed_result,
-    _retry_failed_enabled,
-    _safe_print,
-    _should_retry_failed_job,
+    emit_batch_progress as report_batch_progress,
+    emit_job_complete,
+    emit_job_failed,
+    job_cancelled_result,
+    job_failed_result,
+    retry_failed_enabled,
+    safe_print,
+    should_retry_failed_job,
 )
 
 JOB_MANIFEST_TYPE = "beru-job-manifest"
@@ -140,36 +138,37 @@ def _new_hardware_fallback_states(jobs):
 def _process_one(idx, job, ffmpeg_path, *, hw_encoder=None, ctx=None,
                  hardware_fallback=None):
     job_id = job.get("id", idx) if isinstance(job, dict) else idx
-    workers = ctx.max_workers if ctx else 1
-    if _check_cancelled(ctx):
-        return _job_cancelled_result(job_id)
+    workers = ctx.scheduling.max_workers if ctx else 1
+    if check_cancelled(ctx):
+        return job_cancelled_result(job_id)
     try:
         if not isinstance(job, dict):
             raise ValueError("Invalid job payload")
         if ctx is None:
             encoder = hw_encoder
-            if encoder is None and _job_requires_encode(job) and _jobs_allow_hardware([job]):
+            if encoder is None and job_requires_encode(job) and jobs_allow_hardware([job]):
                 encoder = encoders.detect_hw_encoder(ffmpeg_path)
-            ctx = BatchContext(ffmpeg_path=ffmpeg_path, hw_encoder=encoder,
-                               cancel_event=_cancel_event)
+            ctx = BatchContext(ffmpeg_path=ffmpeg_path, scheduling=BatchScheduling(hw_encoder=encoder),
+                               cancel_event=default_cancel_event)
         if job.get("kind") == "stabilization":
-            process_stabilization(job, ctx.ffmpeg_path,
-                ctx=ctx, run_ffmpeg=ffmpeg_runner._run_ffmpeg, encode_args=encode_args.build_encode_args)
+            process_stabilization(job, ctx.ffmpeg_path, ctx=ctx)
         else:
-            renderer = ClipRenderer(ctx, hardware_fallback=(
+            fallback = (
                 hardware_fallback if hardware_fallback is not None else HardwareFallbackState()
-            ))
+            )
             if job.get("kind") == "composition":
-                process_composition(job, renderer.ffmpeg_path, ctx=ctx,
-                    render_clip=renderer.render, run_ffmpeg=ffmpeg_runner._run_ffmpeg, encode_args=encode_args.build_encode_args)
+                process_composition(job, ctx=ctx, hardware_fallback=fallback)
             else:
+                renderer = ClipRenderer(ctx, hardware_fallback=fallback)
                 renderer.render({**job, "id": job_id} if "id" not in job else job)
-        _emit_job_complete(job_id, job["output_path"])
+        emit_job_complete(job_id, job["output_path"])
         return {"index": job_id, "status": "succeeded"}
+    except ProcessingCancelled:
+        return job_cancelled_result(job_id)
     except Exception as exc:
-        if str(exc) == "Cancelled" or _check_cancelled(ctx):
-            return _job_cancelled_result(job_id)
-        return _job_failed_result(job_id, str(exc), max_workers=workers)
+        if check_cancelled(ctx):
+            return job_cancelled_result(job_id)
+        return job_failed_result(job_id, str(exc), max_workers=workers)
 
 
 def _execute_batch(
@@ -184,8 +183,8 @@ def _execute_batch(
     if fallback_by_parent is None:
         fallback_by_parent = _new_hardware_fallback_states(jobs)
     ffmpeg_path = ctx.ffmpeg_path
-    max_workers = ctx.max_workers
-    hw_encoder = ctx.hw_encoder
+    max_workers = ctx.scheduling.max_workers
+    hw_encoder = ctx.scheduling.hw_encoder
     total = len(jobs)
     results = [None] * total
     state = {"succeeded": 0, "failed": 0, "cancelled": 0, "completed": 0}
@@ -194,7 +193,7 @@ def _execute_batch(
 
     pending = {"encode": deque(), "copy": deque()}
     for i, job in enumerate(jobs):
-        key = "copy" if _job_takes_copy_path(job) else "encode"
+        key = "copy" if job_takes_copy_path(job) else "encode"
         pending[key].append((i, job))
 
     if pending["copy"]:
@@ -213,16 +212,16 @@ def _execute_batch(
 
     def _job_ram_estimate_mb(job, pool):
         if pool == "copy":
-            return _REMUX_JOB_RAM_MB
+            return REMUX_JOB_RAM_MB
         profile = job.get("encode_profile", "balanced") if isinstance(job, dict) else "balanced"
         hw_failed = fallback_by_parent[id(job)].hardware_failed
         job_hw = hw_encoder if profile_allows_hardware(profile) and not hw_failed else None
-        return _estimate_job_ram_mb(job, job_hw, _job_requires_encode(job), profile)
+        return estimate_job_ram_mb(job, job_hw, job_requires_encode(job), profile)
 
     def _memory_allows_another(job_ram_mb):
         if pools["encode"]["outstanding"] + pools["copy"]["outstanding"] <= 0:
             return True
-        avail_mb = _get_available_ram_mb()
+        avail_mb = get_available_ram_mb()
         if avail_mb <= 0:
             return True
         return avail_mb >= job_ram_mb
@@ -250,12 +249,12 @@ def _execute_batch(
             job_pos = getattr(fut, "_beru_job_pos", -1)
             job = jobs[job_pos] if 0 <= job_pos < total else None
             job_id = job.get("id", job_pos) if isinstance(job, dict) else job_pos
-            result = _job_failed_result(job_id, str(e), max_workers=max_workers)
+            result = job_failed_result(job_id, str(e), max_workers=max_workers)
 
         if result.get("status") == "failed" and not (
-            defer_retryable and _should_retry_failed_job(result, max_workers)
+            defer_retryable and should_retry_failed_job(result, max_workers)
         ):
-            _emit_job_failed(result)
+            emit_job_failed(result)
 
         with state_lock:
             results[fut._beru_job_pos] = result
@@ -275,7 +274,7 @@ def _execute_batch(
                     fname = os.path.basename(job.get("input_path", "")) if isinstance(job, dict) else "?"
                 else:
                     fname = "?"
-                _emit_batch_progress(state, total, fname)
+                report_batch_progress(state, total, fname)
 
     def _mark_cancelled(job, i):
         job_id = job.get("id", i) if isinstance(job, dict) else i
@@ -286,8 +285,8 @@ def _execute_batch(
                 state["completed"] += 1
                 if emit_batch_progress:
                     fname = os.path.basename(job.get("input_path", "")) if isinstance(job, dict) else "?"
-                    _emit_batch_progress(state, total, fname)
-        _safe_print(json.dumps({
+                    report_batch_progress(state, total, fname)
+        safe_print(json.dumps({
             "type": "cancelled", "index": job_id,
         }))
 
@@ -296,7 +295,7 @@ def _execute_batch(
     ) as executor:
         futures = []
         while pending["encode"] or pending["copy"]:
-            if _check_cancelled(ctx):
+            if check_cancelled(ctx):
                 break
             progressed = False
             for name in ("encode", "copy"):
@@ -347,42 +346,46 @@ def _execute_batch(
 _HW_ENCODER_UNSET = object()
 
 
-def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_UNSET, ctx=None):
+def process_jobs(jobs, ffmpeg_path=None, max_workers=None, *, hw_encoder=_HW_ENCODER_UNSET, ctx=None):
     """Process jobs concurrently. Report progress to stdout.
 
     Args:
         hw_encoder: If provided (from batch pre-flight), it is used directly
             for profiles that allow hardware encoding.
-        ctx: State of this run, shared by every Job and retry pass. When
-            omitted, a fresh context captures the process defaults.
+        ctx: Run inputs shared by every Job and retry pass. Scheduling is
+            derived without changing this context. Without ctx, ffmpeg_path
+            captures fresh process defaults; with ctx, it must match its tools.
     """
+    if ctx is not None and ffmpeg_path is not None and ffmpeg_path != ctx.ffmpeg_path:
+        raise ValueError("ffmpeg_path conflicts with ctx.ffmpeg_path")
+    if ctx is None and ffmpeg_path is None:
+        raise ValueError("Provide ctx or ffmpeg_path")
     if ctx is not None and hw_encoder is _HW_ENCODER_UNSET:
-        hw_encoder = ctx.hw_encoder
+        hw_encoder = ctx.scheduling.hw_encoder
     if ctx is None:
         ctx = BatchContext(ffmpeg_path=ffmpeg_path, ffprobe_path=media_probe.FFPROBE)
-    ffmpeg_path = ctx.ffmpeg_path
 
-    if _jobs_require_fonts(jobs):
+    if jobs_require_fonts(jobs):
         fonts.reset_caches()
         fonts.get_system_fonts()
 
-    if not _jobs_allow_hardware(jobs):
+    if not jobs_allow_hardware(jobs):
         hw = None
     elif hw_encoder is _HW_ENCODER_UNSET:
-        hw = encoders.detect_hw_encoder(ffmpeg_path, env=ctx.env)
+        hw = encoders.detect_hw_encoder(ctx.ffmpeg_path, env=ctx.env)
     else:
         hw = hw_encoder
     max_pixels = 0
     has_video_filters = False
     encode_profiles = set()
-    for job in [stage for value in jobs if isinstance(value, dict) for stage in _job_processing_stages(value)]:
+    for job in [stage for value in jobs if isinstance(value, dict) for stage in job_processing_stages(value)]:
         if not isinstance(job, dict):
             continue
         w = int(job.get("source_width") or job.get("width") or 0)
         h = int(job.get("source_height") or job.get("height") or 0)
         if w > 0 and h > 0:
             max_pixels = max(max_pixels, w * h)
-        if _job_requires_encode(job):
+        if job_requires_encode(job):
             has_video_filters = True
         profile = (job.get("encode_profile") or "").strip().lower()
         if profile:
@@ -408,12 +411,10 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
             env=ctx.env,
         )
 
-    per_job_ram_mb = _max_estimated_job_ram_mb(
+    per_job_ram_mb = max_estimated_job_ram_mb(
         jobs, effective_hw, has_video_filters, encode_profile
     )
 
-    ctx.hw_encoder = hw
-    ctx.max_workers = max(1, max_workers)
     if hw:
         software_workers = resolve_max_workers(
             None,
@@ -424,18 +425,21 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
             jobs=jobs,
             env=ctx.env,
         )
-        software_ram_mb = _max_estimated_job_ram_mb(
+        software_ram_mb = max_estimated_job_ram_mb(
             jobs, None, has_video_filters, encode_profile
         )
-        ctx.sw_fallback_admission = _ResourceAdmission(
+        admission = ResourceAdmission(
             min(max_workers, software_workers), software_ram_mb, ctx=ctx
         )
     else:
-        ctx.sw_fallback_admission = None
+        admission = None
+    ctx = replace(ctx, scheduling=BatchScheduling(
+        hw_encoder=hw, max_workers=max(1, max_workers), sw_fallback_admission=admission,
+    ))
 
     total = len(jobs)
     copy_workers = resolve_copy_workers(
-        sum(1 for job in jobs if _job_takes_copy_path(job)), env=ctx.env
+        sum(1 for job in jobs if job_takes_copy_path(job)), env=ctx.env
     )
     mode = (ctx.env.get("BERU_WORKERS_MODE") or "balanced").strip().lower()
     logger.info(
@@ -443,10 +447,10 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
         "(mode=%s, encoder=%s, max_px=%d, "
         "est_ram_per_job=%dMB, avail_ram=%dMB), ffmpeg=%s",
         total, max_workers, copy_workers, mode, effective_hw or "libx264", max_pixels,
-        per_job_ram_mb, _get_available_ram_mb(), ffmpeg_path,
+        per_job_ram_mb, get_available_ram_mb(), ctx.ffmpeg_path,
     )
 
-    retry_enabled = _retry_failed_enabled(env=ctx.env) and max_workers > 1
+    retry_enabled = retry_failed_enabled(env=ctx.env) and max_workers > 1
     fallback_by_parent = _new_hardware_fallback_states(jobs)
     pass1 = _execute_batch(
         jobs,
@@ -462,24 +466,24 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
 
     retry_pairs = [
         (job, result) for job, result in pass1["failed_jobs"]
-        if _should_retry_failed_job(result, max_workers)
+        if should_retry_failed_job(result, max_workers)
     ]
     retry_candidates = [{**job, "id": result["index"]} for job, result in retry_pairs]
-    if retry_enabled and retry_candidates and _check_cancelled(ctx):
+    if retry_enabled and retry_candidates and check_cancelled(ctx):
         for _job, result in retry_pairs:
-            _emit_job_failed(result)
+            emit_job_failed(result)
     elif retry_enabled and retry_candidates:
         resource_retry = any(
             is_resource_pressure_error((result.get("raw_error") or result.get("error") or ""))
             for _job, result in pass1["failed_jobs"]
-            if _should_retry_failed_job(result, max_workers)
+            if should_retry_failed_job(result, max_workers)
         )
         reduced_workers = 1 if resource_retry else max(1, max_workers // 2)
         logger.info(
             "Retry pass: %d failed jobs at %d workers (was %d)",
             len(retry_candidates), reduced_workers, max_workers,
         )
-        retry_ctx = replace(ctx, max_workers=max(1, reduced_workers))
+        retry_ctx = replace(ctx, scheduling=replace(ctx.scheduling, max_workers=max(1, reduced_workers)))
         pass2 = _execute_batch(
             retry_candidates,
             retry_ctx,
@@ -489,7 +493,7 @@ def process_jobs(jobs, ffmpeg_path, max_workers=None, *, hw_encoder=_HW_ENCODER_
             },
             emit_batch_progress=False,
             copy_workers=resolve_copy_workers(
-                sum(1 for job in retry_candidates if _job_takes_copy_path(job)), env=ctx.env
+                sum(1 for job in retry_candidates if job_takes_copy_path(job)), env=ctx.env
             ),
         )
         for (_job, prev), new in zip(retry_pairs, pass2["results"]):
@@ -586,7 +590,7 @@ def _load_jobs_manifest(jobs_path):
 
 
 def _preflight_hw_encoder(jobs, *, verified, ctx=None):
-    if not _jobs_allow_hardware(jobs):
+    if not jobs_allow_hardware(jobs):
         return None, verified
     hw = encoders.detect_hw_encoder(
         ctx.ffmpeg_path if ctx is not None else media_probe.FFMPEG,
@@ -638,16 +642,16 @@ def job_worker_main():
             preflight_hw, hw_verified = _preflight_hw_encoder(
                 jobs, verified=hw_verified, ctx=ctx
             )
-            result = process_jobs(jobs, media_probe.FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
-            _safe_print(json.dumps({"type": "summary", **result}))
-            _safe_print(json.dumps({
+            result = process_jobs(jobs, hw_encoder=preflight_hw, ctx=ctx)
+            safe_print(json.dumps({"type": "summary", **result}))
+            safe_print(json.dumps({
                 "type": "run_end", "id": request_id,
                 "ok": result["failed"] == 0 and result["cancelled"] == 0,
             }))
         except Exception as exc:
             logger.exception("Job worker request failed")
-            _safe_print(json.dumps({"type": "error", "error": str(exc)}))
-            _safe_print(json.dumps(
+            safe_print(json.dumps({"type": "error", "error": str(exc)}))
+            safe_print(json.dumps(
                 {"type": "run_end", "id": request_id, "ok": False, "error": str(exc)}
             ))
 
@@ -684,7 +688,7 @@ def main():
 
     ctx = BatchContext(ffmpeg_path=media_probe.FFMPEG, ffprobe_path=media_probe.FFPROBE, jobs_file=sys.argv[1])
     preflight_hw, _ = _preflight_hw_encoder(jobs, verified=False, ctx=ctx)
-    result = process_jobs(jobs, media_probe.FFMPEG, hw_encoder=preflight_hw, ctx=ctx)
+    result = process_jobs(jobs, hw_encoder=preflight_hw, ctx=ctx)
     print(json.dumps({"type": "summary", **result}))
     sys.exit(1 if result["failed"] else 130 if result["cancelled"] else 0)
 

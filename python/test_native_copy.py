@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import ffmpeg_runner
 from batch_context import BatchContext
+from batch_errors import ProcessingCancelled
 
 
 class NativeCopyTests(unittest.TestCase):
@@ -43,8 +44,8 @@ class NativeCopyTests(unittest.TestCase):
                 ctx.cancel_event.set()
 
             with patch.object(ffmpeg_runner, "_emit_job_progress", side_effect=cancel_after_progress):
-                result = ffmpeg_runner._native_stream_copy(source, output, ctx=ctx, job_id=7)
-            self.assertEqual(result, (False, "Cancelled"))
+                with self.assertRaises(ProcessingCancelled):
+                    ffmpeg_runner._native_stream_copy(source, output, ctx=ctx, job_id=7)
             self.assertEqual(output.read_bytes(), first_block)
             self.assertTrue(percentages)
             self.assertTrue(all(percent < 100 for percent in percentages))

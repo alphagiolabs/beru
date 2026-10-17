@@ -79,6 +79,7 @@ function resolveOutputPathsForState(s) {
 }
 
 export function createQueueSlice(set, get) {
+  let thumbnailAbortControllers = new Set();
   const priorityThumbnailLoads = new Map();
   const pendingThumbnails = new Map();
   let thumbnailFlushQueued = false;
@@ -161,6 +162,110 @@ export function createQueueSlice(set, get) {
     });
   };
 
+  const patchQueueVideoInfo = (items, infos) => {
+    if (!Array.isArray(infos) || infos.length === 0) return;
+    set((s) => {
+      const infoByImport = new Map(items.map((item, i) => [item.importId, infos[i] || {}]));
+      const next = s.queue.map((item) => {
+        const info = infoByImport.get(item.importId);
+        return info ? mergeProbeIntoQueueItem(item, info) : item;
+      });
+      return { queue: next };
+    });
+  };
+
+  const scheduleThumbnailLoads = (api, toAdd) => {
+    if (!api?.getThumbnailBatch || toAdd.length === 0) return;
+
+    const THUMB_CHUNK = 4;
+    const MAX_THUMB_BATCHES_IN_FLIGHT = 2;
+
+    const abortController = new AbortController();
+    const registry = thumbnailAbortControllers;
+    registry?.add(abortController);
+    const unregister = () => registry?.delete(abortController);
+
+    const applyThumbResults = (paths, results) => {
+      if (abortController.signal.aborted || !Array.isArray(results)) return;
+      for (let i = 0; i < results.length; i++) {
+        queueThumbnail(paths[i], results[i]?.dataUrl);
+      }
+    };
+
+    const loadChunk = (paths) => {
+      if (abortController.signal.aborted) return Promise.resolve();
+      return api
+        .getThumbnailBatch(paths)
+        .then((results) => applyThumbResults(paths, results))
+        .catch(() => {});
+    };
+
+    const firstCount = Math.min(4, toAdd.length);
+    void get().prioritizeThumbnails(
+      [get().queue[get().selectedIdx]?.path],
+      { interactive: true },
+      api,
+    );
+    const firstPromise = loadChunk(toAdd.slice(0, firstCount));
+
+    const rest = toAdd.slice(firstCount);
+    if (rest.length === 0) {
+      firstPromise.then(unregister, unregister);
+      return;
+    }
+
+    const loadRestInChunks = () =>
+      new Promise((resolve) => {
+        let nextOff = 0;
+        let inFlight = 0;
+
+        const pump = () => {
+          if (abortController.signal.aborted) return resolve();
+          while (inFlight < MAX_THUMB_BATCHES_IN_FLIGHT && nextOff < rest.length) {
+            const off = nextOff;
+            nextOff += THUMB_CHUNK;
+            const slice = rest.slice(off, off + THUMB_CHUNK);
+            inFlight++;
+            loadChunk(slice).finally(() => {
+              inFlight--;
+              if (nextOff >= rest.length && inFlight === 0) return resolve();
+              pump();
+            });
+          }
+          if (nextOff >= rest.length && inFlight === 0) resolve();
+        };
+
+        pump();
+      });
+
+    const restPromise = new Promise((resolve) => {
+      const start = () => resolve(loadRestInChunks());
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(start, { timeout: 2000 });
+      } else {
+        setTimeout(start, 300);
+      }
+    });
+
+    Promise.all([firstPromise, restPromise]).then(unregister, unregister);
+  };
+
+  const saveUndo = () => {
+    const { queue, selectedIdx, undoStack } = get();
+    if (selectedIdx < 0 || selectedIdx >= queue.length) return;
+    set({
+      undoStack: [...undoStack.slice(-(MAX_UNDO_STACK - 1)), snapshotItem(queue[selectedIdx])],
+      redoStack: [],
+    });
+  };
+
+  const normalizeCurrentRegion = (region) => {
+    const bounds = get().videoBounds();
+    return clampRegionToVideo(
+      ensureNormalized(region, bounds?.width || 1920, bounds?.height || 1080),
+    );
+  };
+
   return {
     queue: [],
     selectedIdx: -1,
@@ -194,19 +299,6 @@ export function createQueueSlice(set, get) {
 
     outputPathsForAll: () => resolveOutputPathsForState(get()),
 
-    _patchQueueVideoInfo: (items, infos) => {
-      if (!Array.isArray(infos) || infos.length === 0) return;
-      set((s) => {
-        const infoByImport = new Map(items.map((item, i) => [item.importId, infos[i] || {}]));
-        const next = s.queue.map((item) => {
-          const info = infoByImport.get(item.importId);
-          return info ? mergeProbeIntoQueueItem(item, info) : item;
-        });
-        return { queue: next };
-      });
-    },
-
-    _thumbnailAbortControllers: new Set(),
     thumbnailsByPath: {},
 
     prioritizeThumbnails: (paths, { interactive = false } = {}, api = window.api) => {
@@ -221,7 +313,7 @@ export function createQueueSlice(set, get) {
             const pending = priorityThumbnailLoads.get(path);
             if (pending && (!interactive || pending.interactive)) return pending.promise;
             const controller = new AbortController();
-            const registry = get()._thumbnailAbortControllers;
+            const registry = thumbnailAbortControllers;
             registry.add(controller);
             const entry = { interactive };
             entry.promise = api
@@ -239,82 +331,6 @@ export function createQueueSlice(set, get) {
             return entry.promise;
           }),
       );
-    },
-
-    _scheduleThumbnailLoads: (api, toAdd) => {
-      if (!api?.getThumbnailBatch || toAdd.length === 0) return;
-
-      const THUMB_CHUNK = 4;
-      const MAX_THUMB_BATCHES_IN_FLIGHT = 2;
-
-      const abortController = new AbortController();
-      const registry = get()._thumbnailAbortControllers;
-      registry?.add(abortController);
-      const unregister = () => registry?.delete(abortController);
-
-      const applyThumbResults = (paths, results) => {
-        if (abortController.signal.aborted || !Array.isArray(results)) return;
-        for (let i = 0; i < results.length; i++) {
-          queueThumbnail(paths[i], results[i]?.dataUrl);
-        }
-      };
-
-      const loadChunk = (paths) => {
-        if (abortController.signal.aborted) return Promise.resolve();
-        return api
-          .getThumbnailBatch(paths)
-          .then((results) => applyThumbResults(paths, results))
-          .catch(() => {});
-      };
-
-      const firstCount = Math.min(4, toAdd.length);
-      void get().prioritizeThumbnails(
-        [get().queue[get().selectedIdx]?.path],
-        { interactive: true },
-        api,
-      );
-      const firstPromise = loadChunk(toAdd.slice(0, firstCount));
-
-      const rest = toAdd.slice(firstCount);
-      if (rest.length === 0) {
-        firstPromise.then(unregister, unregister);
-        return;
-      }
-
-      const loadRestInChunks = () =>
-        new Promise((resolve) => {
-          let nextOff = 0;
-          let inFlight = 0;
-
-          const pump = () => {
-            if (abortController.signal.aborted) return resolve();
-            while (inFlight < MAX_THUMB_BATCHES_IN_FLIGHT && nextOff < rest.length) {
-              const off = nextOff;
-              nextOff += THUMB_CHUNK;
-              const slice = rest.slice(off, off + THUMB_CHUNK);
-              inFlight++;
-              loadChunk(slice).finally(() => {
-                inFlight--;
-                if (nextOff >= rest.length && inFlight === 0) return resolve();
-                pump();
-              });
-            }
-            if (nextOff >= rest.length && inFlight === 0) resolve();
-          };
-
-          pump();
-        });
-
-      const restPromise = new Promise((resolve) => {
-        const start = () => resolve(loadRestInChunks());
-        if (typeof requestIdleCallback === "function") {
-          requestIdleCallback(start, { timeout: 2000 });
-        } else {
-          setTimeout(start, 300);
-        }
-      });
-
-      Promise.all([firstPromise, restPromise]).then(unregister, unregister);
     },
 
     addVideos: async (paths, api) => {
@@ -344,10 +360,10 @@ export function createQueueSlice(set, get) {
           }).patch,
       );
 
-      get()._scheduleThumbnailLoads(api, toAdd);
+      scheduleThumbnailLoads(api, toAdd);
 
       return fetchVideoInfos(api, toAdd)
-        .then((infos) => get()._patchQueueVideoInfo(newItems, infos))
+        .then((infos) => patchQueueVideoInfo(newItems, infos))
         .catch((err) => {
           swallow("getVideoInfoBatch", err);
           const lang = get().language;
@@ -385,13 +401,14 @@ export function createQueueSlice(set, get) {
     },
 
     clearQueue: () => {
-      const { queue, _thumbnailAbortControllers } = get();
+      const { queue } = get();
       if (queue.length === 0) return false;
-      for (const controller of _thumbnailAbortControllers ?? []) {
+      for (const controller of thumbnailAbortControllers) {
         try {
           controller.abort();
         } catch {}
       }
+      thumbnailAbortControllers = new Set();
       priorityThumbnailLoads.clear();
       pendingThumbnails.clear();
       set({
@@ -404,7 +421,6 @@ export function createQueueSlice(set, get) {
         excelMatchStatus: {},
         batchSummary: null,
         templateIdx: -1,
-        _thumbnailAbortControllers: new Set(),
         thumbnailsByPath: {},
       });
       return true;
@@ -443,17 +459,22 @@ export function createQueueSlice(set, get) {
       });
     },
 
+    setCurrentRegionDraft: (region) => {
+      if (!region) {
+        set({ currentRegion: null });
+        return;
+      }
+      const clamped = normalizeCurrentRegion(region);
+      if (clamped) set({ currentRegion: clamped });
+    },
+
     setCurrentRegion: (region) => {
       if (!region) {
         set({ currentRegion: null });
         return;
       }
-      const bounds = get().videoBounds();
-      const w = bounds?.width || 1920;
-      const h = bounds?.height || 1080;
       const isFreshDraw = region.w === 0 && region.h === 0;
-      const safe = ensureNormalized(region, w, h);
-      const clamped = clampRegionToVideo(safe);
+      const clamped = normalizeCurrentRegion(region);
       if (!clamped) return;
 
       const { sidebarMode, selectedTemplateRegionId } = get();
@@ -483,15 +504,6 @@ export function createQueueSlice(set, get) {
         return;
       }
       set({ selectedOperationIdx: opIdx, currentRegion: null });
-    },
-
-    _saveUndo: () => {
-      const { queue, selectedIdx, undoStack } = get();
-      if (selectedIdx < 0 || selectedIdx >= queue.length) return;
-      set({
-        undoStack: [...undoStack.slice(-(MAX_UNDO_STACK - 1)), snapshotItem(queue[selectedIdx])],
-        redoStack: [],
-      });
     },
 
     setVideoTransform: (patch) => {
@@ -561,7 +573,7 @@ export function createQueueSlice(set, get) {
       if (mode === "datetime" && parseClockStart(get().tempClock.clockStart) == null) return;
       const geometry = mode === "datetime" ? itemOutputGeometry(queue[selectedIdx]) : null;
       const stampRegion = geometry ? sourceRegionToOutput(currentRegion, geometry) : null;
-      get()._saveUndo();
+      saveUndo();
 
       const op = sanitizeOperation(
         createOperation({
@@ -611,7 +623,7 @@ export function createQueueSlice(set, get) {
       if (videoIdx < 0 || videoIdx >= queue.length) return;
       const ops = queue[videoIdx].operations;
       if (opIdx < 0 || opIdx >= ops.length) return;
-      if (videoIdx === selectedIdx) get()._saveUndo();
+      if (videoIdx === selectedIdx) saveUndo();
       const op = ops[opIdx];
       const regionId = get().findTemplateRegionIdForOp(op);
       const updated = [...queue];
@@ -642,7 +654,7 @@ export function createQueueSlice(set, get) {
       if (selectedIdx < 0) return;
       const ops = queue[selectedIdx]?.operations;
       if (!ops || fromIdx < 0 || fromIdx >= ops.length || toIdx < 0 || toIdx > ops.length) return;
-      get()._saveUndo();
+      saveUndo();
       const updated = [...queue];
       const nextOps = [...updated[selectedIdx].operations];
       const [moved] = nextOps.splice(fromIdx, 1);
@@ -671,7 +683,7 @@ export function createQueueSlice(set, get) {
     duplicateOperation: (opIdx) => {
       const { queue, selectedIdx } = get();
       if (selectedIdx < 0) return;
-      get()._saveUndo();
+      saveUndo();
       const updated = [...queue];
       const ops = [...updated[selectedIdx].operations];
       const clone = sanitizeOperation({
@@ -687,7 +699,7 @@ export function createQueueSlice(set, get) {
     updateOperationRegion: (opIdx, region, { recordHistory = true } = {}) => {
       const { queue, selectedIdx } = get();
       if (selectedIdx < 0) return;
-      if (recordHistory) get()._saveUndo();
+      if (recordHistory) saveUndo();
       const updated = [...queue];
       const ops = [...updated[selectedIdx].operations];
       ops[opIdx] = { ...ops[opIdx], region: { ...region } };
@@ -701,7 +713,7 @@ export function createQueueSlice(set, get) {
       const updated = [...queue];
       const ops = [...updated[videoIdx].operations];
       if (opIdx < 0 || opIdx >= ops.length) return;
-      if (recordHistory && videoIdx === selectedIdx) get()._saveUndo();
+      if (recordHistory && videoIdx === selectedIdx) saveUndo();
       const nextOp = { ...ops[opIdx], ...patch };
       ops[opIdx] = nextOp;
       updated[videoIdx] = { ...updated[videoIdx], operations: ops };
@@ -732,7 +744,7 @@ export function createQueueSlice(set, get) {
         text,
         ...pickTextStyle(style),
       });
-      if (videoIdx === get().selectedIdx) get()._saveUndo();
+      if (videoIdx === get().selectedIdx) saveUndo();
       const updated = [...queue];
       updated[videoIdx] = {
         ...updated[videoIdx],

@@ -7,8 +7,9 @@ import threading
 import time
 from collections import deque
 
-from batch_context import _check_cancelled
+from batch_context import check_cancelled
 from batch_errors import (
+    ProcessingCancelled,
     format_processing_error,
     is_hardware_encode_error,
     is_resource_pressure_error,
@@ -26,24 +27,22 @@ STALL_TIMEOUT_SEC = 120
 TRACKED_TIMEOUT_DURATION_FACTOR = 20
 UNTRACKED_TIMEOUT_DURATION_FACTOR = 3
 _tr_print_lock = threading.Lock()
-_last_job_progress_emit = {}
-_job_progress_lock = threading.Lock()
 _FFMPEG_TIME_RE = re.compile(r"time=(\d+):(\d+):(\d+\.?\d*)")
 _FFMPEG_SPEED_RE = re.compile(r"speed=\s*([0-9.]+)x")
 _FFMPEG_FRAME_RE = re.compile(r"(?:^|\s)frame=\s*(\d+)")
 
 
-def _safe_print(msg):
+def safe_print(msg):
     with _tr_print_lock:
         print(msg, flush=True)
 
 
-def _emit_job_complete(job_id, output_path):
-    _safe_print(json.dumps({"type": "complete", "index": job_id, "output": output_path}))
+def emit_job_complete(job_id, output_path):
+    safe_print(json.dumps({"type": "complete", "index": job_id, "output": output_path}))
 
 
-def _emit_batch_progress(state, total, fname):
-    _safe_print(json.dumps({
+def emit_batch_progress(state, total, fname):
+    safe_print(json.dumps({
         "type": "progress",
         "current": state["completed"],
         "total": total,
@@ -53,7 +52,7 @@ def _emit_batch_progress(state, total, fname):
     }))
 
 
-def _job_failed_result(job_id, raw_error, *, max_workers=None):
+def job_failed_result(job_id, raw_error, *, max_workers=None):
     user_error = format_processing_error(raw_error, max_workers=max_workers)
     result = {"index": job_id, "status": "failed", "error": user_error}
     if raw_error and raw_error != user_error:
@@ -61,43 +60,55 @@ def _job_failed_result(job_id, raw_error, *, max_workers=None):
     return result
 
 
-def _emit_job_failed(result):
+def emit_job_failed(result):
     payload = {"type": "error", "index": result["index"], "error": result["error"]}
     if result.get("raw_error"):
         payload["raw_error"] = result["raw_error"][-1000:]
-    _safe_print(json.dumps(payload))
+    safe_print(json.dumps(payload))
 
 
-def _job_cancelled_result(job_id):
-    _safe_print(json.dumps({"type": "cancelled", "index": job_id}))
+def job_cancelled_result(job_id):
+    safe_print(json.dumps({"type": "cancelled", "index": job_id}))
     return {"index": job_id, "status": "cancelled"}
 
 
-def _emit_job_progress(job_id, percent, speed, *, ctx=None, fields=None):
-    if job_id is None:
-        return
-    pct = round(max(0.0, min(100.0, percent)), 1)
-    now = time.monotonic()
-    times = ctx.progress_times if ctx is not None else _last_job_progress_emit
-    lock = ctx.progress_lock if ctx is not None else _job_progress_lock
-    with lock:
-        last_t = times.get(job_id, 0.0)
-        if pct < 100.0 and (now - last_t) < 1.0:
+def create_progress_reporter():
+    times = {}
+    lock = threading.Lock()
+
+    def report(job_id, percent, speed, *, fields=None):
+        if job_id is None:
             return
-        times[job_id] = now
-    _safe_print(json.dumps({
-        "type": "job_progress",
-        "index": job_id,
-        "percent": pct,
-        "speed": speed,
-        **(fields or {}),
-    }))
+        pct = round(max(0.0, min(100.0, percent)), 1)
+        now = time.monotonic()
+        with lock:
+            last_t = times.get(job_id, 0.0)
+            if pct < 100.0 and (now - last_t) < 1.0:
+                return
+            times[job_id] = now
+        safe_print(json.dumps({
+            "type": "job_progress",
+            "index": job_id,
+            "percent": pct,
+            "speed": speed,
+            **(fields or {}),
+        }))
+
+    return report
+
+
+_default_progress_reporter = create_progress_reporter()
+
+
+def _emit_job_progress(job_id, percent, speed, *, ctx=None, fields=None):
+    report = ctx.report_progress if ctx is not None else _default_progress_reporter
+    report(job_id, percent, speed, fields=fields)
 
 
 def _emit_warning(index, code, message):
     if index is None:
         return
-    _safe_print(json.dumps({"type": "warning", "index": index, "code": code, "message": message}))
+    safe_print(json.dumps({"type": "warning", "index": index, "code": code, "message": message}))
 
 
 def _is_transient_error(stderr_text):
@@ -136,11 +147,11 @@ class StderrBuffer:
         return "".join(self._buf)
 
 
-def _retry_failed_enabled(*, env=None):
+def retry_failed_enabled(*, env=None):
     return _env_flag("BERU_RETRY_FAILED", True, env=env)
 
 
-def _should_retry_failed_job(result, max_workers):
+def should_retry_failed_job(result, max_workers):
     if result.get("status") != "failed":
         return False
     err = result.get("raw_error") or result.get("error") or ""
@@ -305,8 +316,8 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=N
             returncode = proc.poll()
             if returncode is not None:
                 break
-            if _check_cancelled(ctx):
-                failure = "Cancelled"
+            if check_cancelled(ctx):
+                failure = ProcessingCancelled()
                 break
             now = time.monotonic()
             if now >= deadline:
@@ -331,7 +342,9 @@ def _run_ffmpeg_stream(cmd, timeout_sec, job_id=None, duration_sec=0.0, *, ctx=N
     if failure:
         _cleanup_ffmpeg_partial(cmd)
         detail = _extract_error_line(stderr)
-        return False, failure if failure == "Cancelled" or not detail else f"{failure}: {detail}"
+        if isinstance(failure, ProcessingCancelled):
+            raise failure
+        return False, failure if not detail else f"{failure}: {detail}"
 
     if returncode == 0:
         output = _output_path_from_ffmpeg_cmd(cmd) if _input_path_from_ffmpeg_cmd(cmd) else None
@@ -349,9 +362,9 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None
         factor = TRACKED_TIMEOUT_DURATION_FACTOR if job_id is not None else UNTRACKED_TIMEOUT_DURATION_FACTOR
         timeout_sec = max(timeout_sec, int(duration_sec * factor))
     for attempt in range(MAX_RETRIES + 1):
-        if _check_cancelled(ctx):
+        if check_cancelled(ctx):
             _cleanup_ffmpeg_partial(cmd)
-            return False, "Cancelled"
+            raise ProcessingCancelled()
         try:
             logger.debug("FFmpeg cmd: %s", " ".join(str(x) for x in cmd)[:500])
             t0 = time.perf_counter()
@@ -372,6 +385,9 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None
                 continue
             _cleanup_ffmpeg_partial(cmd)
             return False, stderr if stderr else "Unknown error"
+        except ProcessingCancelled:
+            _cleanup_ffmpeg_partial(cmd)
+            raise
         except Exception as e:
             _cleanup_ffmpeg_partial(cmd)
             if attempt < MAX_RETRIES:
@@ -383,7 +399,7 @@ def _run_ffmpeg(cmd, timeout_sec=600, job_id=None, duration_sec=0.0, *, ctx=None
 
 def _wait_retry(delay, ctx):
     deadline = time.monotonic() + delay
-    while not _check_cancelled(ctx):
+    while not check_cancelled(ctx):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             break
@@ -401,8 +417,8 @@ def _native_stream_copy(input_path, output_path, *, ctx=None, job_id=None):
             buffer = bytearray(min(8 * 1024 * 1024, max(1, total_bytes)))
             view = memoryview(buffer)
             while True:
-                if _check_cancelled(ctx):
-                    return False, "Cancelled"
+                if check_cancelled(ctx):
+                    raise ProcessingCancelled()
                 count = fin.readinto(buffer)
                 if not count:
                     _emit_job_progress(job_id, 100, None, ctx=ctx)

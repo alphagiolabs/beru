@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "base": { "sourceWidth": 1920, "sourceHeight": 1080, "duration": 10, "operations": [] },
+  "cases": [
+    { "id": "identity", "item": {}, "expected": false },
+    { "id": "quarter-turn", "item": { "transform": { "rotation": 90 } }, "expected": true },
+    { "id": "invalid-rotation", "item": { "transform": { "rotation": 45 } }, "expected": false },
+    { "id": "horizontal-flip", "item": { "transform": { "flipH": true } }, "expected": true },
+    { "id": "vertical-flip", "item": { "transform": { "flipV": true } }, "expected": true },
+    { "id": "downsize", "item": { "transform": { "outputHeight": 720 } }, "expected": true },
+    { "id": "same-height", "item": { "transform": { "outputHeight": 1080 } }, "expected": false },
+    {
+      "id": "height-does-not-enlarge",
+      "item": { "transform": { "outputHeight": 2160 } },
+      "expected": false
+    },
+    {
+      "id": "explicit-size",
+      "item": { "transform": { "outputWidth": 1920, "outputHeight": 1080 } },
+      "expected": true
+    },
+    {
+      "id": "height-without-probe",
+      "item": { "sourceHeight": 0, "transform": { "outputHeight": 720 } },
+      "expected": true
+    },
+    { "id": "retime", "item": { "timing": { "rate": 2 } }, "expected": true },
+    { "id": "invalid-rate-defaults", "item": { "timing": { "rate": 8 } }, "expected": false },
+    { "id": "repeat", "item": { "timing": { "repeatCount": 2 } }, "expected": true },
+    { "id": "trim-start", "item": { "trimStart": 1 }, "expected": true },
+    { "id": "trim-end", "item": { "trimEnd": 9 }, "expected": true },
+    {
+      "id": "trim-clamps-to-source",
+      "item": { "trimStart": -1, "trimEnd": 20 },
+      "expected": false
+    },
+    {
+      "id": "empty-trim-is-not-exported",
+      "item": { "trimStart": 5, "trimEnd": 5 },
+      "expected": false
+    },
+    {
+      "id": "blur",
+      "item": {
+        "operations": [{ "mode": "blur", "region": { "x": 0, "y": 0, "w": 0.5, "h": 0.5 } }]
+      },
+      "expected": true
+    },
+    {
+      "id": "empty-template-text",
+      "item": { "operations": [{ "mode": "text", "text": "  " }] },
+      "expected": false
+    },
+    {
+      "id": "empty-image",
+      "item": { "operations": [{ "mode": "image", "imagePath": "" }] },
+      "expected": false
+    },
+    {
+      "id": "empty-clock",
+      "item": { "operations": [{ "mode": "datetime", "clockStart": "" }] },
+      "expected": false
+    },
+    {
+      "id": "watermark",
+      "item": {},
+      "watermark": { "enabled": true, "type": "text", "text": "WM" },
+      "expected": true
+    },
+    {
+      "id": "disabled-watermark",
+      "item": {},
+      "watermark": { "enabled": false },
+      "expected": false
+    },
+    {
+      "id": "audio-keeps-video-copy",
+      "item": { "audio": { "gain": 0.5, "muted": true } },
+      "expected": false
+    }
+  ]
+}

@@ -84,8 +84,8 @@ for value in json.load(sys.stdin):
     entry = value["job"]
     job = {"video_codec": entry.get("videoCodec", ""), "pix_fmt": entry.get("pixFmt", ""),
            "source_width": entry.get("sourceWidth", 0), "source_height": entry.get("sourceHeight", 0)}
-    with patch("capacity.os.cpu_count", return_value=8), patch("capacity._get_available_ram_mb", return_value=value["availableRamMb"]):
-        ram = capacity._estimate_job_ram_mb(job, value["hwEncoder"], value["hasVideoFilters"], value["encodeProfile"])
+    with patch("capacity.os.cpu_count", return_value=8), patch("capacity.get_available_ram_mb", return_value=value["availableRamMb"]):
+        ram = capacity.estimate_job_ram_mb(job, value["hwEncoder"], value["hasVideoFilters"], value["encodeProfile"])
         workers = capacity.resolve_max_workers(value["hwEncoder"], 8, job["source_width"] * job["source_height"],
             has_video_filters=value["hasVideoFilters"], encode_profile=value["encodeProfile"], jobs=[job], env={})
         results.append([ram, workers])

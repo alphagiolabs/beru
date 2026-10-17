@@ -4,9 +4,9 @@ import { createUpdaterHarness } from "./updater-main.harness.mjs";
 describe("main/updater.js cancel before quitAndInstall", () => {
   let harness;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers({ toFake: ["setImmediate", "setTimeout"] });
-    harness = createUpdaterHarness();
+    harness = await createUpdaterHarness();
   });
 
   afterEach(() => {

@@ -29,7 +29,7 @@ describe("operation editing (undo + addOperation)", () => {
       ],
     });
 
-    useEditorStore.getState()._saveUndo();
+    useEditorStore.getState().updateOperationRegion(0, { ...region, x: 0.11 });
     expect(useEditorStore.getState().undoStack).toHaveLength(1);
 
     for (let i = 0; i < 20; i++) {

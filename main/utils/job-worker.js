@@ -1,5 +1,6 @@
 import { spawnProcessor } from "./spawn-processor.js";
 import { createLineWorker } from "./line-worker.js";
+import { isRunEvent, WORKER_EVENTS } from "../../shared/run-events.js";
 
 const STARTUP_TIMEOUT_MS = 30_000;
 const RUN_IDLE_TIMEOUT_MS = 5 * 60_000;
@@ -36,7 +37,7 @@ const lineWorker = createLineWorker({
   spawnProc: (spawnSpec) =>
     spawnProcessor({ command: spawnSpec.command, args: [...spawnSpec.args, "--job-worker"] }),
   onMessage: (msg, line, proc) => {
-    if (msg && msg.type === "run_end" && activeRun?.proc === proc) {
+    if (msg && msg.type === WORKER_EVENTS.runEnd && activeRun?.proc === proc) {
       if (msg.id != null && msg.id !== activeRun.id) {
         console.error("[beru] Job worker returned an obsolete request id:", msg.id);
         return;
@@ -50,12 +51,7 @@ const lineWorker = createLineWorker({
       return;
     }
 
-    if (
-      activeRun?.proc === proc &&
-      ["progress", "job_progress", "complete", "error", "cancelled", "summary", "warning"].includes(
-        msg?.type,
-      )
-    ) {
+    if (activeRun?.proc === proc && isRunEvent(msg)) {
       activeRun.timer.refresh();
     }
 

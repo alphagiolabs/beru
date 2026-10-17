@@ -79,9 +79,10 @@ describe("Batch Export / Excel coherent transitions", () => {
     expect(states[0].queue[0].operations[0]).toMatchObject({ id: op.id, text: "renamed" });
   });
 
-  it("loads project template, workbook and derived overlays together", () => {
-    const states = observe(() =>
-      get()._applyProject({
+  it("loads project template, workbook and derived overlays together", async () => {
+    api.loadProject = vi.fn(async () => ({
+      success: true,
+      data: {
         type: "beru-project",
         templateRegions: [{ ...template, id: 2 }],
         excel: {
@@ -89,18 +90,33 @@ describe("Batch Export / Excel coherent transitions", () => {
           headers: ["id", "text"],
           mapping: { idColumn: "id", columns: { 2: "text" } },
         },
-      }),
-    );
+      },
+    }));
+    const states = [];
+    const off = useEditorStore.subscribe((state) => states.push(state));
+    try {
+      await get().loadProject();
+    } finally {
+      off();
+    }
     expect(states).toHaveLength(1);
     expect(states[0].templateRegions[0].id).toBe(2);
     expect(states[0].excelRowIndexByFilename).toEqual({ a: 0 });
     expect(states[0].queue[0].operations.find((op) => op.batchRegionId === 2).text).toBe("Project");
   });
 
-  it("clears obsolete workbook indices when loading a project without Excel", () => {
-    const states = observe(() =>
-      get()._applyProject({ type: "beru-project", templateRegions: [] }),
-    );
+  it("clears obsolete workbook indices when loading a project without Excel", async () => {
+    api.loadProject = vi.fn(async () => ({
+      success: true,
+      data: { type: "beru-project", templateRegions: [] },
+    }));
+    const states = [];
+    const off = useEditorStore.subscribe((state) => states.push(state));
+    try {
+      await get().loadProject();
+    } finally {
+      off();
+    }
     expect(states).toHaveLength(1);
     expect(states[0].excelRows).toEqual([]);
     expect(states[0].excelRowIndexByFilename).toEqual({});

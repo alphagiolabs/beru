@@ -2,9 +2,12 @@
 import math
 import os
 import tempfile
+import encode_args
+import ffmpeg_runner
 import media_probe
 from media_paths import _validated_job_media
-from batch_context import _check_cancelled
+from batch_context import check_cancelled
+from batch_errors import ProcessingCancelled
 from clip_timing import MAX_OUTPUT_DURATION_SECONDS
 
 SMOOTHING = {'low': 10, 'medium': 20, 'high': 30}
@@ -30,13 +33,13 @@ def _filter_path(path):
     return ''.join('\\' + char if char in "\\'[],;" else char for char in text)
 
 
-def process_stabilization(job, ffmpeg_path, *, ctx, run_ffmpeg, encode_args):
+def process_stabilization(job, ffmpeg_path, *, ctx):
     intensity, edges, sample = stabilization_settings(job)
     job = _validated_job_media(job, require_output=True)
     if os.path.normcase(job['input_path']) == os.path.normcase(job['output_path']):
         raise ValueError('Stabilization output would overwrite its source')
-    if _check_cancelled(ctx):
-        raise RuntimeError('Cancelled')
+    if check_cancelled(ctx):
+        raise ProcessingCancelled()
     info = media_probe.ffprobe(job['input_path'], ffmpeg_bin=ffmpeg_path,
                               ffprobe_bin=ctx.ffprobe_path if ctx else media_probe.find_ffprobe(ffmpeg_path))
     if not info.get('width') or not info.get('height') or info.get('color_transfer') in ('smpte2084', 'arib-std-b67'):
@@ -46,7 +49,7 @@ def process_stabilization(job, ffmpeg_path, *, ctx, run_ffmpeg, encode_args):
         duration = min(duration, float(sample))
     if not math.isfinite(duration) or duration <= 0 or duration > MAX_SOURCE_SECONDS:
         raise ValueError('Invalid stabilization duration')
-    workers = ctx.max_workers if ctx else 1
+    workers = ctx.scheduling.max_workers if ctx else 1
     run_directory = os.path.dirname(os.path.abspath(ctx.jobs_file)) if ctx and ctx.jobs_file else None
     os.makedirs(os.path.dirname(job['output_path']) or '.', exist_ok=True)
     limit = ['-t', f'{duration:.6f}'] if sample is not None else []
@@ -55,22 +58,22 @@ def process_stabilization(job, ffmpeg_path, *, ctx, run_ffmpeg, encode_args):
         detect = [ffmpeg_path, '-nostdin', '-xerror', '-y', '-loglevel', 'error', '-progress', 'pipe:2', '-nostats',
                   '-i', job['input_path'], *limit, '-an', '-vf', f'vidstabdetect=shakiness=5:accuracy=15:result={_filter_path(transforms)}',
                   '-f', 'null', '-']
-        ok, error = run_ffmpeg(detect, job_id=job.get('id', -1), duration_sec=duration, ctx=ctx, progress_range=(0, 40))
+        ok, error = ffmpeg_runner._run_ffmpeg(detect, job_id=job.get('id', -1), duration_sec=duration, ctx=ctx, progress_range=(0, 40))
         if not ok:
             raise RuntimeError(error)
-        if _check_cancelled(ctx):
-            raise RuntimeError('Cancelled')
+        if check_cancelled(ctx):
+            raise ProcessingCancelled()
         zoom = 'optzoom=1:zoomspeed=0.25' if edges == 'zoom' else 'optzoom=0:zoom=0:crop=black'
         transform = f'vidstabtransform=input={_filter_path(transforms)}:smoothing={SMOOTHING[intensity]}:{zoom}:interpol=bicubic'
         audio = ['-c:a', 'copy'] if info.get('audio_codec') in COPYABLE_AUDIO else ['-c:a', 'aac', '-b:a', '192k']
         cmd = [ffmpeg_path, '-nostdin', '-xerror', '-y', '-loglevel', 'error', '-progress', 'pipe:2', '-nostats',
                '-i', job['input_path'], *limit, '-map', '0:v:0', '-map', '0:a:0?', '-vf', transform, *audio,
                '-pix_fmt', 'yuv420p']
-        cmd += encode_args(ffmpeg_path, job.get('encode_profile', 'balanced'), job, force_software=True, active_workers=workers)
+        cmd += encode_args.build_encode_args(ffmpeg_path, job.get('encode_profile', 'balanced'), job, force_software=True, active_workers=workers)
         if os.path.splitext(job['output_path'])[1].lower() in ('.mp4', '.mov'):
             cmd += ['-movflags', '+faststart']
         cmd.append(job['output_path'])
-        ok, error = run_ffmpeg(cmd, job_id=job.get('id', -1), duration_sec=duration, ctx=ctx, progress_range=(40, 100))
+        ok, error = ffmpeg_runner._run_ffmpeg(cmd, job_id=job.get('id', -1), duration_sec=duration, ctx=ctx, progress_range=(40, 100))
         if not ok:
             raise RuntimeError(error)
     return {'index': job.get('id', -1), 'status': 'succeeded'}

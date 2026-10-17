@@ -15,8 +15,9 @@ import { runWithConcurrency } from "./utils/concurrency.js";
 import { buildJobManifest } from "../shared/build-job-manifest.js";
 import { translateProcessorErrorMessage } from "./utils/process-input-validation.js";
 import { IPC_EVENTS, emitRunEvent } from "../shared/ipc-channels.js";
+import { RUN_EVENTS, RUN_LIFECYCLE, isRunEvent } from "../shared/run-events.js";
 
-export const PROCESSING_LOCK_MAX_MS = 5 * 60 * 1000;
+const PROCESSING_LOCK_MAX_MS = 5 * 60 * 1000;
 const CANCEL_KILL_GRACE_MS = 1500;
 
 let activeRun = null;
@@ -29,7 +30,11 @@ const isInterrupted = (run) => !isCurrent(run) || run.cancellation || getAppIsQu
 const isChildAlive = (proc) => Boolean(proc && proc.exitCode == null && proc.signalCode == null);
 
 function eventChannel(run, channel) {
-  if (channel === IPC_EVENTS.onRunStarted || channel === IPC_EVENTS.onFinished) return channel;
+  if (
+    channel === IPC_EVENTS[RUN_LIFECYCLE.started] ||
+    channel === IPC_EVENTS[RUN_LIFECYCLE.finished]
+  )
+    return channel;
   return run.events ? run.events[channel] : channel;
 }
 
@@ -53,7 +58,7 @@ function settlePendingJobs(
     if (result) continue;
     run.jobs.set(index, { status: cancelled ? "cancelled" : "failed", error });
     emit(run, cancelled ? IPC_EVENTS.onJobCancelled : IPC_EVENTS.onJobError, {
-      type: cancelled ? "cancelled" : "error",
+      type: cancelled ? RUN_EVENTS.cancelled.type : RUN_EVENTS.error.type,
       index,
       ...(!cancelled ? { error } : {}),
     });
@@ -67,7 +72,7 @@ function finish(run, result, channel, payload) {
     const outcomes = [...run.jobs.values()];
     emit(run, IPC_EVENTS.onSummary, {
       ...run.summary,
-      type: "summary",
+      type: RUN_EVENTS.summary.type,
       total: outcomes.length,
       succeeded: outcomes.filter((job) => job.status === "succeeded").length,
       failed: outcomes.filter((job) => job.status === "failed").length,
@@ -142,7 +147,11 @@ async function completeOutput(run, msg) {
     run.outputError = true;
     run.lastError = "No se pudo guardar la exportación: " + err.message;
     run.jobs.set(msg.index, { status: "failed", error: run.lastError });
-    emit(run, IPC_EVENTS.onJobError, { type: "error", index: msg.index, error: run.lastError });
+    emit(run, IPC_EVENTS.onJobError, {
+      type: RUN_EVENTS.error.type,
+      index: msg.index,
+      error: run.lastError,
+    });
   }
 }
 
@@ -150,43 +159,48 @@ function dispatchProcessorLine(run, line) {
   if (!isCurrent(run) || !line.trim()) return;
   try {
     const msg = JSON.parse(line);
-    if (!msg || typeof msg !== "object") throw new Error("Respuesta inválida del procesador");
+    if (!isRunEvent(msg)) throw new Error("Respuesta inválida del procesador");
+    const event = Object.values(RUN_EVENTS).find((event) => event.type === msg.type);
+    if (!event) return;
+    const channel = IPC_EVENTS[event.subscription];
     if (
-      ["complete", "cancelled", "job_progress"].includes(msg.type) ||
-      (msg.type === "error" && msg.index != null)
+      [RUN_EVENTS.complete, RUN_EVENTS.cancelled, RUN_EVENTS.jobProgress].includes(event) ||
+      (event === RUN_EVENTS.error && msg.index != null)
     ) {
       if (!run.jobs.has(msg.index))
         throw new Error("El procesador devolvió un trabajo desconocido");
       if (run.jobs.get(msg.index)?.status === "succeeded") return;
     }
-    if (msg.type === "progress") emit(run, IPC_EVENTS.onProgress, msg);
-    else if (msg.type === "job_progress") emit(run, IPC_EVENTS.onJobProgress, msg);
-    else if (msg.type === "complete") {
+    if (event === RUN_EVENTS.progress || event === RUN_EVENTS.jobProgress) emit(run, channel, msg);
+    else if (event === RUN_EVENTS.complete) {
       if (!run.promotions.has(msg.index)) run.promotions.set(msg.index, completeOutput(run, msg));
-    } else if (msg.type === "cancelled") {
+    } else if (event === RUN_EVENTS.cancelled) {
       run.jobs.set(msg.index, { status: "cancelled" });
-      emit(run, IPC_EVENTS.onJobCancelled, msg);
-    } else if (msg.type === "error") {
+      emit(run, channel, msg);
+    } else if (event === RUN_EVENTS.error) {
       const error = msg.error || "Unknown error";
       if (Number.isInteger(msg.index)) {
         run.jobs.set(msg.index, { status: error === "Cancelled" ? "cancelled" : "failed", error });
         if (error === "Cancelled")
-          emit(run, IPC_EVENTS.onJobCancelled, { type: "cancelled", index: msg.index });
-        else emit(run, IPC_EVENTS.onJobError, msg);
+          emit(run, IPC_EVENTS[RUN_EVENTS.cancelled.subscription], {
+            type: RUN_EVENTS.cancelled.type,
+            index: msg.index,
+          });
+        else emit(run, IPC_EVENTS[event.jobSubscription], msg);
       } else {
         run.lastError = translateProcessorErrorMessage(error);
         run.protocolError = true;
         emitError(run, run.lastError);
       }
-    } else if (msg.type === "summary") {
+    } else if (event === RUN_EVENTS.summary) {
       run.summary = msg;
-    } else if (msg.type === "warning") {
-      emit(run, IPC_EVENTS.onRunWarning, {
+    } else if (event === RUN_EVENTS.warning) {
+      emit(run, channel, {
         index: msg.index,
         code: msg.code || "unknown",
         message: msg.message || "",
       });
-    } else throw new Error("Evento desconocido: " + msg.type);
+    }
   } catch (err) {
     run.protocolError = true;
     run.lastError = "Respuesta inválida del procesador: " + err.message;
@@ -264,7 +278,7 @@ function watchWorker(run, worker) {
         for (const [index, result] of run.jobs) {
           if (!result)
             emit(run, IPC_EVENTS.onJobError, {
-              type: "error",
+              type: RUN_EVENTS.error.type,
               index,
               error: error + ": " + killError.message,
             });

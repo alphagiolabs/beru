@@ -11,6 +11,53 @@ const { default: useEditorStore } = await import("../src/stores/useEditorStore.j
 describe("queueSlice", () => {
   beforeEach(() => resetEditorState(useEditorStore, mockApi));
 
+  it.each([
+    [
+      { x: 0.9, y: 0.9, w: 0.3, h: 0.2 },
+      { x: 0.7, y: 0.8, w: 0.3, h: 0.2 },
+    ],
+    [
+      { x: 1728, y: 972, w: 576, h: 216 },
+      { x: 0.7, y: 0.8, w: 0.3, h: 0.2 },
+    ],
+    [
+      { x: 0.2, y: 0.3, w: 0, h: 0 },
+      { x: 0.2, y: 0.3, w: 0.01, h: 0.01 },
+    ],
+    [null, null],
+  ])(
+    "normalizes a region draft without changing template, selection or history (%j)",
+    (input, expected) => {
+      useEditorStore.setState({
+        queue: [makeQueueItem()],
+        selectedIdx: 0,
+        sidebarMode: "batch",
+        selectedOperationIdx: 0,
+        selectedTemplateRegionId: "slot",
+        currentRegion: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 },
+        templateRegions: [{ id: "slot", region: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 } }],
+        undoStack: [{ operations: [] }],
+        redoStack: [{ operations: [] }],
+      });
+      const before = useEditorStore.getState();
+      before.setCurrentRegionDraft(input);
+      const after = useEditorStore.getState();
+      expect(after.currentRegion).toEqual(expected);
+      expect(after.queue).toBe(before.queue);
+      expect(after.templateRegions).toBe(before.templateRegions);
+      expect(after.selectedOperationIdx).toBe(0);
+      expect(after.selectedTemplateRegionId).toBe("slot");
+      expect(after.undoStack).toBe(before.undoStack);
+      expect(after.redoStack).toBe(before.redoStack);
+    },
+  );
+
+  it("rejects a non-finite region draft without changing state", () => {
+    const before = useEditorStore.getState();
+    before.setCurrentRegionDraft({ x: NaN, y: 0, w: 0.2, h: 0.2 });
+    expect(useEditorStore.getState()).toBe(before);
+  });
+
   it("applies pending metadata to the surviving video after an earlier item is removed", async () => {
     let resolveProbe;
     mockApi.getVideoInfoBatch.mockImplementationOnce(

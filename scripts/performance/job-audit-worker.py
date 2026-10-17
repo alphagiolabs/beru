@@ -21,7 +21,7 @@ import ffmpeg_runner
 import filters
 import job_classify
 import media_probe
-from batch_context import BatchContext
+from batch_context import BatchContext, BatchScheduling
 
 processor._init_ffmpeg_globals()
 original_popen = subprocess.Popen
@@ -247,8 +247,8 @@ def audit_one(idx, job, ffmpeg_path, *, ctx=None, hw_encoder=None, hardware_fall
                       python_process_cpu_seconds=(time.process_time() - process_cpu_started
                           if "jobs" not in request or request.get("serial") else None),
                       ended=time.time() * 1000,
-                      estimated_ram_mb=capacity._estimate_job_ram_mb(
-                          job, ctx.hw_encoder, job_classify._job_requires_encode(job),
+                      estimated_ram_mb=capacity.estimate_job_ram_mb(
+                          job, ctx.scheduling.hw_encoder, job_classify.job_requires_encode(job),
                           job.get("encode_profile", "balanced")))
         for command, child in zip(active["commands"], active.pop("_children")):
             if child.poll() is not None:
@@ -281,7 +281,7 @@ for line in sys.stdin:
     result_lock = threading.Lock()
     configure(request["variant"])
     context = BatchContext(ffmpeg_path=media_probe.FFMPEG, ffprobe_path=media_probe.FFPROBE,
-                           max_workers=request.get("workers", 1), hw_encoder=request.get("hardware"),
+                           scheduling=BatchScheduling(max_workers=request.get("workers", 1), hw_encoder=request.get("hardware")),
                            env={**os.environ, "BERU_RETRY_FAILED": "0", "BERU_COPY_WORKERS": "1"})
     started = time.perf_counter()
     batch_cpu_started = time.process_time()
@@ -291,8 +291,8 @@ for line in sys.stdin:
                 for idx, job in enumerate(request["jobs"]):
                     audit_one(idx, job, media_probe.FFMPEG, ctx=context)
             else:
-                processor.process_jobs(request["jobs"], media_probe.FFMPEG,
-                                       max_workers=context.max_workers, ctx=context)
+                processor.process_jobs(request["jobs"],
+                                       max_workers=context.scheduling.max_workers, ctx=context)
             print(json.dumps({"type": "audit_batch_result", "runs": measured_jobs,
                               "seconds": time.perf_counter() - started,
                               "python_process_cpu_seconds": time.process_time() - batch_cpu_started}), flush=True)

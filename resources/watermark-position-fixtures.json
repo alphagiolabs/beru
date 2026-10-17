@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "frame": {
+    "width": 640,
+    "height": 360
+  },
+  "mark": {
+    "width": 80,
+    "height": 20
+  },
+  "cases": [
+    {
+      "id": "top-left",
+      "position": "top-left",
+      "expected": {
+        "x": 10,
+        "y": 10
+      },
+      "listed": true
+    },
+    {
+      "id": "top-center",
+      "position": "top-center",
+      "expected": {
+        "x": 280,
+        "y": 10
+      },
+      "listed": true
+    },
+    {
+      "id": "top-right",
+      "position": "top-right",
+      "expected": {
+        "x": 550,
+        "y": 10
+      },
+      "listed": true
+    },
+    {
+      "id": "center-left",
+      "position": "center-left",
+      "expected": {
+        "x": 10,
+        "y": 170
+      },
+      "listed": true
+    },
+    {
+      "id": "center",
+      "position": "center",
+      "expected": {
+        "x": 280,
+        "y": 170
+      },
+      "listed": true
+    },
+    {
+      "id": "center-right",
+      "position": "center-right",
+      "expected": {
+        "x": 550,
+        "y": 170
+      },
+      "listed": true
+    },
+    {
+      "id": "bottom-left",
+      "position": "bottom-left",
+      "expected": {
+        "x": 10,
+        "y": 330
+      },
+      "listed": true
+    },
+    {
+      "id": "bottom-center",
+      "position": "bottom-center",
+      "expected": {
+        "x": 280,
+        "y": 330
+      },
+      "listed": true
+    },
+    {
+      "id": "bottom-right",
+      "position": "bottom-right",
+      "expected": {
+        "x": 550,
+        "y": 330
+      },
+      "listed": true
+    },
+    {
+      "id": "diagonal",
+      "position": "diagonal",
+      "expected": {
+        "x": 550,
+        "y": 330
+      }
+    },
+    {
+      "id": "toString",
+      "position": "toString",
+      "expected": {
+        "x": 550,
+        "y": 330
+      }
+    },
+    {
+      "id": "__proto__",
+      "position": "__proto__",
+      "expected": {
+        "x": 550,
+        "y": 330
+      }
+    },
+    {
+      "id": "empty-position",
+      "position": "",
+      "expected": {
+        "x": 550,
+        "y": 330
+      }
+    },
+    {
+      "id": "null-position",
+      "position": null,
+      "expected": {
+        "x": 550,
+        "y": 330
+      }
+    },
+    {
+      "id": "missing-position",
+      "expected": {
+        "x": 550,
+        "y": 330
+      }
+    }
+  ]
+}

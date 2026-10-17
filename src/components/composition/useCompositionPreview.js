@@ -3,22 +3,23 @@ import useEditorStore from "../../stores/useEditorStore.js";
 import { buildExportJob } from "../../utils/export-pipeline.js";
 import { createJobSignatureCache, stampJobTimestamp } from "../../utils/job-signature.js";
 import { normalizeTiming } from "../../../shared/clip-timeline.js";
+import { createPreviewRequests } from "../../utils/preview-requests.js";
 
 export function useCompositionPreview({ open, document, entry, onError }) {
   const get = useEditorStore.getState;
-  const videoRef = useRef(null),
-    sequence = useRef(0);
+  const videoRef = useRef(null);
+  const [requests] = useState(createPreviewRequests);
   const [signatureFor] = useState(createJobSignatureCache);
   const [frame, setFrame] = useState(null),
     [busy, setBusy] = useState(false);
   useEffect(() => {
-    sequence.current += 1;
+    requests.invalidate();
     setFrame(null);
     setBusy(false);
     return () => {
-      sequence.current += 1;
+      requests.invalidate();
     };
-  }, [open, document, entry?.id]);
+  }, [open, document, entry?.id, requests]);
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.playbackRate = normalizeTiming(entry?.item?.timing).rate;
@@ -26,14 +27,12 @@ export function useCompositionPreview({ open, document, entry, onError }) {
     }
   }, [entry?.item, frame]);
   const clear = () => {
-    sequence.current += 1;
+    requests.invalidate();
     setFrame(null);
     setBusy(false);
   };
   const preview = async () => {
-    const token = ++sequence.current,
-      owner = document,
-      timestamp = videoRef.current?.currentTime || 0;
+    const timestamp = videoRef.current?.currentTime || 0;
     const job = () =>
       stampJobTimestamp(
         buildExportJob(entry.item, 0, { outputPath: null, encodeProfile: get().encodeProfile }),
@@ -41,24 +40,25 @@ export function useCompositionPreview({ open, document, entry, onError }) {
       );
     const signature = () =>
       signatureFor([entry.id, entry.item, get().encodeProfile], timestamp, job);
-    const requested = signature();
-    const current = () =>
-      token === sequence.current &&
-      get().showCompositionModal &&
-      !get().isProcessing &&
-      get().composition === owner &&
-      videoRef.current?.currentTime === timestamp &&
-      signature() === requested;
+    const request = requests.begin(
+      { document, timestamp, signature: signature() },
+      (owner) =>
+        !get().showCompositionModal ||
+        get().isProcessing ||
+        get().composition !== owner.document ||
+        videoRef.current?.currentTime !== owner.timestamp ||
+        signature() !== owner.signature,
+    );
     setBusy(true);
     try {
       const response = await window.api.renderPreviewFrame(job());
-      if (!current()) return;
+      if (!request.isCurrent()) return;
       if (response?.ok) setFrame(response.data_url);
       else if (!response?.cancelled) onError();
     } catch {
-      if (current()) onError();
+      if (request.isCurrent()) onError();
     } finally {
-      if (token === sequence.current) setBusy(false);
+      if (request.finish()) setBusy(false);
     }
   };
   return { videoRef, frame, busy, preview, clear };

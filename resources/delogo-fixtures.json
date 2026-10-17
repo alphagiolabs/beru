@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "motion": {
+    "width": 64,
+    "height": 40,
+    "box": { "x": 26, "y": 14, "w": 8, "h": 8 },
+    "cases": [
+      {
+        "id": "stationary",
+        "pattern": "flat",
+        "current": 80,
+        "donor": 80,
+        "expected": { "dx": 0, "dy": 0, "error": 0 }
+      },
+      { "id": "scene-cut", "pattern": "flat", "current": 20, "donor": 200, "expected": null },
+      {
+        "id": "translated-texture",
+        "pattern": "noise",
+        "current": 3,
+        "donor": 0,
+        "expected": { "dx": 3, "dy": 0, "error": 0 }
+      },
+      {
+        "id": "equal-score-prefers-shorter-shift",
+        "pattern": "flat",
+        "current": 0,
+        "donor": 1,
+        "expected": { "dx": 0, "dy": 0, "error": 1 }
+      },
+      {
+        "id": "equal-score-and-distance-keeps-traversal-order",
+        "pattern": "periodic",
+        "period": 8,
+        "current": 0,
+        "donor": -4,
+        "expected": { "dx": -4, "dy": 0, "error": 0 }
+      },
+      {
+        "id": "insufficient-unmasked-samples",
+        "pattern": "flat",
+        "current": 80,
+        "donor": 80,
+        "box": { "x": 0, "y": 0, "w": 64, "h": 40 },
+        "expected": null
+      }
+    ]
+  },
+  "spatial": {
+    "width": 192,
+    "height": 112,
+    "box": { "x": 76, "y": 40, "w": 18, "h": 24 },
+    "cases": [
+      { "id": "cloth-phase-0", "phase": 0, "maxMeanError": 5 },
+      { "id": "cloth-phase-1", "phase": 1, "maxMeanError": 5 },
+      { "id": "cloth-phase-5", "phase": 5, "maxMeanError": 5 }
+    ]
+  }
+}

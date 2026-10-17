@@ -146,13 +146,14 @@ export default function VideoPreview() {
     (sidebarMode === "batch" || activeTool === "text" || activeTool === "datetime");
 
   const previewTextRegion = useCallback((region) => {
-    useEditorStore.setState({ currentRegion: region });
+    useEditorStore.getState().setCurrentRegionDraft(region);
   }, []);
   const commitTextRegion = useCallback((region) => {
     useEditorStore.getState().setCurrentRegion(region);
   }, []);
   const textRegionGesture = useRegionGesture({
     videoEl: videoRef,
+    owner: `${selectedIdx}:${sel?.path}:${sidebarMode}:${activeTool}:${selectedTemplateRegionId}`,
     enabled: textSelectionActive,
     onChange: previewTextRegion,
     onCommit: commitTextRegion,
@@ -177,6 +178,7 @@ export default function VideoPreview() {
   } = useOperationDrag({
     videoRef,
     sel,
+    selectedIdx,
     sidebarMode,
     activeTool,
     currentRegion,

@@ -1,5 +1,10 @@
 import os
 
+
+class ProcessingCancelled(RuntimeError):
+    def __init__(self):
+        super().__init__("Cancelled")
+
 _FONT_NOT_FOUND_MSG = (
     "No se encontró una fuente tipográfica necesaria para el texto. "
     "Instala la fuente indicada en el overlay o cambia a una fuente del sistema "

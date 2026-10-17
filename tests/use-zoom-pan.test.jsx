@@ -1,6 +1,6 @@
 import React, { act, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import useZoomPan from "../src/components/video-preview/useZoomPan.js";
 
 globalThis.React = React;
@@ -121,6 +121,7 @@ describe("useZoomPan", () => {
       root = null;
     }
     document.body.innerHTML = "";
+    vi.unstubAllGlobals();
   });
 
   it("pans with the primary button when the pan tool is active", async () => {
@@ -134,6 +135,15 @@ describe("useZoomPan", () => {
     await renderHarness(false);
     await dragLeft({ x: 100, y: 100 }, { x: 220, y: 140 });
 
+    expect(document.querySelector('[data-testid="pan"]').textContent).toBe("0,0");
+  });
+
+  it("does not schedule a redraw when the pointer delta is zero", async () => {
+    const schedule = vi.fn();
+    vi.stubGlobal("requestAnimationFrame", schedule);
+    await renderHarness(true);
+    await dragLeft({ x: 100, y: 100 }, { x: 100, y: 100 });
+    expect(schedule).not.toHaveBeenCalled();
     expect(document.querySelector('[data-testid="pan"]').textContent).toBe("0,0");
   });
 
