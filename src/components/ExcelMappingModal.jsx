@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { X, FileSpreadsheet, ArrowRight, RotateCcw } from "lucide-react";
+import { FileSpreadsheet, ArrowRight, RotateCcw } from "lucide-react";
 import { shallow } from "zustand/shallow";
 import useEditorStore from "../stores/useEditorStore";
 import { rowGet, normalizeMatchId } from "../utils/video-utils";
@@ -7,6 +7,7 @@ import { autoExcelMapping } from "../utils/batch-export";
 import { useT } from "../i18n/useT";
 import { Button } from "./ui/Button";
 import { Select } from "./ui/select";
+import { ModalCloseButton } from "./ui/ModalCloseButton";
 
 const PREVIEW_ROWS = 5;
 
@@ -95,36 +96,27 @@ export default function ExcelMappingModal() {
         className="cap-modal-panel max-w-[960px] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div
-          className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <div className="flex items-center gap-2">
-            <FileSpreadsheet size={16} style={{ color: "var(--text-purple)" }} />
-            <span className="text-sm font-semibold">{t("excel.title")}</span>
-            <span className="text-[10px]" style={{ color: "var(--text-dim)" }}>
+        <div className="cap-modal-titlebar">
+          <div className="min-w-0">
+            <h2 className="cap-modal-title">
+              <FileSpreadsheet size={15} style={{ color: "var(--text-purple)" }} />
+              {t("excel.title")}
+            </h2>
+            <p className="cap-modal-subtitle">
               {t("excel.metaStats", {
                 rows: excelRows.length,
                 cols: excelHeaders.length,
                 regions: templateRegions.length,
               })}
-            </span>
+            </p>
           </div>
-          <Button
-            type="button"
+          <ModalCloseButton
             onClick={() => getState().setShowMappingModal(false)}
-            variant="tertiary"
-            size="icon"
-            className="text-[var(--text-dim)] hover:bg-white/10"
-            style={{ color: "var(--text-dim)" }}
-            title={t("common.close")}
-            aria-label={t("common.close")}
-          >
-            <X size={18} />
-          </Button>
+            label={t("common.close")}
+          />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div>
             <div className="cap-input-label mb-1">{t("excel.idColumn")}</div>
             <Select
@@ -338,7 +330,7 @@ export default function ExcelMappingModal() {
         </div>
 
         <div
-          className="px-4 py-3 border-t flex items-center justify-between flex-shrink-0"
+          className="px-5 py-3 border-t flex items-center justify-between flex-shrink-0"
           style={{ borderColor: "var(--border)" }}
         >
           <Button type="button" onClick={handleReset} variant="secondary" size="sm">

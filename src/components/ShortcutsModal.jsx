@@ -1,7 +1,6 @@
-import { X } from "lucide-react";
 import useEditorStore from "../stores/useEditorStore";
 import { useT } from "../i18n/useT";
-import { Button } from "./ui/Button";
+import { ModalCloseButton } from "./ui/ModalCloseButton";
 
 export default function ShortcutsModal() {
   const showShortcuts = useEditorStore((s) => s.showShortcuts);
@@ -80,24 +79,14 @@ export default function ShortcutsModal() {
       onClick={() => useEditorStore.getState().setShowShortcuts(false)}
     >
       <div className="cap-modal-panel max-w-[400px]" onClick={(e) => e.stopPropagation()}>
-        <div
-          className="flex items-center justify-between px-4 py-3 border-b"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <span className="text-sm font-semibold">{t("modal.shortcuts.title")}</span>
-          <Button
+        <div className="cap-modal-titlebar">
+          <h2 className="cap-modal-title">{t("modal.shortcuts.title")}</h2>
+          <ModalCloseButton
             onClick={() => useEditorStore.getState().setShowShortcuts(false)}
-            variant="tertiary"
-            size="icon"
-            className="!h-8 !min-h-8 !w-8 !min-w-8"
-            style={{ color: "var(--text-dim)" }}
-            title={t("common.close")}
-            aria-label={t("common.close")}
-          >
-            <X size={18} />
-          </Button>
+            label={t("common.close")}
+          />
         </div>
-        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
           {groups.map((g) => (
             <div key={g.titleKey}>
               <div

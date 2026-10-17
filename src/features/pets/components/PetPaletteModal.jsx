@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, PawPrint, Power, Search, Settings, X } from "lucide-react";
+import { Check, PawPrint, Power, Search, Settings } from "lucide-react";
 import useEditorStore from "../../../stores/useEditorStore";
 import { useT } from "../../../i18n/useT";
 import { storeErrorText } from "../../../utils/store-errors.js";
 import PetPreviewSprite from "./PetPreviewSprite.jsx";
 import { Button } from "../../../components/ui/Button";
+import { ModalCloseButton } from "../../../components/ui/ModalCloseButton";
 
 export default function PetPaletteModal() {
   const t = useT();
@@ -104,21 +105,12 @@ export default function PetPaletteModal() {
         role="dialog"
         aria-labelledby="pet-palette-title"
       >
-        <header className="pet-palette-head">
-          <div className="pet-palette-head-brand">
-            <PawPrint size={14} strokeWidth={2.25} />
-            <span id="pet-palette-title">{t("settings.petdex.paletteTitle")}</span>
-          </div>
-          <Button
-            type="button"
-            variant="tertiary"
-            size="icon"
-            className="pet-palette-close"
-            onClick={close}
-            aria-label={t("common.close")}
-          >
-            <X size={14} />
-          </Button>
+        <header className="cap-modal-titlebar">
+          <h2 id="pet-palette-title" className="cap-modal-title">
+            <PawPrint size={15} strokeWidth={2.25} style={{ color: "var(--text-brand)" }} />
+            {t("settings.petdex.paletteTitle")}
+          </h2>
+          <ModalCloseButton onClick={close} label={t("common.close")} />
         </header>
 
         <label className="pet-palette-search">

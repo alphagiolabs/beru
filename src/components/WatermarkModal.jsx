@@ -5,6 +5,7 @@ import { storeErrorText } from "../utils/store-errors";
 import { beruLocalUrl, imageVersion } from "../utils/beru-url";
 import { WATERMARK_POSITIONS } from "../utils/watermark-position";
 import { Button } from "./ui/Button";
+import { ModalCloseButton } from "./ui/ModalCloseButton";
 import { PositionIcon } from "./ui/PositionIcon";
 import { fileName } from "../../shared/file-name.js";
 
@@ -24,26 +25,12 @@ export default function WatermarkModal() {
   return (
     <div className="cap-modal-overlay" onClick={close}>
       <div className="cap-modal-panel max-w-[420px] w-full" onClick={(e) => e.stopPropagation()}>
-        <div
-          className="flex items-center justify-between px-4 py-3 border-b"
-          style={{ borderColor: "var(--border)" }}
-        >
-          <span className="text-sm font-semibold">{t("header.watermark")}</span>
-          <Button
-            type="button"
-            onClick={close}
-            variant="tertiary"
-            size="icon"
-            className="text-[var(--text-dim)] hover:bg-white/10"
-            style={{ color: "var(--text-dim)" }}
-            title={t("common.close")}
-            aria-label={t("common.close")}
-          >
-            <X size={18} />
-          </Button>
+        <div className="cap-modal-titlebar">
+          <h2 className="cap-modal-title">{t("header.watermark")}</h2>
+          <ModalCloseButton onClick={close} label={t("common.close")} />
         </div>
 
-        <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-5 py-4 space-y-4 max-h-[70vh] overflow-y-auto">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"

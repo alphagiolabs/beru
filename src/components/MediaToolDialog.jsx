@@ -1,7 +1,6 @@
 import { Dialog } from "radix-ui";
 import { useRef } from "react";
-import { X } from "lucide-react";
-import { Button } from "./ui/Button";
+import { ModalCloseButton } from "./ui/ModalCloseButton";
 import { Tooltip, TooltipProvider } from "./ui/tooltip";
 import { useT } from "../i18n/useT";
 
@@ -33,13 +32,11 @@ export default function MediaToolDialog({ open, onOpenChange, title, description
                 onOpenChange(false);
               }}
             >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
-                <Dialog.Title className="text-sm font-semibold">{title}</Dialog.Title>
+              <div className="cap-modal-titlebar">
+                <Dialog.Title className="cap-modal-title">{title}</Dialog.Title>
                 <Tooltip label={t("common.close")}>
                   <Dialog.Close asChild>
-                    <Button variant="tertiary" size="icon" aria-label={t("common.close")}>
-                      <X size={16} />
-                    </Button>
+                    <ModalCloseButton label={t("common.close")} />
                   </Dialog.Close>
                 </Tooltip>
               </div>

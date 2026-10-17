@@ -12,6 +12,8 @@ import {
   TITLEBAR_OVERLAY_HEIGHT,
 } from "./windowTheme.js";
 import * as updater from "../updater.js";
+import { requestCloseConfirm } from "./closeConfirm.js";
+import { IPC_EVENTS } from "../../shared/ipc-channels.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,6 +46,31 @@ export function attachNavigationGuards(win) {
     console.error("[beru] blocked navigation to:", url);
     return { action: "deny" };
   });
+}
+
+// The renderer shows the styled in-app dialog; the native box is only a fallback
+// for when the page cannot answer (loading, crashed or no listener mounted).
+async function confirmClose(win, processing) {
+  const contents = win.webContents;
+  if (!contents.isLoading() && !contents.isCrashed()) {
+    const answer = await requestCloseConfirm(contents, IPC_EVENTS.onCloseConfirm, { processing });
+    if (answer !== null) return answer;
+  }
+  if (win.isDestroyed()) return false;
+  return dialog
+    .showMessageBox(win, {
+      type: "warning",
+      buttons: processing
+        ? ["Cancelar y salir", "Seguir procesando"]
+        : ["Salir de todas formas", "Volver"],
+      defaultId: 1,
+      cancelId: 1,
+      title: "Beru",
+      message: processing
+        ? "Hay un procesamiento en curso. ¿Cancelar y salir?"
+        : "Hay cambios sin guardar o videos sin exportar. ¿Salir de todas formas?",
+    })
+    .then(({ response }) => response === 0);
 }
 
 export function createWindow() {
@@ -79,6 +106,7 @@ export function createWindow() {
   attachNavigationGuards(win);
 
   let closeConfirmed = false;
+  let closePromptOpen = false;
   win.on("close", (event) => {
     if (closeConfirmed) return;
     if (updater.isQuittingForUpdate()) return;
@@ -86,32 +114,11 @@ export function createWindow() {
     if (!processing && !getHasUnexportedWork()) return;
 
     event.preventDefault();
-    dialog
-      .showMessageBox(
-        win,
-        processing
-          ? {
-              type: "warning",
-              buttons: ["Cancelar y salir", "Seguir procesando"],
-              defaultId: 1,
-              cancelId: 1,
-              title: "Beru",
-              message: "Hay un procesamiento en curso. ¿Cancelar y salir?",
-              detail: "Si sales ahora, el lote actual se cancelará.",
-            }
-          : {
-              type: "warning",
-              buttons: ["Salir de todas formas", "Volver"],
-              defaultId: 1,
-              cancelId: 1,
-              title: "Beru",
-              message: "Hay cambios sin guardar o videos sin exportar. ¿Salir de todas formas?",
-              detail:
-                "Guarda el montaje o exporta los videos antes de cerrar para conservar tu trabajo.",
-            },
-      )
-      .then(async ({ response }) => {
-        if (response !== 0) return;
+    if (closePromptOpen) return;
+    closePromptOpen = true;
+    confirmClose(win, processing)
+      .then(async (confirmed) => {
+        if (!confirmed) return;
         closeConfirmed = true;
         try {
           await cancelRun();
@@ -122,8 +129,17 @@ export function createWindow() {
       })
       .catch((e) => {
         console.error("[beru] close confirm dialog failed:", e?.message || e);
+      })
+      .finally(() => {
+        closePromptOpen = false;
       });
   });
+  // A reload or crash drops the in-app dialog without an answer; let the next close ask again.
+  const resetClosePrompt = () => {
+    closePromptOpen = false;
+  };
+  win.webContents.on("did-start-loading", resetClosePrompt);
+  win.webContents.on("render-process-gone", resetClosePrompt);
 
   if (isDev) {
     const startupOpenedAt = Date.now();

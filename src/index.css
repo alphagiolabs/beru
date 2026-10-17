@@ -357,10 +357,64 @@ a:focus-visible,
 }
 
 .cap-modal-panel {
-  @apply rounded-lg overflow-hidden w-full;
+  @apply overflow-hidden w-full;
+  border-radius: 12px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   box-shadow: var(--modal-shadow);
+  animation: cap-modal-in 160ms var(--ease-out);
+}
+
+.cap-modal-titlebar {
+  @apply flex items-center justify-between gap-3 flex-shrink-0;
+  padding: 12px 12px 12px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.cap-modal-title {
+  @apply flex items-center gap-2 min-w-0 m-0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.cap-modal-subtitle {
+  @apply m-0 truncate;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--text-dim);
+}
+
+.cap-modal-close {
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.cap-modal-close:hover,
+.cap-modal-close:focus-visible {
+  color: var(--text-primary);
+}
+
+@keyframes cap-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+@keyframes cap-modal-in-rm {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cap-modal-panel {
+    animation-name: cap-modal-in-rm;
+  }
 }
 
 .cap-modal-header {
@@ -397,6 +451,74 @@ a:focus-visible,
   @apply flex items-center justify-end gap-2 px-5 py-4 border-t;
   border-color: var(--border);
   background: var(--bg-surface);
+}
+
+.cap-dialog {
+  --dialog-tone: var(--text-amber);
+  max-width: 400px;
+  padding: 20px;
+}
+
+.cap-dialog--danger {
+  --dialog-tone: var(--text-rose);
+}
+
+.cap-dialog--neutral {
+  --dialog-tone: var(--text-secondary);
+}
+
+.cap-dialog--success {
+  --dialog-tone: var(--text-brand);
+}
+
+.cap-dialog-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cap-dialog-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--dialog-tone);
+  background: color-mix(in srgb, var(--dialog-tone) 12%, transparent);
+}
+
+.cap-dialog-title {
+  margin: 6px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text-primary);
+}
+
+.cap-dialog-message {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.cap-dialog-message--error {
+  color: var(--text-rose);
+}
+
+.cap-dialog-field {
+  margin-top: 16px;
+}
+
+.cap-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
 }
 
 .status-footer {
@@ -511,131 +633,21 @@ a:focus-visible,
   margin-left: 2px;
 }
 
-.status-footer-up-to-date-overlay {
-  background: color-mix(in srgb, var(--overlay) 76%, transparent);
-}
-
-.status-footer-up-to-date-panel {
-  @apply relative w-full text-center;
-  max-width: 384px;
-  padding: 34px 32px 27px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg-app));
-  border: 1px solid color-mix(in srgb, var(--border) 90%, var(--text-dim));
-  box-shadow: var(--modal-shadow);
-}
-
-.status-footer-up-to-date-close {
-  @apply absolute inline-flex items-center justify-center rounded;
-  top: 10px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  color: var(--text-dim);
-  background: transparent;
-  border: 1px solid transparent;
-  transition:
-    background-color 140ms var(--ease-out),
-    color 140ms var(--ease-out),
-    transform 100ms var(--ease-press);
-}
-
-.status-footer-up-to-date-close:hover,
-.status-footer-up-to-date-close:focus-visible {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--border) 28%, transparent);
-}
-
-.status-footer-up-to-date-close:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.status-footer-up-to-date-icon {
-  margin: 0 auto;
-  color: #18d6a3;
-}
-
-.status-footer-up-to-date-title {
-  margin-top: 18px;
-  font-size: 15px;
-  font-weight: 650;
-  line-height: 1.2;
-  color: var(--text-primary);
-}
-
-.status-footer-up-to-date-description {
-  margin-top: 16px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-dim);
-}
-
-.status-footer-up-to-date-check {
-  @apply w-full text-center text-xs mt-3 rounded;
-  min-height: 32px;
-  padding: 0 12px;
-  color: var(--text-accent);
-  border: 1px solid transparent;
-  background: transparent;
-  font-weight: 600;
-  transition:
-    background-color 140ms var(--ease-out),
-    color 140ms var(--ease-out),
-    transform 100ms var(--ease-press);
-}
-
-.status-footer-up-to-date-check:hover,
-.status-footer-up-to-date-check:focus-visible {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
-
-.status-footer-up-to-date-check:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
 .status-footer-update-overlay {
   z-index: 80;
-  background: color-mix(in srgb, var(--overlay) 88%, transparent);
 }
 
 .status-footer-update-panel {
-  @apply relative w-full text-center;
+  @apply relative text-center;
   max-width: 384px;
-  padding: 34px 32px 27px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--bg-elevated) 96%, var(--bg-app));
-  border: 1px solid color-mix(in srgb, var(--border) 90%, var(--text-dim));
-  box-shadow: var(--modal-shadow);
+  padding: 32px 28px 24px;
   overflow: visible;
 }
 
 .status-footer-update-close {
-  @apply absolute inline-flex items-center justify-center rounded;
-  top: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid transparent;
-  transition:
-    background-color 140ms var(--ease-out),
-    color 140ms var(--ease-out),
-    transform 100ms var(--ease-press);
-}
-
-.status-footer-update-close:hover,
-.status-footer-update-close:focus-visible {
-  color: var(--text-primary);
-  background: color-mix(in srgb, #ffffff 8%, transparent);
-}
-
-.status-footer-update-close:active:not(:disabled) {
-  transform: translateY(1px);
+  position: absolute;
+  top: 10px;
+  right: 10px;
 }
 
 .status-footer-update-brand {
@@ -959,7 +971,6 @@ a:focus-visible,
   flex-direction: column;
   max-width: 1340px;
   max-height: calc(100dvh - 32px);
-  border-radius: 8px;
   --settings-main-height: min(840px, calc(100dvh - 112px));
 }
 
@@ -982,12 +993,6 @@ a:focus-visible,
 .settings-modal-header-sub {
   @apply text-[11px] m-0 mt-1 leading-snug;
   color: var(--text-dim);
-}
-
-.settings-modal-close {
-  --button-radius: 4px;
-  --button-height-md: 30px;
-  color: var(--text-secondary);
 }
 
 .settings-modal-body {
@@ -5537,7 +5542,7 @@ a:focus-visible,
   overflow: hidden;
   border-radius: 12px;
   background: var(--bg-elevated);
-  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   box-shadow: var(--modal-shadow);
   animation: te-in 220ms var(--ease-out) both;
 }
@@ -5593,7 +5598,7 @@ a:focus-visible,
   justify-content: space-between;
   gap: 12px;
   flex-shrink: 0;
-  padding: 10px 14px;
+  padding: 12px 12px 12px 20px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 
@@ -5603,10 +5608,9 @@ a:focus-visible,
 
 .te-header-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  line-height: 1.3;
   color: var(--text-primary);
 }
 
@@ -7152,7 +7156,6 @@ a:focus-visible,
 .settings-theme-action-btn,
 .theme-editor-link-btn,
 .settings-theme-row-menu-panel button,
-.settings-modal-close,
 .settings-modal-nav-item,
 .settings-users-toggle,
 .mobile-workspace-nav button {
@@ -7168,7 +7171,6 @@ a:focus-visible,
 .settings-theme-action-btn:active:not(:disabled),
 .theme-editor-link-btn:active:not(:disabled),
 .settings-theme-row-menu-panel button:active:not(:disabled),
-.settings-modal-close:active:not(:disabled),
 .settings-modal-nav-item:active:not(:disabled),
 .settings-users-toggle:active:not(:disabled),
 .mobile-workspace-nav button:active:not(:disabled) {
@@ -7189,9 +7191,6 @@ button:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .cap-btn,
   .cap-btn-loader,
-  .status-footer-up-to-date-close,
-  .status-footer-up-to-date-check,
-  .status-footer-update-close,
   .status-footer-update-primary,
   .status-footer-update-secondary,
   .settings-users-submit {

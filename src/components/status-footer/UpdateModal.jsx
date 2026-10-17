@@ -1,9 +1,9 @@
 import { useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
 import { parseReleaseNotesSections } from "../../utils/appVersion";
 import { formatUpdateError } from "../../utils/updateErrors";
 import { Button } from "../ui/Button";
+import { ModalCloseButton } from "../ui/ModalCloseButton";
 import BeruMark from "./BeruMark";
 import UpdateChangelog from "./UpdateChangelog";
 
@@ -51,20 +51,15 @@ export default function UpdateModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="update-modal-title"
-        className="status-footer-update-panel"
+        className="cap-modal-panel status-footer-update-panel"
         onClick={(event) => event.stopPropagation()}
       >
-        <Button
+        <ModalCloseButton
           ref={closeBtnRef}
-          type="button"
           className="status-footer-update-close"
           onClick={onClose}
-          aria-label={t("common.close")}
-          variant="tertiary"
-          size="icon"
-        >
-          <X size={16} />
-        </Button>
+          label={t("common.close")}
+        />
 
         <div className="status-footer-update-brand">
           <BeruMark />

@@ -51,6 +51,22 @@ export default function BeruRoot() {
   usePetKeyboard();
 
   useEffect(() => {
+    if (!api?.onCloseConfirm) return undefined;
+    return api.onCloseConfirm(async ({ id, processing }) => {
+      void api.resolveCloseConfirm({ id, ack: true });
+      const key = processing ? "closeProcessing" : "closeUnsaved";
+      const confirmed = await useEditorStore.getState().requestConfirm({
+        title: t(`dialog.${key}Title`),
+        message: t(`dialog.${key}Message`),
+        confirmLabel: t(`dialog.${key}Confirm`),
+        cancelLabel: t("dialog.closeStay"),
+        variant: "danger",
+      });
+      void api.resolveCloseConfirm({ id, confirmed });
+    });
+  }, [t]);
+
+  useEffect(() => {
     if (isSupabaseConfigured) {
       initAuth();
     }
@@ -63,28 +79,30 @@ export default function BeruRoot() {
   }, [appToast, clearAppToast]);
 
   return (
-    <ErrorBoundary>
-      <AuthGate />
-      <UpdatePrompt />
-      <AppToast />
+    <>
+      <ErrorBoundary>
+        <AuthGate />
+        <UpdatePrompt />
+        <AppToast />
+        <DeferredPanel
+          when={(s) => s.showSettings}
+          label={t("settings.title")}
+          onClose={() => useEditorStore.getState().setShowSettings(false)}
+        >
+          <SettingsModal />
+        </DeferredPanel>
+        <DeferredPanel when={(s) => s.petEnabled || s.petPoppedOut}>
+          <DesktopPet />
+        </DeferredPanel>
+        <DeferredPanel
+          when={(s) => s.showPetPalette}
+          label={t("settings.petdex.paletteTitle")}
+          onClose={() => useEditorStore.getState().setShowPetPalette(false)}
+        >
+          <PetPaletteModal />
+        </DeferredPanel>
+      </ErrorBoundary>
       <ConfirmDialog />
-      <DeferredPanel
-        when={(s) => s.showSettings}
-        label={t("settings.title")}
-        onClose={() => useEditorStore.getState().setShowSettings(false)}
-      >
-        <SettingsModal />
-      </DeferredPanel>
-      <DeferredPanel when={(s) => s.petEnabled || s.petPoppedOut}>
-        <DesktopPet />
-      </DeferredPanel>
-      <DeferredPanel
-        when={(s) => s.showPetPalette}
-        label={t("settings.petdex.paletteTitle")}
-        onClose={() => useEditorStore.getState().setShowPetPalette(false)}
-      >
-        <PetPaletteModal />
-      </DeferredPanel>
-    </ErrorBoundary>
+    </>
   );
 }
