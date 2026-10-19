@@ -1,13 +1,12 @@
 export const IDENTITY_AUDIO = Object.freeze({ gain: 1, muted: false });
 
+export function normalizeGain(value) {
+  const gain = value == null || (typeof value === "string" && !value.trim()) ? NaN : Number(value);
+  return Number.isFinite(gain) ? Math.min(1, Math.max(0, gain)) : 1;
+}
+
 export function normalizeAudio(value) {
-  const rawGain = value?.gain;
-  const gain =
-    rawGain == null || (typeof rawGain === "string" && !rawGain.trim()) ? NaN : Number(rawGain);
-  return {
-    gain: Number.isFinite(gain) ? Math.min(1, Math.max(0, gain)) : 1,
-    muted: value?.muted === true,
-  };
+  return { gain: normalizeGain(value?.gain), muted: value?.muted === true };
 }
 
 export function audioSettingsEqual(a, b) {

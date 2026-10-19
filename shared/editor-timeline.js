@@ -36,10 +36,6 @@ function clipDurationSeconds(clip) {
   }).totalDuration;
 }
 
-export function clipDurationUs(clip) {
-  return Math.round(clipDurationSeconds(clip) * 1e6);
-}
-
 export function layoutTrack(project, trackId) {
   const track = findTrack(project, trackId);
   const clipsById = new Map(project.clips.map((c) => [c.id, c]));
@@ -140,16 +136,19 @@ export function insertClip(
   return { project: assertEditorProject(next), clipId: clip.id };
 }
 
-export function trimClip(project, clipId, { sourceInUs, sourceOutUs }) {
-  const clip = findClip(project, clipId);
-  const trimmed = {
-    ...clip,
-    sourceInUs: sourceInUs ?? clip.sourceInUs,
-    sourceOutUs: sourceOutUs ?? clip.sourceOutUs,
-  };
+function patchClip(project, clipId, fields) {
+  findClip(project, clipId);
   return assertEditorProject({
     ...project,
-    clips: project.clips.map((c) => (c.id === clipId ? trimmed : c)),
+    clips: project.clips.map((c) => (c.id === clipId ? { ...c, ...fields } : c)),
+  });
+}
+
+export function trimClip(project, clipId, { sourceInUs, sourceOutUs }) {
+  const clip = findClip(project, clipId);
+  return patchClip(project, clipId, {
+    sourceInUs: sourceInUs ?? clip.sourceInUs,
+    sourceOutUs: sourceOutUs ?? clip.sourceOutUs,
   });
 }
 
@@ -217,27 +216,17 @@ export function moveClip(project, clipId, toIndex) {
 }
 
 export function setClipSpeed(project, clipId, speed) {
-  const clip = findClip(project, clipId);
-  return assertEditorProject({
-    ...project,
-    clips: project.clips.map((c) => (c.id === clip.id ? { ...c, speed } : c)),
-  });
+  return patchClip(project, clipId, { speed });
 }
 
 export function setClipMuted(project, clipId, muted) {
-  const clip = findClip(project, clipId);
-  return assertEditorProject({
-    ...project,
-    clips: project.clips.map((c) => (c.id === clip.id ? { ...c, muted } : c)),
-  });
+  return patchClip(project, clipId, { muted });
 }
 
 export function setClipTransform(project, clipId, patch) {
   const clip = findClip(project, clipId);
-  const transform = normalizeClipTransform({ ...clip.transform, ...patch });
-  return assertEditorProject({
-    ...project,
-    clips: project.clips.map((c) => (c.id === clip.id ? { ...c, transform } : c)),
+  return patchClip(project, clipId, {
+    transform: normalizeClipTransform({ ...clip.transform, ...patch }),
   });
 }
 
@@ -246,7 +235,7 @@ export function setCanvas(project, patch) {
   return assertEditorProject({ ...project, canvas: { width, height, background } });
 }
 
-export const DEFAULT_OVERLAY_US = 3_000_000;
+const DEFAULT_OVERLAY_US = 3_000_000;
 const DEFAULT_TEXT_GEOMETRY = { x: 0.1, y: 0.4, w: 0.8, h: 0.2 };
 const DEFAULT_IMAGE_GEOMETRY = { x: 0.7, y: 0.05, w: 0.25, h: 0.25 };
 

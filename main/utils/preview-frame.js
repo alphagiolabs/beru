@@ -86,15 +86,10 @@ function dispatchQueuedRequest(proc) {
     );
     if (!sent) {
       settleRequest(id, { ok: false, error: "La solicitud de preview supera el límite de tamaño" });
-      return;
     }
   } catch (err) {
     previewWorker.stop(proc, { ok: false, error: err.message });
   }
-}
-
-export async function renderSourceFrame(payload) {
-  return renderPreviewFrame({ ...payload, source_only: true });
 }
 
 export async function renderPreviewFrame(payload) {

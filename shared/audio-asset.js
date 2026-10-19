@@ -1,3 +1,5 @@
+import { normalizeGain } from "./audio-settings.js";
+
 const number = (value, fallback) => (value == null ? fallback : Number(value));
 
 export function normalizeAudioAsset(value) {
@@ -17,9 +19,6 @@ export function normalizeAudioAsset(value) {
     (trimEnd != null && (!Number.isFinite(trimEnd) || trimEnd <= trimStart))
   )
     return null;
-  const rawGain = value.gain;
-  const gain =
-    rawGain == null || (typeof rawGain === "string" && !rawGain.trim()) ? 1 : Number(rawGain);
   return {
     path: value.path,
     name: typeof value.name === "string" ? value.name : value.path.split(/[\\/]/).at(-1),
@@ -29,7 +28,7 @@ export function normalizeAudioAsset(value) {
     offset,
     trimStart,
     trimEnd,
-    gain: Number.isFinite(gain) ? Math.min(1, Math.max(0, gain)) : 1,
+    gain: normalizeGain(value.gain),
   };
 }
 

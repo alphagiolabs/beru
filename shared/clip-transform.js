@@ -1,11 +1,11 @@
 import { COMPOSITION_LIMITS } from "./composition-settings.js";
 
-export const SPEED_MIN = COMPOSITION_LIMITS.minRate;
-export const SPEED_MAX = COMPOSITION_LIMITS.maxRate;
-export const ZOOM_MIN = 1;
-export const ZOOM_MAX = 4;
-export const ROTATIONS = new Set([0, 90, 180, 270]);
-export const FIT_MODES = new Set(["fit", "fill"]);
+const SPEED_MIN = COMPOSITION_LIMITS.minRate;
+const SPEED_MAX = COMPOSITION_LIMITS.maxRate;
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 4;
+const ROTATIONS = new Set([0, 90, 180, 270]);
+const FIT_MODES = new Set(["fit", "fill"]);
 const MIN_CROP = 0.05;
 
 export const DEFAULT_CLIP_TRANSFORM = Object.freeze({
@@ -20,10 +20,6 @@ export const DEFAULT_CLIP_TRANSFORM = Object.freeze({
 });
 
 const isNumberIn = (value, low, high) => typeof value === "number" && value >= low && value <= high;
-
-export function isFullCrop(crop) {
-  return crop.x === 0 && crop.y === 0 && crop.w === 1 && crop.h === 1;
-}
 
 export function validateClipTransform(transform) {
   if (!transform || typeof transform !== "object") return "Transformación inválida";

@@ -3,7 +3,6 @@ import { stat } from "node:fs/promises";
 import { jobMediaSources } from "../../shared/job-manifest.js";
 import {
   renderPreviewFrame as renderWorkerFrame,
-  renderSourceFrame as renderWorkerSourceFrame,
   disposePreviewFrameWorker as disposeWorker,
 } from "./preview-frame.js";
 import { runMediaTask } from "./media-task-pool.js";
@@ -92,7 +91,7 @@ export function renderPreviewFrame(payload) {
 }
 
 export function renderSourceFrame(payload) {
-  return renderFrame({ ...payload, source_only: true }, renderWorkerSourceFrame);
+  return renderFrame({ ...payload, source_only: true }, renderWorkerFrame);
 }
 
 export function disposePreviewFrameWorker() {

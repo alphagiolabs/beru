@@ -86,7 +86,7 @@ function assetStatusFromError(error) {
   return "invalid";
 }
 
-export function readKindFor(asset) {
+function readKindFor(asset) {
   return asset.metadata?.durationUs == null ? "image" : "video";
 }
 

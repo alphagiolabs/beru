@@ -2,7 +2,7 @@ import { BrowserWindow } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import { getMainWindow, isDev, DEV_URL } from "../shared-state.js";
-import { attachNavigationGuards } from "./window.js";
+import { attachNavigationGuards, isolatedWebPreferences } from "./window.js";
 import { IPC_EVENTS } from "../../shared/ipc-channels.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,13 +65,7 @@ export function createPetOverlayWindow(position) {
     show: false,
     backgroundColor: "#00000000",
     autoHideMenuBar: true,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-      preload: path.join(__dirname, "..", "preload.cjs"),
-    },
+    webPreferences: isolatedWebPreferences(),
   });
 
   attachNavigationGuards(overlayWindow);

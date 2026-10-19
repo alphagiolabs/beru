@@ -1,8 +1,8 @@
 export const OVERLAY_TEXT_MAX_LENGTH = 500;
-export const OVERLAY_SIZE_MIN = 0.01;
-export const OVERLAY_SIZE_MAX = 0.5;
+const OVERLAY_SIZE_MIN = 0.01;
+const OVERLAY_SIZE_MAX = 0.5;
 export const OVERLAY_MAX_COUNT = 50;
-export const OVERLAY_OUTLINE_MAX = 0.25;
+const OVERLAY_OUTLINE_MAX = 0.25;
 export const TEXT_FONT_FAMILIES = Object.freeze(["Arial", "Segoe UI"]);
 export const TEXT_ALIGNS = Object.freeze(["left", "center", "right"]);
 
