@@ -297,11 +297,6 @@ def ffprobe_cached(path, *, ffprobe_bin=None, ffmpeg_bin=None):
     return result
 
 
-def reset_probe_cache():
-    with _PROBE_CACHE_LOCK:
-        _PROBE_CACHE.clear()
-
-
 def _probe_stream_types(path, *, ffprobe_bin=None):
     probe_bin = FFPROBE if ffprobe_bin is None else ffprobe_bin
     if not probe_bin or not os.path.isfile(probe_bin):

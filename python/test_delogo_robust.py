@@ -75,35 +75,30 @@ def test_feather_zero():
     assert "boxblur" not in fc, f"feather=0 must not inject a blur, got: {fc}"
 
 
-def test_small_blur_region_max_strength():
-    op = {
-        "mode": "delogo",
-        "region": {"x": 0, "y": 0, "w": 20, "h": 10},
-        "delogo_method": "blur",
-        "blur_strength": 100,
-        "edge_feather": 0,
-    }
-    assert_graph([op], 320, 180, "small max-strength blur")
-
-
-def test_small_blur_tool_max_strength():
-    op = {
-        "mode": "blur",
-        "region": {"x": 0, "y": 0, "w": 20, "h": 10},
-        "blur_strength": 100,
-    }
-    assert_graph([op], 320, 180, "small max-strength blur tool")
-
-
-def test_small_blur_region_max_feather():
-    op = {
-        "mode": "delogo",
-        "region": {"x": 0, "y": 0, "w": 20, "h": 10},
-        "delogo_method": "blur",
-        "blur_strength": 12,
-        "edge_feather": 40,
-    }
-    assert_graph([op], 320, 180, "small max-feather blur")
+def test_small_blur_regions_render_at_extreme_settings():
+    cases = (
+        ("small max-strength blur", {
+            "mode": "delogo",
+            "region": {"x": 0, "y": 0, "w": 20, "h": 10},
+            "delogo_method": "blur",
+            "blur_strength": 100,
+            "edge_feather": 0,
+        }),
+        ("small max-strength blur tool", {
+            "mode": "blur",
+            "region": {"x": 0, "y": 0, "w": 20, "h": 10},
+            "blur_strength": 100,
+        }),
+        ("small max-feather blur", {
+            "mode": "delogo",
+            "region": {"x": 0, "y": 0, "w": 20, "h": 10},
+            "delogo_method": "blur",
+            "blur_strength": 12,
+            "edge_feather": 40,
+        }),
+    )
+    for label, op in cases:
+        assert_graph([op], 320, 180, label)
 
 
 def test_corner_region():
@@ -156,20 +151,13 @@ def test_interior_inpaint_preserves_odd_selection_dimensions():
     assert_graph([op], 320, 180, "odd inpaint selection")
 
 
-def test_fill_opacity_zero_preserved():
-    op = {"mode": "delogo", "region": {"x": 10, "y": 10, "w": 80, "h": 40},
-          "delogo_method": "fill", "delogo_fill_color": "red",
-          "delogo_fill_opacity": 0}
-    fc, _, _ = build_filter_complex([op], 320, 180)
-    assert "color=red@0.0:" in fc, f"opacity 0 not preserved in filter: {fc}"
-
-
-def test_fill_opacity_out_of_range_clamped():
-    op = {"mode": "delogo", "region": {"x": 10, "y": 10, "w": 80, "h": 40},
-          "delogo_method": "fill", "delogo_fill_color": "red",
-          "delogo_fill_opacity": 2.5}
-    fc, _, _ = build_filter_complex([op], 320, 180)
-    assert "color=red@1.0:" in fc, f"opacity not clamped to 1: {fc}"
+def test_fill_opacity_is_preserved_at_zero_and_clamped_to_one():
+    for opacity, expected in ((0, "color=red@0.0:"), (-0.5, "color=red@0.0:"), (2.5, "color=red@1.0:")):
+        op = {"mode": "delogo", "region": {"x": 10, "y": 10, "w": 80, "h": 40},
+              "delogo_method": "fill", "delogo_fill_color": "red",
+              "delogo_fill_opacity": opacity}
+        fc, _, _ = build_filter_complex([op], 320, 180)
+        assert expected in fc, f"fill opacity {opacity} must produce {expected}: {fc}"
 
 
 def test_image_opacity_zero_preserved():
@@ -296,15 +284,12 @@ def main():
         test_camel_case_keys,
         test_invalid_method_fallback,
         test_feather_zero,
-        test_small_blur_region_max_strength,
-        test_small_blur_tool_max_strength,
-        test_small_blur_region_max_feather,
+        test_small_blur_regions_render_at_extreme_settings,
         test_corner_region,
         test_edge_blur_preserves_the_full_selection,
         test_edge_inpaint_falls_back_to_blur_without_leaving_a_border,
         test_interior_inpaint_preserves_odd_selection_dimensions,
-        test_fill_opacity_zero_preserved,
-        test_fill_opacity_out_of_range_clamped,
+        test_fill_opacity_is_preserved_at_zero_and_clamped_to_one,
         test_image_opacity_zero_preserved,
         test_cover_keeps_contain_letterbox_transparent,
         test_delogo_color_injection_rejected,

@@ -80,11 +80,6 @@ def output_layout(width, height, transform):
     return full(next_width, next_height, True)
 
 
-def output_dimensions(width, height, transform):
-    out_w, out_h, resized, _ = output_layout(width, height, transform)
-    return out_w, out_h, resized
-
-
 def transform_filters(transform, width, height):
     chain = []
     if transform["rotation"] == 90:

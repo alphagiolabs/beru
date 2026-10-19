@@ -28,8 +28,9 @@ class ProbeCacheTest(unittest.TestCase):
         runner = patch.object(media_probe.subprocess, "run", return_value=completed)
         self.run_probe = runner.start()
         self.addCleanup(runner.stop)
-        media_probe.reset_probe_cache()
-        self.addCleanup(media_probe.reset_probe_cache)
+        cache = patch.object(media_probe, "_PROBE_CACHE", {})
+        cache.start()
+        self.addCleanup(cache.stop)
 
     def probe(self, source=None, **kwargs):
         return media_probe.ffprobe_cached(
@@ -72,12 +73,6 @@ class ProbeCacheTest(unittest.TestCase):
         second["width"] = 100
         self.assertEqual(self.probe()["width"], 640)
         self.assertEqual(self.run_probe.call_count, 1)
-
-    def test_reset_forces_a_new_probe(self):
-        self.probe()
-        media_probe.reset_probe_cache()
-        self.probe()
-        self.assertEqual(self.run_probe.call_count, 2)
 
     def test_oldest_entry_is_evicted_after_128_files(self):
         self.probe()

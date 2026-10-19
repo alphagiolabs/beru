@@ -13,7 +13,6 @@ from media_probe import find_ffmpeg, find_ffprobe  # noqa: E402
 
 FFMPEG = find_ffmpeg()
 RGB = {"red": (255, 0, 0), "lime": (0, 255, 0), "blue": (0, 0, 255), "yellow": (255, 255, 0)}
-SOURCE = {"tl": "red", "tr": "lime", "bl": "blue", "br": "yellow"}
 
 
 def transform(**fields):
@@ -113,7 +112,11 @@ def run():
 
 
 def run_preview():
-    import preview
+    import media_probe
+    import processor
+
+    media_probe.FFMPEG = FFMPEG
+    media_probe.FFPROBE = find_ffprobe(FFMPEG)
 
     with tempfile.TemporaryDirectory(prefix="beru-preview-geometry-") as directory:
         source = make_corners(directory, "corners.mp4")
@@ -126,7 +129,7 @@ def run_preview():
             ({"rotation": 90}, (90, 160)),
             ({"output_height": 44}, (78, 44)),
         ):
-            result = preview.render_preview_frame({**payload, **fields}, ffmpeg_path=FFMPEG)
+            result = processor.render_preview_frame({**payload, **fields})
             assert result.get("ok"), result
             assert (result["width"], result["height"]) == expected, (fields, result)
 

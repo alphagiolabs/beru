@@ -6,22 +6,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 from ffmpeg_runner import _extract_error_line# noqa: E402
 
 
-def test_no_error_word_with_trailing_newline():
-    stderr = "frame=  100 fps=30\nConversion failed!\n"
-    result = _extract_error_line(stderr)
-    assert result == "Conversion failed!", f"Expected 'Conversion failed!', got {result!r}"
-
-
-def test_no_error_word_without_trailing_newline():
-    stderr = "frame=  100 fps=30\nConversion failed!"
-    result = _extract_error_line(stderr)
-    assert result == "Conversion failed!", f"Expected 'Conversion failed!', got {result!r}"
-
-
-def test_no_error_word_single_line_no_newline():
-    stderr = "Conversion failed!"
-    result = _extract_error_line(stderr)
-    assert result == "Conversion failed!"
+def test_last_line_without_error_keyword_is_returned():
+    for stderr in (
+        "frame=  100 fps=30\nConversion failed!\n",
+        "frame=  100 fps=30\nConversion failed!",
+        "Conversion failed!",
+    ):
+        assert _extract_error_line(stderr) == "Conversion failed!", repr(stderr)
 
 
 def test_error_word_takes_precedence():
@@ -45,21 +36,15 @@ def test_prefer_no_such_file():
     assert "No such file" in result
 
 
-def test_empty_stderr():
-    assert _extract_error_line("") == ""
-
-
-def test_only_whitespace():
-    assert _extract_error_line("\n\n\n") == ""
+def test_blank_stderr_yields_empty_line():
+    for stderr in ("", "\n\n\n"):
+        assert _extract_error_line(stderr) == "", repr(stderr)
 
 
 if __name__ == "__main__":
-    test_no_error_word_with_trailing_newline()
-    test_no_error_word_without_trailing_newline()
-    test_no_error_word_single_line_no_newline()
+    test_last_line_without_error_keyword_is_returned()
     test_error_word_takes_precedence()
     test_prefer_invalid_over_generic_error_while()
     test_prefer_no_such_file()
-    test_empty_stderr()
-    test_only_whitespace()
+    test_blank_stderr_yields_empty_line()
     print("OK: _extract_error_line returns last non-empty line")
