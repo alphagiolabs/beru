@@ -25,25 +25,15 @@ describe("useEditorStore.deletePreset", () => {
     });
   });
 
-  it("is async and calls window.api.deletePreset with the filename", async () => {
-    const result = useEditorStore.getState().deletePreset({
+  it("deletes through the disk API, refreshes the list and leaves localStorage alone", async () => {
+    const res = await useEditorStore.getState().deletePreset({
       name: "Mío",
       filename: "mio.beru.json",
     });
-    expect(result).toBeDefined();
-    expect(typeof result.then).toBe("function");
-
-    const res = await result;
     expect(res).toEqual(expect.objectContaining({ ok: true }));
     expect(mockApi.deletePreset).toHaveBeenCalledTimes(1);
     expect(mockApi.deletePreset.mock.calls[0][0]).toBe("mio.beru.json");
-  });
-
-  it("refreshes the presets list from disk after deleting", async () => {
-    await useEditorStore.getState().deletePreset({
-      name: "Mío",
-      filename: "mio.beru.json",
-    });
+    expect(setItemSpy).not.toHaveBeenCalled();
     expect(mockApi.listPresets).toHaveBeenCalledTimes(1);
     expect(useEditorStore.getState().presets).toHaveLength(1);
     expect(useEditorStore.getState().presets[0].filename).toBe("otro.beru.json");
@@ -53,14 +43,6 @@ describe("useEditorStore.deletePreset", () => {
     const res = await useEditorStore.getState().deletePreset({ name: "X" });
     expect(res.ok).toBe(false);
     expect(mockApi.deletePreset).not.toHaveBeenCalled();
-  });
-
-  it("does not write to localStorage (disk-backed, not the old sync path)", async () => {
-    await useEditorStore.getState().deletePreset({
-      name: "Mío",
-      filename: "mio.beru.json",
-    });
-    expect(setItemSpy).not.toHaveBeenCalled();
   });
 
   it("propagates API failures", async () => {

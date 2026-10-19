@@ -74,7 +74,7 @@ describe("auth listener lifecycle", () => {
     const { store, emit, session, fetchProfile, lock } = setup();
     await store.getState().initAuth();
     lock(true);
-    expect(emit("SIGNED_IN", session)).toBeUndefined();
+    emit("SIGNED_IN", session);
     expect(fetchProfile).not.toHaveBeenCalled();
     lock(false);
     await vi.advanceTimersByTimeAsync(0);

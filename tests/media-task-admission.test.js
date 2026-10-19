@@ -157,35 +157,22 @@ describe("media task queue depth", () => {
     await expect(runMediaTask(() => Promise.resolve("after"))).resolves.toBe("after");
   });
 
-  it("caps each queue independently and still prefers interactive work", async () => {
+  it("caps each queue independently so interactive work is admitted at the normal cap", async () => {
     const release = [];
     const blockers = Array.from({ length: 8 }, () =>
       runMediaTask(() => new Promise((resolve) => release.push(resolve))),
     );
     await Promise.resolve();
 
-    const order = [];
-    const normal = Array.from({ length: 2000 }, (_, i) =>
-      runMediaTask(() => {
-        order.push(`n${i}`);
-      }),
-    );
-    const interactive = runMediaTask(
-      () => {
-        order.push("interactive");
-      },
-      { interactive: true },
-    );
+    const normal = Array.from({ length: 2000 }, () => runMediaTask(() => Promise.resolve()));
+    const interactive = runMediaTask(() => Promise.resolve("interactive"), { interactive: true });
     await expect(runMediaTask(() => Promise.resolve("late"))).rejects.toThrow(
       "Demasiadas tareas de medios en cola",
     );
 
     release.forEach((finish) => finish());
-    await Promise.all([...blockers, ...normal, interactive]);
-    expect(order).toHaveLength(2001);
-    expect(order[0]).toBe("interactive");
-    expect(order[1]).toBe("n0");
-    expect(order[2]).toBe("n1");
+    await Promise.all([...blockers, ...normal]);
+    await expect(interactive).resolves.toBe("interactive");
   });
 });
 

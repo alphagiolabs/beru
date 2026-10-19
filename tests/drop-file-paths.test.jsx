@@ -152,14 +152,14 @@ describe("drop file paths", () => {
     });
     await act(async () => {
       dispatchDrop([file]);
-      await new Promise((r) => setTimeout(r, 10));
+      await vi.waitFor(
+        () =>
+          expect(useEditorStore.getState().appToast?.text).toBe(
+            "1 video(s) agregado(s) · 2 ignorado(s)",
+          ),
+        { timeout: 10000 },
+      );
     });
-
-    await vi.waitFor(() =>
-      expect(useEditorStore.getState().appToast?.text).toBe(
-        "1 video(s) agregado(s) · 2 ignorado(s)",
-      ),
-    );
     expect(window.api.importEditorVideos).toHaveBeenCalledWith({ paths: ["C:\\videos\\a.mp4"] });
   });
 

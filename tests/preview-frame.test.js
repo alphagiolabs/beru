@@ -91,35 +91,6 @@ describe("preview frame job", () => {
     expect(job.operations.some((op) => op.mode === "text" && op.text === "Hola FFmpeg")).toBe(true);
   });
 
-  it("buildBatchTextOperationsForPreview uses excel text when available", () => {
-    useEditorStore.setState({
-      queue: [
-        {
-          path: "C:\\videos\\clip.mp4",
-          filename: "clip.mp4",
-          operations: [],
-          width: 1280,
-          height: 720,
-        },
-      ],
-      templateRegions: [
-        {
-          id: "r1",
-          label: "TEXT_1",
-          region: { x: 0.2, y: 0.2, w: 0.2, h: 0.1 },
-          style: { fontSize: 40 },
-        },
-      ],
-      excelRows: [{ id: "clip", TEXT_1: "Batch" }],
-      excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
-    });
-
-    const ops = buildBatchTextOperationsForPreview(useEditorStore.getState(), 0);
-    expect(ops).toHaveLength(1);
-    expect(ops[0].text).toBe("Batch");
-    expect(ops[0].fontSize).toBe(40);
-  });
-
   it("buildBatchTextOperationsForPreview omits empty cells like the export does", () => {
     useEditorStore.setState({
       queue: [

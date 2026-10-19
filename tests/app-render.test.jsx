@@ -105,6 +105,8 @@ describe("App render", () => {
     expect(document.body.textContent).toMatch(/Importar videos/i);
     expect(document.body.textContent).not.toMatch(/Descargando actualización/i);
     expect(document.body.textContent).not.toMatch(/Beru v1\.6\.0 se está descargando/i);
+    expect(useEditorStore.getState().updateModalOpen).toBe(false);
+    expect(document.querySelector('[role="dialog"].status-footer-update-panel')).toBeNull();
     expect(document.querySelector(".status-footer")).toBeTruthy();
     expect(document.querySelector(".status-footer-version-dl")).toBeTruthy();
   });
@@ -246,6 +248,10 @@ describe("App render", () => {
     expect(document.body.textContent).toMatch(/demo\.mp4/);
     expect(document.body.textContent).toMatch(/Cuadro de texto/i);
     expect(document.body.textContent).toMatch(/Ajuste de línea/i);
+    expect(document.querySelector('[data-testid="inspector-mode-title"]')?.textContent).toMatch(
+      /Texto en lote/i,
+    );
+    expect(document.querySelector('[data-testid="batch-panel"]')).toBeTruthy();
   });
 
   it("renders the selection canvas above batch text overlays in batch mode", async () => {

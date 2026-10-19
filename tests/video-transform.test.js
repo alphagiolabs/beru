@@ -73,7 +73,7 @@ describe("video transform — store", () => {
     expect(useEditorStore.getState().queue[0].transform.rotation).toBe(0);
   });
 
-  it("an output height is clamped to nothing and stays as set", () => {
+  it("sets an output height and clears it back to the original size", () => {
     useEditorStore.getState().setVideoTransform({ outputHeight: 480 });
     expect(useEditorStore.getState().queue[0].transform.outputHeight).toBe(480);
     useEditorStore.getState().setVideoTransform({ outputHeight: null });

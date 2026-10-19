@@ -13,7 +13,8 @@ describeIfPython("python processor logging", () => {
     const blockedLogDir = path.join(tmp, "logs");
     fs.writeFileSync(blockedLogDir, "not a directory");
 
-    const code = "import sys; sys.path.insert(0, 'python'); import processor; print('ok')";
+    const code =
+      "import sys; sys.path.insert(0, 'python'); import processor; import logging; logging.getLogger('beru').info('log-probe'); print('ok')";
     const r = spawnSync(PY, ["-c", code], {
       cwd: process.cwd(),
       env: { ...process.env, BERU_LOG_DIR: blockedLogDir },
@@ -22,5 +23,7 @@ describeIfPython("python processor logging", () => {
 
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("ok");
+    expect(r.stderr).toContain("File logging disabled");
+    expect(r.stderr).toContain("[INFO] log-probe");
   });
 });

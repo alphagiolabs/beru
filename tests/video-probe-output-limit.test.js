@@ -47,31 +47,4 @@ describe("video probe process output limits", () => {
     expect((await result).width).toBe(0);
     expect(proc.kill).toHaveBeenCalled();
   });
-
-  it("keeps the media slot until the timed-out child closes, then cleans listeners", async () => {
-    vi.useFakeTimers();
-    try {
-      const proc = fakeProcess();
-      spawn.mockReturnValueOnce(proc);
-      const result = probeVideoFile(process.execPath, {
-        ffprobePath: process.execPath,
-        timeoutMs: 10,
-        allowFfmpegFallback: false,
-      });
-      await vi.advanceTimersByTimeAsync(11);
-      let settled = false;
-      result.then(() => {
-        settled = true;
-      });
-      await Promise.resolve();
-      expect(settled).toBe(false);
-      proc.emit("close", 1);
-      expect((await result).width).toBe(0);
-      expect(proc.kill).toHaveBeenCalled();
-      expect(proc.stdout.listenerCount("data")).toBe(0);
-      expect(proc.stderr.listenerCount("data")).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 });

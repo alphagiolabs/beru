@@ -28,28 +28,24 @@ describe("reduceUpdaterEvent", () => {
     );
   });
 
-  it("does not clobber an active download when a new check starts", () => {
-    const downloading = {
-      ...IDLE_UPDATE,
-      status: "downloading",
-      version: "1.6.0",
-      percent: 55,
-    };
+  it.each([
+    [
+      "does not clobber an active download when a new check starts",
+      { status: "downloading", version: "1.6.0", percent: 55 },
+    ],
+    [
+      "preserves an available update when a duplicate background check runs",
+      {
+        status: "available",
+        version: "1.6.0",
+        releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v1.6.0",
+      },
+    ],
+  ])("%s", (_name, state) => {
+    const current = { ...IDLE_UPDATE, ...state };
 
-    expect(reduceUpdaterEvent(downloading, { type: "checking" })).toBe(downloading);
-    expect(reduceUpdaterEvent(downloading, { type: "not-available" })).toBe(downloading);
-  });
-
-  it("preserves an available update when a duplicate background check runs", () => {
-    const available = {
-      ...IDLE_UPDATE,
-      status: "available",
-      version: "1.6.0",
-      releaseUrl: "https://github.com/alphagiolabs/beru/releases/tag/v1.6.0",
-    };
-
-    expect(reduceUpdaterEvent(available, { type: "checking" })).toBe(available);
-    expect(reduceUpdaterEvent(available, { type: "not-available" })).toBe(available);
+    expect(reduceUpdaterEvent(current, { type: "checking" })).toBe(current);
+    expect(reduceUpdaterEvent(current, { type: "not-available" })).toBe(current);
   });
 
   it("returns to available after a download error so the user can retry", () => {
@@ -102,5 +98,8 @@ describe("update flow helpers", () => {
   it("detects when a download can start", () => {
     expect(canStartDownload({ status: "available", version: "1.6.0" })).toBe(true);
     expect(canStartDownload({ status: "downloading", version: "1.6.0" })).toBe(false);
+    expect(canStartDownload({ status: "available", version: null })).toBe(false);
+    expect(canStartDownload({ status: "available" })).toBe(false);
+    expect(canStartDownload(null)).toBe(false);
   });
 });

@@ -104,10 +104,11 @@ describe("filmstrip extraction", () => {
     await extractFilmstrip(input, { ...options, duration: 4 });
     await extractFilmstrip(input, { ...options, count: 3 });
     await extractFilmstrip(input, { ...options, height: 80 });
-    expect(captured).toHaveBeenCalledTimes(9);
+    await extractFilmstrip(input, { ...options, start: 10 });
+    expect(captured).toHaveBeenCalledTimes(11);
     fs.writeFileSync(input, "replacement-content");
     await extractFilmstrip(input, options);
-    expect(captured).toHaveBeenCalledTimes(11);
+    expect(captured).toHaveBeenCalledTimes(13);
     fs.unlinkSync(input);
     expect(await extractFilmstrip(input, options)).toBeNull();
   });

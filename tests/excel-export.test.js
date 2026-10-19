@@ -32,8 +32,13 @@ describe("exportExcel (plan 022)", () => {
     expect(writeExcel).toHaveBeenCalledTimes(1);
     const [path, base64] = writeExcel.mock.calls[0];
     expect(path).toBe("C:\\out\\export.xlsx");
-    expect(typeof base64).toBe("string");
-    expect(base64.length).toBeGreaterThan(20);
+    expect(saveExcelDialog).toHaveBeenCalledWith("source-export.xlsx");
+    const XLSX = await import("xlsx");
+    const workbook = XLSX.read(base64, { type: "base64" });
+    expect(XLSX.utils.sheet_to_json(workbook.Sheets.Sheet1)).toEqual([
+      { id: "a", text: "hola" },
+      { id: "b", text: "adios" },
+    ]);
   });
 
   it("returns canceled when user dismisses dialog", async () => {
@@ -61,5 +66,6 @@ describe("exportExcel (plan 022)", () => {
     const res = await useEditorStore.getState().exportExcel();
     expect(res.ok).toBe(false);
     expect(window.api.saveExcelDialog).not.toHaveBeenCalled();
+    expect(window.api.writeExcel).not.toHaveBeenCalled();
   });
 });

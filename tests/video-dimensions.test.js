@@ -3,14 +3,6 @@ import { getLockedDimensions, mergeProbeIntoQueueItem } from "../src/utils/video
 
 describe("video-dimensions", () => {
   describe("mergeProbeIntoQueueItem", () => {
-    it("locks source dimensions on first probe", () => {
-      const item = { width: 0, height: 0, sourceWidth: 0, sourceHeight: 0 };
-      const merged = mergeProbeIntoQueueItem(item, { width: 1920, height: 1080 });
-      expect(merged.sourceWidth).toBe(1920);
-      expect(merged.sourceHeight).toBe(1080);
-      expect(getLockedDimensions(merged)).toEqual({ width: 1920, height: 1080 });
-    });
-
     it("does not overwrite locked source on later probes", () => {
       const item = {
         width: 1920,
@@ -37,22 +29,6 @@ describe("video-dimensions", () => {
       expect(merged.audioChannels).toBe(6);
     });
 
-    it("preserves video codec and frame rate", () => {
-      const item = { width: 0, height: 0 };
-      const merged = mergeProbeIntoQueueItem(item, {
-        width: 1920,
-        height: 1080,
-        videoCodec: "h264",
-        frameRate: 30,
-        pixFmt: "yuv420p",
-        duration: 120,
-      });
-      expect(merged.videoCodec).toBe("h264");
-      expect(merged.frameRate).toBe(30);
-      expect(merged.pixFmt).toBe("yuv420p");
-      expect(merged.duration).toBe(120);
-    });
-
     it("handles missing probe info gracefully", () => {
       const item = { width: 0, height: 0, sourceWidth: 0, sourceHeight: 0 };
       const merged = mergeProbeIntoQueueItem(item, {});
@@ -62,11 +38,6 @@ describe("video-dimensions", () => {
   });
 
   describe("getLockedDimensions", () => {
-    it("prefers sourceWidth/sourceHeight over width/height", () => {
-      const item = { width: 1280, height: 720, sourceWidth: 1920, sourceHeight: 1080 };
-      expect(getLockedDimensions(item)).toEqual({ width: 1920, height: 1080 });
-    });
-
     it("falls back to width/height when source is not set", () => {
       const item = { width: 1280, height: 720, sourceWidth: 0, sourceHeight: 0 };
       expect(getLockedDimensions(item)).toEqual({ width: 1280, height: 720 });

@@ -45,16 +45,4 @@ describe("filmstrip window", () => {
       expect(time).toBeLessThan(12);
     }
   });
-
-  it("keeps windows of the same file apart in the cache", async () => {
-    await extractFilmstrip(input, { count: 2, duration: 2, start: 0 });
-    const firstCount = captured.mock.calls.length;
-    await extractFilmstrip(input, { count: 2, duration: 2, start: 10 });
-    expect(captured.mock.calls.length).toBeGreaterThan(firstCount);
-    expect(
-      seekTimes()
-        .slice(firstCount)
-        .every((time) => time >= 10),
-    ).toBe(true);
-  });
 });

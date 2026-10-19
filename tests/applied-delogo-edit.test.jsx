@@ -131,16 +131,11 @@ describe("AppliedDelogoEditor — seguir editando zonas aplicadas", () => {
     document.body.innerHTML = "";
   });
 
-  it("muestra el editor de desenfoque aplicado al seleccionar la zona", () => {
+  it("el slider de intensidad actualiza el blurStrength de la operación", () => {
     const root = renderPanel();
     const editor = document.querySelector("[data-applied-region-editor='blur']");
     expect(editor).toBeTruthy();
     expect(editor.textContent).toMatch(/Desenfoque aplicado/);
-    act(() => root.unmount());
-  });
-
-  it("el slider de intensidad actualiza el blurStrength de la operación", () => {
-    const root = renderPanel();
     const slider = document.querySelector(
       "[data-applied-region-editor='blur'] input[aria-label='Intensidad de desenfoque']",
     );

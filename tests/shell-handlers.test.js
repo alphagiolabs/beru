@@ -58,9 +58,11 @@ describe("Electron shell handler restrictions", () => {
     await expect(openPathHandler(trustedSenderEvent, tempDirectory)).resolves.toEqual({
       success: true,
     });
-    await expect(openPathHandler(trustedSenderEvent, executablePath)).resolves.toMatchObject({
+    await expect(openPathHandler(trustedSenderEvent, executablePath)).resolves.toEqual({
       success: false,
+      error: "Sólo se pueden abrir videos de salida o carpetas",
     });
     expect(mocks.openPath).toHaveBeenCalledTimes(2);
+    expect(mocks.openPath).not.toHaveBeenCalledWith(executablePath);
   });
 });

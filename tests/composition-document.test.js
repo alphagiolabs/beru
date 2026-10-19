@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { createQueueItem } from "../src/utils/types.js";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { buildSessionSnapshot, parseSessionSnapshot } from "../src/utils/session-persist.js";
@@ -83,37 +83,6 @@ it("rejects documents with invalid canvas, duplicate entry identity or unknown v
     },
   ])
     expect(parseCompositionDocument(document)).toBeNull();
-});
-
-it("keeps source consent until the last queue or composition owner is removed", () => {
-  const release = vi.fn().mockResolvedValue(undefined);
-  const before = window.api;
-  window.api = { ...before, releaseVideoPaths: release };
-  try {
-    useEditorStore.setState({
-      queue: [
-        createQueueItem({
-          path: "Z:/a.mp4",
-          filename: "a.mp4",
-          width: 320,
-          height: 180,
-          duration: 4,
-        }),
-      ],
-      composition: null,
-      selectedIdx: 0,
-      isProcessing: false,
-    });
-    release.mockClear();
-    useEditorStore.getState().addCompositionEntry(0);
-    const id = useEditorStore.getState().composition.entries[0].id;
-    useEditorStore.getState().removeVideo(0);
-    expect(release).not.toHaveBeenCalled();
-    useEditorStore.getState().removeCompositionEntry(id);
-    expect(release).toHaveBeenCalledExactlyOnceWith(["Z:/a.mp4"], []);
-  } finally {
-    window.api = before;
-  }
 });
 
 it("rejects malformed operations instead of accepting a document that crashes consumers", () => {

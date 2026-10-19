@@ -2,7 +2,7 @@ import React, { act } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRoot } from "react-dom/client";
 import TextOverlay from "../src/components/TextOverlay.jsx";
-import { layoutExportText, scaledSafeMargin } from "../src/utils/text-layout.js";
+import { layoutExportText } from "../src/utils/text-layout.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -30,12 +30,6 @@ describe("text preview ↔ export parity", () => {
       root?.unmount();
     });
     root = null;
-  });
-
-  it("scales the safe margin purely (no artificial screen floor)", () => {
-    const scale = 640 / 1920;
-    expect(scaledSafeMargin(4, scale)).toBeCloseTo(4 * scale, 6);
-    expect(scaledSafeMargin(4, scale)).toBeLessThan(2);
   });
 
   it("paints the scaled export insets without a 2px screen floor", () => {

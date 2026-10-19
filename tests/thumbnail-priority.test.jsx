@@ -93,19 +93,22 @@ describe("visible queue thumbnails", () => {
     expect(rows[7].querySelector("img")).toBeNull();
   });
 
-  it("keeps a thumbnail attached to its path after removing an earlier row", async () => {
+  it("keeps a thumbnail attached to its path and drops one for a removed row", async () => {
     const videos = [item("remove"), item("keep")];
     useEditorStore.setState({ queue: videos, selectedIdx: 1 });
-    let reply;
+    const replies = new Map();
     api.getThumbnail.mockImplementation(
-      () =>
+      (path) =>
         new Promise((resolve) => {
-          reply = resolve;
+          replies.set(path, resolve);
         }),
     );
-    const request = useEditorStore.getState().prioritizeThumbnails([videos[1].path]);
+    const request = useEditorStore
+      .getState()
+      .prioritizeThumbnails([videos[0].path, videos[1].path]);
     useEditorStore.getState().removeVideo(0);
-    reply({ dataUrl: "data:image/jpeg;base64,kept" });
+    replies.get(videos[0].path)({ dataUrl: "data:image/jpeg;base64,removed" });
+    replies.get(videos[1].path)({ dataUrl: "data:image/jpeg;base64,kept" });
     await request;
     expect(useEditorStore.getState().thumbnailsByPath).toEqual({
       [videos[1].path]: "data:image/jpeg;base64,kept",

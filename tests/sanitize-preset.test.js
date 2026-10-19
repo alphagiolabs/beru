@@ -80,8 +80,8 @@ describe("sanitize-preset", () => {
 
     it("handles empty input gracefully", () => {
       const style = sanitizeTextStyle({});
-      expect(style).toBeDefined();
-      expect(typeof style.textFontSize).toBe("number");
+      expect(Number.isFinite(style.textFontSize)).toBe(true);
+      expect(style.textFontSize).toBe(32);
     });
 
     it("keeps layout fields used by Text Overlay", () => {

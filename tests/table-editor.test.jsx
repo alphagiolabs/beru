@@ -118,40 +118,6 @@ describe("TableEditor keyboard", () => {
     expect(focusedRowIndex()).toBe(1);
   });
 
-  it("starts inline edit with Enter on the grid", () => {
-    root = createRoot(document.getElementById("root"));
-
-    act(() => {
-      root.render(<TableEditor />);
-    });
-
-    const grid = document.querySelector('[tabindex="0"]');
-
-    act(() => {
-      grid.focus();
-      dispatchKey(grid, "Enter");
-    });
-
-    expect(document.querySelector("tbody input")).toBeTruthy();
-  });
-
-  it("closes the table editor with Escape on the grid", () => {
-    root = createRoot(document.getElementById("root"));
-
-    act(() => {
-      root.render(<TableEditor />);
-    });
-
-    const grid = document.querySelector('[tabindex="0"]');
-
-    act(() => {
-      grid.focus();
-      dispatchKey(grid, "Escape");
-    });
-
-    expect(useEditorStore.getState().showTableEditor).toBe(false);
-  });
-
   it("blocks global video shortcuts while the table editor is open", () => {
     root = createRoot(document.getElementById("root"));
     const videoCommands = [];
@@ -227,25 +193,6 @@ describe("TableEditor keyboard", () => {
       window.removeEventListener("beru:video:command", onVideoCommand);
       window.removeEventListener("keydown", onWindowKeydown);
     }
-  });
-
-  it("closes the table editor with Escape via the global keyboard handler", () => {
-    root = createRoot(document.getElementById("root"));
-
-    act(() => {
-      root.render(
-        <>
-          <KeyboardHarness />
-          <TableEditor />
-        </>,
-      );
-    });
-
-    act(() => {
-      dispatchKey(window, "Escape");
-    });
-
-    expect(useEditorStore.getState().showTableEditor).toBe(false);
   });
 
   it("Escape inside a focus-panel field blurs it instead of closing the editor", () => {

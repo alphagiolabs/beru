@@ -94,7 +94,26 @@ describe("getBatchProgress", () => {
     ).toEqual({ completed: 3, total: 3, percent: 100 });
   });
 
-  describe("jobProgress map (VITE_BERU_RENDER_PROGRESS_MAP)", () => {
+  it("reports media export progress instead of queue progress", () => {
+    expect(
+      getBatchProgress({
+        queue: [item("done"), item("done"), item("done")],
+        progressDone: 3,
+        progressTotal: 3,
+        mediaExport: { status: "processing", progress: 56 },
+      }),
+    ).toEqual({ completed: 0, total: 1, percent: 56 });
+    expect(
+      getBatchProgress({
+        queue: [],
+        progressDone: 0,
+        progressTotal: 0,
+        mediaExport: { status: "done", progress: 100 },
+      }),
+    ).toEqual({ completed: 1, total: 1, percent: 100 });
+  });
+
+  describe("jobProgress map", () => {
     it("reads in-flight progress from jobProgress instead of item.progress", () => {
       expect(
         getBatchProgress({

@@ -30,6 +30,8 @@ describe("captured process cancellation", () => {
       failure === "timeout" ? { timedOut: true } : { outputExceeded: true },
     );
     expect(children.at(-1).closed).toBe(true);
+    expect(children.at(-1).child.stdout.listenerCount("data")).toBe(0);
+    expect(children.at(-1).child.stderr.listenerCount("data")).toBe(0);
   });
   it("kills a real child and waits for exit before releasing its media slot", async () => {
     const controller = new AbortController();

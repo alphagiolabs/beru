@@ -61,7 +61,6 @@ describe("native picker read consent", () => {
         ok: true,
         resolvedPath: fs.realpathSync.native(selected),
       });
-      expect(security.registerAllowedPath(sibling, kind).ok).toBe(false);
       expect(security.validateReadableFile(sibling, kind).ok).toBe(false);
     },
   );

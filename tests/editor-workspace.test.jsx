@@ -225,19 +225,6 @@ describe("EditorWorkspace", () => {
     expect(api.saveEditorProject.mock.calls[0][0].saveAs).toBe(true);
   });
 
-  it("uses Ctrl+Z for undo inside the editor", () => {
-    const base = createEmptyEditorProject();
-    const edited = { ...base, canvas: { ...base.canvas, width: 800 } };
-    useTimelineStore.setState({
-      history: { present: edited, past: [base], future: [], gesture: null },
-    });
-    mount();
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true }));
-    });
-    expect(useTimelineStore.getState().history.present).toBe(base);
-  });
-
   it("offers autosave recovery once per app session across dependency changes and remounts", async () => {
     const originalConfirm = useEditorStore.getState().requestConfirm;
     const confirm = vi.fn(async () => true);

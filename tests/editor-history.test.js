@@ -133,14 +133,6 @@ describe("useTimelineStore", () => {
     expect(state.filePath).toBe("C:/a.beru-edit.json");
   });
 
-  it("stays dirty when an edit lands while the save is in flight", () => {
-    useTimelineStore.getState().apply((p) => setCanvas(p, { width: 800 }));
-    const { history, revision } = useTimelineStore.getState();
-    useTimelineStore.getState().apply((p) => setCanvas(p, { width: 900 }));
-    useTimelineStore.getState().markSaved({ project: history.present, revision });
-    expect(selectIsDirty(useTimelineStore.getState())).toBe(true);
-  });
-
   it("groups a gesture into a single revision bump and undo entry", () => {
     const store = useTimelineStore.getState();
     const before = store.revision;

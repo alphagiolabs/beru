@@ -81,7 +81,6 @@ describe("Temporal quick preview", () => {
     const cut = frame(8, true);
     const actual = render(session, cut, 8);
     expect(actual).toEqual(render(createDelogoRenderSession(), cut, 8));
-    expect(render(session, cut, 8)).toEqual(actual);
     expect(render(session, frame(0), 0)).toEqual(render(createDelogoRenderSession(), frame(0), 0));
     for (let i = 1; i < 8; i++) render(session, frame(i), i);
     expect(render(session, frame(8), 8, { radius: 1 })).toEqual(

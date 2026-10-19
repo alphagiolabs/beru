@@ -62,18 +62,20 @@ describe("Auth boot gate", () => {
   });
 
   it("does not flash the login screen while restoring a session", async () => {
+    const initAuth = vi.fn(async () => new Promise(() => {}));
     useEditorStore.setState({
       authStatus: "loading",
       user: null,
       profile: null,
       authError: null,
-      initAuth: vi.fn(async () => new Promise(() => {})),
+      initAuth,
     });
 
     await act(async () => {
       root.render(<BeruRoot />);
     });
 
+    expect(initAuth).toHaveBeenCalledTimes(1);
     expect(document.querySelector('[data-testid="auth-session-loading"]')).toBeTruthy();
     expect(document.body.textContent).toMatch(/Verificando sesión/i);
     expect(document.querySelector(".login-cinematic")).toBeNull();

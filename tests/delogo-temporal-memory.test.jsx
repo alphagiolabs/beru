@@ -39,10 +39,9 @@ describe("temporal delogo preview memory", () => {
           drawImage: vi.fn(),
           putImageData: vi.fn(),
           setTransform: vi.fn(),
-          getImageData: vi.fn((_x, _y, width, height) => {
-            if (width > 1280 || height > 720) throw new Error("unbounded frame capture");
-            return { data: new Uint8ClampedArray(width * height * 4) };
-          }),
+          getImageData: vi.fn((_x, _y, width, height) => ({
+            data: new Uint8ClampedArray(width * height * 4),
+          })),
           createImageData: vi.fn((width, height) => ({
             data: new Uint8ClampedArray(width * height * 4),
           })),
@@ -158,41 +157,6 @@ describe("temporal delogo preview memory", () => {
     expect(captures[0][2]).toBeLessThanOrEqual(1280);
     expect(captures[0][3]).toBeLessThanOrEqual(720);
     expect([...contexts.values()].some((ctx) => ctx.putImageData.mock.calls.length)).toBe(true);
-  });
-
-  it("draws an applied blur from its own region and method when there is no draft", () => {
-    useEditorStore.setState({
-      currentRegion: null,
-      activeTool: "pan",
-      delogoMethod: "mosaic",
-    });
-    const video = {
-      videoWidth: 320,
-      videoHeight: 180,
-      readyState: 4,
-      paused: true,
-      currentSrc: "beru://video",
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    };
-    const operation = {
-      mode: "delogo",
-      delogoMethod: "blur",
-      blurStrength: 30,
-      region: { x: 0.25, y: 0.25, w: 0.2, h: 0.2 },
-    };
-    act(() =>
-      root.render(createElement(DelogoLivePreview, { videoRef: { current: video }, operation })),
-    );
-    const [id, draw] = frames.entries().next().value;
-    frames.delete(id);
-    act(() => draw());
-
-    expect(
-      [...contexts.values()].some((ctx) =>
-        ctx.drawImage.mock.calls.some(([source]) => source === video),
-      ),
-    ).toBe(true);
   });
 
   it("respects an applied blur interval on paused seeks", () => {

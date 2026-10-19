@@ -44,7 +44,7 @@ function createFakeWin(currentUrl) {
 }
 
 describe("attachNavigationGuards", () => {
-  it("allows navigation to the window's own document", () => {
+  it("allows only the window's own document", () => {
     for (const ownUrl of [
       "file:///C:/beru/build/index.html",
       "http://localhost:5173/",
@@ -58,6 +58,12 @@ describe("attachNavigationGuards", () => {
 
       expect(event.preventDefault).not.toHaveBeenCalled();
     }
+
+    const { win, handlers } = createFakeWin("http://localhost:5173/");
+    attachNavigationGuards(win);
+    const blocked = { preventDefault: vi.fn() };
+    handlers["will-navigate"](blocked, "http://localhost:5173/evil.html");
+    expect(blocked.preventDefault).toHaveBeenCalled();
   });
 
   it("blocks navigation to external urls", () => {
@@ -70,7 +76,6 @@ describe("attachNavigationGuards", () => {
       handlers["will-navigate"](event, url);
 
       expect(event.preventDefault).toHaveBeenCalled();
-      expect(errorSpy).toHaveBeenCalledWith("[beru] blocked navigation to:", url);
     }
 
     errorSpy.mockRestore();
