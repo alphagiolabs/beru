@@ -555,10 +555,6 @@ a:focus-visible,
   white-space: nowrap;
 }
 
-.status-footer-chip--active {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-}
-
 .status-footer-running {
   color: var(--text-primary);
 }
@@ -3614,11 +3610,6 @@ a:focus-visible,
   z-index: 20;
 }
 
-.inspector-font-picker.is-disabled {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
 .inspector-font-picker-trigger {
   display: flex;
   align-items: center;
@@ -4929,11 +4920,6 @@ a:focus-visible,
 .inspector-switch:focus-visible {
   outline: 2px solid var(--accent-brand);
   outline-offset: 2px;
-}
-
-.inspector-switch:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .inspector-switch-thumb {

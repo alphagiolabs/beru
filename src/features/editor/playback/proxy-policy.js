@@ -1,6 +1,6 @@
-export const SEEK_LIMIT_MS = 150;
-export const SEEK_WINDOW = 12;
-export const SEEK_MIN_SAMPLES = 8;
+const SEEK_LIMIT_MS = 150;
+const SEEK_WINDOW = 12;
+const SEEK_MIN_SAMPLES = 8;
 
 export function recordSeek(samples, ms) {
   return [...samples, ms].slice(-SEEK_WINDOW);

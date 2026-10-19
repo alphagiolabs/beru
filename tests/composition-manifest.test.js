@@ -10,11 +10,11 @@ import {
   projectDurationUs,
 } from "../shared/editor-timeline.js";
 import { compositionDuration, parseCompositionDocument } from "../shared/composition-document.js";
+import { validateCompositionJob } from "../shared/composition-settings.js";
 import {
   buildCompositionManifest,
   buildExactFrameManifest,
   compileEditorComposition,
-  validateCompositionManifest,
 } from "../src/features/editor/composition.js";
 import { compositionJob } from "../src/utils/composition.js";
 
@@ -62,18 +62,17 @@ it("compiles Editor through the same document and job builder as main's composit
     rotation: 270,
     source_identity: { sizeBytes: 2048, mtimeMs: 1700000000000 },
   });
-  expect(validateCompositionManifest(manifest)).toEqual({ valid: true });
+  expect(validateCompositionJob(manifest.jobs[0])).toBeNull();
 });
 
 it("uses the same job for exact frames and rejects an instant outside its duration", () => {
   const manifest = buildExactFrameManifest(projectWithClip(), 1_500_000);
   expect(manifest.jobs[0].frame).toEqual({ atUs: 1_500_000 });
-  expect(validateCompositionManifest(manifest).valid).toBe(true);
+  expect(validateCompositionJob(manifest.jobs[0])).toBeNull();
   for (const atUs of [-1, 5e6]) {
-    expect(
-      validateCompositionManifest({ ...manifest, jobs: [{ ...manifest.jobs[0], frame: { atUs } }] })
-        .valid,
-    ).toBe(false);
+    expect(validateCompositionJob({ ...manifest.jobs[0], frame: { atUs } })).toMatch(
+      /fuera del montaje/,
+    );
   }
 });
 
@@ -109,21 +108,10 @@ it.each([
     );
     const endUs = projectDurationUs(project);
     expect(endUs).toBe(Math.round(compositionDuration(compileEditorComposition(project)) * 1e6));
-    expect(validateCompositionManifest(buildExactFrameManifest(project, endUs - 1))).toEqual({
-      valid: true,
-    });
+    expect(validateCompositionJob(buildExactFrameManifest(project, endUs - 1).jobs[0])).toBeNull();
   },
 );
 
-it("rejects unsupported job envelopes and empty compositions", () => {
-  expect(
-    validateCompositionManifest(buildCompositionManifest(createEmptyEditorProject())).valid,
-  ).toBe(false);
-  expect(
-    validateCompositionManifest({ type: "beru-composition-manifest", version: 1, clips: [] }).valid,
-  ).toBe(false);
-  expect(
-    validateCompositionManifest({ ...buildCompositionManifest(projectWithClip()), version: 2 })
-      .valid,
-  ).toBe(false);
+it("builds no jobs for an empty composition", () => {
+  expect(buildCompositionManifest(createEmptyEditorProject()).jobs).toEqual([]);
 });

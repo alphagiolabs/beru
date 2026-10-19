@@ -45,6 +45,19 @@ export default function OperationOverlays({
 }) {
   const t = useT();
   if (logoComparisonVisible || showFfmpegOverlay) return null;
+  const regionHitLayer = (op, opIdx, s, isDragging) => (
+    <RegionHitLayer
+      screen={s}
+      dragging={isDragging}
+      disabled={
+        !isOpActive(op, currentTimeRef.current) ||
+        (showFfmpegPreview && sidebarMode !== "logo") ||
+        activeTool === "pan"
+      }
+      onDragStart={(e) => onRegionOpDragStart(opIdx, e)}
+      title={t("preview.dragRegion")}
+    />
+  );
   return ops.map(({ op, opIdx, screen: s, cssTransform }) => {
     if (!s) return null;
     if (op.mode === "blur") {
@@ -60,17 +73,7 @@ export default function OperationOverlays({
             endTime={op.endTime}
             outline={isSelected ? "none" : "2px solid rgba(0,240,234,0.6)"}
           />
-          <RegionHitLayer
-            screen={s}
-            dragging={isDragging}
-            disabled={
-              !isOpActive(op, currentTimeRef.current) ||
-              (showFfmpegPreview && sidebarMode !== "logo") ||
-              activeTool === "pan"
-            }
-            onDragStart={(e) => onRegionOpDragStart(opIdx, e)}
-            title={t("preview.dragRegion")}
-          />
+          {regionHitLayer(op, opIdx, s, isDragging)}
         </Fragment>
       );
     }
@@ -90,39 +93,16 @@ export default function OperationOverlays({
               outlineOffset: "-1px",
             }}
           />
-          <RegionHitLayer
-            screen={s}
-            dragging={isDragging}
-            disabled={
-              !isOpActive(op, currentTimeRef.current) ||
-              (showFfmpegPreview && sidebarMode !== "logo") ||
-              activeTool === "pan"
-            }
-            onDragStart={(e) => onRegionOpDragStart(opIdx, e)}
-            title={t("preview.dragRegion")}
-          />
+          {regionHitLayer(op, opIdx, s, isDragging)}
         </Fragment>
       );
     }
     if (op.mode === "delogo") {
       const isDragging = draggingOp?.opIdx === opIdx;
-      const hitLayer = (
-        <RegionHitLayer
-          screen={s}
-          dragging={isDragging}
-          disabled={
-            !isOpActive(op, currentTimeRef.current) ||
-            (showFfmpegPreview && sidebarMode !== "logo") ||
-            activeTool === "pan"
-          }
-          onDragStart={(e) => onRegionOpDragStart(opIdx, e)}
-          title={t("preview.dragRegion")}
-        />
-      );
       return (
         <Fragment key={op.id}>
           <DelogoLivePreview videoRef={videoRef} operation={op} />
-          {hitLayer}
+          {regionHitLayer(op, opIdx, s, isDragging)}
         </Fragment>
       );
     }

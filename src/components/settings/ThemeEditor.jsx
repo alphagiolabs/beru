@@ -110,7 +110,6 @@ export default function ThemeEditor({
   basePresetId,
   onSave,
   onCancel,
-  livePreview = true,
 }) {
   const t = useT();
   const [name, setName] = useState(initialName);
@@ -128,16 +127,10 @@ export default function ThemeEditor({
   const applyActiveTheme = useEditorStore((s) => s.applyActiveTheme);
 
   useEffect(() => {
-    if (!livePreview || !tokens) return;
     applyThemeTokens(tokens, themeActiveSlot);
-  }, [tokens, livePreview, themeActiveSlot]);
+  }, [tokens, themeActiveSlot]);
 
-  useEffect(() => {
-    if (!livePreview) return;
-    return () => {
-      applyActiveTheme();
-    };
-  }, [livePreview, applyActiveTheme]);
+  useEffect(() => () => applyActiveTheme(), [applyActiveTheme]);
 
   const updateToken = useCallback((key, value) => {
     setTokens((prev) => ({ ...prev, [key]: value }));

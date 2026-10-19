@@ -2,7 +2,7 @@ import { getSupabase, isSupabaseConfigured } from "../../lib/supabaseClient.js";
 
 let _authListenerRegistered = false;
 
-export function profileGateError(profile) {
+function profileGateError(profile) {
   if (!profile) return "auth.profileMissing";
   if (!profile.is_active) return "auth.accountDisabled";
   return null;

@@ -1,20 +1,14 @@
 import { describe, expect, it } from "vitest";
-import {
-  SEEK_LIMIT_MS,
-  SEEK_MIN_SAMPLES,
-  SEEK_WINDOW,
-  recordSeek,
-  seekIsSlow,
-} from "../src/features/editor/playback/proxy-policy.js";
+import { recordSeek, seekIsSlow } from "../src/features/editor/playback/proxy-policy.js";
 
 describe("seek policy for the preview proxy", () => {
   it("says nothing until enough seeks have been timed", () => {
-    expect(seekIsSlow(Array(SEEK_MIN_SAMPLES - 1).fill(900))).toBe(false);
+    expect(seekIsSlow(Array(7).fill(900))).toBe(false);
   });
 
   it("switches a source whose 90th percentile seek is over the limit", () => {
-    expect(seekIsSlow(Array(SEEK_MIN_SAMPLES).fill(SEEK_LIMIT_MS))).toBe(false);
-    expect(seekIsSlow([...Array(SEEK_MIN_SAMPLES - 1).fill(100), SEEK_LIMIT_MS + 1])).toBe(true);
+    expect(seekIsSlow(Array(8).fill(150))).toBe(false);
+    expect(seekIsSlow([...Array(7).fill(100), 151])).toBe(true);
   });
 
   it("tolerates a few slow seeks among fast ones", () => {
@@ -26,9 +20,9 @@ describe("seek policy for the preview proxy", () => {
 
   it("keeps only the most recent window of seeks", () => {
     let samples = [];
-    for (let i = 0; i < SEEK_WINDOW + 5; i += 1) samples = recordSeek(samples, i);
-    expect(samples).toHaveLength(SEEK_WINDOW);
+    for (let i = 0; i < 17; i += 1) samples = recordSeek(samples, i);
+    expect(samples).toHaveLength(12);
     expect(samples[0]).toBe(5);
-    expect(samples.at(-1)).toBe(SEEK_WINDOW + 4);
+    expect(samples.at(-1)).toBe(16);
   });
 });

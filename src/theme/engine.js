@@ -166,7 +166,7 @@ export function migrateThemeSettings(settings = {}) {
   };
 }
 
-export function isValidThemeRef(ref, customThemes = []) {
+function isValidThemeRef(ref, customThemes = []) {
   if (isPresetId(ref)) return true;
   if (isCustomThemeRef(ref)) {
     const id = customThemeId(ref);
@@ -175,7 +175,7 @@ export function isValidThemeRef(ref, customThemes = []) {
   return false;
 }
 
-export function sanitizeCustomThemes(themes) {
+function sanitizeCustomThemes(themes) {
   if (!Array.isArray(themes)) return [];
   return themes
     .filter((t) => t && typeof t.id === "string" && typeof t.name === "string")

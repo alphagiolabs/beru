@@ -1,26 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createDelogoRenderSession,
-  inpaintInto,
-  mosaicInto,
-  mosaicOutputSize,
-  temporalSampleSize,
-} from "../src/utils/delogo-render-core.js";
-import { referenceMosaic } from "./fixtures/delogo-render-reference.js";
-
-function makeRng(seed) {
-  let s = seed >>> 0;
-  return () => {
-    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-}
-
-function randomData(rng, length) {
-  const data = new Uint8ClampedArray(length);
-  for (let i = 0; i < length; i++) data[i] = Math.floor(rng() * 256);
-  return data;
-}
+import { createDelogoRenderSession, temporalSampleSize } from "../src/utils/delogo-render-core.js";
 
 function constantFrame(w, h, value) {
   const data = new Uint8ClampedArray(w * h * 4);
@@ -33,43 +12,142 @@ function constantFrame(w, h, value) {
   return data;
 }
 
-describe("delogo render core parity with the legacy inline kernels", () => {
-  it("renders mosaic blocks bit-identically", () => {
-    const rng = makeRng(0xbeef);
-    for (const [sw, sh, blockSize] of [
-      [1, 1, 1],
-      [5, 1, 2],
-      [1, 5, 2],
-      [9, 7, 3],
-      [32, 18, 16],
-      [23, 13, 7],
-      [40, 40, 1],
-      [13, 11, 40],
-      [6, 6, 4],
-    ]) {
-      const data = randomData(rng, sw * sh * 4);
-      const { cols, rows } = mosaicOutputSize(sw, sh, blockSize);
-      const out = new Uint8ClampedArray(cols * rows * 4);
-      mosaicInto(data, sw, sh, blockSize, out);
-      expect(out).toEqual(referenceMosaic(data, sw, sh, blockSize));
-    }
-  });
-
-  it("preserves the source when no surrounding context is available", () => {
-    const rng = makeRng(0xf00d);
-    for (const [sw, sh] of [
-      [1, 1],
-      [1, 10],
-      [10, 1],
-      [2, 2],
-      [9, 7],
-      [33, 17],
-    ]) {
-      const sData = randomData(rng, sw * sh * 4);
-      const dData = new Uint8ClampedArray(sw * sh * 4);
-      inpaintInto(sData, dData, sw, sh);
-      expect(dData).toEqual(sData);
-    }
+describe("mosaic pixels through the render session", () => {
+  it.each([
+    {
+      name: "normal grid with independent RGB channels and rounded averages",
+      size: [4, 4],
+      block: 2,
+      pixels: [
+        [1, 2, 3, 0],
+        [2, 3, 4, 255],
+        [21, 42, 63, 17],
+        [22, 43, 64, 255],
+        [3, 4, 5, 9],
+        [4, 5, 6, 128],
+        [23, 44, 65, 200],
+        [24, 45, 66, 77],
+        [101, 102, 103, 1],
+        [102, 103, 104, 2],
+        [201, 202, 203, 3],
+        [202, 203, 204, 4],
+        [103, 104, 105, 5],
+        [104, 105, 106, 6],
+        [203, 204, 205, 7],
+        [204, 205, 206, 8],
+      ],
+      expectedSize: [2, 2],
+      expected: [
+        [3, 4, 5, 255],
+        [23, 44, 65, 255],
+        [103, 104, 105, 255],
+        [203, 204, 205, 255],
+      ],
+    },
+    {
+      name: "partial blocks on the right and bottom edges",
+      size: [3, 3],
+      block: 2,
+      pixels: [
+        [0, 10, 20, 0],
+        [1, 11, 21, 1],
+        [10, 20, 30, 2],
+        [2, 12, 22, 3],
+        [3, 13, 23, 4],
+        [11, 21, 31, 5],
+        [20, 30, 40, 6],
+        [21, 31, 41, 7],
+        [30, 40, 50, 8],
+      ],
+      expectedSize: [2, 2],
+      expected: [
+        [2, 12, 22, 255],
+        [11, 21, 31, 255],
+        [21, 31, 41, 255],
+        [30, 40, 50, 255],
+      ],
+    },
+    {
+      name: "one-pixel blocks keep RGB and make every output pixel opaque",
+      size: [2, 2],
+      block: 1,
+      pixels: [
+        [5, 6, 7, 0],
+        [20, 30, 40, 8],
+        [100, 90, 80, 128],
+        [0, 127, 255, 255],
+      ],
+      expectedSize: [2, 2],
+      expected: [
+        [5, 6, 7, 255],
+        [20, 30, 40, 255],
+        [100, 90, 80, 255],
+        [0, 127, 255, 255],
+      ],
+    },
+    {
+      name: "a block larger than both dimensions averages the whole image",
+      size: [3, 2],
+      block: 8,
+      pixels: [
+        [0, 10, 20, 1],
+        [2, 12, 22, 2],
+        [4, 14, 24, 3],
+        [6, 16, 26, 4],
+        [8, 18, 28, 5],
+        [13, 23, 33, 6],
+      ],
+      expectedSize: [1, 1],
+      expected: [[6, 16, 26, 255]],
+    },
+    {
+      name: "a single pixel",
+      size: [1, 1],
+      block: 1,
+      pixels: [[7, 100, 200, 0]],
+      expectedSize: [1, 1],
+      expected: [[7, 100, 200, 255]],
+    },
+    {
+      name: "a one-row image with a partial final block",
+      size: [3, 1],
+      block: 2,
+      pixels: [
+        [0, 10, 20, 0],
+        [3, 13, 23, 7],
+        [20, 30, 40, 128],
+      ],
+      expectedSize: [2, 1],
+      expected: [
+        [2, 12, 22, 255],
+        [20, 30, 40, 255],
+      ],
+    },
+    {
+      name: "a one-column image with a partial final block",
+      size: [1, 3],
+      block: 2,
+      pixels: [
+        [0, 10, 20, 0],
+        [3, 13, 23, 7],
+        [20, 30, 40, 128],
+      ],
+      expectedSize: [1, 2],
+      expected: [
+        [2, 12, 22, 255],
+        [20, 30, 40, 255],
+      ],
+    },
+  ])("renders $name", ({ size: [width, height], block, pixels, expectedSize, expected }) => {
+    const result = createDelogoRenderSession().compute(
+      "mosaic",
+      { blockSize: block },
+      Uint8ClampedArray.from(pixels.flat()),
+      width,
+      height,
+    );
+    expect([result.width, result.height]).toEqual(expectedSize);
+    expect(Array.from(result.data)).toEqual(expected.flat());
   });
 });
 
@@ -92,20 +170,6 @@ describe("delogo render session semantics", () => {
     session.reset();
     const result = session.compute("temporal", params, constantFrame(16, 16, 0), 16, 16);
     expect(result.data[(4 * 16 + 4) * 4]).toBe(0);
-  });
-
-  it("reports mosaic output size as the tiny grid", () => {
-    const result = createDelogoRenderSession().compute(
-      "mosaic",
-      { blockSize: 16 },
-      constantFrame(32, 18, 128),
-      32,
-      18,
-    );
-    expect(result.width).toBe(2);
-    expect(result.height).toBe(2);
-    expect(result.data.length).toBe(2 * 2 * 4);
-    expect(result.data[0]).toBe(128);
   });
 });
 

@@ -13,7 +13,6 @@ export default function DateTimeOverlay({
   fallbackText,
   showOutline = false,
   outlineColor = "rgba(168,85,247,0.4)",
-  dimmed = false,
   interactive = false,
   cursor,
   onMouseDown,
@@ -49,7 +48,6 @@ export default function DateTimeOverlay({
         zIndex,
         outline: showOutline ? `1px dashed ${outlineColor}` : "none",
         outlineOffset: "1px",
-        opacity: dimmed ? 0.55 : 1,
         transform: cssTransform,
         transformOrigin: "center",
       }}

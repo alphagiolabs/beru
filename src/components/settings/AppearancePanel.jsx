@@ -186,9 +186,7 @@ function CustomThemeRow({
   onExport,
   onDelete,
 }) {
-  const inSlot1 = themeSlot1 === themeRef;
-  const inSlot2 = themeSlot2 === themeRef;
-  const isActive = inSlot1 || inSlot2;
+  const isActive = themeSlot1 === themeRef || themeSlot2 === themeRef;
 
   return (
     <ThemeAssignRow

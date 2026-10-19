@@ -31,7 +31,6 @@ function Select({
   disabled = false,
   placeholder,
   className,
-  contentClassName,
   ...triggerProps
 }) {
   const sizerOptions = variant === "ghost" ? options.flatMap((o) => o.options ?? [o]) : [];
@@ -70,7 +69,7 @@ function Select({
           align="start"
           sideOffset={4}
           collisionPadding={8}
-          className={cn("ui-dropdown-content ui-select-content", contentClassName)}
+          className="ui-dropdown-content ui-select-content"
         >
           <SelectPrimitive.Viewport>
             {options.map((opt) =>

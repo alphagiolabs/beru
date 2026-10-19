@@ -27,7 +27,7 @@ function setup(profilePromise) {
     auth: {
       getSession: async () => ({ data: { session } }),
       signInWithPassword: async () => ({ data: { user: session.user }, error: null }),
-      signOut: async () => {},
+      signOut: vi.fn(async () => {}),
       onAuthStateChange: (callback) => {
         listener = callback;
       },
@@ -80,5 +80,34 @@ describe("auth session ownership", () => {
       user: null,
       profile: null,
     });
+  });
+
+  it.each([
+    ["a missing profile", null, "auth.profileMissing", "no-profile"],
+    ["a disabled profile", { is_active: false }, "auth.accountDisabled", "disabled"],
+  ])("rejects %s and signs the user out", async (_label, profile, error, reason) => {
+    const { store } = setup(Promise.resolve({ data: profile, error: null }));
+
+    expect(await store.getState().initAuth()).toMatchObject({ ok: false, reason, error });
+    expect(store.getState()).toMatchObject({
+      authStatus: "unauthenticated",
+      user: null,
+      profile: null,
+      authError: error,
+    });
+    expect(mocks.client.auth.signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores an active profile without signing out", async () => {
+    const profile = { id: "active-user", is_active: true, role: "user" };
+    const { store } = setup(Promise.resolve({ data: profile, error: null }));
+
+    expect(await store.getState().initAuth()).toEqual({ ok: true });
+    expect(store.getState()).toMatchObject({
+      authStatus: "authenticated",
+      profile,
+      authError: null,
+    });
+    expect(mocks.client.auth.signOut).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,7 @@ export const petStates = [
   { id: "review", labelKey: "petState.review", row: 8, frames: 6, durationMs: 1030 },
 ];
 
-export const defaultPetState = petStates[0];
+const defaultPetState = petStates[0];
 
 export const ATLAS_SHEET_WIDTH = 1536;
 export const ATLAS_SHEET_HEIGHT = 1872;

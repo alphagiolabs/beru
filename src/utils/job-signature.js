@@ -1,6 +1,6 @@
 import { jobInputs } from "./export-pipeline.js";
 
-export function normalizeJobTimestamp(value) {
+function normalizeJobTimestamp(value) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }

@@ -49,14 +49,13 @@ function AlignIcon({ value }) {
   return <AlignLeft size={13} strokeWidth={2} />;
 }
 
-function ToolBtn({ active, disabled, onClick, title, children }) {
+function ToolBtn({ active, onClick, title, children }) {
   return (
     <Button
       type="button"
       variant="tertiary"
       size="icon"
       className={`te-tool${active ? " is-on" : ""}`}
-      disabled={disabled}
       onClick={onClick}
       title={title}
       aria-pressed={!!active}

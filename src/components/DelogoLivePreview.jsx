@@ -242,6 +242,24 @@ function renderLogoPatch(
   );
 }
 
+function touchesVideoEdge(selection, video) {
+  return (
+    selection.sx === 0 ||
+    selection.sy === 0 ||
+    selection.sx + selection.sw === video.videoWidth ||
+    selection.sy + selection.sh === video.videoHeight
+  );
+}
+
+function boxClippedByPatch(patch) {
+  return (
+    patch.box.x < 1 ||
+    patch.box.y < 1 ||
+    patch.box.x + patch.box.w >= patch.width ||
+    patch.box.y + patch.box.h >= patch.height
+  );
+}
+
 function submitBlur(
   bridge,
   ws,
@@ -278,13 +296,7 @@ function submitInpaint(
   timestamp,
   runWorker,
 ) {
-  const rect = geometry.selection;
-  if (
-    rect.sx === 0 ||
-    rect.sy === 0 ||
-    rect.sx + rect.sw === video.videoWidth ||
-    rect.sy + rect.sh === video.videoHeight
-  ) {
+  const fallbackToBlur = () =>
     submitBlur(
       bridge,
       ws,
@@ -297,28 +309,14 @@ function submitInpaint(
       isCurrent,
       runWorker,
     );
+  if (touchesVideoEdge(geometry.selection, video)) {
+    fallbackToBlur();
     return;
   }
   const rectWithContext = paddedLogoRect(geometry.effect, video, 96);
   const patch = captureLogoPatch(ws, video, rectWithContext, geometry, screen, feather);
-  if (
-    patch.box.x < 1 ||
-    patch.box.y < 1 ||
-    patch.box.x + patch.box.w >= patch.width ||
-    patch.box.y + patch.box.h >= patch.height
-  ) {
-    submitBlur(
-      bridge,
-      ws,
-      video,
-      geometry,
-      screen,
-      ctx,
-      blurStrength,
-      feather,
-      isCurrent,
-      runWorker,
-    );
+  if (boxClippedByPatch(patch)) {
+    fallbackToBlur();
     return;
   }
   const params = {
@@ -348,25 +346,16 @@ function submitTemporal(
   timestamp,
   runWorker,
 ) {
-  const selection = geometry.selection;
-  if (
-    selection.sx === 0 ||
-    selection.sy === 0 ||
-    selection.sx + selection.sw === video.videoWidth ||
-    selection.sy + selection.sh === video.videoHeight
-  ) {
+  const fallbackToBlur = () =>
     submitBlur(bridge, ws, video, geometry, screen, ctx, strength, feather, isCurrent, runWorker);
+  if (touchesVideoEdge(geometry.selection, video)) {
+    fallbackToBlur();
     return;
   }
   const rect = paddedLogoRect(geometry.effect, video, 32);
   const patch = captureLogoPatch(ws, video, rect, geometry, screen, feather);
-  if (
-    patch.box.x < 1 ||
-    patch.box.y < 1 ||
-    patch.box.x + patch.box.w >= patch.width ||
-    patch.box.y + patch.box.h >= patch.height
-  ) {
-    submitBlur(bridge, ws, video, geometry, screen, ctx, strength, feather, isCurrent, runWorker);
+  if (boxClippedByPatch(patch)) {
+    fallbackToBlur();
     return;
   }
   const params = {
@@ -382,6 +371,11 @@ function submitTemporal(
 }
 
 const CANVAS_METHODS = new Set(["temporal", "mirror", "mosaic", "inpaint", "blur"]);
+
+function positionLabel(label, screen) {
+  label.style.left = screen.x + "px";
+  label.style.top = Math.max(0, screen.y - 18) + "px";
+}
 
 export default function DelogoLivePreview({ videoRef, operation = null }) {
   const t = useT();
@@ -589,11 +583,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
     ],
   );
   const afterDraw = useCallback((screen) => {
-    const label = labelRef.current;
-    if (label) {
-      label.style.left = screen.x + "px";
-      label.style.top = Math.max(0, screen.y - 18) + "px";
-    }
+    if (labelRef.current) positionLabel(labelRef.current, screen);
   }, []);
 
   useThrottledVideoDraw({
@@ -633,11 +623,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
       el.style.outlineOffset = "-1px";
     }
 
-    const label = labelRef.current;
-    if (label) {
-      label.style.left = screen.x + "px";
-      label.style.top = Math.max(0, screen.y - 18) + "px";
-    }
+    if (labelRef.current) positionLabel(labelRef.current, screen);
   }, [
     isCanvas,
     visible,
@@ -650,11 +636,7 @@ export default function DelogoLivePreview({ videoRef, operation = null }) {
   ]);
 
   useEffect(() => {
-    if (!visible || delogoMethod !== "cover") {
-      setCoverImgData(null);
-      return;
-    }
-    if (!delogoImagePath) {
+    if (!visible || delogoMethod !== "cover" || !delogoImagePath) {
       setCoverImgData(null);
       return;
     }

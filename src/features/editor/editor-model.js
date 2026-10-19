@@ -8,8 +8,8 @@ import {
 } from "../../../shared/editor-timeline.js";
 import { EditorError } from "../../../shared/editor-project.js";
 
-export const US_PER_SECOND = 1_000_000;
-export const DEFAULT_CANVAS_LIMIT = 1920;
+const US_PER_SECOND = 1_000_000;
+const DEFAULT_CANVAS_LIMIT = 1920;
 
 export const secondsToUs = (seconds) => Math.round(seconds * US_PER_SECOND);
 export const usToSeconds = (us) => us / US_PER_SECOND;

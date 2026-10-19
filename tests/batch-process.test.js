@@ -5,7 +5,6 @@ import {
   listVideosMissingBatchText,
   sanitizeFilenamePart,
   summarizeQueue,
-  videoHasBatchText,
 } from "../src/utils/batch-process.js";
 describe("batch-process helpers", () => {
   describe("summarizeQueue", () => {
@@ -28,23 +27,17 @@ describe("batch-process helpers", () => {
     });
   });
 
-  describe("videoHasBatchText / listVideosMissingBatchText", () => {
+  describe("listVideosMissingBatchText", () => {
     it("detects videos missing batch text", () => {
       const queue = [{ filename: "a.mp4" }, { filename: "b.mp4" }];
       const regions = [{ id: 1, label: "TEXT_1", region: { x: 0, y: 0, w: 0.2, h: 0.1 } }];
       const getCell = (idx) => (idx === 0 ? "OK" : "");
-      expect(videoHasBatchText(0, regions, getCell)).toBe(true);
-      expect(videoHasBatchText(1, regions, getCell)).toBe(false);
       expect(listVideosMissingBatchText(queue, regions, getCell)).toEqual(["b.mp4"]);
-    });
-
-    it("returns true when there are no template regions (no batch mode)", () => {
-      expect(videoHasBatchText(0, [], () => "")).toBe(true);
-      expect(videoHasBatchText(0, null, () => "")).toBe(true);
     });
 
     it("returns empty list when there are no template regions", () => {
       expect(listVideosMissingBatchText([{ filename: "a.mp4" }], [], () => "")).toEqual([]);
+      expect(listVideosMissingBatchText([{ filename: "a.mp4" }], null, () => "")).toEqual([]);
     });
 
     it("uses customOutputName over filename when listing missing videos", () => {
