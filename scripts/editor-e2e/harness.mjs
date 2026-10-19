@@ -55,7 +55,7 @@ export function startVite(port) {
   return startRenderer(port);
 }
 
-export const RENDERER_PROD = path.join(RUN_ROOT, "renderer-prod");
+const RENDERER_PROD = path.join(RUN_ROOT, "renderer-prod");
 
 export function startPreview(port) {
   return startRenderer(port, ["preview", "--outDir", RENDERER_PROD]);

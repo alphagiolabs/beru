@@ -38,7 +38,7 @@ export function validateReleaseSource(root, tag) {
   return { version, notes };
 }
 
-export async function sha512File(path) {
+async function sha512File(path) {
   const hash = createHash("sha512");
   for await (const chunk of createReadStream(path)) hash.update(chunk);
   return hash.digest("base64");

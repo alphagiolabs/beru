@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import limits from "../resources/processing-limits.json" with { type: "json" };
 import { COMPOSITION_LIMITS } from "../shared/composition-settings.js";
 import {
-  IDENTITY_TIMING,
   MIN_RATE,
   MAX_RATE,
   MIN_REPEAT_COUNT,
@@ -10,6 +9,8 @@ import {
   MAX_OUTPUT_DURATION,
   normalizeTiming,
 } from "../shared/clip-timeline.js";
+
+const IDENTITY_TIMING = { rate: 1, repeatCount: 1 };
 
 describe("processing limits contract (JSON)", () => {
   it("is versioned", () => {

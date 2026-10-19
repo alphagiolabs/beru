@@ -8,7 +8,7 @@ const ROTATIONS = new Set([0, 90, 180, 270]);
 const FIT_MODES = new Set(["fit", "fill"]);
 const MIN_CROP = 0.05;
 
-export const DEFAULT_CLIP_TRANSFORM = Object.freeze({
+const DEFAULT_CLIP_TRANSFORM = Object.freeze({
   rotate: 0,
   flipH: false,
   flipV: false,

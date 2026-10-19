@@ -1,6 +1,6 @@
 import limits from "../resources/processing-limits.json" with { type: "json" };
 
-export const IDENTITY_TIMING = { rate: 1, repeatCount: 1 };
+const IDENTITY_TIMING = { rate: 1, repeatCount: 1 };
 export const MIN_RATE = limits.min_rate;
 export const MAX_RATE = limits.max_rate;
 export const MIN_REPEAT_COUNT = limits.min_repeat_count;

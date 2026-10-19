@@ -4,12 +4,7 @@ import { createRoot } from "react-dom/client";
 import StabilizationModal from "../src/components/StabilizationModal.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
 import { createQueueItem } from "../src/utils/types.js";
-import {
-  STABILIZATION_JOB_ID,
-  isStabilizationJob,
-  parseStabilizationSettings,
-  stabilizationJob,
-} from "../shared/stabilization.js";
+import { isStabilizationJob, stabilizationJob } from "../shared/stabilization.js";
 
 globalThis.React = React;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -29,7 +24,7 @@ describe("stabilization contract", () => {
     const settings = { intensity: "high", edges: "keep" };
     const job = stabilizationJob(item, settings, { outputPath: "C:/out/a.mp4", sample: true });
     expect(job).toMatchObject({
-      id: STABILIZATION_JOB_ID,
+      id: -2,
       kind: "stabilization",
       input_path: item.path,
       stabilization: settings,
@@ -42,13 +37,15 @@ describe("stabilization contract", () => {
   });
 
   it("rejects unknown settings and out-of-range samples at both boundaries", () => {
-    expect(parseStabilizationSettings({ intensity: "extreme", edges: "zoom" })).toBeNull();
     expect(stabilizationJob(item, { intensity: "low" }, { outputPath: "x.mp4" })).toBeNull();
     const job = stabilizationJob(
       item,
       { intensity: "low", edges: "zoom" },
       { outputPath: "x.mp4" },
     );
+    expect(
+      isStabilizationJob({ ...job, stabilization: { intensity: "extreme", edges: "zoom" } }),
+    ).toBe(false);
     expect(isStabilizationJob({ ...job, sample_seconds: 600 })).toBe(false);
     expect(isStabilizationJob({ ...job, id: 0 })).toBe(false);
   });
@@ -95,7 +92,7 @@ describe("stabilization run routing", () => {
       expect(window.api.startComposition).not.toHaveBeenCalled();
       const [manifest] = startStabilization.mock.calls[0];
       expect(manifest.jobs).toHaveLength(1);
-      expect(manifest.jobs[0]).toMatchObject({ kind: "stabilization", id: STABILIZATION_JOB_ID });
+      expect(manifest.jobs[0]).toMatchObject({ kind: "stabilization", id: -2 });
       expect(useEditorStore.getState().mediaExport).toMatchObject({
         confirmedVariant: sample ? "sample" : "full",
         confirmedSourcePath: item.path,
