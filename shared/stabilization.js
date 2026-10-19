@@ -1,10 +1,10 @@
-export const STABILIZATION_JOB_ID = -2;
+const STABILIZATION_JOB_ID = -2;
 export const STABILIZATION_INTENSITIES = ["low", "medium", "high"];
 export const STABILIZATION_EDGES = ["zoom", "keep"];
 export const STABILIZATION_SAMPLE_SECONDS = 5;
 export const STABILIZATION_DEFAULTS = Object.freeze({ intensity: "medium", edges: "zoom" });
 
-export function parseStabilizationSettings(value) {
+function parseStabilizationSettings(value) {
   return STABILIZATION_INTENSITIES.includes(value?.intensity) &&
     STABILIZATION_EDGES.includes(value?.edges)
     ? { intensity: value.intensity, edges: value.edges }

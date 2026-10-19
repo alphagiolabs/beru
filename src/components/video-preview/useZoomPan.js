@@ -185,7 +185,6 @@ export default function useZoomPan(videoRef, isSplitCompare, { panToolActive = f
     zoomOut,
     zoomReset,
     onPanMouseDown,
-    isSplitCompareRef,
     setZoomBoth,
     setPanBoth,
   };

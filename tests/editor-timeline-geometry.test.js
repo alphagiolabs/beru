@@ -58,10 +58,13 @@ describe("snapping", () => {
   });
 
   it("snaps to clip boundaries and the playhead, never to the dragged clip itself", () => {
-    const { project } = montage([4, 4]);
-    const layout = layoutTrack(project);
-    const candidates = snapCandidates(layout, 6 * SECOND, layout[0].clip.id);
-    expect(candidates).toEqual(expect.arrayContaining([0, 6 * SECOND, 4 * SECOND, 8 * SECOND]));
+    const layout = [
+      { clip: { id: "dragged" }, startUs: 0, endUs: 4 * SECOND },
+      { clip: { id: "other" }, startUs: 6 * SECOND, endUs: 10 * SECOND },
+    ];
+    const candidates = snapCandidates(layout, 12 * SECOND, "dragged");
+    expect(candidates).toEqual([0, 12 * SECOND, 6 * SECOND, 10 * SECOND]);
+    expect(candidates).not.toContain(4 * SECOND);
   });
 });
 

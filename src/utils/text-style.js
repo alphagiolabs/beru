@@ -7,8 +7,8 @@ export function letterSpacingToPx(value) {
   return clampNum(value, LETTER_SPACING_MIN, LETTER_SPACING_MAX, 0);
 }
 
-export const TEXT_SCALE_X_MIN = 0.5;
-export const TEXT_SCALE_X_MAX = 3;
+const TEXT_SCALE_X_MIN = 0.5;
+const TEXT_SCALE_X_MAX = 3;
 
 export function textScaleLayoutWidth(width, scaleX = 1) {
   const k = clampNum(scaleX ?? 1, TEXT_SCALE_X_MIN, TEXT_SCALE_X_MAX, 1);

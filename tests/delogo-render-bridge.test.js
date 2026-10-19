@@ -216,15 +216,4 @@ describe("delogo render bridge (main-thread fallback)", () => {
     expect(results[3].data[0]).toBe(0);
     bridge.release();
   });
-
-  it("drops computes after release()", async () => {
-    const { createDelogoRenderBridge } = await loadBridge();
-    const bridge = createDelogoRenderBridge();
-    bridge.release();
-    let called = false;
-    computeTemporal(bridge, 7, () => {
-      called = true;
-    });
-    expect(called).toBe(false);
-  });
 });

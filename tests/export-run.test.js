@@ -28,7 +28,10 @@ const batchInput = (queue, overrides = {}) => ({
 
 describe("prepareRun — batch", () => {
   it("returns jobs, manifest, signatures and start patch for a ready queue", () => {
-    const queue = [item(), item({ path: "C:\\videos\\b.mp4", filename: "b.mp4" })];
+    const queue = [
+      item(),
+      item({ path: "C:\\videos\\b.mp4", filename: "b.mp4", status: "done", progress: 100 }),
+    ];
     const prepared = prepareRun(batchInput(queue));
 
     expect(prepared.ok).toBe(true);
@@ -110,14 +113,12 @@ describe("prepareRun — single", () => {
     expect(prepared.startPatch.queue[0].status).toBe("idle");
   });
 
-  it("rejects an out-of-range index", () => {
-    const prepared = prepareRun(batchInput([item()], { videoIdx: 5 }));
+  it.each([
+    ["an out-of-range index", 5],
+    ["a non-integer index", "0"],
+  ])("rejects %s", (_label, videoIdx) => {
+    const prepared = prepareRun(batchInput([item()], { videoIdx }));
     expect(prepared).toMatchObject({ ok: false, code: "invalid_video", error: "Video inválido" });
-  });
-
-  it("rejects a non-integer index", () => {
-    const prepared = prepareRun(batchInput([item()], { videoIdx: "0" }));
-    expect(prepared).toMatchObject({ ok: false, code: "invalid_video" });
   });
 
   it("does not run batch text validation in single mode", () => {

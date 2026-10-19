@@ -22,24 +22,27 @@ describe("useEditorStore.savePreset", () => {
     mockApi.listPresets.mockClear();
   });
 
-  it("returns a Promise (async, disk-backed) and not a sync localStorage write", async () => {
-    const result = useEditorStore.getState().savePreset("Mi preset");
-    expect(result).toBeDefined();
-    expect(typeof result.then).toBe("function");
-
-    const res = await result;
+  it("saves through the disk API and refreshes the presets list", async () => {
+    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    useEditorStore.setState({
+      templateRegions: [{ id: 1, label: "TEXT_1", region }],
+      textFontSize: 44,
+      textFontColor: "#abcdef",
+    });
+    const res = await useEditorStore.getState().savePreset("Otro");
     expect(res).toEqual(expect.objectContaining({ ok: true }));
 
     expect(mockApi.savePreset).toHaveBeenCalledTimes(1);
-    expect(setItemSpy).not.toHaveBeenCalled();
-  });
-
-  it("calls window.api.savePreset and refreshes the presets list", async () => {
-    await useEditorStore.getState().savePreset("Otro");
-    expect(mockApi.savePreset).toHaveBeenCalledTimes(1);
     const [name, jsonStr] = mockApi.savePreset.mock.calls[0];
     expect(name).toBe("Otro");
-    expect(() => JSON.parse(jsonStr)).not.toThrow();
+    const preset = JSON.parse(jsonStr);
+    expect(preset).toMatchObject({
+      type: "beru-preset",
+      excel: null,
+      templateRegions: [expect.objectContaining({ id: 1, label: "TEXT_1", region })],
+      textStyle: expect.objectContaining({ textFontSize: 44, textFontColor: "#abcdef" }),
+    });
+    expect(setItemSpy).not.toHaveBeenCalled();
     expect(mockApi.listPresets).toHaveBeenCalledTimes(1);
   });
 

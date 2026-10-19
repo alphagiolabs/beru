@@ -22,8 +22,8 @@ const limits = Object.freeze({
   maxDurationSeconds: MAX_OUTPUT_DURATION,
 });
 export const COMPOSITION_LIMITS = limits;
-export const COMPOSITION_FITS = new Set(["contain", "cover"]);
-export const absoluteMediaPath = (value) =>
+const COMPOSITION_FITS = new Set(["contain", "cover"]);
+const absoluteMediaPath = (value) =>
   typeof value === "string" &&
   (/^[A-Za-z]:[\\/]/.test(value) || value.startsWith("/") || value.startsWith("\\\\"));
 

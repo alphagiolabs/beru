@@ -75,13 +75,6 @@ class MediaJobAudioPreservationTest(unittest.TestCase):
         self.assertEqual(plan.job["audio_codec"], "aac-pro")
         self.assertEqual(plan.job["audio_channels"], 2)
 
-    def test_failed_probe_does_not_override_encode_branch_info(self):
-        base_info = {"width": 640, "height": 480, "duration": 10,
-                     "audio_codec": "aac", "audio_channels": 2}
-        merged = {**base_info, **(clip_render._probe_has_media(_empty_probe()) and _empty_probe() or {})}
-        self.assertEqual(merged["audio_codec"], "aac")
-        self.assertEqual(merged["width"], 640)
-
 
 if __name__ == "__main__":
     unittest.main()

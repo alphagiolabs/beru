@@ -2,20 +2,6 @@ import { describe, it, expect } from "vitest";
 import { runWithConcurrency } from "../main/utils/concurrency.js";
 
 describe("runWithConcurrency", () => {
-  it("keeps result order and uses per-item fallback when a worker fails", async () => {
-    const results = await runWithConcurrency(
-      [1, 2, 3],
-      2,
-      async (item) => {
-        if (item === 2) throw new Error("bad item");
-        return item * 10;
-      },
-      (err, item) => ({ item, error: err.message }),
-    );
-
-    expect(results).toEqual([10, { item: 2, error: "bad item" }, 30]);
-  });
-
   it("handles empty input array", async () => {
     const results = await runWithConcurrency([], 2, async (item) => item);
     expect(results).toEqual([]);
@@ -35,7 +21,7 @@ describe("runWithConcurrency", () => {
     expect(maxActive).toBeLessThanOrEqual(2);
   });
 
-  it("throws error when no fallback is provided and a worker fails", async () => {
+  it("propagates worker errors", async () => {
     await expect(
       runWithConcurrency([1, 2], 2, async (item) => {
         if (item === 2) throw new Error("boom");
@@ -53,15 +39,27 @@ describe("runWithConcurrency", () => {
     expect(indices.sort()).toEqual([0, 1, 2]);
   });
 
-  it("passes item index to fallback function", async () => {
-    const results = await runWithConcurrency(
-      [1, 2],
+  it("stops scheduling after cancellation and retains in-flight results", async () => {
+    let cancelled = false;
+    const started = [];
+    const release = [];
+    const pending = runWithConcurrency(
+      [1, 2, 3, 4],
       2,
-      async () => {
-        throw new Error("fail");
+      async (item) => {
+        started.push(item);
+        if (item <= 2) await new Promise((resolve) => release.push(resolve));
+        return item * 10;
       },
-      (err, item, idx) => idx,
+      () => cancelled,
     );
-    expect(results).toEqual([0, 1]);
+    expect(started).toEqual([1, 2]);
+    cancelled = true;
+    release.forEach((resolve) => resolve());
+    const results = await pending;
+    expect(started).toEqual([1, 2]);
+    expect(results.slice(0, 2)).toEqual([10, 20]);
+    expect(results[2]).toBeUndefined();
+    expect(results[3]).toBeUndefined();
   });
 });

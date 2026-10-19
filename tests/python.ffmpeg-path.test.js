@@ -11,18 +11,21 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
   const PY_CODE_PREFIX =
     "import sys; sys.stdout.reconfigure(encoding='utf-8'); sys.path.insert(0, 'python'); import os, subprocess, batch_context, capacity, encode_args, encoders, ffmpeg_runner, filters, fonts, job_classify, media_probe; ";
 
+  function runPython(code, options) {
+    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8", ...options });
+    expect(r.status, r.stderr || r.error?.message).toBe(0);
+    return r;
+  }
+
   it.each(["test_delogo", "test_delogo_robust", "test_delogo_seamless"])(
     "%s uses the discovered FFmpeg binary instead of assuming a Windows filename",
     (moduleName) => {
       const probe = path.join(os.tmpdir(), `beru-ci-ffmpeg-${Date.now()}.bin`);
       writeFileSync(probe, "");
       try {
-        const result = spawnSync(
-          PY,
-          ["-c", `${PY_CODE_PREFIX}import ${moduleName}; print(${moduleName}.FFMPEG)`],
-          { env: { ...process.env, BERU_FFMPEG: probe }, encoding: "utf8" },
-        );
-        expect(result.status, result.stderr).toBe(0);
+        const result = runPython(`import ${moduleName}; print(${moduleName}.FFMPEG)`, {
+          env: { ...process.env, BERU_FFMPEG: probe },
+        });
         expect(result.stdout.trim()).toBe(probe);
       } finally {
         unlinkSync(probe);
@@ -31,12 +34,7 @@ describeIfPython("python/processor.py ffmpeg path resolution", () => {
   );
 
   it("applies the measured QSV admission budget in the actual batch policy", () => {
-    const result = spawnSync(
-      PY,
-      [
-        "-c",
-        PY_CODE_PREFIX +
-          `
+    const code = `
 import json, processor, capacity
 job = {"source_width": 3840, "source_height": 2160, "video_codec": "hevc", "pix_fmt": "yuv420p10le"}
 caps = []
@@ -44,14 +42,10 @@ for available in (2600, 4000):
     capacity.get_available_ram_mb = lambda: available
     caps.append(capacity.resolve_max_workers("h264_qsv", 2, 3840 * 2160, has_video_filters=True, encode_profile="balanced", jobs=[job]))
 print(json.dumps(caps))
-`,
-      ],
-      {
-        env: { ...process.env, BERU_WORKERS: "0", BERU_WORKERS_MODE: "balanced" },
-        encoding: "utf8",
-      },
-    );
-    expect(result.status, result.stderr).toBe(0);
+`;
+    const result = runPython(code, {
+      env: { ...process.env, BERU_WORKERS: "0", BERU_WORKERS_MODE: "balanced" },
+    });
     expect(JSON.parse(result.stdout)).toEqual([1, 2]);
   });
 
@@ -59,19 +53,9 @@ print(json.dumps(caps))
     const probe = path.join(os.tmpdir(), `beru-test-runtime-ffmpeg-${Date.now()}.bin`);
     writeFileSync(probe, "");
     try {
-      const r = spawnSync(
-        PY,
-        ["-c", PY_CODE_PREFIX + "import processor; print(media_probe.find_ffmpeg())"],
-        {
-          env: { ...process.env, BERU_FFMPEG: probe },
-          encoding: "utf8",
-        },
-      );
-      if (r.status !== 0) {
-        console.error("STDOUT:", r.stdout);
-        console.error("STDERR:", r.stderr);
-      }
-      expect(r.status).toBe(0);
+      const r = runPython("import processor; print(media_probe.find_ffmpeg())", {
+        env: { ...process.env, BERU_FFMPEG: probe },
+      });
       expect(r.stdout.trim()).toBe(probe);
     } finally {
       try {
@@ -99,11 +83,7 @@ subprocess.run = fake_run
 ok = encoders._test_hw_encoder_real("ffmpeg", "h264_qsv")
 print(json.dumps({"ok": ok, "cmd": captured[0]}))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.ok).toBe(true);
     expect(parsed.cmd[parsed.cmd.indexOf("-preset") + 1]).toBe("veryfast");
@@ -122,14 +102,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(r.stdout.trim()).toContain("fontfile='C\\:/Windows/Fonts/arial.ttf'");
   });
 
@@ -142,8 +115,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(r.stdout.trim()).toBe("None");
   });
 
@@ -156,8 +128,7 @@ graph, last, imgs = filters.build_filter_complex([
 ], 1920, 1080)
 print(graph is not None and "drawtext" in graph and "Hola" in graph)
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(r.stdout.trim()).toBe("True");
   });
 
@@ -180,12 +151,7 @@ graph, last, imgs = filters.build_filter_complex([
 ], 1920, 1080)
 print(graph)
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     const graph = r.stdout.trim();
     expect(graph).toContain("scale=1536:130,format=rgba,drawbox=x=0:y=0:w=1536:h=130");
     expect(graph).toContain("color=black@0.650:t=fill:replace=1");
@@ -203,12 +169,7 @@ graph, last, imgs = filters.build_filter_complex([
 ], 1920, 1080)
 print("overlay=192:216" in graph and "x=196" in graph and "y=220" in graph)
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(r.stdout.trim()).toBe("True");
   });
 
@@ -226,14 +187,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     const filter = r.stdout.trim();
     expect(filter).toContain("spacing=8");
     expect(filter).toContain("text='ABC'");
@@ -255,14 +209,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     const filter = r.stdout.trim();
     expect(filter).not.toContain("spacing=");
     expect(filter).toContain("text='A\u200a\u200aB\u200a\u200aC'");
@@ -282,14 +229,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     const filter = r.stdout.trim();
     expect(filter).toContain("spacing=-3");
     expect(filter).toContain("text='ABC'");
@@ -310,14 +250,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     const filter = r.stdout.trim();
     expect(filter).not.toContain("spacing=");
     expect(filter).toContain("text='A'");
@@ -343,14 +276,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     const filter = r.stdout.trim();
     expect(filter).toContain("shadowcolor=#111111");
     expect(filter).toContain("shadowx=3");
@@ -373,14 +299,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 200, "h": 50},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     const filter = r.stdout.trim();
     expect(filter).toContain("text='A\u200a\u200a\u200aB\u200a\u200a\u200aC'");
     expect(filter).not.toContain("fontweight=");
@@ -410,12 +329,7 @@ print(filters.build_drawtext({
     "region": {"x": 10, "y": 20, "w": 300, "h": 80},
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(r.stdout.trim()).toContain("fontfile='C\\:/Windows/Fonts/arialbi.ttf'");
   });
 
@@ -432,14 +346,7 @@ print(json.dumps([
     capacity.resolve_max_workers(None, 1, consider_memory=False),
 ]))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(JSON.parse(r.stdout.trim())).toEqual([2, 1, 1]);
   });
 
@@ -452,10 +359,7 @@ os.environ.pop("BERU_WORKERS", None)
 os.environ["BERU_WORKERS_MODE"] = "balanced"
 print(json.dumps(capacity.resolve_max_workers("h264_nvenc", 8, consider_memory=False)))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(JSON.parse(r.stdout.trim())).toBe(5);
   });
 
@@ -471,8 +375,7 @@ print(json.dumps({
     "encode": job_classify.job_requires_encode(jobs[0]),
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(JSON.parse(r.stdout.trim())).toEqual({ fonts: false, hardware: false, encode: false });
   });
 
@@ -487,8 +390,7 @@ print(json.dumps({"encode": job_classify.job_requires_encode(job),
                   "hardware": job_classify.jobs_allow_hardware([job]),
                   "copy": job_classify.job_takes_copy_path(job)}))
 `;
-      const result = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-      expect(result.status, result.stderr).toBe(0);
+      const result = runPython(code);
       expect(JSON.parse(result.stdout.trim())).toEqual({
         encode: true,
         hardware: true,
@@ -527,11 +429,7 @@ for thread in threads:
     thread.join()
 print(json.dumps(state))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     expect(JSON.parse(r.stdout.trim()).peak).toBeLessThanOrEqual(2);
   });
 
@@ -578,10 +476,7 @@ print(json.dumps({
     ),
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     expect(JSON.parse(r.stdout.trim())).toEqual({
       filtered_quality: 5,
       no_filters: 5,
@@ -596,25 +491,12 @@ print(json.dumps({
     writeFileSync(ffmpegProbe, "");
     writeFileSync(ffprobeProbe, "");
     try {
-      const r = spawnSync(
-        PY,
-        [
-          "-c",
-          PY_CODE_PREFIX +
-            "import processor; print(media_probe.find_ffprobe(r'" +
-            ffmpegProbe.replace(/\\/g, "\\\\") +
-            "'))",
-        ],
-        {
-          env: { ...process.env, BERU_FFPROBE: ffprobeProbe },
-          encoding: "utf8",
-        },
+      const r = runPython(
+        "import processor; print(media_probe.find_ffprobe(r'" +
+          ffmpegProbe.replace(/\\/g, "\\\\") +
+          "'))",
+        { env: { ...process.env, BERU_FFPROBE: ffprobeProbe } },
       );
-      if (r.status !== 0) {
-        console.error("STDOUT:", r.stdout);
-        console.error("STDERR:", r.stderr);
-      }
-      expect(r.status).toBe(0);
       expect(r.stdout.trim()).toBe(ffprobeProbe);
     } finally {
       try {
@@ -630,16 +512,7 @@ print(json.dumps({
     const env = { ...process.env };
     delete env.BERU_FFMPEG;
     delete env.BERU_FFPROBE;
-    const r = spawnSync(
-      PY,
-      ["-c", PY_CODE_PREFIX + "print(media_probe.FFMPEG, media_probe.FFPROBE)"],
-      { env, encoding: "utf8" },
-    );
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython("print(media_probe.FFMPEG, media_probe.FFPROBE)", { env });
     expect(r.stdout.trim()).toBe("ffmpeg.exe ffprobe.exe");
   });
 
@@ -667,11 +540,7 @@ jobs = [{"id": 3, "input_path": "C:/tmp/a.mp4", "output_path": "C:/tmp/out.mp4",
 result = processor.process_jobs(jobs, "ffmpeg", max_workers=4)
 print(json.dumps({"calls": calls, "result": result}))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.calls).toEqual([
       { workers: 4, encoder: "h264_nvenc" },
@@ -714,11 +583,7 @@ with tempfile.TemporaryDirectory() as temp:
     result = processor.process_jobs(jobs, "ffmpeg", max_workers=4, hw_encoder=None)
 print(json.dumps({"calls": calls, "result": result}))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.calls.slice(0, 4)).toEqual([2, 2, 2, 2]);
     expect(parsed.calls.slice(4)).toEqual([8, 8, 8, 8]);
@@ -752,11 +617,7 @@ jobs = [{"id": i, "input_path": f"C:/tmp/{i}.mp4", "operations": [{"mode": "blur
 result = processor.process_jobs(jobs, "ffmpeg", max_workers=2)
 print(json.dumps({"max_active": active["max"], "result": result}))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.max_active).toBeLessThanOrEqual(2);
     expect(parsed.result.succeeded).toBe(8);
@@ -791,11 +652,7 @@ elapsed = time.perf_counter() - started
 batch_context.default_cancel_event.clear()
 print(json.dumps({"ok": ok, "err": err, "elapsed": elapsed}))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.ok).toBe(false);
     expect(parsed.err).toContain("Cancelled");
@@ -830,11 +687,7 @@ finally:
 
 print(json.dumps({"result": result, "exists_after": exists_after}))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.exists_after).toBe(false);
     expect(parsed.result.status).toBe("failed");
@@ -857,11 +710,7 @@ print(json.dumps({
     "args": args,
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.threads).toBe("4");
     expect(parsed.codec).toBe("libx264");
@@ -882,11 +731,7 @@ args = encode_args.build_encode_args(
 )
 print(json.dumps(args))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const args = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(args).toContain("h264_nvenc");
     expect(args).not.toContain("libx264");
@@ -909,11 +754,7 @@ args = encode_args.build_encode_args(
 )
 print(json.dumps(args))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const args = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(args).toContain("libx264");
     expect(args).not.toContain("h264_nvenc");
@@ -935,11 +776,7 @@ args = encode_args.build_encode_args(
 )
 print(json.dumps(args))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const args = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(args).toContain("libx264");
     expect(args).not.toContain("h264_nvenc");
@@ -960,11 +797,7 @@ args = encode_args.build_encode_args(
 )
 print(json.dumps(args))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const args = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(args).toContain("h264_amf");
     expect(args[args.indexOf("-quality") + 1]).toBe("quality");
@@ -1031,15 +864,7 @@ print(json.dumps({
     "pix_fmt": cmd[cmd.index("-pix_fmt") + 1],
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.status).toBe("succeeded");
     expect(parsed.uses_libx264).toBe(false);
@@ -1074,11 +899,7 @@ info = media_probe.job_video_info({
 }, "C:/tmp/in.mp4")
 print(json.dumps(info, sort_keys=True))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed).toEqual({
       audio_channels: 2,
@@ -1121,11 +942,7 @@ info = media_probe.job_video_info({
 }, "C:/tmp/in.mp4")
 print(json.dumps({"calls": calls["n"], "info": info}, sort_keys=True))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.calls).toBe(1);
     expect(parsed.info.width).toBe(1920);
@@ -1156,15 +973,7 @@ info = media_probe.job_video_info({
 }, "C:/tmp/in.mp4")
 print(json.dumps(info, sort_keys=True))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.width).toBe(1280);
     expect(parsed.height).toBe(720);
@@ -1228,15 +1037,7 @@ print(json.dumps({
     "second_uses_software": "libx264" in calls[1] if len(calls) > 1 else False,
 }))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.result.status).toBe("succeeded");
     expect(parsed.calls).toBe(2);
@@ -1291,15 +1092,7 @@ finally:
 
 print(json.dumps(seen))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 10000,
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 10000 });
     const parsed = JSON.parse(r.stdout.trim().split("\n").pop());
     expect(parsed.hw_encoder).toBe("h264_nvenc");
     expect(parsed.jobs).toHaveLength(1);
@@ -1313,8 +1106,7 @@ for i in range(500):
     buf.append("x" * 200 + "\\n")
 print(len(buf), len(buf.join()))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
-    expect(r.status).toBe(0);
+    const r = runPython(code);
     const [lines, chars] = r.stdout.trim().split(" ").map(Number);
     expect(lines).toBeLessThanOrEqual(256);
     expect(chars).toBeLessThanOrEqual(48000);
@@ -1330,16 +1122,7 @@ processor._process_one = lambda idx, job, ffmpeg_path, **kwargs: {"index": job.g
 result = processor.process_jobs([{"id": 7, "input_path": "C:/tmp/a.mp4"}], "ffmpeg", max_workers=1)
 print("RESULT", json.dumps(result, sort_keys=True))
 `;
-    const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], {
-      encoding: "utf8",
-      timeout: 5000,
-    });
-    if (r.status !== 0) {
-      console.error("STDOUT:", r.stdout);
-      console.error("STDERR:", r.stderr);
-      console.error("ERROR:", r.error);
-    }
-    expect(r.status).toBe(0);
+    const r = runPython(code, { timeout: 5000 });
     expect(r.stdout).toContain('"file": "a.mp4"');
     expect(r.stdout).toContain(
       'RESULT {"cancelled": 0, "copy_workers": 1, "failed": 0, "succeeded": 1, "total": 1, "workers": 1}',

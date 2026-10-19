@@ -1,6 +1,6 @@
 export const FIT_MODES = ["pad", "stretch", "crop"];
-export const OUTPUT_SIZE_MIN = 16;
-export const OUTPUT_SIZE_MAX = 8192;
+const OUTPUT_SIZE_MIN = 16;
+const OUTPUT_SIZE_MAX = 8192;
 
 export const IDENTITY_TRANSFORM = Object.freeze({
   rotation: 0,

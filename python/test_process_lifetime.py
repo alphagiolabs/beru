@@ -12,19 +12,24 @@ from ctypes import wintypes
 from pathlib import Path
 
 
+def _kernel32():
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel.WaitForSingleObject.restype = wintypes.DWORD
+    kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    return kernel
+
+
 @unittest.skipUnless(os.name == "nt", "Windows process ownership")
 class ProcessLifetimeTests(unittest.TestCase):
     def test_packaged_media_owner_closes_its_child_when_its_bootloader_is_killed(self):
         executable = Path(__file__).resolve().parent.parent / "bin" / "beru-processor" / "beru-processor.exe"
         if not executable.is_file():
             self.skipTest("bundled processor is not built")
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        kernel.OpenProcess.restype = wintypes.HANDLE
-        kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-        kernel.WaitForSingleObject.restype = wintypes.DWORD
-        kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel = _kernel32()
         with tempfile.TemporaryDirectory() as directory:
             ready = Path(directory) / "child.txt"
             code = f"import os,time; from pathlib import Path; Path({str(ready)!r} + '.tmp').write_text(str(os.getpid())); os.replace({str(ready)!r} + '.tmp', {str(ready)!r}); time.sleep(60)"
@@ -59,13 +64,7 @@ class ProcessLifetimeTests(unittest.TestCase):
         self.assertEqual(result.stderr.strip(), "decode failed")
 
     def test_owner_death_terminates_the_worker_and_its_descendants(self):
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        kernel.OpenProcess.restype = wintypes.HANDLE
-        kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-        kernel.WaitForSingleObject.restype = wintypes.DWORD
-        kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel = _kernel32()
         for death in ("worker", "electron", "bootloader"):
             with self.subTest(death=death), tempfile.TemporaryDirectory() as directory:
                 ready = str(Path(directory) / "ready.json")

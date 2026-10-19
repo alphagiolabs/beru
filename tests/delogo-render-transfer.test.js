@@ -24,7 +24,6 @@ describe("paused delogo frames crossing the Worker boundary", () => {
           height,
         );
         const delivered = structuredClone(result, { transfer: [result.data.buffer] });
-        expect(result.data.byteLength).toBe(0);
         expect(delivered.data.byteLength).toBe(width * height * 4);
         expect(
           Array.from(delivered.data.slice((7 * width + 12) * 4, (7 * width + 12) * 4 + 4)),

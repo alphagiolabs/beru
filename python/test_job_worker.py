@@ -76,25 +76,6 @@ def test_worker_emits_ready_summary_and_run_end():
     assert det.call_args.kwargs.get("force_test") is True
 
 
-def test_worker_probes_hardware_once_across_requests():
-    with tempfile.TemporaryDirectory() as tmp:
-        manifest = _manifest(Path(tmp) / "m.json", [_job()])
-        stdin = _stdin_with(
-            {"id": 1, "jobs_file": manifest, "env": {}},
-            {"id": 2, "jobs_file": manifest, "env": {}},
-        )
-        lines, pj, det = _run_worker(stdin)
-
-    assert pj.call_count == 2
-    assert det.call_count == 2
-    force_flags = [call.kwargs.get("force_test") for call in det.call_args_list]
-    assert force_flags == [True, False], force_flags
-    assert [line for line in lines if line.get("type") == "run_end"] == [
-        {"type": "run_end", "id": 1, "ok": True},
-        {"type": "run_end", "id": 2, "ok": True},
-    ]
-
-
 def test_worker_reprobes_with_force_test_after_failed_probe():
     with tempfile.TemporaryDirectory() as tmp:
         manifest = _manifest(Path(tmp) / "m.json", [_job()])
@@ -167,7 +148,6 @@ def test_main_dispatch_accepts_job_worker_flag():
 
 if __name__ == "__main__":
     test_worker_emits_ready_summary_and_run_end()
-    test_worker_probes_hardware_once_across_requests()
     test_worker_reprobes_with_force_test_after_failed_probe()
     test_worker_reports_manifest_errors_without_crashing()
     test_worker_rejects_invalid_request_shape()

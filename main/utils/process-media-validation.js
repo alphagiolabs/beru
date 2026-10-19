@@ -69,7 +69,7 @@ export function sanitizeJobMedia(job, pathSecurity, { outputDirectory } = {}) {
     image_path: validateImage(operation.image_path),
     delogo_image_path: validateImage(operation.delogo_image_path),
   }));
-  let externalAudio = job.external_audio ? { ...job.external_audio } : null;
+  const externalAudio = job.external_audio ? { ...job.external_audio } : null;
   if (externalAudio) {
     const check = pathSecurity.validateReadableFile(externalAudio.path, "audio");
     if (!check.ok) throw new Error(`Audio no permitido: ${check.error}`);

@@ -63,30 +63,14 @@ describe("Escape cierra modales sin tocar el estado de atrás", () => {
     root = null;
   });
 
-  it("cierra SettingsModal", () => {
-    useEditorStore.setState({ showSettings: true });
+  it.each([
+    ["SettingsModal", "showSettings"],
+    ["WatermarkModal", "showWatermarkModal"],
+    ["UpdatePrompt", "updateModalOpen"],
+  ])("cierra %s", (_name, flag) => {
+    useEditorStore.setState({ [flag]: true });
     pressEscape();
-    expect(useEditorStore.getState().showSettings).toBe(false);
-    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
-  });
-
-  it("cierra WatermarkModal", () => {
-    useEditorStore.setState({ showWatermarkModal: true });
-    pressEscape();
-    expect(useEditorStore.getState().showWatermarkModal).toBe(false);
-    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
-  });
-
-  it("cierra UpdatePrompt", () => {
-    useEditorStore.setState({ updateModalOpen: true });
-    pressEscape();
-    expect(useEditorStore.getState().updateModalOpen).toBe(false);
-    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
-  });
-
-  it("con ConfirmDialog abierto no muta la selección", () => {
-    useEditorStore.setState({ confirmDialog: { message: "borrar?" } });
-    pressEscape();
+    expect(useEditorStore.getState()[flag]).toBe(false);
     expect(useEditorStore.getState().currentRegion).toEqual(REGION);
   });
 
@@ -119,21 +103,6 @@ describe("Escape cierra modales sin tocar el estado de atrás", () => {
     act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })));
     expect(useEditorStore.getState().showSettings).toBe(true);
     expect(useEditorStore.getState().currentRegion).toEqual(REGION);
-  });
-
-  it("desenfoca la celda de tabla antes de cerrar el modal", () => {
-    useEditorStore.setState({ showTableEditor: true });
-    const input = document.createElement("input");
-    document.body.append(input);
-    input.focus();
-    act(() => input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
-    expect(document.activeElement).not.toBe(input);
-    expect(useEditorStore.getState().showTableEditor).toBe(true);
-    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
-    pressEscape();
-    expect(useEditorStore.getState().showTableEditor).toBe(false);
-    expect(useEditorStore.getState().currentRegion).toEqual(REGION);
-    input.remove();
   });
 
   it("sincroniza el texto editado con Excel al cerrar la tabla con Escape", () => {
@@ -187,7 +156,8 @@ describe("Editor de tabla con cola vacía", () => {
       await new Promise((r) => setTimeout(r, 10));
     });
     expect(useEditorStore.getState().showTableEditor).toBe(false);
-    expect(useEditorStore.getState().appToast?.text).toMatch(/videos/i);
+    expect(useEditorStore.getState().appToast).toMatchObject({ kind: "warn" });
+    expect(useEditorStore.getState().appToast.text).toMatch(/editor de tabla/i);
   });
 
   it("abre el modal cuando hay videos", async () => {

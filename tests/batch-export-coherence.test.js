@@ -213,8 +213,12 @@ describe("Batch Export / Excel coherent transitions", () => {
       selectedIdx: -1,
       queue: get().queue.map((item) => ({ ...item, operations: [] })),
     });
-    const states = observe(() => get().setTextForRegion(0, "r1", "New edit"));
+    let opIdx;
+    const states = observe(() => {
+      opIdx = get().setTextForRegion(0, "r1", "New edit");
+    });
     expect(states).toHaveLength(1);
+    expect(opIdx).toBe(0);
     expect(states[0].queue[0].operations[0].text).toBe("New edit");
     expect(states[0].excelRows[0].TEXT_1).toBe("New edit");
   });
@@ -270,31 +274,44 @@ describe("Batch Export / Excel coherent transitions", () => {
     "a preset preserves manual text at the new template geometry (Excel: %s)",
     async (withExcel) => {
       const manual = { id: "manual", mode: "text", region, text: "Keep this", fontWeight: 900 };
+      const blur = { id: "blur", mode: "blur", region };
       useEditorStore.setState({
-        queue: get().queue.map((item) => ({ ...item, operations: [...item.operations, manual] })),
+        queue: get().queue.map((item) => ({
+          ...item,
+          operations: [...item.operations, manual, blur],
+        })),
         ...(withExcel ? {} : { excelRows: [], excelMapping: { idColumn: null, columns: {} } }),
       });
       const states = observe(() =>
-        get().applyPreset({ type: "beru-preset", templateRegions: [{ ...template, id: 2 }] }),
+        get().applyPreset({
+          type: "beru-preset",
+          templateRegions: [{ ...template, id: 2, style: { fontSize: 40 } }],
+        }),
       );
       expect(states).toHaveLength(1);
       expect(states[0].queue[0].operations).toContainEqual(manual);
+      expect(states[0].queue[0].operations).toContainEqual(blur);
       expect(states[0].queue[0].operations.some((op) => op.batchRegionId === "r1")).toBe(false);
-      expect(states[0].queue[0].operations.find((op) => op.batchRegionId === 2)).toMatchObject({
+      const created = states[0].queue[0].operations.find((op) => op.batchRegionId === 2);
+      expect(created).toMatchObject({
         text: withExcel ? "First" : "",
         fontWeight: 400,
       });
+      if (withExcel) expect(created.fontSize).toBe(40);
       expect(get().getBatchPreviewPayload(0, 2).text).toBe(withExcel ? "First" : "");
       const texts = withExcel ? ["Keep this", "First"] : ["Keep this"];
       expect(
         get()
           .buildPreviewFrameJob(0, 0)
-          .operations.map((op) => op.text),
+          .operations.filter((op) => op.mode === "text")
+          .map((op) => op.text),
       ).toEqual(texts);
       await get().processSingle(0);
-      expect(api.startProcessing.mock.calls[0][0].jobs[0].operations.map((op) => op.text)).toEqual(
-        texts,
-      );
+      expect(
+        api.startProcessing.mock.calls[0][0].jobs[0].operations
+          .filter((op) => op.mode === "text")
+          .map((op) => op.text),
+      ).toEqual(texts);
       expect(get().queue[0].operations.find((op) => op.id === "manual")).toMatchObject(manual);
     },
   );

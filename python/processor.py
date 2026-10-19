@@ -589,13 +589,10 @@ def _load_jobs_manifest(jobs_path):
     return payload["jobs"]
 
 
-def _preflight_hw_encoder(jobs, *, verified, ctx=None):
+def _preflight_hw_encoder(jobs, *, verified, ctx):
     if not jobs_allow_hardware(jobs):
         return None, verified
-    hw = encoders.detect_hw_encoder(
-        ctx.ffmpeg_path if ctx is not None else media_probe.FFMPEG,
-        force_test=not verified, env=ctx.env if ctx is not None else None,
-    )
+    hw = encoders.detect_hw_encoder(ctx.ffmpeg_path, force_test=not verified, env=ctx.env)
     if hw is None:
         logger.info("Hardware encoder pre-flight failed; using software (libx264) for batch")
     return hw, hw is not None

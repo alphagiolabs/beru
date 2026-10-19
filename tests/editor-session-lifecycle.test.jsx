@@ -47,7 +47,9 @@ it("autosaves after leaving the editor before the debounce finishes", async () =
   await mount();
   act(() => useTimelineStore.getState().apply((p) => setCanvas(p, { width: 800 })));
   act(() => useEditorStore.getState().setSidebarMode("logo"));
-  await act(async () => vi.advanceTimersByTimeAsync(2000));
+  await act(async () => vi.advanceTimersByTimeAsync(1999));
+  expect(api.writeEditorAutosave).not.toHaveBeenCalled();
+  await act(async () => vi.advanceTimersByTimeAsync(1));
   expect(api.writeEditorAutosave).toHaveBeenCalledOnce();
   expect(api.writeEditorAutosave.mock.calls[0][0].project.canvas.width).toBe(800);
 });

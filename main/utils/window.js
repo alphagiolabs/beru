@@ -19,6 +19,14 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const BUILD_INDEX = path.join(__dirname, "..", "..", "build", "index.html");
 
+export const isolatedWebPreferences = () => ({
+  nodeIntegration: false,
+  contextIsolation: true,
+  sandbox: true,
+  webSecurity: true,
+  preload: path.join(__dirname, "..", "preload.cjs"),
+});
+
 function loadProductionBuild(win) {
   if (!fs.existsSync(BUILD_INDEX)) {
     console.error("[beru] Missing build/index.html — run: npm run build");
@@ -92,14 +100,7 @@ export function createWindow() {
       symbolColor: initialTheme.symbols,
       height: TITLEBAR_OVERLAY_HEIGHT,
     },
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
-      preload: path.join(__dirname, "..", "preload.cjs"),
-    },
+    webPreferences: { ...isolatedWebPreferences(), allowRunningInsecureContent: false },
   });
   win.setMenu(null);
   setMainWindow(win);

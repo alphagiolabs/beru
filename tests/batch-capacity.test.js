@@ -37,19 +37,24 @@ describe("queueCapacityInput", () => {
     expect(input.hasVideoFilters).toBe(true);
   });
 
-  it.each([
-    { transform: { rotation: 90 } },
-    { transform: { outputHeight: 720 } },
-    { transform: { outputWidth: 3840, outputHeight: 2160, fitMode: "pad" } },
-    { transform: { outputWidth: 1080, outputHeight: 1920, fitMode: "crop" } },
-    { timing: { rate: 2 } },
-    { timing: { repeatCount: 2 } },
-    { trimStart: 1 },
-  ])("refreshes capacity for an encode edit without Operations: %j", (patch) => {
+  it("changes the capacity signature for an encode edit without Operations", () => {
     const base = { width: 1920, height: 1080, duration: 10, operations: [] };
-    const edited = { ...base, ...patch };
+    const edited = {
+      ...base,
+      transform: { outputWidth: 1080, outputHeight: 1920, fitMode: "crop" },
+    };
     expect(queueCapacityInput([edited]).hasVideoFilters).toBe(true);
     expect(capacityJobsSignature([edited])).not.toBe(capacityJobsSignature([base]));
+  });
+
+  it("includes codec and pixel format in the signature but ignores volatile file fields", () => {
+    const base = { width: 1920, height: 1080, duration: 10, operations: [], videoCodec: "h264" };
+    const same = { ...base, path: "C:/other.mp4", filename: "other.mp4", status: "done" };
+    const otherCodec = { ...base, videoCodec: "hevc" };
+    const otherPixFmt = { ...base, pixFmt: "yuv420p10le" };
+    expect(capacityJobsSignature([same])).toBe(capacityJobsSignature([base]));
+    expect(capacityJobsSignature([otherCodec])).not.toBe(capacityJobsSignature([base]));
+    expect(capacityJobsSignature([otherPixFmt])).not.toBe(capacityJobsSignature([base]));
   });
 
   it("tracks an enabled watermark and preserves identity for a resize that cannot enlarge", () => {

@@ -40,6 +40,10 @@ def _probe_has_media(info):
     return bool(info) and bool(info.get("width") or info.get("duration"))
 
 
+def _with_source_probe(info, source_info):
+    return {**info, **(source_info if _probe_has_media(source_info) else {})}
+
+
 @dataclass
 class HardwareFallbackState:
     hardware_failed: bool = False
@@ -152,7 +156,7 @@ class ClipRenderer:
         cmd = self._command(job)
         if job.get("external_audio"):
             base_info = media_probe.job_video_info(job, job["input_path"], probe_fn=self._probe)
-            info = {**base_info, **(source_info if _probe_has_media(source_info) else {})}
+            info = _with_source_probe(base_info, source_info)
             graph, label, channels, duration = self._external_plan(job, 1, info, external_info)
             cmd += ["-i", job["external_audio"]["path"], "-filter_complex", graph, "-map", "0:v:0", "-c:v", "copy"]
             cmd += build_audio_args(output, "", channels, force_encode=True, audio_map=label)
@@ -179,7 +183,7 @@ class ClipRenderer:
                      *, patch_range=None):
         info = media_probe.job_video_info(job, job["input_path"], probe_fn=self._probe)
         if rate != 1:
-            info = {**info, **(source_info if _probe_has_media(source_info) else {})}
+            info = _with_source_probe(info, source_info)
         width, height = _job_dimensions(job, info)
         duration = float(info.get("duration") or 0)
         output_duration = duration
@@ -236,7 +240,7 @@ class ClipRenderer:
         if job.get("external_audio"):
             audio_graph, audio_label, channels, target = self._external_plan(
                 job, len(image_paths) + 1,
-                {**info, **(source_info if _probe_has_media(source_info) else {})}, external_info)
+                _with_source_probe(info, source_info), external_info)
             cmd += ["-i", job["external_audio"]["path"]]
             graph = f"{graph};{audio_graph}" if graph else audio_graph
         cmd += encode_args.build_filter_thread_args(self.workers)

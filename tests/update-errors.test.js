@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
+import es from "../src/i18n/messages/es.json";
+import en from "../src/i18n/messages/en.json";
 import { formatUpdateError } from "../src/utils/updateErrors.js";
 
-const t = (key) => key;
+const t = (key) => {
+  expect(Object.hasOwn(es, key), `missing es translation: ${key}`).toBe(true);
+  expect(Object.hasOwn(en, key), `missing en translation: ${key}`).toBe(true);
+  return key;
+};
 
 describe("formatUpdateError", () => {
   it("maps known IPC failure codes to i18n keys", () => {

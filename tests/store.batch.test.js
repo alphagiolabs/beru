@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { prepareRun } from "../src/utils/export-run.js";
 import { createMockApi, installMockApi, makeQueueItem, resetEditorState } from "./helpers/store.js";
 
 const mockApi = installMockApi(createMockApi());
@@ -8,56 +7,6 @@ const { default: useEditorStore } = await import("../src/stores/useEditorStore.j
 
 describe("batchSlice", () => {
   beforeEach(() => resetEditorState(useEditorStore, mockApi));
-
-  it("uses ID_TEXT as the output name for batch text jobs", () => {
-    useEditorStore.setState({
-      queue: [makeQueueItem({ path: "C:\\videos\\promo.mp4", filename: "promo.mp4" })],
-      outputDir: "C:\\output",
-      templateRegions: [
-        { id: "region-1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
-      ],
-      excelRows: [{ id: "promo.mp4", TEXT_1: "Oferta: 50% / hoy" }],
-      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
-    });
-
-    useEditorStore
-      .getState()
-      .updateExcelMapping({ idColumn: "id", columns: { "region-1": "TEXT_1" } });
-    const s = useEditorStore.getState();
-    const job = prepareRun({
-      queue: s.queue,
-      videoIdx: 0,
-      outputPaths: s.outputPathsForAll(),
-    }).jobs[0];
-
-    expect(job.output_path).toBe("C:\\output\\promo_Oferta 50% hoy.mp4");
-  });
-
-  it("uses the first non-empty batch text when TEXT_1 is empty", () => {
-    useEditorStore.setState({
-      queue: [makeQueueItem({ path: "C:\\videos\\promo.mp4", filename: "promo.mp4" })],
-      outputDir: "C:\\output",
-      templateRegions: [
-        { id: "region-1", label: "TEXT_1", region: { x: 0.1, y: 0.2, w: 0.3, h: 0.1 } },
-        { id: "region-2", label: "TEXT_2", region: { x: 0.1, y: 0.4, w: 0.3, h: 0.1 } },
-      ],
-      excelRows: [{ id: "promo", TEXT_1: "", TEXT_2: "Subtitulo" }],
-      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1", "region-2": "TEXT_2" } },
-    });
-
-    useEditorStore.getState().updateExcelMapping({
-      idColumn: "id",
-      columns: { "region-1": "TEXT_1", "region-2": "TEXT_2" },
-    });
-    const s = useEditorStore.getState();
-    const job = prepareRun({
-      queue: s.queue,
-      videoIdx: 0,
-      outputPaths: s.outputPathsForAll(),
-    }).jobs[0];
-
-    expect(job.output_path).toBe("C:\\output\\promo_Subtitulo.mp4");
-  });
 
   it("getBatchPreviewPayload returns Excel text without a text operation", () => {
     useEditorStore.setState({
@@ -374,6 +323,7 @@ describe("batchSlice", () => {
 
   it("setTextForRegion updates an existing op and syncs Excel", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    const blur = { id: "blur-1", mode: "blur", region: { ...region } };
     useEditorStore.setState({
       queue: [
         makeQueueItem({
@@ -385,6 +335,7 @@ describe("batchSlice", () => {
               region: { ...region },
               text: "Antes",
             },
+            blur,
           ],
         }),
       ],
@@ -397,28 +348,10 @@ describe("batchSlice", () => {
     const state = useEditorStore.getState();
 
     expect(opIdx).toBe(0);
-    expect(state.queue[0].operations).toHaveLength(1);
+    expect(state.queue[0].operations).toHaveLength(2);
     expect(state.queue[0].operations[0].text).toBe("Nuevo");
+    expect(state.queue[0].operations[1]).toEqual(blur);
     expect(state.excelRows[0].TEXT_1).toBe("Nuevo");
-  });
-
-  it("setTextForRegion creates the op when committing non-empty text", () => {
-    const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
-    useEditorStore.setState({
-      queue: [makeQueueItem()],
-      templateRegions: [{ id: "region-1", label: "TEXT_1", region }],
-      excelRows: [{ id: "sample", TEXT_1: "" }],
-      excelMapping: { idColumn: "id", columns: { "region-1": "TEXT_1" } },
-    });
-
-    const opIdx = useEditorStore.getState().setTextForRegion(0, "region-1", "Hola");
-    const state = useEditorStore.getState();
-
-    expect(opIdx).toBe(0);
-    expect(state.queue[0].operations[0]).toEqual(
-      expect.objectContaining({ mode: "text", batchRegionId: "region-1", text: "Hola" }),
-    );
-    expect(state.excelRows[0].TEXT_1).toBe("Hola");
   });
 
   it("setTextForRegion with empty text and no op only clears the Excel cell", () => {

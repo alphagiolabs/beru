@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Geometry contract: the shared cases with the JS helper, and the copy-path rule."""
+"""Geometry contract: shared layout cases with the JS helper and invalid inputs."""
 import json
 import sys
 from pathlib import Path
@@ -10,10 +10,8 @@ sys.path.insert(0, str(HERE))
 from frame_geometry import (  # noqa: E402
     is_identity_transform,
     normalize_transform,
-    output_dimensions,
     output_layout,
 )
-from job_classify import job_takes_copy_path  # noqa: E402
 
 CASES = json.loads((HERE.parent / "tests" / "fixtures" / "output-geometry-cases.json").read_text(encoding="utf-8"))
 
@@ -40,10 +38,10 @@ def test_shared_layout_cases_match_the_javascript_helper():
 
 def test_shared_cases_match_the_javascript_helper():
     for case in CASES["cases"]:
-        width, height, resized = output_dimensions(
+        width, height, resized = output_layout(
             case["frame"]["width"], case["frame"]["height"],
             normalize_transform(job_from_case(case["transform"])),
-        )
+        )[:3]
         assert {"width": width, "height": height, "resized": resized} == case["expect"], case
 
 
@@ -55,18 +53,8 @@ def test_invalid_values_fall_back_to_identity():
     assert is_identity_transform(normalize_transform(None))
 
 
-def test_any_geometry_change_leaves_the_stream_copy_path():
-    base = {"operations": [], "input_path": "a.mp4"}
-    assert job_takes_copy_path(base)
-    assert not job_takes_copy_path({**base, "rotation": 90})
-    assert not job_takes_copy_path({**base, "flip_v": True})
-    assert not job_takes_copy_path({**base, "output_height": 480})
-    assert job_takes_copy_path({**base, "rotation": 0, "flip_h": False, "output_height": None})
-
-
 if __name__ == "__main__":
     test_shared_cases_match_the_javascript_helper()
     test_shared_layout_cases_match_the_javascript_helper()
     test_invalid_values_fall_back_to_identity()
-    test_any_geometry_change_leaves_the_stream_copy_path()
     print("frame geometry: all checks passed")

@@ -60,6 +60,17 @@ describe("SettingsModal appearance", () => {
     expect(document.querySelector(".settings-modal-nav-item--active")?.textContent).toContain(
       "Apariencia",
     );
+
+    const oceanRow = Array.from(document.querySelectorAll(".settings-theme-section-rows > *")).find(
+      (el) => el.textContent.includes("Océano"),
+    );
+    const theme2Button = oceanRow.querySelector('button[aria-label="Tema 2"]');
+    await act(async () => {
+      theme2Button.click();
+    });
+    expect(useEditorStore.getState().themeSlot2).toBe("ocean");
+    expect(document.documentElement.style.getPropertyValue("--bg-app")).toBe("#041e26");
+    expect(window.api.saveSettings).toHaveBeenCalledWith({ themeSlot2: "ocean" });
   });
 
   it("switches to users tab for admin", async () => {
@@ -83,5 +94,18 @@ describe("SettingsModal appearance", () => {
     expect(useEditorStore.getState().settingsTab).toBe("users");
     expect(document.body.textContent).toContain("Usuarios");
     expect(document.querySelector(".settings-users")).toBeTruthy();
+
+    await act(async () => {
+      useEditorStore.setState({
+        profile: { email: "user@test.com", role: "user" },
+        settingsTab: "appearance",
+      });
+    });
+    expect(
+      Array.from(document.querySelectorAll(".settings-modal-nav-item")).some((el) =>
+        el.textContent.includes("Usuarios"),
+      ),
+    ).toBe(false);
+    expect(document.querySelector(".settings-users")).toBeNull();
   });
 });

@@ -11,8 +11,8 @@ import useUpdater from "./hooks/useUpdater";
 import useEditorStore from "./stores/useEditorStore";
 import { isSupabaseConfigured } from "./lib/supabaseClient";
 import { useT } from "./i18n/useT";
-import { DesktopPet, PetPaletteModal, usePetKeyboard } from "./features/pets";
-import { SettingsModal } from "./components/modal-panels";
+import { DesktopPet, usePetKeyboard } from "./features/pets";
+import { PetPaletteModal, SettingsModal } from "./components/modal-panels";
 
 const api = window.api;
 

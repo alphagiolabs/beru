@@ -30,26 +30,18 @@ def test_is_op_time_disabled_detects_empty_range():
 def test_build_filter_complex_skips_op_with_empty_time_range():
     op = _text_op(10, 5)
     filter_str, _label, _paths = build_filter_complex([op], 320, 240)
-    if filter_str is not None:
-        assert "drawtext" not in filter_str, (
-            f"Expected op to be skipped for empty time range, but filter contains drawtext: {filter_str!r}"
-        )
-
-
-def test_build_filter_complex_keeps_op_with_valid_range():
-    op = _text_op(5, 10)
-    filter_str, _label, _paths = build_filter_complex([op], 320, 240)
-    assert filter_str is not None, "Expected a filter for valid range"
-    assert "drawtext" in filter_str, (
-        f"Expected drawtext for valid range, got: {filter_str!r}"
+    assert filter_str is None, (
+        f"Expected op to be skipped for empty time range, got: {filter_str!r}"
     )
 
 
-def test_build_filter_complex_keeps_op_without_time_bounds():
-    op = _text_op(None, None)
-    filter_str, _label, _paths = build_filter_complex([op], 320, 240)
-    assert filter_str is not None, "Expected a filter for op without time bounds"
-    assert "drawtext" in filter_str
+def test_build_filter_complex_keeps_op_with_valid_or_absent_time_bounds():
+    for start, end in ((5, 10), (None, None)):
+        filter_str, _label, _paths = build_filter_complex([_text_op(start, end)], 320, 240)
+        assert filter_str is not None, f"Expected a filter for time bounds {start}..{end}"
+        assert "drawtext" in filter_str, (
+            f"Expected drawtext for time bounds {start}..{end}, got: {filter_str!r}"
+        )
 
 
 def test_timed_blur_disables_the_expensive_blur_filter_outside_its_range():
@@ -70,7 +62,6 @@ def test_timed_blur_disables_the_expensive_blur_filter_outside_its_range():
 if __name__ == "__main__":
     test_is_op_time_disabled_detects_empty_range()
     test_build_filter_complex_skips_op_with_empty_time_range()
-    test_build_filter_complex_keeps_op_with_valid_range()
-    test_build_filter_complex_keeps_op_without_time_bounds()
+    test_build_filter_complex_keeps_op_with_valid_or_absent_time_bounds()
     test_timed_blur_disables_the_expensive_blur_filter_outside_its_range()
     print("OK: empty time range disables op")

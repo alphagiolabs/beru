@@ -1,11 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  binarySearchAutoFitFontSize,
-  drawtextLineSpacingPx,
-  layoutExportText,
-  verticalAlignToFlex,
-} from "../src/utils/text-layout.js";
-import { normalizeTextStyle, textStyleToPythonPayload } from "../src/utils/text-style.js";
+import { drawtextLineSpacingPx, verticalAlignToFlex } from "../src/utils/text-layout.js";
 
 describe("text-layout utilities", () => {
   it("maps vertical align to flex justification", () => {
@@ -14,65 +8,9 @@ describe("text-layout utilities", () => {
     expect(verticalAlignToFlex("bottom")).toBe("flex-end");
   });
 
-  it("binarySearchAutoFitFontSize picks the largest fitting size", () => {
-    const fits = (px) => px <= 20;
-    expect(binarySearchAutoFitFontSize(fits, { minPx: 8, maxPx: 32 })).toBe(20);
-  });
-
   it("drawtextLineSpacingPx matches FFmpeg round(font_size * (line_height-1))", () => {
     expect(drawtextLineSpacingPx(32, 1.2)).toBe(6);
     expect(drawtextLineSpacingPx(24, 1.2)).toBe(5);
     expect(drawtextLineSpacingPx(32, 1)).toBe(0);
-  });
-
-  it("layoutExportText wraps then keeps font size when autoFit is off", () => {
-    expect(
-      layoutExportText({
-        text: "one two three four five six",
-        regionW: 80,
-        regionH: 400,
-        fontSize: 32,
-      }),
-    ).toEqual({
-      fontSize: 32,
-      displayText: "one\ntwo\nthree\nfour\nfive\nsix",
-    });
-  });
-});
-
-describe("text-style layout contract", () => {
-  it("normalizeTextStyle clamps layout fields", () => {
-    const style = normalizeTextStyle({
-      lineHeight: 9,
-      safeMargin: 999,
-      verticalAlign: "middle",
-      truncate: "bogus",
-    });
-    expect(style.lineHeight).toBe(3);
-    expect(style.safeMargin).toBe(48);
-    expect(style.verticalAlign).toBe("top");
-    expect(style.truncate).toBe("none");
-  });
-
-  it("textStyleToPythonPayload exports layout fields", () => {
-    expect(
-      textStyleToPythonPayload({
-        autoFit: true,
-        lineHeight: 1.35,
-        verticalAlign: "center",
-        textWrap: true,
-        safeMargin: 6,
-        truncate: "ellipsis",
-      }),
-    ).toEqual(
-      expect.objectContaining({
-        auto_fit: true,
-        line_height: 1.35,
-        vertical_align: "center",
-        text_wrap: true,
-        safe_margin: 6,
-        truncate: "ellipsis",
-      }),
-    );
   });
 });

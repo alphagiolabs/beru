@@ -94,9 +94,7 @@ describe("live blur preview", () => {
     );
     nextFrame();
     expect(context.drawImage).toHaveBeenCalledTimes(5);
-    const firstSourceX = context.drawImage.mock.calls[0][1];
-    const lastSourceX = context.drawImage.mock.lastCall[1];
-    expect(lastSourceX).toBeGreaterThan(firstSourceX);
+    expect(context.drawImage.mock.lastCall.slice(1, 5)).toEqual([142, 18, 100, 72]);
   });
 
   it("shows a timed blur only on frames inside its export interval", () => {
@@ -109,17 +107,21 @@ describe("live blur preview", () => {
       endTime: 1.7,
     };
     act(() => root.render(createElement(RegionBlurPreview, props)));
+    const canvas = document.querySelector("[data-region-blur-preview]");
     nextFrame();
+    expect(canvas.style.visibility).toBe("hidden");
     expect(context.drawImage).not.toHaveBeenCalled();
 
     video.currentTime = 1.2;
     act(() => video.dispatchEvent(new Event("seeked")));
     nextFrame();
+    expect(canvas.style.visibility).toBe("visible");
     expect(context.drawImage).toHaveBeenCalledTimes(1);
 
     video.currentTime = 2;
     act(() => video.dispatchEvent(new Event("seeked")));
     nextFrame();
+    expect(canvas.style.visibility).toBe("hidden");
     expect(context.drawImage).toHaveBeenCalledTimes(1);
   });
 });

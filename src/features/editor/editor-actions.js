@@ -26,7 +26,7 @@ const store = () => useTimelineStore.getState();
 const superseded = () => ({ success: false, canceled: true, superseded: true });
 let openSequence = 0;
 
-export function assetStatusMap(assets = []) {
+function assetStatusMap(assets = []) {
   return Object.fromEntries(assets.map(({ id, status }) => [id, status]));
 }
 

@@ -172,7 +172,8 @@ describe("ffmpeg strict preview staleness", () => {
     expect(document.querySelector(STRICT_IMG)).toBeNull();
     await act(async () => vi.advanceTimersByTimeAsync(450));
     expect(requests).toHaveLength(2);
-    expect(JSON.stringify(requests[1].job)).not.toBe(JSON.stringify(requests[0].job));
+    expect(requests[0].job.rotation).toBe(0);
+    expect(requests[1].job.rotation).toBe(90);
     await act(async () =>
       requests[1].resolve({ ok: true, data_url: "data:image/jpeg;base64,ROTATED" }),
     );
@@ -443,7 +444,11 @@ describe("ffmpeg strict preview staleness", () => {
       { queue: queueWithOps([{ ...blurOp(20), region: { x: 0.4, y: 0.4, w: 0.2, h: 0.2 } }]) },
       (j) => j.operations[0].region,
     ],
-    ["a watermark change", { watermark: { enabled: true, text: "ACME" } }, (j) => j.watermark.text],
+    [
+      "a watermark change",
+      { watermark: { enabled: true, text: "ACME" } },
+      (j) => j.watermark?.text,
+    ],
     ["an encode profile change", { encodeProfile: "quality" }, (j) => j.encode_profile],
     ["an output path change", { outputDir: "D:\\exports" }, (j) => j.output_path],
     [
@@ -462,6 +467,7 @@ describe("ffmpeg strict preview staleness", () => {
       requests[0].resolve({ ok: true, data_url: "data:image/jpeg;base64,AAAA" }),
     );
     expect(requests).toHaveLength(1);
+    const before = pick(requests[0].job);
 
     act(() => useEditorStore.setState(patch));
     await act(async () => {
@@ -469,7 +475,7 @@ describe("ffmpeg strict preview staleness", () => {
     });
 
     expect(requests).toHaveLength(2);
-    expect(pick(requests[1].job)).toBeDefined();
+    expect(pick(requests[1].job)).not.toEqual(before);
   });
 
   it("a global text style change invalidates a batch-text frame", async () => {

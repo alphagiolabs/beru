@@ -6,7 +6,6 @@ import numpy as np
 
 from filters import build_filter_complex
 from media_probe import find_ffmpeg
-import filters
 
 FFMPEG = find_ffmpeg()
 WIDTH, HEIGHT, FRAMES = 320, 180, 12

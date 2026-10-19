@@ -53,18 +53,41 @@ describe("petdex handlers", () => {
     fs.rmSync(tempDirectory, { recursive: true, force: true });
   });
 
-  it("lists installed pets from userData/pets", async () => {
-    const petDir = path.join(tempDirectory, "pets", "boba");
+  it.each([
+    {
+      name: "lists installed pets from userData/pets",
+      codex: false,
+      slug: "boba",
+      displayName: "Boba",
+      manifest: "pet.json",
+      sprite: "spritesheet.webp",
+      meta: { spritesheetUrl: "https://x.test/s.webp" },
+      source: "beru",
+    },
+    {
+      name: "lists pets installed via Codex CLI",
+      codex: true,
+      slug: "kebo",
+      displayName: "Kebo",
+      manifest: "pet.json",
+      sprite: "spritesheet.webp",
+      source: "codex",
+    },
+    {
+      name: "lists pets installed via petjson.json",
+      codex: true,
+      slug: "mallow",
+      displayName: "Mallow",
+      manifest: "petjson.json",
+      sprite: "sprite.webp",
+      source: "codex",
+    },
+  ])("$name", async ({ codex, slug, displayName, manifest, sprite, meta, source }) => {
+    const petDir = path.join(codex ? mocks.codexPetsRoot : path.join(tempDirectory, "pets"), slug);
     fs.mkdirSync(petDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(petDir, "pet.json"),
-      JSON.stringify({ id: "boba", displayName: "Boba" }),
-    );
-    fs.writeFileSync(
-      path.join(petDir, "meta.json"),
-      JSON.stringify({ spritesheetUrl: "https://x.test/s.webp" }),
-    );
-    fs.writeFileSync(path.join(petDir, "spritesheet.webp"), "webp");
+    fs.writeFileSync(path.join(petDir, manifest), JSON.stringify({ id: slug, displayName }));
+    if (meta) fs.writeFileSync(path.join(petDir, "meta.json"), JSON.stringify(meta));
+    fs.writeFileSync(path.join(petDir, sprite), "webp");
 
     const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
     registerPetdexHandlers();
@@ -72,52 +95,7 @@ describe("petdex handlers", () => {
     const listHandler = mocks.handlers.get("petdex:listInstalled");
     await expect(listHandler(trustedSenderEvent)).resolves.toMatchObject({
       success: true,
-      pets: [
-        {
-          slug: "boba",
-          displayName: "Boba",
-          spritesheetUrl: "https://x.test/s.webp",
-          source: "beru",
-        },
-      ],
-    });
-  });
-
-  it("lists pets installed via Codex CLI", async () => {
-    const petDir = path.join(mocks.codexPetsRoot, "kebo");
-    fs.mkdirSync(petDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(petDir, "pet.json"),
-      JSON.stringify({ id: "kebo", displayName: "Kebo" }),
-    );
-    fs.writeFileSync(path.join(petDir, "spritesheet.webp"), "webp");
-
-    const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
-    registerPetdexHandlers();
-
-    const listHandler = mocks.handlers.get("petdex:listInstalled");
-    await expect(listHandler(trustedSenderEvent)).resolves.toMatchObject({
-      success: true,
-      pets: [{ slug: "kebo", displayName: "Kebo", source: "codex" }],
-    });
-  });
-
-  it("lists pets installed via petjson.json", async () => {
-    const petDir = path.join(mocks.codexPetsRoot, "mallow");
-    fs.mkdirSync(petDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(petDir, "petjson.json"),
-      JSON.stringify({ id: "mallow", displayName: "Mallow" }),
-    );
-    fs.writeFileSync(path.join(petDir, "sprite.webp"), "webp");
-
-    const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
-    registerPetdexHandlers();
-
-    const listHandler = mocks.handlers.get("petdex:listInstalled");
-    await expect(listHandler(trustedSenderEvent)).resolves.toMatchObject({
-      success: true,
-      pets: [{ slug: "mallow", displayName: "Mallow", source: "codex" }],
+      pets: [{ slug, displayName, source, ...meta }],
     });
   });
 
@@ -138,23 +116,44 @@ describe("petdex handlers", () => {
   });
 
   it("installs bundled boba without network", async () => {
-    const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
-    registerPetdexHandlers();
+    const fetchSpy = vi.fn(() => {
+      throw new Error("network disabled");
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
+      registerPetdexHandlers();
 
-    const installHandler = mocks.handlers.get("petdex:install");
-    const res = await installHandler(trustedSenderEvent, { slug: "boba", displayName: "Boba" });
-    expect(res.success).toBe(true);
-    expect(fs.existsSync(path.join(tempDirectory, "pets", "boba", "spritesheet.webp"))).toBe(true);
+      const installHandler = mocks.handlers.get("petdex:install");
+      const res = await installHandler(trustedSenderEvent, { slug: "boba", displayName: "Boba" });
+      expect(res.success).toBe(true);
+      expect(fs.existsSync(path.join(tempDirectory, "pets", "boba", "spritesheet.webp"))).toBe(
+        true,
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("returns bundled spritesheet previews", async () => {
-    const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
-    registerPetdexHandlers();
+    const fetchSpy = vi.fn(() => {
+      throw new Error("network disabled");
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const { registerPetdexHandlers } = await import("../main/handlers/petdex.js");
+      registerPetdexHandlers();
 
-    const bundledHandler = mocks.handlers.get("petdex:getBundledSpritesheet");
-    const res = await bundledHandler(trustedSenderEvent, "boba");
-    expect(res.success).toBe(true);
-    expect(res.path).toMatch(/spritesheet\.webp$/);
+      const bundledHandler = mocks.handlers.get("petdex:getBundledSpritesheet");
+      const res = await bundledHandler(trustedSenderEvent, "boba");
+      expect(res.success).toBe(true);
+      expect(res.path).toMatch(/spritesheet\.webp$/);
+      expect(fs.existsSync(res.path)).toBe(true);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("keeps offline bundled catalog available without network", async () => {

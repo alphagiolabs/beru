@@ -146,6 +146,11 @@ describe("pathSecurity", () => {
       expect(security.registerOutputDirectory(outputDirectory).ok).toBe(true);
       expect(fs.existsSync(staged)).toBe(scenario !== "dead");
       expect(fs.existsSync(tmpFile)).toBe(true);
+      if (scenario === "unknown-file") {
+        expect(fs.readFileSync(path.join(path.dirname(staged), "personal.txt"), "utf8")).toBe(
+          "keep",
+        );
+      }
     },
   );
 

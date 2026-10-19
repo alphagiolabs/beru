@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createEmptyEditorProject,
   EditorError,
-  validateEditorProject,
+  parseEditorProject,
 } from "../shared/editor-project.js";
 import {
   addAsset,
@@ -13,10 +13,8 @@ import {
   removeOverlay,
   updateOverlay,
 } from "../shared/editor-timeline.js";
-import {
-  buildCompositionManifest,
-  validateCompositionManifest,
-} from "../src/features/editor/composition.js";
+import { buildCompositionManifest } from "../src/features/editor/composition.js";
+import { validateCompositionJob } from "../shared/composition-settings.js";
 import {
   DEFAULT_OVERLAY_STYLE,
   OVERLAY_MAX_COUNT,
@@ -59,7 +57,7 @@ describe("title and image layer operations", () => {
       text: "Hola",
       style: DEFAULT_OVERLAY_STYLE,
     });
-    expect(validateEditorProject(added.project)).toEqual({ valid: true });
+    expect(parseEditorProject(added.project)).toEqual({ ok: true, project: added.project });
   });
 
   it("layers only still images, never a video asset", () => {
@@ -143,14 +141,14 @@ describe("overlays in the render manifest", () => {
         source: { path: "C:/Images/logo.png", sizeBytes: 64, mtimeMs: 7 },
       }),
     ]);
-    expect(validateCompositionManifest(manifest)).toEqual({ valid: true });
+    expect(validateCompositionJob(manifest.jobs[0])).toBeNull();
   });
 
   it("accepts the common job contract without global layers", () => {
     const { project } = montage();
     const legacy = buildCompositionManifest(project);
     delete legacy.jobs[0].overlays;
-    expect(validateCompositionManifest(legacy)).toEqual({ valid: true });
+    expect(validateCompositionJob(legacy.jobs[0])).toBeNull();
   });
 
   it("rejects overlays the renderer would refuse", () => {
@@ -165,12 +163,7 @@ describe("overlays in the render manifest", () => {
       [{ ...image, kind: "video" }, /[Tt]ipo.*inválid/],
     ];
     for (const [overlay, pattern] of cases) {
-      const result = validateCompositionManifest({
-        ...base,
-        jobs: [{ ...base.jobs[0], overlays: [overlay] }],
-      });
-      expect(result.valid).toBe(false);
-      expect(result.error).toMatch(pattern);
+      expect(validateCompositionJob({ ...base.jobs[0], overlays: [overlay] })).toMatch(pattern);
     }
     const text = {
       id: "t",
@@ -181,17 +174,15 @@ describe("overlays in the render manifest", () => {
       text: "Hola",
       style: { color: "red", size: 0.1 },
     };
-    expect(
-      validateCompositionManifest({ ...base, jobs: [{ ...base.jobs[0], overlays: [text] }] }).error,
-    ).toMatch(/#rrggbb/);
+    expect(validateCompositionJob({ ...base.jobs[0], overlays: [text] })).toMatch(/#rrggbb/);
     const overfull = Array.from({ length: OVERLAY_MAX_COUNT + 1 }, (_, i) => ({
       ...text,
       id: `t${i}`,
+      style: { ...text.style, color: "#ffffff" },
     }));
-    expect(
-      validateCompositionManifest({ ...base, jobs: [{ ...base.jobs[0], overlays: overfull }] })
-        .error,
-    ).toMatch(/[Ss]uperposiciones.*rango/);
+    expect(validateCompositionJob({ ...base.jobs[0], overlays: overfull })).toMatch(
+      /[Ss]uperposiciones.*rango/,
+    );
   });
 });
 
@@ -209,13 +200,10 @@ describe("canvas dimensions", () => {
     expect(() => setCanvas(project, { width: 1281 })).toThrow(/canvas/);
     const manifest = buildCompositionManifest(project);
     expect(
-      validateCompositionManifest({
-        ...manifest,
-        jobs: [{ ...manifest.jobs[0], canvas: { ...manifest.jobs[0].canvas, height: 721 } }],
+      validateCompositionJob({
+        ...manifest.jobs[0],
+        canvas: { ...manifest.jobs[0].canvas, height: 721 },
       }),
-    ).toEqual({
-      valid: false,
-      error: "canvas: las dimensiones deben ser pares",
-    });
+    ).toBe("canvas: las dimensiones deben ser pares");
   });
 });

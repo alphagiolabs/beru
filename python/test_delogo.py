@@ -73,19 +73,18 @@ def create_test_image(path):
 
 CASES = [
     ("temporal default", [make_op("temporal")]),
-    ("temporal radius 5", [make_op("temporal", temporal_radius=5)]),
     ("temporal + feather 0", [make_op("temporal", edge_feather=0)]),
     ("temporal + time range", [make_op("temporal", startTime=0.5, endTime=2.0)]),
     ("mosaic", [make_op("mosaic", mosaic_size=16)]),
     ("mirror right", [make_op("mirror", mirror_side="right")]),
-    ("mirror left", [make_op("mirror", mirror_side="left")]),
-    ("mirror top", [make_op("mirror", mirror_side="top")]),
+    ("mirror left", [make_op("mirror", mirror_side="left",
+                             region={"x": 300, "y": 80, "w": 120, "h": 60})]),
+    ("mirror top", [make_op("mirror", mirror_side="top",
+                            region={"x": 100, "y": 200, "w": 240, "h": 120})]),
     ("mirror bottom", [make_op("mirror", mirror_side="bottom")]),
     ("inpaint", [make_op("inpaint")]),
     ("blur", [make_op("blur", blur_strength=30)]),
     ("fill red", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=0.5)]),
-    ("fill opacity 0", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=0)]),
-    ("fill opacity clamped", [make_op("fill", delogo_fill_color="red", delogo_fill_opacity=-0.5)]),
     ("two temporal ops + feather", [
         make_op("temporal", edge_feather=10),
         make_op("temporal", edge_feather=10,

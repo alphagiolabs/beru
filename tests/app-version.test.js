@@ -28,6 +28,19 @@ describe("appVersion utils", () => {
     });
   });
 
+  it("reports hidden entries when a section exceeds the display limit", () => {
+    expect(
+      parseReleaseNotesSections(
+        "What's new\n- feat: one\n- feat: two\nFixed\n- fix: one\n- fix: two",
+        1,
+      ),
+    ).toEqual({
+      whatsNew: ["feat: one"],
+      fixed: ["fix: one"],
+      hiddenCount: 2,
+    });
+  });
+
   it("formats elapsed time for footer clocks", () => {
     expect(formatFooterClock(125000)).toBe("02:05");
     expect(formatFooterClock(3725000)).toBe("1:02:05");

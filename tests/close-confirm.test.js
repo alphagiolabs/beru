@@ -8,7 +8,7 @@ function fakeContents() {
 afterEach(() => vi.useRealTimers());
 
 describe("close confirm handshake", () => {
-  it("resolves with the renderer answer after an ack", async () => {
+  it("waits for the renderer answer after an ack", async () => {
     vi.useFakeTimers();
     const contents = fakeContents();
     const answer = requestCloseConfirm(contents, "window:confirmClose", { processing: false });
@@ -16,11 +16,17 @@ describe("close confirm handshake", () => {
     expect(channel).toBe("window:confirmClose");
     expect(processing).toBe(false);
 
+    let settled = false;
+    answer.then(() => {
+      settled = true;
+    });
     expect(resolveCloseConfirm(id, { ack: true })).toBe(true);
+    await Promise.resolve();
     vi.advanceTimersByTime(60_000);
-    expect(resolveCloseConfirm(id, { confirmed: true })).toBe(true);
-    await expect(answer).resolves.toBe(true);
-    expect(resolveCloseConfirm(id, { confirmed: false })).toBe(false);
+    expect(settled).toBe(false);
+    expect(resolveCloseConfirm(id, { confirmed: false })).toBe(true);
+    await expect(answer).resolves.toBe(false);
+    expect(settled).toBe(true);
   });
 
   it("resolves null when the renderer never acknowledges", async () => {

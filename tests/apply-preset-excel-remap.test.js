@@ -67,13 +67,13 @@ describe("applyPreset — Excel column re-mapping on region ID change", () => {
     expect(op2Codigo.text).toBe("B002");
   });
 
-  it("does not re-map when preset region IDs already match existing columns", () => {
+  it("keeps existing id columns and remaps only new ids by geometry", () => {
     const preset = {
       type: "beru-preset",
-      name: "Same IDs",
+      name: "Mixed IDs",
       templateRegions: [
-        { id: 1001, region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 } },
-        { id: 1002, region: { x: 0.5, y: 0.5, w: 0.2, h: 0.1 } },
+        { id: 1001, region: { x: 0.5, y: 0.5, w: 0.2, h: 0.1 } },
+        { id: 2002, region: { x: 0.1, y: 0.1, w: 0.2, h: 0.1 } },
       ],
       textStyle: {},
       defaults: {},
@@ -81,7 +81,8 @@ describe("applyPreset — Excel column re-mapping on region ID change", () => {
 
     useEditorStore.getState().applyPreset(preset);
     const state = useEditorStore.getState();
+    expect(state.templateRegions.map((r) => r.id)).toEqual([1001, 2002]);
     expect(state.excelMapping.columns[1001]).toBe("Nombre");
-    expect(state.excelMapping.columns[1002]).toBe("Codigo");
+    expect(state.excelMapping.columns[2002]).toBe("Nombre");
   });
 });

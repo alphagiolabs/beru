@@ -6,7 +6,6 @@ export default function FontFamilyPicker({
   value,
   options = [],
   onChange,
-  disabled = false,
   label = "Fuente",
   ariaLabel = "Fuente",
 }) {
@@ -25,13 +24,11 @@ export default function FontFamilyPicker({
   }, [open, selected]);
 
   const commit = (next, { close = true } = {}) => {
-    if (disabled) return;
     onChange?.(next);
     if (close) setOpen(false);
   };
 
   const onTriggerKeyDown = (e) => {
-    if (disabled) return;
     if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       setOpen(true);
@@ -78,22 +75,15 @@ export default function FontFamilyPicker({
   };
 
   return (
-    <div
-      ref={rootRef}
-      className={`inspector-font-picker${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}`}
-    >
+    <div ref={rootRef} className={`inspector-font-picker${open ? " is-open" : ""}`}>
       <button
         type="button"
         className="inspector-font-picker-trigger"
-        disabled={disabled}
         aria-label={ariaLabel}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        onClick={() => {
-          if (disabled) return;
-          setOpen((v) => !v);
-        }}
+        onClick={() => setOpen((v) => !v)}
         onKeyDown={onTriggerKeyDown}
       >
         <span className="inspector-font-picker-key">{label}</span>

@@ -21,19 +21,28 @@ export function createPathResolver({
     return path.normalize(p).toLowerCase();
   }
 
+  function isUsableInput(filePath) {
+    return typeof filePath === "string" && Boolean(filePath.trim()) && !NULL_BYTE.test(filePath);
+  }
+
+  function cachedEntry(filePath) {
+    if (!cacheEnabled()) return undefined;
+    const hit = resolveCache.get(filePath);
+    return hit && Date.now() - hit.ts <= resolveCacheTtlMs() ? hit : undefined;
+  }
+
+  function remember(filePath, resolved) {
+    if (!cacheEnabled()) return;
+    resolveCache.set(filePath, { resolved, ts: Date.now() });
+    trimOldest(resolveCache, RESOLVE_CACHE_MAX);
+  }
+
   function resolveSafe(filePath) {
-    if (typeof filePath !== "string" || !filePath.trim() || NULL_BYTE.test(filePath)) {
-      return null;
-    }
-    if (cacheEnabled()) {
-      const hit = resolveCache.get(filePath);
-      if (hit && Date.now() - hit.ts <= resolveCacheTtlMs()) return hit.resolved;
-    }
+    if (!isUsableInput(filePath)) return null;
+    const hit = cachedEntry(filePath);
+    if (hit) return hit.resolved;
     const resolved = resolveSafeUncached(filePath);
-    if (cacheEnabled()) {
-      resolveCache.set(filePath, { resolved, ts: Date.now() });
-      trimOldest(resolveCache, RESOLVE_CACHE_MAX);
-    }
+    remember(filePath, resolved);
     return resolved;
   }
 
@@ -44,7 +53,7 @@ export function createPathResolver({
       try {
         const resolved = path.resolve(filePath);
         let dir = resolved;
-        let tail = [];
+        const tail = [];
         while (dir !== path.dirname(dir)) {
           try {
             const realDir = realpath(dir);
@@ -62,11 +71,9 @@ export function createPathResolver({
   }
 
   async function resolveSafeAsync(filePath) {
-    if (typeof filePath !== "string" || !filePath.trim() || NULL_BYTE.test(filePath)) return null;
-    if (cacheEnabled()) {
-      const hit = resolveCache.get(filePath);
-      if (hit && Date.now() - hit.ts <= resolveCacheTtlMs()) return hit.resolved;
-    }
+    if (!isUsableInput(filePath)) return null;
+    const hit = cachedEntry(filePath);
+    if (hit) return hit.resolved;
     let resolved;
     try {
       resolved = await realpathAsync(filePath);
@@ -85,10 +92,7 @@ export function createPathResolver({
         }
       }
     }
-    if (cacheEnabled()) {
-      resolveCache.set(filePath, { resolved, ts: Date.now() });
-      trimOldest(resolveCache, RESOLVE_CACHE_MAX);
-    }
+    remember(filePath, resolved);
     return resolved;
   }
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CLIP_TRANSFORM, clipLayerGeometry } from "../shared/clip-transform.js";
+import { clipLayerGeometry, normalizeClipTransform } from "../shared/clip-transform.js";
 
 const CANVAS = { width: 320, height: 240 };
 const SOURCE = { width: 640, height: 360 };
+const DEFAULT_CLIP_TRANSFORM = normalizeClipTransform({});
 
 const transformOf = (changes) => ({ ...DEFAULT_CLIP_TRANSFORM, ...changes });
 

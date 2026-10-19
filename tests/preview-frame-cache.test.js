@@ -12,7 +12,6 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("../main/utils/preview-frame.js", () => ({
   renderPreviewFrame: mocks.render,
-  renderSourceFrame: (payload) => mocks.render({ ...payload, source_only: true }),
   disposePreviewFrameWorker: mocks.dispose,
 }));
 vi.mock("../main/utils/media-task-pool.js", async (importOriginal) => ({

@@ -194,40 +194,6 @@ describe("projectSlice + editorStyleSlice", () => {
     );
   });
 
-  it.each([false, true])(
-    "replaces old template text while preserving manual operations (Excel: %s)",
-    (withExcel) => {
-      const oldRegion = { x: 0.1, y: 0.1, w: 0.2, h: 0.2 };
-      const manual = { id: "manual", mode: "text", region: oldRegion, text: "Manual" };
-      const blur = { id: "blur", mode: "blur", region: oldRegion };
-      useEditorStore.setState({
-        templateRegions: [{ id: 1, label: "TEXT_1", region: oldRegion }],
-        queue: [
-          {
-            path: "C:\\videos\\sample.mp4",
-            filename: "sample.mp4",
-            operations: [
-              { id: "old", mode: "text", batchRegionId: 1, region: oldRegion, text: "Old" },
-              manual,
-              blur,
-            ],
-          },
-        ],
-        excelRows: withExcel ? [{ ID: "sample", Text: "New" }] : [],
-        excelMapping: { idColumn: "ID", columns: { 1: "Text" } },
-      });
-      const result = useEditorStore.getState().applyPreset({
-        type: "beru-preset",
-        templateRegions: [{ id: 2, label: "TEXT_2", region: { x: 0.3, y: 0.3, w: 0.2, h: 0.2 } }],
-      });
-      expect(result.ok).toBe(true);
-      const operations = useEditorStore.getState().queue[0].operations;
-      expect(operations).toContainEqual(manual);
-      expect(operations).toContainEqual(blur);
-      expect(operations.some((op) => op.id === "old" || op.text === "Old")).toBe(false);
-    },
-  );
-
   it("restores a preset watermark and clears the previous image cache", () => {
     useEditorStore.setState({
       watermark: { enabled: false, text: "Previous", imageV: "stale" },

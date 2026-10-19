@@ -1,6 +1,6 @@
 export { hasVideoDimensions } from "../../shared/has-video-dimensions.js";
 
-export function videoHasBatchText(videoIdx, templateRegions, getCellTextForRegion) {
+function videoHasBatchText(videoIdx, templateRegions, getCellTextForRegion) {
   if (!templateRegions?.length) return true;
   return templateRegions.some(
     (tr) => String(getCellTextForRegion(videoIdx, tr.id) ?? "").trim().length > 0,

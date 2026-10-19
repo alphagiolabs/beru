@@ -1,7 +1,7 @@
 export const MIN_PX_PER_SECOND = 2;
 export const MAX_PX_PER_SECOND = 480;
 export const DEFAULT_PX_PER_SECOND = 40;
-export const SNAP_THRESHOLD_PX = 6;
+const SNAP_THRESHOLD_PX = 6;
 export const MIN_CLIP_US = 40_000;
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));

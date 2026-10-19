@@ -55,7 +55,7 @@ export function longFixture() {
   ]);
 }
 
-export const CODEC_CLIPS = [
+const CODEC_CLIPS = [
   { name: "h264.mp4", args: ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"] },
   { name: "h264.mkv", args: ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"] },
   {

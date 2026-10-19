@@ -88,7 +88,7 @@ def _shift_op_time_bounds(op, offset):
     return out
 
 
-def _run_preview_image_cmd(cmd, vw, vh, timestamp):
+def _run_preview_image_cmd(cmd, timestamp):
     """Run a single-frame PNG command with bounded pipes; return the payload dict."""
     proc = None
     output = {}
@@ -175,10 +175,10 @@ def _run_preview_image_cmd(cmd, vw, vh, timestamp):
     }
 
 
-def _run_preview_with_end_fallback(make_command, info, input_path, vw, vh, timestamp, *,
+def _run_preview_with_end_fallback(make_command, info, input_path, timestamp, *,
                                    probe_fn=None):
     probe = probe_fn or media_probe.ffprobe
-    result = _run_preview_image_cmd(make_command(timestamp), vw, vh, timestamp)
+    result = _run_preview_image_cmd(make_command(timestamp), timestamp)
     if result.get("error") != "FFmpeg no produjo imagen" or timestamp <= 0:
         return result
 
@@ -197,9 +197,7 @@ def _run_preview_with_end_fallback(make_command, info, input_path, vw, vh, times
         if rounded in attempted:
             continue
         attempted.add(rounded)
-        result = _run_preview_image_cmd(
-            make_command(sample_timestamp), vw, vh, timestamp
-        )
+        result = _run_preview_image_cmd(make_command(sample_timestamp), timestamp)
         if result.get("error") != "FFmpeg no produjo imagen" or sample_timestamp == 0:
             return result
 
@@ -277,7 +275,7 @@ def _render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
             ]
 
         return _run_preview_with_end_fallback(
-            make_source_command, info, input_path, vw, vh, timestamp,
+            make_source_command, info, input_path, timestamp,
             probe_fn=probe_fn,
         )
 
@@ -334,15 +332,5 @@ def _render_frame(payload, *, source_only, ffmpeg_path=None, probe_fn=None,
         return cmd
 
     return _run_preview_with_end_fallback(
-        make_command, info, input_path, vw, vh, timestamp, probe_fn=probe_fn,
+        make_command, info, input_path, timestamp, probe_fn=probe_fn,
     )
-
-
-def render_preview_frame(payload, **kwargs):
-    """Render one video frame with export-equivalent filters."""
-    return render_frame(payload, source_only=False, **kwargs)
-
-
-def render_source_frame(payload, **kwargs):
-    """Decode one frame straight from a rendered artifact (no filter graph)."""
-    return render_frame(payload, source_only=True, **kwargs)

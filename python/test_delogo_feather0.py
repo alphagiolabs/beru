@@ -24,10 +24,10 @@ def test_inpaint_feather0_with_time_no_boxblur():
     op = _op("inpaint", 0, 5, 10)
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     assert chain is not None
-    assert "boxblur=1" not in chain, (
-        f"feather=0 must not apply boxblur, but chain contains boxblur=1: {chain!r}"
+    assert "boxblur" not in chain, (
+        f"feather=0 must not apply boxblur, but chain contains one: {chain!r}"
     )
-    assert "overlay=" in chain
+    assert "overlay=" in chain and "enable=" in chain
 
 
 def test_inpaint_feather0_no_time_no_boxblur():
@@ -47,15 +47,17 @@ def test_inpaint_feather6_with_time_applies_seamless_blend():
     assert "overlay=" in chain and "enable=" in chain
 
 
-def test_mirror_fallback_feather0_with_time_no_boxblur():
+def test_mirror_without_source_falls_back_to_blur():
     op = _op("mirror", 0, 5, 10)
-    op["region"] = {"x": 600, "y": 100, "w": 80, "h": 60}
+    op["region"] = {"x": 200, "y": 100, "w": 440, "h": 60}
     op["mirror_side"] = "right"
     chain = _build_delogo_chain(op, None, 0, 640, 480, None)
     assert chain is not None
-    assert "boxblur=1" not in chain, (
-        f"feather=0 fallback must not apply boxblur=1, got: {chain!r}"
+    assert "boxblur=luma_radius=min(" in chain, (
+        f"mirror with no source region must fall back to blur, got: {chain!r}"
     )
+    assert "hflip" not in chain
+    assert "enable=" in chain
 
 
 def test_mosaic_feather0_patch_matches_selection_box():
@@ -74,6 +76,6 @@ if __name__ == "__main__":
     test_inpaint_feather0_with_time_no_boxblur()
     test_inpaint_feather0_no_time_no_boxblur()
     test_inpaint_feather6_with_time_applies_seamless_blend()
-    test_mirror_fallback_feather0_with_time_no_boxblur()
+    test_mirror_without_source_falls_back_to_blur()
     test_mosaic_feather0_patch_matches_selection_box()
     print("OK: feather=0 with time bounds skips boxblur")

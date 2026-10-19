@@ -4,7 +4,7 @@ import { readContract, previewExportInputs } from "./helpers/preview-export-inpu
 import { queueCapacityInput } from "../src/utils/batch-capacity.js";
 import { motionDescriptor, estimateMotion } from "../src/utils/delogo-motion.js";
 import { outputLayout } from "../src/utils/output-geometry.js";
-import { frameRectAfterCrops } from "../src/utils/crop-output.js";
+import { frameAfterCrops, frameRectAfterCrops } from "../src/utils/crop-output.js";
 
 const classify = readContract("job-classify");
 const delogo = readContract("delogo");
@@ -37,6 +37,10 @@ describe("output geometry boundary cases", () => {
 describe("iterative crop output", () => {
   it.each(crop.cases.map((c, index) => [c.id, c, index]))("%s", (_id, c, index) => {
     expect(frameRectAfterCrops(c.operations, crop.dims)).toEqual(c.expected);
+    expect(frameAfterCrops(c.operations, crop.dims)).toEqual({
+      width: c.expected.width,
+      height: c.expected.height,
+    });
     expect(python.crop[index]).toEqual(c.expected);
   });
 });

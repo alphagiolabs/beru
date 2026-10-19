@@ -6,8 +6,8 @@ import {
   validateOverlayText,
 } from "./overlay-style.js";
 
-export const EDIT_PROJECT_TYPE = "beru-edit-project";
-export const EDIT_PROJECT_VERSION = 1;
+const EDIT_PROJECT_TYPE = "beru-edit-project";
+const EDIT_PROJECT_VERSION = 1;
 export const EDIT_AUTOSAVE_TYPE = "beru-edit-autosave";
 
 const TRACK_KINDS = new Set(["video"]);
@@ -155,7 +155,7 @@ function checkOverlays(doc, assetsById) {
   return null;
 }
 
-export function validateEditorProject(data) {
+function validateEditorProject(data) {
   if (!data || typeof data !== "object" || Array.isArray(data))
     return fail("El proyecto debe ser un objeto");
   if (data.type !== EDIT_PROJECT_TYPE) return fail("Tipo de documento inválido");

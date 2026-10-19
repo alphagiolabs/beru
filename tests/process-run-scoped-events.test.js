@@ -5,7 +5,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { pathToFileURL } from "url";
-import { IPC_EVENTS, IPC_INVOKE, emitRunEvent } from "../shared/ipc-channels.js";
+import { IPC_EVENTS, IPC_INVOKE } from "../shared/ipc-channels.js";
 import { createProcessingRun } from "../src/utils/processing-run.js";
 import { RUN_EVENTS, RUN_WARNING_KEYS, WORKER_EVENTS } from "../shared/run-events.js";
 import es from "../src/i18n/messages/es.json";
@@ -51,20 +51,6 @@ vi.mock("../main/utils/job-worker.js", () => ({
 vi.mock("../main/utils/media-task-pool.js", () => ({
   setMediaProcessingActive: vi.fn(),
   waitForMediaTasksToDrain: async () => {},
-}));
-vi.mock("../main/utils/concurrency.js", () => ({
-  runWithConcurrency: async (items, limit, worker) => {
-    const results = new Array(items.length);
-    let cursor = 0;
-    const launch = async () => {
-      while (cursor < items.length) {
-        const idx = cursor++;
-        results[idx] = await worker(items[idx], idx);
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, launch));
-    return results;
-  },
 }));
 vi.mock("../main/utils/video-cache.js", () => ({ probeVideo: vi.fn() }));
 vi.mock("../main/utils/settings.js", () => ({ readSettings: () => ({}) }));
@@ -218,14 +204,6 @@ describe("run-scoped process events", () => {
     disconnect();
   });
 
-  it("emitRunEvent stamps runId onto the payload", () => {
-    const send = vi.fn();
-    emitRunEvent(send, IPC_EVENTS.onProgress, "run-1", { percent: 50 });
-    expect(send).toHaveBeenCalledWith(IPC_EVENTS.onProgress, { percent: 50, runId: "run-1" });
-    emitRunEvent(send, IPC_EVENTS.onRunStarted, "run-2");
-    expect(send).toHaveBeenLastCalledWith(IPC_EVENTS.onRunStarted, { runId: "run-2" });
-  });
-
   it("routes real Python event payloads through main and renderer against the shared contract", async () => {
     const result = spawnSync(
       process.env.BERU_PYTHON || "python",
@@ -338,10 +316,20 @@ print(json.dumps({"events": [json.loads(line) for line in output.getvalue().spli
       );
       for (const msg of messages.filter((msg) => msg !== runError)) {
         mocks.emitLine(JSON.stringify(msg));
+        if (msg.type === RUN_EVENTS.warning.type)
+          expect(calls(IPC_EVENTS.onRunWarning).at(-1)[1]).toEqual({
+            index: msg.index,
+            code: msg.code,
+            message: msg.message,
+            runId: expect.any(String),
+          });
         if (msg.type === RUN_EVENTS.progress.type) expect(state.progressDone).toBe(msg.current);
         if (msg.type === RUN_EVENTS.jobProgress.type)
           await vi.waitFor(() => expect(state.jobProgress[0] ?? state.queue[0].progress).toBe(100));
       }
+      mocks.emitLine(
+        JSON.stringify({ type: "warning", index: 0, code: "future_warning", message: "raw msg" }),
+      );
       mocks.resolveDone({ ok: false });
       const outcome = await pending;
       for (const event of contracts) {
@@ -359,7 +347,7 @@ print(json.dumps({"events": [json.loads(line) for line in output.getvalue().spli
         state.showToast.mock.calls
           .filter(([toast]) => toast.kind === "warn")
           .map(([toast]) => toast.text),
-      ).toEqual(Object.values(RUN_WARNING_KEYS).map((key) => es[key]));
+      ).toEqual([...Object.values(RUN_WARNING_KEYS).map((key) => es[key]), "raw msg"]);
 
       mocks.done = new Promise((resolve) => {
         mocks.resolveDone = resolve;
@@ -383,17 +371,35 @@ print(json.dumps({"events": [json.loads(line) for line in output.getvalue().spli
   it("every event a run emits is run-scoped and carries that run's runId", async () => {
     const outputDir = tmpDir();
     const pending = mocks.handlers.get(IPC_INVOKE.startProcessing)(trustedSenderEvent, [
-      { input_path: "a.mp4", output_path: path.join(outputDir, "a.mp4") },
+      { id: 5, input_path: "a.mp4", output_path: path.join(outputDir, "a.mp4") },
     ]);
 
     await vi.waitFor(() => expect(runModule.getPythonProcess()).toBe(mocks.proc));
-    mocks.emitLine('{"type":"progress","index":0,"percent":10}');
-    mocks.emitLine('{"type":"job_progress","index":0,"percent":20}');
+    mocks.emitLine('{"type":"progress","index":5,"percent":10}');
+    mocks.emitLine('{"type":"job_progress","index":5,"percent":20}');
+    mocks.emitLine(
+      JSON.stringify({
+        type: "warning",
+        index: 5,
+        code: "patch_skipped_timing",
+        message: "Reconstrucción temporal omitida",
+      }),
+    );
     fs.writeFileSync(mocks.jobs[0].output_path, "exported");
-    mocks.emitLine('{"type":"complete","index":0}');
+    mocks.emitLine('{"type":"complete","index":5}');
     mocks.emitLine('{"type":"summary","done":1}');
     mocks.resolveDone({ ok: true });
-    await pending;
+    const result = await pending;
+
+    expect(result.success).toBe(true);
+    expect(calls(IPC_EVENTS.onRunWarning).map(([, payload]) => payload)).toEqual([
+      {
+        index: 5,
+        code: "patch_skipped_timing",
+        message: "Reconstrucción temporal omitida",
+        runId: result.runId,
+      },
+    ]);
 
     const started = calls(IPC_EVENTS.onRunStarted);
     expect(started).toHaveLength(1);

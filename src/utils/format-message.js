@@ -3,6 +3,10 @@ import en from "../i18n/messages/en.json";
 
 const DICTS = { es, en };
 
+export function dictFor(lang) {
+  return DICTS[lang] || es;
+}
+
 export function lookupMessage(dict, key, vars, fallbackDict) {
   let str = dict[key];
   if (str == null) str = fallbackDict[key] != null ? fallbackDict[key] : key;
@@ -13,7 +17,5 @@ export function lookupMessage(dict, key, vars, fallbackDict) {
 }
 
 export function tStatic(key, vars, lang) {
-  const l = lang || "es";
-  const dict = DICTS[l] || es;
-  return lookupMessage(dict, key, vars, es);
+  return lookupMessage(dictFor(lang || "es"), key, vars, es);
 }

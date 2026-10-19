@@ -136,21 +136,6 @@ describe("normalizeManifest", () => {
 });
 
 describe("buildJobManifest", () => {
-  it("wraps normalized renderer jobs in a versioned manifest", () => {
-    const manifest = buildJobManifest(
-      [{ id: 7, encode_profile: "quality" }],
-      "2026-06-05T00:00:00.000Z",
-    );
-
-    expect(manifest).toEqual({
-      type: JOB_MANIFEST_TYPE,
-      version: JOB_MANIFEST_VERSION,
-      createdAt: "2026-06-05T00:00:00.000Z",
-      jobs: [normalizeJob({ id: 7, encode_profile: "quality" }, 0)],
-    });
-    expect(unwrapJobManifest(manifest).error).toBeUndefined();
-  });
-
   it("does not emit a manifest-level profile (resolved per-job by Python)", () => {
     const manifest = buildJobManifest([{ id: 1, encode_profile: "quality" }]);
     expect(manifest).not.toHaveProperty("profile");
@@ -160,11 +145,6 @@ describe("buildJobManifest", () => {
     const manifest = buildJobManifest([{ id: 1 }]);
     expect(manifest.createdAt).toBeDefined();
     expect(typeof manifest.createdAt).toBe("string");
-  });
-
-  it("handles empty jobs array", () => {
-    const manifest = buildJobManifest([]);
-    expect(manifest.jobs).toEqual([]);
   });
 });
 
@@ -182,58 +162,26 @@ describe("unwrapJobManifest", () => {
     });
   });
 
-  it("returns error for null or undefined payload", () => {
-    expect(unwrapJobManifest(null)).toEqual({
-      jobs: [],
-      manifest: null,
-      error: "Payload de procesamiento inválido",
-    });
-    expect(unwrapJobManifest(undefined)).toEqual({
-      jobs: [],
-      manifest: null,
-      error: "Payload de procesamiento inválido",
-    });
-  });
-
-  it("returns error for invalid manifest type", () => {
-    expect(
-      unwrapJobManifest({
-        type: "wrong-type",
-        version: JOB_MANIFEST_VERSION,
-        jobs: [],
-      }),
-    ).toEqual({
-      jobs: [],
-      manifest: null,
-      error: "Tipo de manifiesto de procesamiento inválido",
-    });
-  });
-
-  it("returns error for unsupported manifest version", () => {
-    expect(
-      unwrapJobManifest({
-        type: JOB_MANIFEST_TYPE,
-        version: 999,
-        jobs: [],
-      }),
-    ).toEqual({
-      jobs: [],
-      manifest: null,
-      error: "Versión de manifiesto no soportada: 999",
-    });
-  });
-
-  it("returns error when manifest has no jobs array", () => {
-    expect(
-      unwrapJobManifest({
-        type: JOB_MANIFEST_TYPE,
-        version: JOB_MANIFEST_VERSION,
-      }),
-    ).toEqual({
-      jobs: [],
-      manifest: null,
-      error: "El manifiesto no contiene jobs válidos",
-    });
+  it.each([
+    ["null payload", null, "Payload de procesamiento inválido"],
+    ["undefined payload", undefined, "Payload de procesamiento inválido"],
+    [
+      "invalid manifest type",
+      { type: "wrong-type", version: JOB_MANIFEST_VERSION, jobs: [] },
+      "Tipo de manifiesto de procesamiento inválido",
+    ],
+    [
+      "unsupported manifest version",
+      { type: JOB_MANIFEST_TYPE, version: 999, jobs: [] },
+      "Versión de manifiesto no soportada: 999",
+    ],
+    [
+      "manifest without a jobs array",
+      { type: JOB_MANIFEST_TYPE, version: JOB_MANIFEST_VERSION },
+      "El manifiesto no contiene jobs válidos",
+    ],
+  ])("returns an error for %s", (_label, payload, error) => {
+    expect(unwrapJobManifest(payload)).toEqual({ jobs: [], manifest: null, error });
   });
 });
 

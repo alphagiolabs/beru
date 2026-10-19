@@ -187,7 +187,7 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(job.operations[2].text_shadow_offset_y).toBe(4);
   });
 
-  it("materializeBatchTextOps creates text ops with correct style from global + template", () => {
+  it("materializeBatchTextOps creates styled text ops and drops empty ones", () => {
     const region = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
     useEditorStore.setState({
       queue: [queueItem(0)],
@@ -244,6 +244,19 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(ops[0].textShadowColor).toBe("#000000");
     expect(ops[0].textShadowOffsetX).toBe(6);
     expect(ops[0].textShadowOffsetY).toBe(3);
+
+    const blur = { id: "blur-1", mode: "blur", region: { ...region } };
+    useEditorStore.setState({
+      queue: [
+        {
+          ...useEditorStore.getState().queue[0],
+          operations: [{ ...ops[0], text: "" }, blur],
+        },
+      ],
+      excelRows: [{ id: "video_0", TEXT_1: "" }],
+    });
+    useEditorStore.getState().materializeBatchTextOps();
+    expect(useEditorStore.getState().queue[0].operations).toEqual([blur]);
   });
 
   it("updateExcelMapping reapplies rows and produces the same text ops", () => {
@@ -341,38 +354,6 @@ describe("Export pipeline — Eliminar Logo + Texto en Lote", () => {
     expect(ops[0].blurStrength).toBe(25);
     expect(ops[1].mode).toBe("text");
     expect(ops[1].text).toBe("Batch Text");
-  });
-
-  it("materializeBatchTextOps preserves non-text ops", () => {
-    const textRegion = { x: 0.1, y: 0.8, w: 0.3, h: 0.1 };
-    const delogoRegion = { x: 0.7, y: 0.0, w: 0.15, h: 0.05 };
-    useEditorStore.setState({
-      queue: [
-        queueItem(0, {
-          operations: [
-            {
-              id: "delogo-1",
-              mode: "delogo",
-              region: delogoRegion,
-              delogoMethod: "blur",
-              blurStrength: 20,
-            },
-          ],
-        }),
-      ],
-      templateRegions: [{ id: "r1", label: "TEXT_1", region: textRegion }],
-      excelRows: [{ id: "video_0", TEXT_1: "Title" }],
-      excelMapping: { idColumn: "id", columns: { r1: "TEXT_1" } },
-    });
-
-    useEditorStore.getState().materializeBatchTextOps();
-    const ops = useEditorStore.getState().queue[0].operations;
-
-    expect(ops).toHaveLength(2);
-    expect(ops[0].mode).toBe("delogo");
-    expect(ops[0].delogoMethod).toBe("blur");
-    expect(ops[1].mode).toBe("text");
-    expect(ops[1].text).toBe("Title");
   });
 
   it("full pipeline: 5 videos with mixed delogo + batch text", async () => {

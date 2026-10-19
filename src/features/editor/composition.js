@@ -3,7 +3,6 @@ import {
   COMPOSITION_VERSION,
   parseCompositionDocument,
 } from "../../../shared/composition-document.js";
-import { validateCompositionJob } from "../../../shared/composition-settings.js";
 import { JOB_MANIFEST_TYPE, JOB_MANIFEST_VERSION } from "../../../shared/job-manifest.js";
 import { normalizeOverlayStyle } from "../../../shared/overlay-style.js";
 import { normalizeClipTransform } from "../../../shared/clip-transform.js";
@@ -73,15 +72,4 @@ export function buildCompositionManifest(project, { encodeProfile = "balanced", 
 export function buildExactFrameManifest(project, timeUs, options = {}) {
   const manifest = buildCompositionManifest(project, options);
   return { ...manifest, jobs: manifest.jobs.map((job) => ({ ...job, frame: { atUs: timeUs } })) };
-}
-
-export function validateCompositionManifest(manifest) {
-  if (
-    manifest?.type !== JOB_MANIFEST_TYPE ||
-    manifest.version !== JOB_MANIFEST_VERSION ||
-    manifest.jobs?.length !== 1
-  )
-    return { valid: false, error: "La composición no tiene un job válido" };
-  const error = validateCompositionJob(manifest.jobs[0]);
-  return error ? { valid: false, error } : { valid: true };
 }

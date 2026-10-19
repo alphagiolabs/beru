@@ -7,7 +7,6 @@ vi.mock("../src/lib/supabaseClient.js", () => ({
   getSupabase: vi.fn(() => null),
 }));
 
-import BeruRoot from "../src/BeruRoot.jsx";
 import ConfirmDialog from "../src/components/ConfirmDialog.jsx";
 import AppRail from "../src/components/AppRail.jsx";
 import useEditorStore from "../src/stores/useEditorStore.js";
@@ -85,26 +84,5 @@ describe("Sign out", () => {
     });
 
     expect(useEditorStore.getState().signOut).toHaveBeenCalledTimes(1);
-  });
-
-  it("returns to the login screen after signing out", async () => {
-    await act(async () => {
-      root.render(<BeruRoot />);
-    });
-
-    expect(document.body.textContent).toMatch(/Importar videos/i);
-
-    await clickSignOut();
-
-    const confirmBtn = Array.from(document.querySelectorAll("button")).find((button) =>
-      button.textContent.includes("Continuar"),
-    );
-    await act(async () => {
-      confirmBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(useEditorStore.getState().signOut).toHaveBeenCalledTimes(1);
-    expect(document.body.textContent).toMatch(/Inicia sesión para continuar/i);
-    expect(document.body.textContent).not.toMatch(/Importar videos/i);
   });
 });

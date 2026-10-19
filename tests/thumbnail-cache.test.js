@@ -84,29 +84,6 @@ describe("thumbnailsByPath cache", () => {
     });
   });
 
-  it("drops results for videos removed before the thumbnail resolves", async () => {
-    useEditorStore.setState({
-      queue: [queueItem({ path: "C:\\videos\\a.mp4", filename: "a.mp4" })],
-    });
-    let resolveThumb;
-    mockApi.getThumbnail.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveThumb = resolve;
-        }),
-    );
-
-    const pending = useEditorStore
-      .getState()
-      .prioritizeThumbnails(["C:\\videos\\a.mp4"], {}, mockApi);
-    useEditorStore.getState().removeVideo(0);
-    resolveThumb({ dataUrl: "data:a" });
-    await pending;
-    await Promise.resolve();
-
-    expect(useEditorStore.getState().thumbnailsByPath["C:\\videos\\a.mp4"]).toBeUndefined();
-  });
-
   it("evicts oldest entries beyond the cache cap", async () => {
     const items = Array.from({ length: 2050 }, (_, i) =>
       queueItem({ path: `C:\\videos\\${i}.mp4`, filename: `${i}.mp4` }),

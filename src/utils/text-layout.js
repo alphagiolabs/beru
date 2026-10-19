@@ -60,7 +60,7 @@ export function textLayoutBounds(region = {}, safeMargin = 0, boxPad = 0) {
   };
 }
 
-export function binarySearchAutoFitFontSize(measureFits, { minPx, maxPx }) {
+function binarySearchAutoFitFontSize(measureFits, { minPx, maxPx }) {
   let lo = minPx;
   let hi = maxPx;
   let best = minPx;

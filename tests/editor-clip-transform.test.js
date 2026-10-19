@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_CLIP_TRANSFORM,
   normalizeClipTransform,
   validateClipSpeed,
   validateClipTransform,
@@ -14,13 +13,9 @@ import {
   setClipSpeed,
   setClipTransform,
 } from "../shared/editor-timeline.js";
-import {
-  buildCompositionManifest,
-  buildExactFrameManifest,
-  validateCompositionManifest,
-} from "../src/features/editor/composition.js";
 
 const SECOND = 1_000_000;
+const DEFAULT_CLIP_TRANSFORM = normalizeClipTransform({});
 
 function oneClip() {
   const added = addAsset(createEmptyEditorProject(), {
@@ -110,38 +105,5 @@ describe("clip speed, mute and transform operations", () => {
   it("rejects an invalid transform before it reaches the document", () => {
     const { project, clipId } = oneClip();
     expect(() => setClipTransform(project, clipId, { zoom: 9 })).toThrow(/zoom/);
-  });
-});
-
-describe("render manifest contract", () => {
-  it("carries speed, mute and transform per clip and validates them", () => {
-    const { project, clipId } = oneClip();
-    const changed = setClipTransform(
-      setClipMuted(setClipSpeed(project, clipId, 2), clipId, true),
-      clipId,
-      { rotate: 270 },
-    );
-    const manifest = buildCompositionManifest(changed);
-    expect(manifest.jobs[0].clips[0]).toMatchObject({
-      playback_rate: 2,
-      audio_muted: true,
-      rotation: 270,
-    });
-    expect(validateCompositionManifest(manifest)).toEqual({ valid: true });
-  });
-
-  it("builds an exact-frame manifest that asks for one PNG at an instant", () => {
-    const { project } = oneClip();
-    const manifest = buildExactFrameManifest(project, 1_500_000);
-    expect(manifest.jobs[0].frame).toEqual({ atUs: 1_500_000 });
-    expect(validateCompositionManifest({ ...manifest, output: { path: "C:/x.png" } })).toEqual({
-      valid: true,
-    });
-    expect(
-      validateCompositionManifest({
-        ...manifest,
-        jobs: [{ ...manifest.jobs[0], frame: { atUs: -1 } }],
-      }).valid,
-    ).toBe(false);
   });
 });

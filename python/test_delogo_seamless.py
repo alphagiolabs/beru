@@ -13,7 +13,6 @@ from delogo_chains import (  # noqa: E402
 )
 from filters import build_filter_complex
 from media_probe import find_ffmpeg# noqa: E402
-import filters
 
 FFMPEG = Path(find_ffmpeg())
 _TMP = tempfile.TemporaryDirectory(prefix="beru_delogo_seamless_")

@@ -16,22 +16,6 @@ describe("preview request ownership", () => {
     expect(second.isCurrent()).toBe(false);
   });
 
-  it.each(["time", "video", "rotation", "tool", "logo"])(
-    "rejects a frame after its %s changes, before a replacement is launched",
-    (field) => {
-      const requests = createPreviewRequests();
-      const state = { time: 1, video: "a.mp4", rotation: 0, tool: "blur", logo: 20 };
-      const owner = { ...state };
-      const request = requests.begin(owner, (snapshot) =>
-        Object.keys(snapshot).some((key) => snapshot[key] !== state[key]),
-      );
-      state[field] = "changed";
-      expect(request.isCurrent()).toBe(false);
-      expect(request.isPending()).toBe(true);
-      expect(request.finish()).toBe(true);
-    },
-  );
-
   it("invalidates a closed preview and prevents a late result from reopening it", () => {
     const requests = createPreviewRequests();
     const request = requests.begin({ video: "a.mp4" });

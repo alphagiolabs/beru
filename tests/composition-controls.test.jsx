@@ -32,7 +32,6 @@ beforeEach(() => {
   window.api = {
     saveComposition: vi.fn(async () => ({ success: true })),
     loadComposition: vi.fn(),
-    restoreSessionPaths: vi.fn(async () => ({ ok: true })),
     startComposition: vi.fn(async () => ({ success: true, runId: "compose-1" })),
   };
   document.body.innerHTML = '<div id="root"></div>';
@@ -106,11 +105,10 @@ it("applies a loaded document once and rejects a load that finishes after its ow
   window.api.loadComposition.mockResolvedValue({
     success: true,
     document: loaded,
-    paths: { ok: true, errors: [] },
   });
   await act(async () => button("Abrir composición").click());
   expect(useEditorStore.getState().composition.outputName).toBe("loaded");
-  expect(window.api.restoreSessionPaths).not.toHaveBeenCalled();
+  expect(window.api.loadComposition).toHaveBeenCalledTimes(1);
   let finish;
   window.api.loadComposition.mockImplementation(
     () =>
@@ -121,6 +119,7 @@ it("applies a loaded document once and rejects a load that finishes after its ow
   await act(async () => button("Abrir composición").click());
   act(() => useEditorStore.getState().setCompositionSettings({ outputName: "edited" }));
   await act(async () => finish({ success: true, document: loaded }));
+  expect(window.api.loadComposition).toHaveBeenCalledTimes(2);
   expect(useEditorStore.getState().composition.outputName).toBe("edited");
 });
 

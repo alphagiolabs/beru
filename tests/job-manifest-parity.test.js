@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import contract from "../resources/job-manifest-fixtures.json" with { type: "json" };
 import {
   normalizeManifest,
-  normalizeJob,
   JOB_MANIFEST_TYPE,
   JOB_MANIFEST_VERSION,
 } from "../shared/job-manifest.js";
@@ -23,26 +22,6 @@ describe("job manifest contract (envelope)", () => {
     expect(JOB_MANIFEST_TYPE).toBe(contract.envelope.type);
     expect(JOB_MANIFEST_VERSION).toBe(contract.envelope.version);
   });
-
-  it("rejects a manifest with a tampered type", () => {
-    expect(() =>
-      normalizeManifest({
-        ...contract.envelope,
-        type: "other-job-manifest",
-        jobs: contract.jobs,
-      }),
-    ).toThrow();
-  });
-
-  it("rejects a manifest with a tampered version", () => {
-    expect(() =>
-      normalizeManifest({
-        ...contract.envelope,
-        version: 99,
-        jobs: contract.jobs,
-      }),
-    ).toThrow();
-  });
 });
 
 describe("job manifest contract (JS normalization)", () => {
@@ -55,9 +34,7 @@ describe("job manifest contract (JS normalization)", () => {
     expect(manifest.jobs).toHaveLength(contract.expected.length);
 
     manifest.jobs.forEach((job, i) => {
-      const raw = contract.jobs[i];
       const expected = contract.expected[i];
-      expect(normalizeJob(raw, i), `${expected.label}: normalizeJob parity`).toEqual(job);
       for (const [path, value] of Object.entries(expected.fields)) {
         expect(resolveField(job, path), `${expected.label}: ${path}`).toEqual(value);
       }

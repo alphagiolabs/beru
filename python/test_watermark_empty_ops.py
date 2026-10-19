@@ -7,7 +7,6 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from filters import build_filter_complex# noqa: E402
-import job_classify
 import media_probe
 
 
@@ -43,14 +42,6 @@ def test_text_watermark_positions_match_the_selected_frame_edges():
                     assert abs((start + end) / 2 - extent / 2) <= 2, (position, start, end)
 
 
-def test_stream_copy_gate_requires_no_watermark():
-    wm = {"enabled": True, "type": "text", "text": "WM"}
-    assert not job_classify.job_takes_copy_path({"operations": [], "watermark": wm})
-    assert job_classify.job_takes_copy_path({"operations": []})
-    assert job_classify.job_takes_copy_path({"watermark": {"enabled": False}})
-
-
 if __name__ == "__main__":
-    test_stream_copy_gate_requires_no_watermark()
     test_text_watermark_positions_match_the_selected_frame_edges()
     print("ALL PASSED")

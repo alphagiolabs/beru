@@ -14,42 +14,29 @@ def _write_png(path: Path) -> None:
     path.write_bytes(b"\x89PNG\r\n\x1a\n")
 
 
-def test_empty_asset_roots_rejects_image_path():
+def test_image_assets_without_asset_roots_are_rejected():
     with tempfile.TemporaryDirectory() as tmp:
         video = Path(tmp) / "clip.mp4"
         image = Path(tmp) / "logo.png"
         video.write_bytes(b"fake")
         _write_png(image)
-        job = {
-            "input_path": str(video),
-            "input_root": str(tmp),
-            "asset_roots": [],
-            "operations": [{"mode": "image", "image_path": str(image)}],
+        cases = {
+            "empty asset_roots, image operation": {
+                "asset_roots": [],
+                "operations": [{"mode": "image", "image_path": str(image)}],
+            },
+            "missing asset_roots, watermark image": {
+                "operations": [],
+                "watermark": {"type": "image", "imagePath": str(image)},
+            },
         }
-        try:
-            _validated_job_media(job, require_output=False)
-            raise AssertionError("expected ValueError for empty asset_roots")
-        except ValueError as exc:
-            assert "asset_roots" in str(exc).lower()
-
-
-def test_missing_asset_roots_rejects_watermark_image():
-    with tempfile.TemporaryDirectory() as tmp:
-        video = Path(tmp) / "clip.mp4"
-        image = Path(tmp) / "wm.png"
-        video.write_bytes(b"fake")
-        _write_png(image)
-        job = {
-            "input_path": str(video),
-            "input_root": str(tmp),
-            "operations": [],
-            "watermark": {"type": "image", "imagePath": str(image)},
-        }
-        try:
-            _validated_job_media(job, require_output=False)
-            raise AssertionError("expected ValueError for missing asset_roots")
-        except ValueError as exc:
-            assert "asset_roots" in str(exc).lower()
+        for label, fields in cases.items():
+            job = {"input_path": str(video), "input_root": str(tmp), **fields}
+            try:
+                _validated_job_media(job, require_output=False)
+                raise AssertionError(f"expected ValueError for {label}")
+            except ValueError as exc:
+                assert "asset_roots" in str(exc).lower(), label
 
 
 def test_nonempty_asset_roots_accepts_image_under_root():
@@ -85,8 +72,7 @@ def test_font_path_still_allows_parent_fallback_without_asset_roots():
 
 
 if __name__ == "__main__":
-    test_empty_asset_roots_rejects_image_path()
-    test_missing_asset_roots_rejects_watermark_image()
+    test_image_assets_without_asset_roots_are_rejected()
     test_nonempty_asset_roots_accepts_image_under_root()
     test_font_path_still_allows_parent_fallback_without_asset_roots()
     print("ALL PASSED")

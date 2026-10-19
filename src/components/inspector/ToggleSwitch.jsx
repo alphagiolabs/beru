@@ -1,15 +1,7 @@
 import { useId } from "react";
 
-export default function ToggleSwitch({
-  checked = false,
-  onChange,
-  label,
-  disabled = false,
-  id: idProp,
-  ariaLabel,
-}) {
-  const autoId = useId();
-  const id = idProp || autoId;
+export default function ToggleSwitch({ checked = false, onChange, label, ariaLabel }) {
+  const id = useId();
   const accessibleName = ariaLabel || (typeof label === "string" ? label : undefined);
 
   return (
@@ -25,12 +17,8 @@ export default function ToggleSwitch({
         role="switch"
         aria-checked={checked}
         aria-label={accessibleName}
-        disabled={disabled}
         className={`inspector-switch${checked ? " is-on" : ""}`}
-        onClick={() => {
-          if (disabled) return;
-          onChange?.(!checked);
-        }}
+        onClick={() => onChange?.(!checked)}
       >
         <span className="inspector-switch-thumb" aria-hidden />
       </button>

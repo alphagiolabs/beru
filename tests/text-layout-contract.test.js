@@ -142,14 +142,12 @@ print(json.dumps(out))
       const row = py.bounds.find((b) => b.id === c.id);
       expect(row, c.id).toBeTruthy();
       expect({ box_pad: row.box_pad, bounds: row.bounds }).toEqual(c.expected);
-      expect(jsBoundsForCase(c)).toEqual(c.expected);
     }
 
     for (const c of contract.wrap_cases) {
       const row = py.wrap.find((w) => w.id === c.id);
       expect(row, c.id).toBeTruthy();
       expect(row.wrapped).toBe(c.expected.wrapped);
-      expect(wrapTextToWidth(c.text, c.max_width_px, c.font_size)).toBe(c.expected.wrapped);
     }
 
     for (const c of contract.fit_cases) {

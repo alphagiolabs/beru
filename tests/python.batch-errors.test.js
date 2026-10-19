@@ -34,13 +34,19 @@ print(json.dumps({
   it("does not treat generic filter failures as hardware encode errors", () => {
     const code = `
 import json
-from batch_errors import is_hardware_encode_error
+from batch_errors import is_hardware_encode_error, format_processing_error
 
 msg = "Error while filtering: Cannot allocate memory for filter graph"
-print(json.dumps(is_hardware_encode_error(msg)))
+print(json.dumps({
+    "hardware": is_hardware_encode_error(msg),
+    "message": format_processing_error(msg),
+}))
 `;
     const r = spawnSync(PY, ["-c", PY_CODE_PREFIX + code], { encoding: "utf8" });
     expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout.trim())).toBe(false);
+    const parsed = JSON.parse(r.stdout.trim());
+    expect(parsed.hardware).toBe(false);
+    expect(parsed.message).toContain("Memoria insuficiente");
+    expect(parsed.message).not.toMatch(/hardware|drivers/i);
   });
 });

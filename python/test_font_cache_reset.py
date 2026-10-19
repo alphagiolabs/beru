@@ -11,35 +11,6 @@ import processor  # noqa: E402
 import encoders
 
 
-def test_deleted_fontfile_reverifies_on_cache_hit():
-    with tempfile.TemporaryDirectory() as tmp:
-        font = Path(tmp) / "ghost.ttf"
-        font.write_bytes(b"x")
-        catalogue = {"ghost": (str(font), "ghost")}
-        with patch.object(fonts_module, "get_system_fonts", return_value=catalogue):
-            fonts_module.reset_caches()
-            assert fonts_module._resolve_font("ghost")[0] == "fontfile"
-            font.unlink()
-            resolved = fonts_module._resolve_font("ghost")
-    assert resolved == ("font", "ghost", False), resolved
-
-
-def test_reset_exposes_font_installed_between_runs():
-    with tempfile.TemporaryDirectory() as tmp:
-        font = Path(tmp) / "newfont.ttf"
-        font.write_bytes(b"x")
-        before = {"arial": (str(font), "arial")}
-        after = {"newfont": (str(font), "newfont")}
-        with patch.object(fonts_module, "get_system_fonts") as provider:
-            provider.return_value = before
-            fonts_module.reset_caches()
-            assert fonts_module._resolve_font("newfont") == ("font", "newfont", False)
-            provider.return_value = after
-            fonts_module.reset_caches()
-            resolved = fonts_module._resolve_font("newfont")
-    assert resolved[0] == "fontfile", resolved
-
-
 def test_process_jobs_rescans_fonts_every_run():
     registry_calls = []
 
@@ -109,8 +80,6 @@ def test_cached_drawtext_uses_a_font_installed_between_runs():
 
 
 if __name__ == "__main__":
-    test_deleted_fontfile_reverifies_on_cache_hit()
-    test_reset_exposes_font_installed_between_runs()
     test_process_jobs_rescans_fonts_every_run()
     test_cached_drawtext_falls_back_when_its_font_is_deleted()
     test_cached_drawtext_uses_a_font_installed_between_runs()

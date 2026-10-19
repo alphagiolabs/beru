@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { EDIT_AUTOSAVE_TYPE, parseEditorProject } from "../../shared/editor-project.js";
 
-export async function writeFileAtomic(file, text) {
+async function writeFileAtomic(file, text) {
   const tmp = `${file}.${randomUUID()}.tmp`;
   try {
     const handle = await fs.promises.open(tmp, "wx");
@@ -86,7 +86,7 @@ function assetStatusFromError(error) {
   return "invalid";
 }
 
-export function readKindFor(asset) {
+function readKindFor(asset) {
   return asset.metadata?.durationUs == null ? "image" : "video";
 }
 

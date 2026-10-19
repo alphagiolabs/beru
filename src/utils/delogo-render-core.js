@@ -30,14 +30,14 @@ function insertionMedian(work, values, n) {
   return Math.round((work[k - 1] + work[k]) / 2);
 }
 
-export function mosaicOutputSize(sw, sh, blockSize) {
+function mosaicOutputSize(sw, sh, blockSize) {
   return {
     cols: Math.max(1, Math.ceil(sw / blockSize)),
     rows: Math.max(1, Math.ceil(sh / blockSize)),
   };
 }
 
-export function mosaicInto(data, sw, sh, blockSize, out) {
+function mosaicInto(data, sw, sh, blockSize, out) {
   const { cols, rows } = mosaicOutputSize(sw, sh, blockSize);
   for (let by = 0; by < rows; by++) {
     for (let bx = 0; bx < cols; bx++) {
@@ -67,7 +67,7 @@ export function mosaicInto(data, sw, sh, blockSize, out) {
   }
 }
 
-export function inpaintInto(sData, dData, sw, sh, box) {
+function inpaintInto(sData, dData, sw, sh, box) {
   dData.set(sData);
   if (!box || box.w < 1 || box.h < 1) return;
   const left = box.x - 1;

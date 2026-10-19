@@ -85,7 +85,7 @@ def test_full_crop_then_blur_uses_cropped_frame():
     ]
     graph, _label, _ = build_filter_complex(ops, 640, 360)
     assert graph is not None
-    assert "crop=200:100:10:10" in graph or "crop=200:100:" in graph
+    assert "crop=200:100:" in graph
     assert "crop=50:40:0:0" in graph
 
 

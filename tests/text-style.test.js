@@ -29,11 +29,11 @@ describe("text-style utilities", () => {
   });
 
   it("regionsMatch compares all four normalized edges", () => {
-    const a = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
-    const b = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
-    const c = { x: 0.1, y: 0.2, w: 0.5, h: 0.1 };
-    expect(regionsMatch(a, b)).toBe(true);
-    expect(regionsMatch(a, c)).toBe(false);
+    const base = { x: 0.1, y: 0.2, w: 0.3, h: 0.1 };
+    expect(regionsMatch(base, { ...base })).toBe(true);
+    for (const edge of ["x", "y", "w", "h"]) {
+      expect(regionsMatch(base, { ...base, [edge]: base[edge] + 0.05 })).toBe(false);
+    }
   });
 
   it("findTextOpForRegion matches by full region, not position only", () => {
@@ -86,6 +86,10 @@ describe("text-style utilities", () => {
       textAlign: "bogus",
       textShadowOffsetX: 999,
       textShadowOffsetY: -999,
+      lineHeight: 9,
+      safeMargin: 999,
+      verticalAlign: "middle",
+      truncate: "bogus",
     });
 
     expect(style.fontSize).toBe(200);
@@ -93,6 +97,10 @@ describe("text-style utilities", () => {
     expect(style.textAlign).toBe("left");
     expect(style.textShadowOffsetX).toBe(64);
     expect(style.textShadowOffsetY).toBe(-64);
+    expect(style.lineHeight).toBe(3);
+    expect(style.safeMargin).toBe(48);
+    expect(style.verticalAlign).toBe("top");
+    expect(style.truncate).toBe("none");
   });
 
   it("textStyleToPythonPayload is the FFmpeg adapter for text style", () => {
@@ -102,6 +110,12 @@ describe("text-style utilities", () => {
         fontColor: "#fff",
         textShadowEnabled: true,
         textShadowOffsetX: 5,
+        autoFit: true,
+        lineHeight: 1.35,
+        verticalAlign: "center",
+        textWrap: true,
+        safeMargin: 6,
+        truncate: "ellipsis",
       }),
     ).toEqual(
       expect.objectContaining({
@@ -109,6 +123,12 @@ describe("text-style utilities", () => {
         font_color: "#fff",
         text_shadow_enabled: true,
         text_shadow_offset_x: 5,
+        auto_fit: true,
+        line_height: 1.35,
+        vertical_align: "center",
+        text_wrap: true,
+        safe_margin: 6,
+        truncate: "ellipsis",
       }),
     );
   });

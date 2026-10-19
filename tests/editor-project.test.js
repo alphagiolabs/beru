@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  EDIT_PROJECT_TYPE,
-  EDIT_PROJECT_VERSION,
-  createEmptyEditorProject,
-  parseEditorProject,
-  validateEditorProject,
-} from "../shared/editor-project.js";
+import { createEmptyEditorProject, parseEditorProject } from "../shared/editor-project.js";
 
 const SECOND = 1_000_000;
 
@@ -35,117 +29,133 @@ function sampleProject() {
 describe("createEmptyEditorProject", () => {
   it("creates a valid empty document with one video track", () => {
     const project = createEmptyEditorProject();
-    expect(project.type).toBe(EDIT_PROJECT_TYPE);
-    expect(project.version).toBe(EDIT_PROJECT_VERSION);
+    expect(project.type).toBe("beru-edit-project");
+    expect(project.version).toBe(1);
     expect(project.tracks).toHaveLength(1);
-    expect(validateEditorProject(project)).toEqual({ valid: true });
+    expect(parseEditorProject(project)).toEqual({ ok: true, project });
   });
 });
 
-describe("validateEditorProject", () => {
+describe("parseEditorProject validation", () => {
   it("accepts a document with references and intervals in range", () => {
-    expect(validateEditorProject(sampleProject())).toEqual({ valid: true });
+    const project = sampleProject();
+    expect(parseEditorProject(project)).toEqual({ ok: true, project });
   });
 
   it("rejects unsupported document versions with the version in the message", () => {
-    const result = validateEditorProject({ ...sampleProject(), version: 2 });
-    expect(result.valid).toBe(false);
+    const result = parseEditorProject({ ...sampleProject(), version: 2 });
+    expect(result.ok).toBe(false);
     expect(result.error).toMatch(/no soportada: 2/);
   });
 
   it("rejects the Batch project type", () => {
-    const result = validateEditorProject({ ...sampleProject(), type: "beru-project" });
-    expect(result.valid).toBe(false);
+    const result = parseEditorProject({ ...sampleProject(), type: "beru-project" });
+    expect(result.ok).toBe(false);
   });
 
-  it("rejects a clip whose asset does not exist", () => {
+  it("rejects a non-integer timestamp", () => {
     const project = sampleProject();
-    project.clips[0].assetId = "missing";
-    expect(validateEditorProject(project).error).toMatch(/asset inexistente/);
-  });
-
-  it("rejects a source interval that is empty or reversed", () => {
-    const project = sampleProject();
-    project.clips[0].sourceOutUs = project.clips[0].sourceInUs;
-    expect(validateEditorProject(project).error).toMatch(/intervalo de fuente inválido/);
-  });
-
-  it("rejects a source interval beyond the known asset duration", () => {
-    const project = sampleProject();
-    project.clips[0].sourceOutUs = 9 * SECOND;
-    expect(validateEditorProject(project).error).toMatch(/supera la duración/);
+    project.clips[0].sourceOutUs = 1.5;
+    expect(parseEditorProject(project).ok).toBe(false);
   });
 
   it("accepts an unknown asset duration without bounding the clip", () => {
     const project = sampleProject();
     project.assets[0].metadata.durationUs = null;
     project.clips[0].sourceOutUs = 9 * SECOND;
-    expect(validateEditorProject(project)).toEqual({ valid: true });
+    expect(parseEditorProject(project)).toEqual({ ok: true, project });
   });
 
-  it("rejects duplicate ids across entity kinds", () => {
+  it.each([
+    [
+      "rejects a clip whose asset does not exist",
+      (project) => {
+        project.clips[0].assetId = "missing";
+      },
+      /asset inexistente/,
+    ],
+    [
+      "rejects a source interval that is empty or reversed",
+      (project) => {
+        project.clips[0].sourceOutUs = project.clips[0].sourceInUs;
+      },
+      /intervalo de fuente inválido/,
+    ],
+    [
+      "rejects a source interval beyond the known asset duration",
+      (project) => {
+        project.clips[0].sourceOutUs = 9 * SECOND;
+      },
+      /supera la duración/,
+    ],
+    [
+      "rejects duplicate ids across entity kinds",
+      (project) => {
+        project.clips[0].id = "asset_a";
+      },
+      /ID duplicado/,
+    ],
+    [
+      "rejects a clip that is missing from its track order",
+      (project) => {
+        project.tracks[0].clipIds = [];
+      },
+      /no está en ninguna pista/,
+    ],
+    [
+      "rejects a clip listed in a track other than its own",
+      (project) => {
+        project.tracks.push({ id: "track_2", kind: "video", clipIds: [] });
+        project.tracks[1].clipIds.push("clip_1");
+      },
+      /otra pista/,
+    ],
+    [
+      "rejects a clip listed twice",
+      (project) => {
+        project.tracks[0].clipIds.push("clip_1");
+      },
+      /más de una posición/,
+    ],
+    [
+      "rejects a document with no track",
+      (project) => {
+        project.tracks = [];
+      },
+      /al menos una pista/,
+    ],
+    [
+      "rejects an image overlay that references a missing asset",
+      (project) => {
+        project.overlays.push({
+          id: "ov_1",
+          kind: "image",
+          assetId: "missing",
+          startUs: 0,
+          endUs: SECOND,
+          geometry: { x: 0, y: 0, w: 0.5, h: 0.5 },
+        });
+      },
+      /asset inexistente/i,
+    ],
+    [
+      "rejects overlay geometry outside the canvas",
+      (project) => {
+        project.overlays.push({
+          id: "ov_1",
+          kind: "text",
+          text: "Hola",
+          startUs: 0,
+          endUs: SECOND,
+          geometry: { x: 0.8, y: 0, w: 0.5, h: 0.2 },
+        });
+      },
+      /fuera del lienzo/,
+    ],
+  ])("%s", (_name, mutate, message) => {
     const project = sampleProject();
-    project.clips[0].id = "asset_a";
-    expect(validateEditorProject(project).error).toMatch(/ID duplicado/);
-  });
-
-  it("rejects a clip that is missing from its track order", () => {
-    const project = sampleProject();
-    project.tracks[0].clipIds = [];
-    expect(validateEditorProject(project).error).toMatch(/no está en ninguna pista/);
-  });
-
-  it("rejects a clip listed in a track other than its own", () => {
-    const project = sampleProject();
-    project.tracks.push({ id: "track_2", kind: "video", clipIds: [] });
-    project.tracks[1].clipIds.push("clip_1");
-    expect(validateEditorProject(project).error).toMatch(/otra pista/);
-  });
-
-  it("rejects a clip listed twice", () => {
-    const project = sampleProject();
-    project.tracks[0].clipIds.push("clip_1");
-    expect(validateEditorProject(project).error).toMatch(/más de una posición/);
-  });
-
-  it("rejects a document with no track", () => {
-    const project = sampleProject();
-    project.tracks = [];
-    expect(validateEditorProject(project).error).toMatch(/al menos una pista/);
-  });
-
-  it("rejects an image overlay that references a missing asset", () => {
-    const project = sampleProject();
-    project.overlays.push({
-      id: "ov_1",
-      kind: "image",
-      assetId: "missing",
-      startUs: 0,
-      endUs: SECOND,
-      geometry: { x: 0, y: 0, w: 0.5, h: 0.5 },
-    });
-    expect(validateEditorProject(project).error).toMatch(
-      /overlay.*asset inexistente|asset inexistente/i,
-    );
-  });
-
-  it("rejects overlay geometry outside the canvas", () => {
-    const project = sampleProject();
-    project.overlays.push({
-      id: "ov_1",
-      kind: "text",
-      text: "Hola",
-      startUs: 0,
-      endUs: SECOND,
-      geometry: { x: 0.8, y: 0, w: 0.5, h: 0.2 },
-    });
-    expect(validateEditorProject(project).error).toMatch(/fuera del lienzo/);
-  });
-
-  it("rejects a non-integer timestamp", () => {
-    const project = sampleProject();
-    project.clips[0].sourceOutUs = 1.5;
-    expect(validateEditorProject(project).valid).toBe(false);
+    mutate(project);
+    expect(parseEditorProject(project).error).toMatch(message);
   });
 });
 

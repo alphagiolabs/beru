@@ -222,7 +222,7 @@ export function applyJobCancelled(state) {
   return applyUnsuccessfulJob(state, true);
 }
 
-export function resetQueueForRun(queue) {
+function resetQueueForRun(queue) {
   return (Array.isArray(queue) ? queue : []).map((item) => ({
     ...item,
     status: "idle",

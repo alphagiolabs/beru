@@ -8,7 +8,6 @@ import {
   migrateThemeSettings,
   resolveTheme,
   resolveThemeName,
-  sanitizeCustomThemes,
   toCustomThemeRef,
   validateThemeTokens,
 } from "../src/theme/engine.js";
@@ -172,13 +171,15 @@ describe("theme engine", () => {
 
   it("sanitizes malformed custom themes", () => {
     const valid = createCustomTheme("Good");
-    const sanitized = sanitizeCustomThemes([
-      valid,
-      { id: "bad", name: 123 },
-      { id: "x", name: "X", tokens: { bgApp: "not-a-color" } },
-    ]);
-    expect(sanitized).toHaveLength(1);
-    expect(sanitized[0].name).toBe("Good");
+    const migrated = migrateThemeSettings({
+      customThemes: [
+        valid,
+        { id: "bad", name: 123 },
+        { id: "x", name: "X", tokens: { bgApp: "not-a-color" } },
+      ],
+    });
+    expect(migrated.customThemes).toHaveLength(1);
+    expect(migrated.customThemes[0].name).toBe("Good");
   });
 
   it("resolves theme names via i18n callback", () => {

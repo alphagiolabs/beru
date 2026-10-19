@@ -61,7 +61,7 @@ const VIDEO_CONTENT_TYPES = {
   ".mpeg": "video/mpeg",
 };
 
-export const IMAGE_CONTENT_TYPES = {
+const IMAGE_CONTENT_TYPES = {
   ".webp": "image/webp",
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -77,16 +77,9 @@ export function filePathFromBeruUrl(requestUrl) {
   const decoded = decodeURIComponent(url.pathname || "");
   if (!decoded) return null;
 
-  if (/^\/[A-Za-z]:[\\/]/.test(decoded)) {
-    return decoded.slice(1);
-  }
-  if (/^\/\\\\/.test(decoded)) {
-    return decoded.slice(1);
-  }
-  if (decoded.startsWith("//")) {
-    return decoded.slice(1);
-  }
-  return decoded;
+  const hasExtraLeadingSlash =
+    /^\/[A-Za-z]:[\\/]/.test(decoded) || /^\/\\\\/.test(decoded) || decoded.startsWith("//");
+  return hasExtraLeadingSlash ? decoded.slice(1) : decoded;
 }
 
 export function validateBeruRequestPath(pathSecurity, requestUrl) {

@@ -269,7 +269,7 @@ describe("queueSlice", () => {
         height: 720,
         duration: 12.5,
         videoCodec: "h264",
-        pixFmt: "yuv420p",
+        pixFmt: "yuv444p",
         frameRate: 30,
         audioCodec: "aac",
       },
@@ -301,6 +301,7 @@ describe("queueSlice", () => {
         height: 720,
         duration: 12.5,
         videoCodec: "h264",
+        pixFmt: "yuv444p",
         frameRate: 30,
         audioCodec: "aac",
       }),
@@ -507,12 +508,16 @@ describe("queueSlice", () => {
       blurStrength: 30,
     };
     const cache = createJobSignatureCache();
+    let cacheBuilds = 0;
     for (const ts of [0, 1.5, 2.5, 0.033]) {
       const get = useEditorStore.getState();
-      const fresh = () => buildLogoPreviewJob(get.buildPreviewFrameJob(1, ts), draft);
-      expect(cache(previewJobInputSnapshot(get, 1, draft), ts, fresh)).toBe(
-        JSON.stringify(fresh()),
-      );
+      const build = () => {
+        cacheBuilds += 1;
+        return buildLogoPreviewJob(get.buildPreviewFrameJob(1, ts), draft);
+      };
+      const fresh = buildLogoPreviewJob(get.buildPreviewFrameJob(1, ts), draft);
+      expect(cache(previewJobInputSnapshot(get, 1, draft), ts, build)).toBe(JSON.stringify(fresh));
     }
+    expect(cacheBuilds).toBe(1);
   });
 });

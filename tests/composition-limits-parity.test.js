@@ -22,7 +22,6 @@ it("enforces the same composition boundaries in JavaScript and the standalone pr
     valid,
     { ...valid, composition_fps: 300 },
     { ...valid, clips: Array.from({ length: COMPOSITION_LIMITS.maxClips + 1 }, () => clip) },
-    { ...valid, clips: Array.from({ length: 501 }, () => clip) },
     { ...valid, canvas: { ...valid.canvas, width: 9000 } },
     { ...valid, canvas: { ...valid.canvas, height: true } },
     { ...valid, clips: [{ ...clip, playback_rate: 5 }] },
@@ -37,6 +36,6 @@ it("enforces the same composition boundaries in JavaScript and the standalone pr
   });
   expect(result.status, result.stderr).toBe(0);
   const accepted = cases.map((job) => validateCompositionJob(job) == null);
-  expect(accepted).toEqual([true, false, false, false, false, false, false, false, false]);
+  expect(accepted).toEqual([true, false, false, false, false, false, false, false]);
   expect(JSON.parse(result.stdout)).toEqual(accepted);
 });

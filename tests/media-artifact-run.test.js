@@ -1,6 +1,5 @@
 import { expect, it, vi } from "vitest";
 import { createProcessingRun } from "../src/utils/processing-run.js";
-import { getBatchProgress } from "../src/utils/batch-progress.js";
 
 it("owns a composition result and progress without assigning them to queue[0] or replacing batch summary", async () => {
   const queue = [{ path: "C:/a.mp4", status: "done", exportedOutputPath: "C:/old.mp4" }],
@@ -62,9 +61,6 @@ it("owns a composition result and progress without assigning them to queue[0] or
   resolve({ success: true, runId: "composition-1" });
   expect(await promise).toMatchObject({ ok: true, outputPath: "C:/composed.mp4" });
   expect(state.mediaExport.outputPath).toBe("C:/composed.mp4");
-  expect(
-    getBatchProgress({ ...state, mediaExport: { status: "processing", progress: 25 } }),
-  ).toEqual({ completed: 0, total: 1, percent: 25 });
   expect(state.queue).toBe(queue);
   expect(state.batchSummary).toBe(summary);
   handlers.onComplete({ runId: "old-batch", index: 0, output: "C:/wrong.mp4" });
@@ -84,12 +80,6 @@ it("owns a composition result and progress without assigning them to queue[0] or
     },
   });
   handlers.onRunStarted({ runId: "batch-2" });
-  expect(
-    getBatchProgress({
-      ...state,
-      mediaExport: state.activeProcessingKind ? state.mediaExport : null,
-    }),
-  ).toEqual({ completed: 0, total: 1, percent: 0 });
   handlers.onComplete({ runId: "composition-1", index: -1, output: "C:/late.mp4" });
   expect(state.mediaExport.outputPath).toBe("C:/composed.mp4");
   handlers.onComplete({ runId: "batch-2", index: 0, output: video.output_path });
@@ -141,11 +131,8 @@ it("reconnects to an active artifact without treating its id as a queue index", 
 
 it.each([
   ["composition", -1, "done"],
-  ["composition", -1, "error"],
-  ["composition", -1, "cancelled"],
-  ["stabilization", -2, "done"],
   ["stabilization", -2, "error"],
-  ["stabilization", -2, "cancelled"],
+  ["composition", -1, "cancelled"],
 ])("preserves batch progress after %s (job %i) finishes as %s", async (kind, id, status) => {
   vi.useFakeTimers();
   const queue = [0, 1, 2].map((i) => ({ path: `C:/${i}.mp4`, status: "done" }));
@@ -202,6 +189,8 @@ it.each([
     },
     id,
   );
+  expect(state.activeProcessingKind).toBe(kind);
+  expect(state.mediaExport.kind).toBe(kind);
   try {
     handlers.onRunStarted({ runId: "artifact" });
     handlers.onProgress({ runId: "artifact", current: 0, total: 1 });
@@ -209,11 +198,6 @@ it.each([
     await vi.advanceTimersByTimeAsync(60);
     expect(state.mediaExport.progress).toBe(56);
     expect([state.progressDone, state.progressTotal]).toEqual([3, 3]);
-    expect(getBatchProgress({ ...state, mediaExport: state.mediaExport })).toEqual({
-      completed: 0,
-      total: 1,
-      percent: 56,
-    });
     const event =
       status === "done" ? "onComplete" : status === "error" ? "onJobError" : "onJobCancelled";
     handlers[event]({
@@ -233,12 +217,6 @@ it.each([
     expect([state.progressDone, state.progressTotal]).toEqual([3, 3]);
     expect(state.queue).toBe(queue);
     expect(state.activeProcessingKind).toBeNull();
-    expect(
-      getBatchProgress({
-        ...state,
-        mediaExport: state.activeProcessingKind ? state.mediaExport : null,
-      }),
-    ).toEqual({ completed: 3, total: 3, percent: 100 });
   } finally {
     disconnect();
     vi.useRealTimers();

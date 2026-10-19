@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useEditorStore from "../../stores/useEditorStore.js";
 import { buildExportJob } from "../../utils/export-pipeline.js";
 import { createJobSignatureCache, stampJobTimestamp } from "../../utils/job-signature.js";
@@ -12,25 +12,23 @@ export function useCompositionPreview({ open, document, entry, onError }) {
   const [signatureFor] = useState(createJobSignatureCache);
   const [frame, setFrame] = useState(null),
     [busy, setBusy] = useState(false);
-  useEffect(() => {
+  const clear = useCallback(() => {
     requests.invalidate();
     setFrame(null);
     setBusy(false);
+  }, [requests]);
+  useEffect(() => {
+    clear();
     return () => {
       requests.invalidate();
     };
-  }, [open, document, entry?.id, requests]);
+  }, [open, document, entry?.id, requests, clear]);
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.playbackRate = normalizeTiming(entry?.item?.timing).rate;
       videoRef.current.preservesPitch = true;
     }
   }, [entry?.item, frame]);
-  const clear = () => {
-    requests.invalidate();
-    setFrame(null);
-    setBusy(false);
-  };
   const preview = async () => {
     const timestamp = videoRef.current?.currentTime || 0;
     const job = () =>
