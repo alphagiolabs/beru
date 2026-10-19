@@ -317,12 +317,8 @@ async function prepareAndStart(run, { manifest, jobs, outputDirectory, spawnSpec
   if (stopIfInterrupted(run)) return;
   const stagedJobs = run.outputFiles.jobs;
   const probeLimit = Math.max(2, Math.min(8, stagedJobs.length, (os.cpus()?.length || 4) * 2));
-  const enrichedJobs = await runWithConcurrency(
-    stagedJobs,
-    probeLimit,
-    enrichJobVideoInfo,
-    undefined,
-    () => Boolean(isInterrupted(run)),
+  const enrichedJobs = await runWithConcurrency(stagedJobs, probeLimit, enrichJobVideoInfo, () =>
+    Boolean(isInterrupted(run)),
   );
   if (stopIfInterrupted(run)) return;
   await fs.promises.writeFile(

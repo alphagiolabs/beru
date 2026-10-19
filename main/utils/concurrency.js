@@ -1,4 +1,4 @@
-export async function runWithConcurrency(items, limit, worker, fallback, shouldCancel) {
+export async function runWithConcurrency(items, limit, worker, shouldCancel) {
   const results = new Array(items.length);
   let cursor = 0;
   let cancelled = false;
@@ -11,15 +11,7 @@ export async function runWithConcurrency(items, limit, worker, fallback, shouldC
         cancelled = true;
         return;
       }
-      try {
-        results[idx] = await worker(items[idx], idx);
-      } catch (err) {
-        if (fallback) {
-          results[idx] = fallback(err, items[idx], idx);
-        } else {
-          throw err;
-        }
-      }
+      results[idx] = await worker(items[idx], idx);
     }
   };
   const runners = Array.from({ length: Math.min(limit, items.length) }, launch);

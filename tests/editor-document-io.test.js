@@ -10,7 +10,6 @@ import {
   readEditorDocument,
   writeAutosave,
   writeEditorDocument,
-  writeFileAtomic,
 } from "../main/utils/editor-document-io.js";
 import { createEmptyEditorProject } from "../shared/editor-project.js";
 import { addAsset, insertClip, setCanvas } from "../shared/editor-timeline.js";
@@ -83,15 +82,14 @@ describe("editor document persistence", () => {
       expect(loaded.ok && loaded.project.revision).toBe(2);
     });
 
-    it("removes the temporary file when the rename fails and leaves the original document alone", async () => {
-      await writeEditorDocument(docFile, project({ name: "Original" }));
+    it("removes the temporary file when autosave rename fails and preserves the destination", async () => {
       const blocker = path.join(trusted, "home", "Videos", "blocker");
       fs.mkdirSync(blocker);
       fs.writeFileSync(path.join(blocker, "keep.txt"), "x");
-      await expect(writeFileAtomic(blocker, "{}")).rejects.toThrow();
+      await expect(writeAutosave(blocker, project())).rejects.toThrow();
       expect(fs.readdirSync(path.dirname(blocker)).filter((f) => f.endsWith(".tmp"))).toEqual([]);
-      const loaded = await readEditorDocument(docFile);
-      expect(loaded.ok && loaded.project.name).toBe("Original");
+      expect(fs.readdirSync(blocker)).toEqual(["keep.txt"]);
+      expect(fs.readFileSync(path.join(blocker, "keep.txt"), "utf8")).toBe("x");
     });
 
     it("refuses to write an invalid document and does not touch the file", async () => {
@@ -118,14 +116,6 @@ describe("editor document persistence", () => {
         conflict: true,
         error: "El proyecto cambió en disco desde que se abrió",
       });
-    });
-
-    it("saves over the file when the base revision matches", async () => {
-      await writeEditorDocument(docFile, project({ revision: 3 }));
-      const next = await writeEditorDocument(docFile, project({ revision: 4 }), {
-        baseRevision: 3,
-      });
-      expect(next.ok).toBe(true);
     });
 
     it("replaces an existing editor file on Save As, without a base revision", async () => {

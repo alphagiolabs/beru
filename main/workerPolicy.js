@@ -69,7 +69,7 @@ export function estimateJobRamMb({
   return Math.max(policy.minimumJobRamMb, perJob);
 }
 
-export function memoryCapWorkers({
+function memoryCapWorkers({
   hwEncoder = null,
   maxSourcePixels = 0,
   desiredWorkers,

@@ -42,7 +42,7 @@ function unreadableIssue(inputPath, check) {
   return check.ok ? null : { inputPath, ...check };
 }
 
-export async function validateInputPathReadableAsync(inputPath) {
+async function validateInputPathReadableAsync(inputPath) {
   const pathError = validateInputPath(inputPath);
   if (pathError) return pathError;
   let stat;
